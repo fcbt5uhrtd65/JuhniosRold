@@ -1,3 +1,3 @@
-from .entities import ProductEntity, ProductVariantEntity
+from .entities import CategoryEntity, ProductEntity, ProductVariantEntity
 
-__all__ = ("ProductEntity", "ProductVariantEntity")
+__all__ = ("CategoryEntity", "ProductEntity", "ProductVariantEntity")
