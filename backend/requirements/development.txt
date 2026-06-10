@@ -1,0 +1,6 @@
+-r base.txt
+
+django-extensions==4.1
+pytest==8.4.0
+pytest-django==4.11.1
+ruff==0.11.13
