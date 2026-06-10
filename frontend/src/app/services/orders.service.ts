@@ -4,6 +4,8 @@
 
 import { api } from './api';
 
+const ORDERS_PATH = '/commerce/orders/';
+
 export type OrderStatus =
   | 'pending'
   | 'confirmed'
@@ -81,6 +83,98 @@ export interface OrderStats {
   orders_by_status: Record<OrderStatus, number>;
 }
 
+interface PaginatedResponse<T> {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: T[];
+}
+
+interface BackendOrderItem {
+  id: string;
+  order: string;
+  variant: string;
+  product_name: string;
+  sku: string;
+  quantity: string | number;
+  unit_price: string | number;
+  subtotal: string | number;
+  created_at: string;
+}
+
+interface BackendOrder {
+  id: string;
+  number: string;
+  customer: string;
+  status: string;
+  subtotal: string | number;
+  shipping_cost: string | number;
+  total: string | number;
+  shipping_address: string;
+  tracking_number: string;
+  payment_reference: string;
+  items: BackendOrderItem[];
+  created_at: string;
+  updated_at: string;
+}
+
+function parseNumber(value: string | number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function normalizeStatus(status: string): OrderStatus {
+  const normalized = status.toLowerCase();
+  if (
+    normalized === 'pending' ||
+    normalized === 'confirmed' ||
+    normalized === 'processing' ||
+    normalized === 'shipped' ||
+    normalized === 'delivered' ||
+    normalized === 'cancelled'
+  ) {
+    return normalized;
+  }
+  return 'pending';
+}
+
+function normalizeOrder(order: BackendOrder): Order {
+  return {
+    id: order.id,
+    order_number: order.number,
+    user_id: order.customer,
+    status: normalizeStatus(order.status),
+    total_amount: parseNumber(order.total),
+    subtotal: parseNumber(order.subtotal),
+    shipping_cost: parseNumber(order.shipping_cost),
+    discount_amount: 0,
+    shipping_address: {
+      full_name: '',
+      address_line1: order.shipping_address,
+      city: '',
+      department: '',
+      phone: '',
+      country: 'CO',
+    },
+    payment_method: '',
+    payment_status: order.payment_reference ? 'paid' : 'pending',
+    payment_reference: order.payment_reference,
+    items: order.items.map(item => ({
+      id: item.id,
+      order_id: item.order,
+      product_id: item.variant,
+      product_name: item.product_name,
+      product_sku: item.sku,
+      quantity: parseNumber(item.quantity),
+      unit_price: parseNumber(item.unit_price),
+      subtotal: parseNumber(item.subtotal),
+      created_at: item.created_at,
+    })),
+    created_at: order.created_at,
+    updated_at: order.updated_at,
+  };
+}
+
 // ---- List orders ----
 export async function getOrders(params?: { page?: number; limit?: number }): Promise<{
   data: Order[];
@@ -90,32 +184,58 @@ export async function getOrders(params?: { page?: number; limit?: number }): Pro
 }> {
   const query = new URLSearchParams();
   if (params?.page) query.set('page', String(params.page));
-  if (params?.limit) query.set('limit', String(params.limit));
+  if (params?.limit) query.set('page_size', String(params.limit));
 
-  const endpoint = `/orders${query.toString() ? `?${query}` : ''}`;
-  const res = await api.get<{ data: Order[]; total: number; page: number; totalPages: number }>(endpoint);
-  if (res.data) return res.data;
-  throw new Error(res.message);
+  const endpoint = `${ORDERS_PATH}${query.toString() ? `?${query}` : ''}`;
+  const res = await api.get<PaginatedResponse<BackendOrder>>(endpoint);
+  if (!res.data) throw new Error(res.message);
+
+  const page = params?.page ?? 1;
+  const limit = params?.limit ?? Math.max(res.data.results.length, 1);
+  return {
+    data: res.data.results.map(normalizeOrder),
+    total: res.data.count,
+    page,
+    totalPages: Math.max(1, Math.ceil(res.data.count / limit)),
+  };
 }
 
 // ---- Get order by ID ----
 export async function getOrderById(id: string): Promise<Order> {
-  const res = await api.get<Order>(`/orders/${id}`);
-  if (res.data) return res.data;
+  const res = await api.get<BackendOrder>(`${ORDERS_PATH}${id}/`);
+  if (res.data) return normalizeOrder(res.data);
   throw new Error(res.message);
 }
 
 // ---- Get order stats (admin) ----
 export async function getOrderStats(): Promise<OrderStats> {
-  const res = await api.get<OrderStats>('/orders/stats');
-  if (res.data) return res.data;
-  throw new Error(res.message);
+  const result = await getOrders({ limit: 100 });
+  const ordersByStatus = {
+    pending: 0,
+    confirmed: 0,
+    processing: 0,
+    shipped: 0,
+    delivered: 0,
+    cancelled: 0,
+    refunded: 0,
+  };
+
+  result.data.forEach(order => {
+    ordersByStatus[order.status] += 1;
+  });
+
+  return {
+    total_orders: result.total,
+    pending_orders: ordersByStatus.pending,
+    total_revenue: result.data.reduce((total, order) => total + order.total_amount, 0),
+    orders_by_status: ordersByStatus,
+  };
 }
 
 // ---- Create order ----
 export async function createOrder(payload: CreateOrderPayload): Promise<Order> {
-  const res = await api.post<Order>('/orders', payload);
-  if (res.data) return res.data;
+  const res = await api.post<BackendOrder>(ORDERS_PATH, payload);
+  if (res.data) return normalizeOrder(res.data);
   throw new Error(res.message);
 }
 
@@ -124,15 +244,20 @@ export async function updateOrderStatus(
   id: string,
   payload: UpdateOrderStatusPayload,
 ): Promise<Order> {
-  const res = await api.patch<Order>(`/orders/${id}/status`, payload);
-  if (res.data) return res.data;
+  const res = await api.patch<BackendOrder>(`${ORDERS_PATH}${id}/`, {
+    ...(payload.status ? { status: payload.status.toUpperCase() } : {}),
+    ...(payload.payment_reference !== undefined
+      ? { payment_reference: payload.payment_reference }
+      : {}),
+  });
+  if (res.data) return normalizeOrder(res.data);
   throw new Error(res.message);
 }
 
 // ---- Cancel order ----
 export async function cancelOrder(id: string): Promise<Order> {
-  const res = await api.post<Order>(`/orders/${id}/cancel`, {});
-  if (res.data) return res.data;
+  const res = await api.post<BackendOrder>(`${ORDERS_PATH}${id}/cancel/`, {});
+  if (res.data) return normalizeOrder(res.data);
   throw new Error(res.message);
 }
 
