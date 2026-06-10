@@ -77,6 +77,7 @@ interface BackendProduct {
   name: string;
   slug: string;
   description: string;
+  image_url: string;
   is_active: boolean;
   is_featured: boolean;
   created_at: string;
@@ -140,6 +141,7 @@ export interface Product {
   name: string;
   slug: string;
   description: string;
+  image_url: string;
   category: string;
   category_id: UUID;
   category_name: string;
@@ -191,6 +193,10 @@ export interface CreateProductPayload {
   stock?: number;
   sku?: string;
   images?: string[];
+  image_url?: string;
+  variant_name?: string;
+  variant_attributes?: Record<string, unknown>;
+  cost?: number;
   ingredients?: string[];
   benefits?: string[];
   how_to_use?: string;
@@ -325,13 +331,17 @@ function normalizeProduct(
     name: product.name,
     slug: product.slug,
     description: product.description,
+    image_url: product.image_url,
     category: category?.slug ?? product.category,
     category_id: product.category,
     category_name: category?.name ?? 'Sin categoría',
     category_slug: category?.slug ?? '',
     price,
     currency,
-    primary_image: pickPrimaryImage(images) ?? category?.image_url ?? null,
+    primary_image:
+      (pickPrimaryImage(images) ?? product.image_url) ||
+      category?.image_url ||
+      null,
     image_urls: images.map((image) => image.image),
     images,
     variants,
@@ -442,6 +452,24 @@ export async function getProducts(params?: ProductsQueryParams): Promise<Paginat
   };
 }
 
+export async function getAllProducts(): Promise<Product[]> {
+  const firstPage = await getProducts({ page: 1, limit: 100 });
+  if (firstPage.totalPages <= 1) {
+    return firstPage.data;
+  }
+
+  const remainingPages = await Promise.all(
+    Array.from({ length: firstPage.totalPages - 1 }, (_, index) =>
+      getProducts({ page: index + 2, limit: 100 }),
+    ),
+  );
+
+  return [
+    ...firstPage.data,
+    ...remainingPages.flatMap(page => page.data),
+  ];
+}
+
 export async function getFeaturedProducts(limit = 100): Promise<Product[]> {
   const res = await getProducts({
     limit,
@@ -491,6 +519,7 @@ export async function createProduct(payload: CreateProductPayload): Promise<Prod
     name: payload.name,
     slug: payload.slug,
     description: payload.description ?? '',
+    image_url: payload.image_url ?? payload.images?.[0] ?? '',
     is_active: payload.is_active ?? true,
     is_featured: payload.is_featured ?? false,
   });
@@ -500,27 +529,35 @@ export async function createProduct(payload: CreateProductPayload): Promise<Prod
     throw new Error('No se pudo crear el producto.');
   }
 
-  if (payload.price !== undefined) {
+  if (
+    payload.price !== undefined ||
+    payload.variant_name !== undefined ||
+    payload.sku !== undefined
+  ) {
     const variantResponse = await api.post<BackendVariant>(VARIANTS_PATH, {
       product: res.data.id,
       sku: payload.sku ?? `JR-${Date.now()}`,
-      name: payload.weight_ml ? `${payload.weight_ml} ml` : 'Presentacion unica',
-      attributes: payload.weight_ml ? { weight_ml: payload.weight_ml } : {},
-      cost: '0',
+      name: payload.variant_name ??
+        (payload.weight_ml ? `${payload.weight_ml} ml` : 'Presentación única'),
+      attributes: payload.variant_attributes ??
+        (payload.weight_ml ? { weight_ml: payload.weight_ml } : {}),
+      cost: String(payload.cost ?? 0),
       is_active: payload.is_active ?? true,
     });
     if (!variantResponse.data) {
       throw new Error('El producto se creo, pero no fue posible crear su variante.');
     }
 
-    await api.post<BackendPrice>(PRICES_PATH, {
-      variant: variantResponse.data.id,
-      amount: String(payload.price),
-      currency: 'COP',
-      valid_from: new Date().toISOString(),
-      valid_until: null,
-      is_active: true,
-    });
+    if (payload.price !== undefined) {
+      await api.post<BackendPrice>(PRICES_PATH, {
+        variant: variantResponse.data.id,
+        amount: String(payload.price),
+        currency: 'COP',
+        valid_from: new Date().toISOString(),
+        valid_until: null,
+        is_active: true,
+      });
+    }
     return getProductById(res.data.id);
   }
 
@@ -536,6 +573,9 @@ export async function updateProduct(id: string, payload: UpdateProductPayload): 
     ...(payload.name !== undefined ? { name: payload.name } : {}),
     ...(payload.slug !== undefined ? { slug: payload.slug } : {}),
     ...(payload.description !== undefined ? { description: payload.description } : {}),
+    ...(payload.image_url !== undefined || payload.images !== undefined
+      ? { image_url: payload.image_url ?? payload.images?.[0] ?? '' }
+      : {}),
     ...(payload.is_active !== undefined ? { is_active: payload.is_active } : {}),
     ...(payload.is_featured !== undefined ? { is_featured: payload.is_featured } : {}),
   });
@@ -545,8 +585,17 @@ export async function updateProduct(id: string, payload: UpdateProductPayload): 
     throw new Error('No se pudo actualizar el producto.');
   }
 
+  const variant = res.data.variants.find((item) => item.is_active) ?? res.data.variants[0];
+  if (variant && (payload.variant_name !== undefined || payload.variant_attributes !== undefined)) {
+    await api.patch<BackendVariant>(`${VARIANTS_PATH}${variant.id}/`, {
+      ...(payload.variant_name !== undefined ? { name: payload.variant_name } : {}),
+      ...(payload.variant_attributes !== undefined
+        ? { attributes: { ...variant.attributes, ...payload.variant_attributes } }
+        : {}),
+    });
+  }
+
   if (payload.price !== undefined) {
-    const variant = res.data.variants.find((item) => item.is_active) ?? res.data.variants[0];
     const price = variant?.prices.find((item) => item.is_active) ?? variant?.prices[0];
     if (price) {
       await api.patch<BackendPrice>(`${PRICES_PATH}${price.id}/`, {

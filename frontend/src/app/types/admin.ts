@@ -10,7 +10,7 @@ export interface User {
 export interface Product {
   id: string;
   nombre: string;
-  categoria: 'capilar' | 'corporal' | 'baby' | 'personal';
+  categoria: string;
   tipo: string;
   presentacion: string;
   precio: number;
@@ -22,6 +22,8 @@ export interface Product {
 export interface Inventory {
   id: string;
   productoId: string;
+  varianteId?: string;
+  ubicacionId?: string;
   stockActual: number;
   stockMinimo: number;
   lote?: string;

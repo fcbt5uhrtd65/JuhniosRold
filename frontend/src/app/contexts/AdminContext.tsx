@@ -12,13 +12,18 @@ import {
   logoutUser,
 } from '../services/auth.service';
 import {
-  getProducts,
+  getAllProducts,
   createProduct as apiCreateProduct,
   updateProduct as apiUpdateProduct,
   deleteProduct as apiDeleteProduct,
-  updateProductStock as apiUpdateStock,
   type Product as ApiProduct,
 } from '../services/products.service';
+import {
+  createInitialStock,
+  getInventoryStock,
+  setInventoryQuantity,
+  type InventoryStock,
+} from '../services/inventory.service';
 import {
   getOrders,
   updateOrderStatus as apiUpdateOrderStatus,
@@ -179,11 +184,14 @@ const INITIAL_PAYMENTS: Payment[] = [
 
 // ---- Map API product → admin Product ----
 function mapApiProduct(p: ApiProduct): Product {
+  const primaryVariant = p.variants.find(variant => variant.is_active) ?? p.variants[0];
+  const productType = primaryVariant?.attributes?.type;
+
   return {
     id: p.id,
     nombre: p.name,
-    categoria: p.category as Product['categoria'],
-    tipo: p.category_name,
+    categoria: p.category_slug || p.category,
+    tipo: typeof productType === 'string' ? productType : p.category_name,
     presentacion: p.sizes[0] ?? '',
     precio: p.price ?? 0,
     descripcion: p.description,
@@ -235,6 +243,31 @@ function mapApiCustomer(customer: BackendCustomer): Customer {
     totalCompras: 0,
     ultimaCompra: customer.updated_at || customer.created_at,
   };
+}
+
+function mapApiInventory(stocks: InventoryStock[], apiProducts: ApiProduct[]): Inventory[] {
+  const productByVariant = new Map(
+    apiProducts.flatMap(product =>
+      product.variants.map(variant => [variant.id, product.id] as const),
+    ),
+  );
+
+  return stocks.flatMap(stock => {
+    const productId = productByVariant.get(stock.variantId);
+    if (!productId) {
+      return [];
+    }
+
+    return [{
+      id: stock.id,
+      productoId: productId,
+      varianteId: stock.variantId,
+      ubicacionId: stock.locationId,
+      stockActual: stock.quantity,
+      stockMinimo: stock.minimumQuantity,
+      ubicacion: [stock.warehouseName, stock.locationName].filter(Boolean).join(' / '),
+    }];
+  });
 }
 
 function mapAdminUser(user: Awaited<ReturnType<typeof getCurrentUser>>): User {
@@ -332,13 +365,16 @@ export function AdminProvider({ children }: { children: ReactNode }) {
 
     setIsLoading(true);
     try {
-      // Products
-      const prodRes = await getProducts({ limit: 100 }).catch(() => null);
-      if (prodRes?.data) {
-        const mapped = prodRes.data.map(mapApiProduct);
-        setProducts(mapped);
-        localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(mapped));
-      }
+      const [apiProducts, stock] = await Promise.all([
+        getAllProducts(),
+        getInventoryStock(),
+      ]);
+      const mappedProducts = apiProducts.map(mapApiProduct);
+      const mappedInventory = mapApiInventory(stock, apiProducts);
+      setProducts(mappedProducts);
+      setInventory(mappedInventory);
+      localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(mappedProducts));
+      localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(mappedInventory));
 
       // Orders
       const ordersRes = await getOrders({ limit: 100 }).catch(() => null);
@@ -359,6 +395,12 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    if (currentUser && backendOnline && getAccessToken()) {
+      void refreshData().catch(() => {});
+    }
+  }, [currentUser, backendOnline, refreshData]);
 
   // ---- LOGIN ----
   const login = useCallback(async (email: string, password: string): Promise<boolean> => {
@@ -381,7 +423,6 @@ export function AdminProvider({ children }: { children: ReactNode }) {
           const adminUser = mapAdminUser(apiUser);
           setCurrentUser(adminUser);
           localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(adminUser));
-          await refreshData();
           return true;
         }
       } catch {
@@ -402,7 +443,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       return true;
     }
     return false;
-  }, [refreshData]);
+  }, []);
 
   const logout = useCallback(() => {
     if (backendOnline && getAccessToken()) {
@@ -416,26 +457,29 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   // ---- Product CRUD ----
   const addProduct = useCallback(async (product: Omit<Product, 'id'>) => {
     if (backendOnline && getAccessToken()) {
-      try {
-        const created = await apiCreateProduct({
-          name: product.nombre,
-          slug: product.nombre.toLowerCase().replace(/\s+/g, '-'),
-          description: product.descripcion,
-          category: product.categoria as 'aceites',
-          price: product.precio,
-          pro_price: product.precio * 0.85,
-          stock: 0,
-          images: product.imagen ? [product.imagen] : [],
-          is_active: product.estado === 'activo',
-        });
-        const mapped = mapApiProduct(created);
-        setProducts(prev => [...prev, mapped]);
-        setInventory(prev => [
-          ...prev,
-          { id: created.id + '_inv', productoId: created.id, stockActual: 0, stockMinimo: 10, ubicacion: 'Bodega Principal' },
-        ]);
-        return;
-      } catch { /* fallback */ }
+      const slugBase = product.nombre
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '');
+      const created = await apiCreateProduct({
+        name: product.nombre,
+        slug: `${slugBase}-${Date.now()}`,
+        description: product.descripcion,
+        category: product.categoria,
+        price: product.precio,
+        image_url: product.imagen,
+        variant_name: product.presentacion,
+        variant_attributes: { type: product.tipo },
+        is_active: product.estado === 'activo',
+      });
+      const variant = created.variants.find(item => item.is_active) ?? created.variants[0];
+      if (variant) {
+        await createInitialStock(variant.id);
+      }
+      await refreshData();
+      return;
     }
 
     const newProduct: Product = { ...product, id: Date.now().toString() };
@@ -444,39 +488,54 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       ...prev,
       { id: Date.now().toString(), productoId: newProduct.id, stockActual: 0, stockMinimo: 10, ubicacion: 'Bodega Principal' },
     ]);
-  }, [backendOnline]);
+  }, [backendOnline, refreshData]);
 
   const updateProduct = useCallback(async (id: string, updates: Partial<Product>) => {
     if (backendOnline && getAccessToken()) {
-      try {
-        await apiUpdateProduct(id, {
-          name: updates.nombre,
-          description: updates.descripcion,
-          price: updates.precio,
-          images: updates.imagen ? [updates.imagen] : undefined,
-          is_active: updates.estado === 'activo',
-        });
-      } catch { /* fallback */ }
+      await apiUpdateProduct(id, {
+        name: updates.nombre,
+        description: updates.descripcion,
+        category: updates.categoria,
+        price: updates.precio,
+        image_url: updates.imagen,
+        variant_name: updates.presentacion,
+        variant_attributes: updates.tipo !== undefined ? { type: updates.tipo } : undefined,
+        is_active: updates.estado !== undefined ? updates.estado === 'activo' : undefined,
+      });
+      await refreshData();
+      return;
     }
     setProducts(prev => prev.map(p => (p.id === id ? { ...p, ...updates } : p)));
-  }, [backendOnline]);
+  }, [backendOnline, refreshData]);
 
   const deleteProduct = useCallback(async (id: string) => {
     if (backendOnline && getAccessToken()) {
-      try { await apiDeleteProduct(id); } catch { /* fallback */ }
+      await apiDeleteProduct(id);
+      await refreshData();
+      return;
     }
     setProducts(prev => prev.filter(p => p.id !== id));
     setInventory(prev => prev.filter(i => i.productoId !== id));
-  }, [backendOnline]);
+  }, [backendOnline, refreshData]);
 
-  const updateInventory = useCallback(async (productId: string, stock: number) => {
+  const updateInventory = useCallback(async (inventoryId: string, stock: number) => {
     if (backendOnline && getAccessToken()) {
-      try { await apiUpdateStock(productId, stock, 'Admin manual update'); } catch { /* fallback */ }
+      const inventoryItem = inventory.find(item => item.id === inventoryId);
+      if (!inventoryItem?.varianteId || !inventoryItem.ubicacionId) {
+        throw new Error('No se encontró la ubicación de inventario seleccionada.');
+      }
+      await setInventoryQuantity({
+        variantId: inventoryItem.varianteId,
+        locationId: inventoryItem.ubicacionId,
+        quantity: inventoryItem.stockActual,
+      }, stock);
+      await refreshData();
+      return;
     }
     setInventory(prev =>
-      prev.map(inv => inv.productoId === productId ? { ...inv, stockActual: stock } : inv),
+      prev.map(inv => inv.id === inventoryId ? { ...inv, stockActual: stock } : inv),
     );
-  }, [backendOnline]);
+  }, [backendOnline, inventory, refreshData]);
 
   // ---- Order status update ----
   const updateOrderStatus = useCallback(async (orderId: string, status: Order['estado']) => {

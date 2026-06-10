@@ -6,6 +6,7 @@ import type { Product } from '../../types/admin';
 import { SearchBar } from './SearchBar';
 import { FilterPanel, type FilterGroup } from './FilterPanel';
 import { Pagination } from './Pagination';
+import { useToast } from '../../contexts/ToastContext';
 
 type ViewMode = 'grid' | 'table';
 type SortField = 'nombre' | 'precio' | 'categoria' | 'estado' | 'stock';
@@ -13,8 +14,10 @@ type SortOrder = 'asc' | 'desc';
 
 export function AdminProducts() {
   const { products, inventory, addProduct, updateProduct, deleteProduct } = useAdmin();
+  const toast = useToast();
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Search & Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -38,20 +41,38 @@ export function AdminProducts() {
     estado: 'activo' as Product['estado'],
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingProduct) {
-      updateProduct(editingProduct.id, {
-        ...formData,
-        precio: Number(formData.precio),
-      });
-    } else {
-      addProduct({
-        ...formData,
-        precio: Number(formData.precio),
-      });
+    setIsSubmitting(true);
+    try {
+      if (editingProduct) {
+        await updateProduct(editingProduct.id, {
+          ...formData,
+          precio: Number(formData.precio),
+        });
+        toast.success('Producto actualizado correctamente');
+      } else {
+        await addProduct({
+          ...formData,
+          precio: Number(formData.precio),
+        });
+        toast.success('Producto creado correctamente');
+      }
+      resetForm();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No fue posible guardar el producto');
+    } finally {
+      setIsSubmitting(false);
     }
-    resetForm();
+  };
+
+  const handleDelete = async (productId: string) => {
+    try {
+      await deleteProduct(productId);
+      toast.success('Producto eliminado correctamente');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No fue posible eliminar el producto');
+    }
   };
 
   const resetForm = () => {
@@ -85,17 +106,20 @@ export function AdminProducts() {
   };
 
   // Filter definitions
+  const categoryOptions = useMemo(
+    () => Array.from(new Set(products.map(product => product.categoria).filter(Boolean))).sort(),
+    [products],
+  );
+
   const filterGroups: FilterGroup[] = [
     {
       id: 'categoria',
       label: 'Categoría',
       multiple: true,
-      options: [
-        { label: 'Capilar', value: 'capilar' },
-        { label: 'Corporal', value: 'corporal' },
-        { label: 'Baby', value: 'baby' },
-        { label: 'Personal', value: 'personal' },
-      ],
+      options: categoryOptions.map(category => ({
+        label: category.charAt(0).toUpperCase() + category.slice(1),
+        value: category,
+      })),
     },
     {
       id: 'estado',
@@ -324,7 +348,7 @@ export function AdminProducts() {
                     <button
                       onClick={() => {
                         if (confirm('¿Eliminar producto?')) {
-                          deleteProduct(product.id);
+                          void handleDelete(product.id);
                         }
                       }}
                       className="flex-1 py-2 border border-border text-xs tracking-wider uppercase hover:bg-background transition-colors"
@@ -469,7 +493,7 @@ export function AdminProducts() {
                           <button
                             onClick={() => {
                               if (confirm('¿Eliminar producto?')) {
-                                deleteProduct(product.id);
+                                void handleDelete(product.id);
                               }
                             }}
                             className="p-2 border border-border hover:bg-background transition-colors"
@@ -534,13 +558,20 @@ export function AdminProducts() {
                   </label>
                   <select
                     value={formData.categoria}
-                    onChange={(e) => setFormData({ ...formData, categoria: e.target.value as Product['categoria'] })}
+                    onChange={(e) => setFormData({ ...formData, categoria: e.target.value })}
                     className="w-full px-3 py-2 bg-transparent border border-border text-xs focus:outline-none focus:border-foreground"
                   >
                     <option value="capilar">Capilar</option>
                     <option value="corporal">Corporal</option>
                     <option value="baby">Baby</option>
                     <option value="personal">Personal</option>
+                    {categoryOptions
+                      .filter(category => !['capilar', 'corporal', 'baby', 'personal'].includes(category))
+                      .map(category => (
+                        <option key={category} value={category}>
+                          {category.charAt(0).toUpperCase() + category.slice(1)}
+                        </option>
+                      ))}
                   </select>
                 </div>
 
@@ -630,9 +661,12 @@ export function AdminProducts() {
               <div className="flex gap-3 pt-4">
                 <button
                   type="submit"
+                  disabled={isSubmitting}
                   className="flex-1 py-3 bg-foreground text-background text-xs tracking-wider uppercase hover:opacity-90"
                 >
-                  {editingProduct ? 'Actualizar' : 'Crear'} Producto
+                  {isSubmitting
+                    ? 'Guardando...'
+                    : `${editingProduct ? 'Actualizar' : 'Crear'} Producto`}
                 </button>
                 <button
                   type="button"

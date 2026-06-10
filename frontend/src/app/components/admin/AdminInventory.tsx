@@ -5,14 +5,17 @@ import { AlertTriangle, TrendingUp, TrendingDown, Package, ArrowUpDown } from 'l
 import { SearchBar } from './SearchBar';
 import { FilterPanel, type FilterGroup } from './FilterPanel';
 import { Pagination } from './Pagination';
+import { useToast } from '../../contexts/ToastContext';
 
 type SortField = 'nombre' | 'categoria' | 'stockActual' | 'stockMinimo' | 'ubicacion';
 type SortOrder = 'asc' | 'desc';
 
 export function AdminInventory() {
   const { products, inventory, updateInventory } = useAdmin();
+  const toast = useToast();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newStock, setNewStock] = useState('');
+  const [isUpdating, setIsUpdating] = useState(false);
 
   // Search & Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -24,11 +27,19 @@ export function AdminInventory() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
 
-  const handleUpdate = (productId: string) => {
+  const handleUpdate = async (inventoryId: string) => {
     if (newStock) {
-      updateInventory(productId, Number(newStock));
-      setEditingId(null);
-      setNewStock('');
+      setIsUpdating(true);
+      try {
+        await updateInventory(inventoryId, Number(newStock));
+        toast.success('Inventario actualizado correctamente');
+        setEditingId(null);
+        setNewStock('');
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'No fue posible actualizar el inventario');
+      } finally {
+        setIsUpdating(false);
+      }
     }
   };
 
@@ -38,17 +49,20 @@ export function AdminInventory() {
   }));
 
   // Filter definitions
+  const categoryOptions = useMemo(
+    () => Array.from(new Set(products.map(product => product.categoria).filter(Boolean))).sort(),
+    [products],
+  );
+
   const filterGroups: FilterGroup[] = [
     {
       id: 'categoria',
       label: 'Categoría',
       multiple: true,
-      options: [
-        { label: 'Capilar', value: 'capilar' },
-        { label: 'Corporal', value: 'corporal' },
-        { label: 'Baby', value: 'baby' },
-        { label: 'Personal', value: 'personal' },
-      ],
+      options: categoryOptions.map(category => ({
+        label: category.charAt(0).toUpperCase() + category.slice(1),
+        value: category,
+      })),
     },
     {
       id: 'estado',
@@ -352,7 +366,7 @@ export function AdminInventory() {
             <tbody className="divide-y divide-border">
               {paginatedInventory.map((inv) => {
                 const isLow = inv.stockActual < inv.stockMinimo;
-                const isEditing = editingId === inv.productoId;
+                const isEditing = editingId === inv.id;
 
                 return (
                   <tr key={inv.id} className="hover:bg-background/50 transition-colors">
@@ -378,6 +392,8 @@ export function AdminInventory() {
                       {isEditing ? (
                         <input
                           type="number"
+                          min="0"
+                          step="any"
                           value={newStock}
                           onChange={(e) => setNewStock(e.target.value)}
                           className="w-20 px-2 py-1 bg-transparent border border-border text-xs text-center focus:outline-none focus:border-foreground"
@@ -399,14 +415,14 @@ export function AdminInventory() {
                       <div className="text-xs text-muted-foreground">{inv.lote || '-'}</div>
                     </td>
                     <td className="px-4 py-3 text-center">
-                      {isLow ? (
+                      {inv.stockActual === 0 ? (
+                        <span className="inline-flex items-center gap-1 text-xs px-2 py-1 bg-red-100 text-red-800">
+                          Sin stock
+                        </span>
+                      ) : isLow ? (
                         <span className="inline-flex items-center gap-1 text-xs px-2 py-1 bg-orange-100 text-orange-800">
                           <AlertTriangle className="w-3 h-3" strokeWidth={1} />
                           Bajo
-                        </span>
-                      ) : inv.stockActual === 0 ? (
-                        <span className="inline-flex items-center gap-1 text-xs px-2 py-1 bg-red-100 text-red-800">
-                          Sin stock
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-xs px-2 py-1 bg-green-100 text-green-800">
@@ -418,7 +434,8 @@ export function AdminInventory() {
                       {isEditing ? (
                         <div className="flex items-center justify-center gap-2">
                           <button
-                            onClick={() => handleUpdate(inv.productoId)}
+                            onClick={() => void handleUpdate(inv.id)}
+                            disabled={isUpdating}
                             className="text-xs px-2 py-1 bg-foreground text-background hover:opacity-90"
                           >
                             ✓
@@ -436,7 +453,7 @@ export function AdminInventory() {
                       ) : (
                         <button
                           onClick={() => {
-                            setEditingId(inv.productoId);
+                            setEditingId(inv.id);
                             setNewStock(inv.stockActual.toString());
                           }}
                           className="text-xs px-3 py-1 border border-border hover:bg-background transition-colors"
