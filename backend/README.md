@@ -41,11 +41,21 @@ Servicios:
 - Frontend: `http://localhost:5174`
 - PostgreSQL: `localhost:5432`
 
-Crear un administrador:
+Crear o actualizar las dos cuentas administrativas iniciales:
 
 ```bash
-docker compose exec backend python manage.py createsuperuser
+docker compose exec backend python manage.py seed_admin_users
 ```
+
+Las cuentas se crean en `identity.User`, porque `identity` es el dueño de las
+credenciales, roles y permisos. Cada cuenta queda además vinculada a un perfil
+de `employees.Employee`; no se crean como clientes.
+
+- `admin@juhnios.com`
+- `administrador2@juhnios.com`
+
+La contraseña inicial se toma de `ADMIN_SEED_PASSWORD`. El comando no vuelve a
+cambiar contraseñas existentes salvo que se ejecute con `--reset-passwords`.
 
 ## Producción
 

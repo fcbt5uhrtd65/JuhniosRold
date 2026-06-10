@@ -3,12 +3,12 @@ import { motion } from 'motion/react';
 import { useAdmin } from '../../contexts/AdminContext';
 import { Users, TrendingUp, DollarSign, Plus } from 'lucide-react';
 import { format } from 'date-fns';
-import type { Customer } from '../../types/admin';
 
 export function AdminCustomers() {
   const { customers, orders, addCustomer } = useAdmin();
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState({
+    documento: '',
     nombre: '',
     telefono: '',
     email: '',
@@ -16,10 +16,11 @@ export function AdminCustomers() {
     ciudad: '',
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    addCustomer(formData);
+    await addCustomer(formData);
     setFormData({
+      documento: '',
       nombre: '',
       telefono: '',
       email: '',
@@ -30,6 +31,7 @@ export function AdminCustomers() {
   };
 
   const topCustomers = customers
+    .slice()
     .sort((a, b) => b.totalCompras - a.totalCompras)
     .slice(0, 10);
 
@@ -192,6 +194,19 @@ export function AdminCustomers() {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-2 block">
+                    Documento
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.documento}
+                    onChange={(e) => setFormData({ ...formData, documento: e.target.value })}
+                    className="w-full px-3 py-2 bg-transparent border border-border text-xs focus:outline-none focus:border-foreground"
+                    required
+                  />
+                </div>
+
                 <div>
                   <label className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-2 block">
                     Nombre Completo

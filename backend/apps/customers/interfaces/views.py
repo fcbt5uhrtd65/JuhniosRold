@@ -1,6 +1,7 @@
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from apps.identity.interfaces.permissions import IsAdministrator
 from shared.interfaces.viewsets import SoftDeleteModelViewSet
 
 from ..infrastructure.models import Customer, CustomerContact, CustomerSegment
@@ -15,6 +16,7 @@ from .filters import CustomerFilter
 class CustomerViewSet(SoftDeleteModelViewSet):
     queryset = Customer.objects.prefetch_related("contacts", "segments")
     serializer_class = CustomerSerializer
+    permission_classes = (IsAdministrator,)
     filterset_class = CustomerFilter
     search_fields = ("document_number", "first_name", "last_name", "email", "phone")
     ordering_fields = ("created_at", "first_name", "last_name")
@@ -29,10 +31,12 @@ class CustomerViewSet(SoftDeleteModelViewSet):
 class CustomerContactViewSet(SoftDeleteModelViewSet):
     queryset = CustomerContact.objects.select_related("customer")
     serializer_class = CustomerContactSerializer
+    permission_classes = (IsAdministrator,)
     filterset_fields = ("customer", "is_primary")
 
 
 class CustomerSegmentViewSet(SoftDeleteModelViewSet):
     queryset = CustomerSegment.objects.all()
     serializer_class = CustomerSegmentSerializer
+    permission_classes = (IsAdministrator,)
     search_fields = ("name",)

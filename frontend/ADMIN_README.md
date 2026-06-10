@@ -110,11 +110,11 @@ npm run dev
 | Rol | Email | Contraseña |
 |-----|-------|-----------|
 | Admin | admin@juhnios.com | Admin123! |
-| Vendedor | vendedor@juhnios.com | Admin123! |
-| Distribuidor | distribuidor@juhnios.com | Admin123! |
+| Admin | administrador2@juhnios.com | Admin123! |
 | Cliente | cliente@test.com | Admin123! |
 
-> ⚠️ Cambia las contraseñas en producción ejecutando el seed con hashes bcrypt correctos.
+La contraseña administrativa se configura con `ADMIN_SEED_PASSWORD`. En
+producción es obligatorio definirla antes de levantar Docker Compose.
 
 ---
 

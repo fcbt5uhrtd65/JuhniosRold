@@ -8,10 +8,14 @@ export function AdminLogin() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const success = login(email, password);
+    setError('');
+    setIsSubmitting(true);
+    const success = await login(email, password);
+    setIsSubmitting(false);
     if (!success) {
       setError('Credenciales inválidas');
     }
@@ -73,9 +77,10 @@ export function AdminLogin() {
 
           <button
             type="submit"
-            className="w-full py-3 bg-foreground text-background text-xs tracking-wider uppercase hover:opacity-90 transition-opacity"
+            disabled={isSubmitting}
+            className="w-full py-3 bg-foreground text-background text-xs tracking-wider uppercase hover:opacity-90 transition-opacity disabled:opacity-50"
           >
-            Iniciar sesión
+            {isSubmitting ? 'Validando...' : 'Iniciar sesión'}
           </button>
         </form>
 
@@ -88,13 +93,10 @@ export function AdminLogin() {
               <strong>Admin:</strong> admin@juhnios.com
             </div>
             <div>
-              <strong>Vendedor:</strong> vendedor@juhnios.com
-            </div>
-            <div>
-              <strong>Distribuidor:</strong> distribuidor@juhnios.com
+              <strong>Admin 2:</strong> administrador2@juhnios.com
             </div>
             <div className="text-[10px] text-muted-foreground mt-2">
-              * Cualquier contraseña funciona en modo demo
+              Contraseña demo: Admin123!
             </div>
           </div>
         </div>

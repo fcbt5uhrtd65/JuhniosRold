@@ -40,7 +40,14 @@ export interface Order {
   clienteId: string;
   productos: OrderItem[];
   total: number;
-  estado: 'pendiente' | 'pagado' | 'enviado' | 'entregado' | 'cancelado';
+  estado:
+    | 'pendiente'
+    | 'confirmado'
+    | 'procesando'
+    | 'pagado'
+    | 'enviado'
+    | 'entregado'
+    | 'cancelado';
   fecha: string;
   metodoPago?: string;
 }
@@ -57,6 +64,7 @@ export interface Payment {
 
 export interface Customer {
   id: string;
+  documento: string;
   nombre: string;
   telefono: string;
   email: string;

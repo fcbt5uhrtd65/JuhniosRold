@@ -3,13 +3,13 @@
 // Admin auth + data management with real API + localStorage fallback
 // ============================================================
 
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import type { ReactNode } from 'react';
 import type { User, Product, Inventory, Order, Payment, Customer } from '../types/admin';
 import {
   loginUser,
   getCurrentUser,
   logoutUser,
-  type AuthUser,
 } from '../services/auth.service';
 import {
   getProducts,
@@ -17,18 +17,21 @@ import {
   updateProduct as apiUpdateProduct,
   deleteProduct as apiDeleteProduct,
   updateProductStock as apiUpdateStock,
+  type Product as ApiProduct,
 } from '../services/products.service';
 import {
   getOrders,
   updateOrderStatus as apiUpdateOrderStatus,
-  getOrderStats,
 } from '../services/orders.service';
-import { getAllUsers } from '../services/users.service';
+import {
+  createCustomer as apiCreateCustomer,
+  getCustomers,
+  type BackendCustomer,
+} from '../services/customers.service';
 import {
   getAccessToken,
   clearTokens,
   isBackendAvailable,
-  setTokens,
 } from '../services/api';
 
 interface AdminContextType {
@@ -47,7 +50,7 @@ interface AdminContextType {
   deleteProduct: (id: string) => void | Promise<void>;
   updateInventory: (productId: string, stock: number) => void | Promise<void>;
   updateOrderStatus: (orderId: string, status: Order['estado']) => void | Promise<void>;
-  addCustomer: (customer: Omit<Customer, 'id' | 'totalCompras'>) => void;
+  addCustomer: (customer: Omit<Customer, 'id' | 'totalCompras'>) => void | Promise<void>;
   refreshData: () => Promise<void>;
 }
 
@@ -62,14 +65,12 @@ const STORAGE_KEYS = {
   CUSTOMERS: 'admin_customers',
 };
 
-// Mock admin users
+const DEMO_ADMIN_PASSWORD = 'Admin123!';
+
+// Offline demo users mirror the accounts created by seed_admin_users.
 const MOCK_USERS: User[] = [
   { id: '1', nombre: 'Admin Principal', email: 'admin@juhnios.com', rol: 'admin' },
-  { id: '2', nombre: 'Vendedor 1', email: 'vendedor@juhnios.com', rol: 'vendedor' },
-  { id: '3', nombre: 'Distribuidor', email: 'distribuidor@juhnios.com', rol: 'distribuidor' },
-  { id: '4', nombre: 'Contador Principal', email: 'contador@juhnios.com', rol: 'contador' },
-  { id: '5', nombre: 'Jefe de RRHH', email: 'rrhh@juhnios.com', rol: 'rrhh' },
-  { id: '6', nombre: 'Abogado Corporativo', email: 'abogado@juhnios.com', rol: 'abogado' },
+  { id: '2', nombre: 'Admin Secundario', email: 'administrador2@juhnios.com', rol: 'admin' },
 ];
 
 const INITIAL_PRODUCTS: Product[] = [
@@ -117,6 +118,7 @@ const INITIAL_INVENTORY: Inventory[] = [
 const INITIAL_CUSTOMERS: Customer[] = [
   {
     id: '1',
+    documento: '1000000001',
     nombre: 'María González',
     telefono: '3001234567',
     email: 'maria@email.com',
@@ -127,6 +129,7 @@ const INITIAL_CUSTOMERS: Customer[] = [
   },
   {
     id: '2',
+    documento: '1000000002',
     nombre: 'Andrea Ramírez',
     telefono: '3009876543',
     email: 'andrea@email.com',
@@ -175,21 +178,17 @@ const INITIAL_PAYMENTS: Payment[] = [
 ];
 
 // ---- Map API product → admin Product ----
-function mapApiProduct(p: {
-  id: string; name: string; category: string; price: number;
-  pro_price?: number; description: string; images?: string[];
-  is_active?: boolean; stock?: number; short_description?: string;
-}): Product {
+function mapApiProduct(p: ApiProduct): Product {
   return {
     id: p.id,
     nombre: p.name,
     categoria: p.category as Product['categoria'],
-    tipo: '',
-    presentacion: '',
-    precio: p.price,
+    tipo: p.category_name,
+    presentacion: p.sizes[0] ?? '',
+    precio: p.price ?? 0,
     descripcion: p.description,
-    imagen: p.images?.[0] ?? '',
-    estado: p.is_active !== false ? 'activo' : 'inactivo',
+    imagen: p.primary_image ?? '',
+    estado: p.is_active ? 'activo' : 'inactivo',
   };
 }
 
@@ -224,6 +223,29 @@ function mapApiOrder(o: {
   };
 }
 
+function mapApiCustomer(customer: BackendCustomer): Customer {
+  return {
+    id: customer.id,
+    documento: customer.document_number,
+    nombre: `${customer.first_name} ${customer.last_name}`.trim(),
+    telefono: customer.phone,
+    email: customer.email,
+    direccion: customer.address,
+    ciudad: customer.city,
+    totalCompras: 0,
+    ultimaCompra: customer.updated_at || customer.created_at,
+  };
+}
+
+function mapAdminUser(user: Awaited<ReturnType<typeof getCurrentUser>>): User {
+  return {
+    id: user.id,
+    nombre: `${user.first_name} ${user.last_name}`.trim() || user.email,
+    email: user.email,
+    rol: 'admin',
+  };
+}
+
 export function AdminProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -231,14 +253,11 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [backendOnline, setBackendOnline] = useState(false);
 
-  // Load from localStorage on mount
+  // Restore data and validate an administrative session on mount.
   useEffect(() => {
-    const savedUser = localStorage.getItem(STORAGE_KEYS.USER);
-    if (savedUser) setCurrentUser(JSON.parse(savedUser));
-
     const savedProducts = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
     setProducts(savedProducts ? JSON.parse(savedProducts) : INITIAL_PRODUCTS);
 
@@ -253,6 +272,44 @@ export function AdminProvider({ children }: { children: ReactNode }) {
 
     const savedCustomers = localStorage.getItem(STORAGE_KEYS.CUSTOMERS);
     setCustomers(savedCustomers ? JSON.parse(savedCustomers) : INITIAL_CUSTOMERS);
+
+    async function restoreSession() {
+      const online = await isBackendAvailable().catch(() => false);
+      setBackendOnline(online);
+
+      if (online && getAccessToken()) {
+        try {
+          const user = await getCurrentUser();
+          if (user.role === 'ADMIN') {
+            const adminUser = mapAdminUser(user);
+            setCurrentUser(adminUser);
+            localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(adminUser));
+          } else {
+            clearTokens();
+            localStorage.removeItem(STORAGE_KEYS.USER);
+          }
+        } catch {
+          clearTokens();
+          localStorage.removeItem(STORAGE_KEYS.USER);
+        }
+      } else if (!online) {
+        const savedUser = localStorage.getItem(STORAGE_KEYS.USER);
+        if (savedUser) {
+          try {
+            const parsed = JSON.parse(savedUser) as User;
+            if (MOCK_USERS.some(user => user.email === parsed.email)) {
+              setCurrentUser(parsed);
+            }
+          } catch {
+            localStorage.removeItem(STORAGE_KEYS.USER);
+          }
+        }
+      }
+
+      setIsLoading(false);
+    }
+
+    void restoreSession();
   }, []);
 
   // Persist changes
@@ -291,19 +348,10 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(mapped));
       }
 
-      // Customers
-      const usersRes = await getAllUsers({ limit: 100 } as Parameters<typeof getAllUsers>[0]).catch(() => null);
-      if (usersRes?.data) {
-        const mapped: Customer[] = usersRes.data.map((u: AuthUser) => ({
-          id: u.id,
-          nombre: `${u.first_name} ${u.last_name}`.trim(),
-          telefono: u.phone ?? '',
-          email: u.email,
-          direccion: '',
-          ciudad: '',
-          totalCompras: 0,
-          ultimaCompra: u.updated_at,
-        }));
+      // Customers are business profiles, not identity users.
+      const customersRes = await getCustomers({ limit: 100 }).catch(() => null);
+      if (customersRes?.data) {
+        const mapped = customersRes.data.map(mapApiCustomer);
         setCustomers(mapped);
         localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(mapped));
       }
@@ -326,32 +374,28 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     if (online) {
       try {
         const apiUser = await loginUser({ email, password });
-        // Only allow admin roles
-        if (!['ADMIN', 'SELLER', 'DISTRIBUTOR'].includes(apiUser.role)) {
+        if (apiUser.role !== 'ADMIN') {
           clearTokens();
-          // Fall through to mock
+          return false;
         } else {
-          const roleMap: Record<string, User['rol']> = {
-            ADMIN: 'admin',
-            SELLER: 'vendedor',
-            DISTRIBUTOR: 'distribuidor',
-          };
-          const adminUser: User = {
-            id: apiUser.id,
-            nombre: `${apiUser.first_name} ${apiUser.last_name}`.trim(),
-            email: apiUser.email,
-            rol: roleMap[apiUser.role] ?? 'vendedor',
-          };
+          const adminUser = mapAdminUser(apiUser);
           setCurrentUser(adminUser);
           localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(adminUser));
           await refreshData();
           return true;
         }
-      } catch { /* fallback */ }
+      } catch {
+        clearTokens();
+        return false;
+      }
     }
 
-    // Mock login
-    const user = MOCK_USERS.find(u => u.email === email);
+    // Offline demo login.
+    const user = MOCK_USERS.find(
+      candidate =>
+        candidate.email === email.toLowerCase() &&
+        password === DEMO_ADMIN_PASSWORD,
+    );
     if (user) {
       setCurrentUser(user);
       localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
@@ -365,6 +409,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       logoutUser().catch(() => {});
     }
     setCurrentUser(null);
+    clearTokens();
     localStorage.removeItem(STORAGE_KEYS.USER);
   }, [backendOnline]);
 
@@ -439,6 +484,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       pendiente: 'pending',
       confirmado: 'confirmed',
       procesando: 'processing',
+      pagado: 'confirmed',
       enviado: 'shipped',
       entregado: 'delivered',
       cancelado: 'cancelled',
@@ -452,8 +498,23 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     setOrders(prev => prev.map(o => (o.id === orderId ? { ...o, estado: status } : o)));
   }, [backendOnline]);
 
-  // ---- Add customer (mock only) ----
-  const addCustomer = (customer: Omit<Customer, 'id' | 'totalCompras'>) => {
+  const addCustomer = async (customer: Omit<Customer, 'id' | 'totalCompras'>) => {
+    if (backendOnline && getAccessToken()) {
+      const nameParts = customer.nombre.trim().split(/\s+/);
+      const created = await apiCreateCustomer({
+        document_number: customer.documento,
+        first_name: nameParts[0] ?? customer.nombre,
+        last_name: nameParts.slice(1).join(' '),
+        email: customer.email,
+        phone: customer.telefono,
+        address: customer.direccion,
+        city: customer.ciudad,
+        is_active: true,
+      });
+      setCustomers(prev => [...prev, mapApiCustomer(created)]);
+      return;
+    }
+
     const newCustomer: Customer = { ...customer, id: Date.now().toString(), totalCompras: 0 };
     setCustomers(prev => [...prev, newCustomer]);
   };

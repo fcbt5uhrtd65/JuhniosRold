@@ -103,7 +103,7 @@ function PublicSite({ onLoginClick }: { onLoginClick: () => void }) {
 }
 
 function AppContent() {
-  const { login, currentUser } = useAdmin();
+  const { login, currentUser, isLoading } = useAdmin();
   const [showLoginModal, setShowLoginModal] = useState(false);
 
   const handleAdminAccess = async (email: string, password: string) => {
@@ -111,7 +111,16 @@ function AppContent() {
     if (success) {
       setShowLoginModal(false);
     }
+    return success;
   };
+
+  if (isLoading && !currentUser) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center text-xs tracking-wider uppercase">
+        Validando sesión...
+      </div>
+    );
+  }
 
   if (currentUser) {
     return <Admin />;

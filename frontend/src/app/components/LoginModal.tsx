@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Lock, Mail, ShieldCheck, User as UserIcon } from 'lucide-react';
+import { X, Lock, Mail, User as UserIcon } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
 
 interface LoginModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAdminAccess: (email: string, password: string) => void | Promise<void>;
+  onAdminAccess: (email: string, password: string) => Promise<boolean>;
 }
 
 export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) {
@@ -16,7 +16,6 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
   const [nombre, setNombre] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showAdminHint, setShowAdminHint] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -43,15 +42,10 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
         return;
       }
 
-      // Check if it's an admin email
-      const adminEmails = ['admin@juhnios.com', 'vendedor@juhnios.com', 'distribuidor@juhnios.com'];
-      if (adminEmails.includes(email.toLowerCase())) {
-        await onAdminAccess(email, password);
-        return;
-      }
-
-      // Handle customer login/register
       if (isLogin) {
+        const isAdmin = await onAdminAccess(email, password);
+        if (isAdmin) return;
+
         const ok = await customerLogin(email, password);
         if (ok) {
           onClose();
@@ -196,11 +190,7 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
                   <input
                     type="email"
                     value={email}
-                    onChange={(e) => {
-                      setEmail(e.target.value);
-                      const adminEmails = ['admin@juhnios.com', 'vendedor@juhnios.com', 'distribuidor@juhnios.com'];
-                      setShowAdminHint(adminEmails.includes(e.target.value.toLowerCase()));
-                    }}
+                    onChange={(e) => setEmail(e.target.value)}
                     className="w-full pl-10 pr-3 py-3 bg-transparent border border-border text-xs focus:outline-none focus:border-foreground transition-colors"
                     placeholder="tu@email.com"
                     required
@@ -225,19 +215,6 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
                     />
                   </div>
                 </div>
-              )}
-
-              {showAdminHint && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200"
-                >
-                  <ShieldCheck className="w-4 h-4 text-blue-600" strokeWidth={1} />
-                  <div className="text-[10px] text-blue-900">
-                    Acceso administrativo detectado
-                  </div>
-                </motion.div>
               )}
 
               {isLogin && !isForgotPassword && (
@@ -295,19 +272,13 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
                     <strong>Admin:</strong> admin@juhnios.com
                   </button>
                   <button
-                    onClick={() => setEmail('vendedor@juhnios.com')}
+                    onClick={() => setEmail('administrador2@juhnios.com')}
                     className="w-full text-left px-3 py-2 border border-border hover:bg-secondary transition-colors"
                   >
-                    <strong>Vendedor:</strong> vendedor@juhnios.com
-                  </button>
-                  <button
-                    onClick={() => setEmail('distribuidor@juhnios.com')}
-                    className="w-full text-left px-3 py-2 border border-border hover:bg-secondary transition-colors"
-                  >
-                    <strong>Distribuidor:</strong> distribuidor@juhnios.com
+                    <strong>Admin 2:</strong> administrador2@juhnios.com
                   </button>
                   <div className="text-[10px] text-muted-foreground mt-2 px-3">
-                    * Cualquier contraseña funciona en modo demo
+                    Contraseña demo: Admin123!
                   </div>
                 </div>
               </div>
