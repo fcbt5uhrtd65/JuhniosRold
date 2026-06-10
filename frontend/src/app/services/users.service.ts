@@ -27,21 +27,21 @@ export interface SavedProduct {
 
 // ---- Get profile ----
 export async function getMyProfile(): Promise<AuthUser> {
-  const res = await api.get<AuthUser>('/users/me');
+  const res = await api.get<AuthUser>('/auth/users/me/');
   if (res.data) return res.data;
   throw new Error(res.message);
 }
 
 // ---- Update profile ----
 export async function updateMyProfile(payload: UpdateProfilePayload): Promise<AuthUser> {
-  const res = await api.patch<AuthUser>('/users/me', payload);
+  const res = await api.patch<AuthUser>('/auth/users/me/', payload);
   if (res.data) return res.data;
   throw new Error(res.message);
 }
 
 // ---- Change password ----
 export async function changePassword(payload: ChangePasswordPayload): Promise<void> {
-  await api.patch('/users/me/password', payload);
+  await api.patch('/auth/users/me/password/', payload);
 }
 
 // ---- Saved products ----
@@ -63,28 +63,41 @@ export async function removeSavedProduct(productId: string): Promise<void> {
 // ---- Admin: List users ----
 export async function getAllUsers(params?: {
   page?: number;
+  limit?: number;
   role?: string;
   search?: string;
 }): Promise<{ data: AuthUser[]; total: number; totalPages: number }> {
   const query = new URLSearchParams();
   if (params?.page) query.set('page', String(params.page));
-  if (params?.role) query.set('role', params.role);
+  if (params?.limit) query.set('page_size', String(params.limit));
   if (params?.search) query.set('search', params.search);
 
-  const endpoint = `/users${query.toString() ? `?${query}` : ''}`;
-  const res = await api.get<{ data: AuthUser[]; total: number; totalPages: number }>(endpoint);
-  if (res.data) return res.data;
-  throw new Error(res.message);
+  const endpoint = `/auth/users/${query.toString() ? `?${query}` : ''}`;
+  const res = await api.get<{
+    count: number;
+    next: string | null;
+    previous: string | null;
+    results: AuthUser[];
+  }>(endpoint);
+  const data = res.data;
+  if (!data) throw new Error(res.message);
+
+  const limit = params?.limit ?? 20;
+  return {
+    data: params?.role ? data.results.filter((user) => user.role === params.role) : data.results,
+    total: data.count,
+    totalPages: Math.max(1, Math.ceil(data.count / limit)),
+  };
 }
 
 // ---- Admin: Update user role ----
 export async function updateUserRole(userId: string, role: string): Promise<AuthUser> {
-  const res = await api.patch<AuthUser>(`/users/${userId}/role`, { role });
+  const res = await api.patch<AuthUser>(`/auth/users/${userId}/role/`, { role });
   if (res.data) return res.data;
   throw new Error(res.message);
 }
 
 // ---- Admin: Deactivate user ----
 export async function deactivateUser(userId: string): Promise<void> {
-  await api.patch(`/users/${userId}/deactivate`, {});
+  await api.patch(`/auth/users/${userId}/`, { is_active: false });
 }

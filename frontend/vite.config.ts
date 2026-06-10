@@ -92,6 +92,7 @@ export default defineConfig({
     proxy: {
       '/api': backendProxy(proxyTarget),
       '/health': backendProxy(proxyTarget),
+      '/media': backendProxy(proxyTarget),
     },
 
     hmr: {

@@ -30,6 +30,9 @@ class RoleSerializer(serializers.ModelSerializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
+    role = serializers.SerializerMethodField()
+    created_at = serializers.DateTimeField(source="date_joined", read_only=True)
+    updated_at = serializers.SerializerMethodField()
     roles = serializers.PrimaryKeyRelatedField(
         source="groups",
         queryset=Group.objects.all(),
@@ -47,10 +50,22 @@ class UserSerializer(serializers.ModelSerializer):
             "phone",
             "is_active",
             "is_staff",
+            "role",
             "roles",
             "date_joined",
+            "created_at",
+            "updated_at",
         )
         read_only_fields = ("id", "date_joined")
+
+    def get_role(self, user):
+        if user.is_superuser or user.is_staff:
+            return "ADMIN"
+        role = user.groups.values_list("name", flat=True).first()
+        return role.upper() if role else "CLIENT"
+
+    def get_updated_at(self, user):
+        return user.last_login or user.date_joined
 
 
 class RegisterSerializer(serializers.Serializer):
@@ -58,6 +73,7 @@ class RegisterSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True, min_length=8)
     first_name = serializers.CharField(required=False, allow_blank=True)
     last_name = serializers.CharField(required=False, allow_blank=True)
+    phone = serializers.CharField(required=False, allow_blank=True)
 
     def create(self, validated_data):
         return RegisterUser().execute(RegisterUserDTO(**validated_data))

@@ -75,7 +75,7 @@ function PublicSite({ onLoginClick }: { onLoginClick: () => void }) {
         </section>
 
         {/* Full product catalog */}
-        <ProductCatalog />
+        <ProductCatalog onLoginRequired={onLoginClick} />
 
         {/* Community / Instagram wall */}
         <Comunidad />

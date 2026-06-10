@@ -44,38 +44,36 @@ export interface AuthResponseData {
   tokens: AuthTokens;
 }
 
+interface BackendTokenPair {
+  access: string;
+  refresh: string;
+}
+
 // ---- Register ----
 export async function registerUser(payload: RegisterPayload): Promise<AuthUser> {
-  const res = await api.post<AuthResponseData>('/auth/register', payload);
-  if (res.data) {
-    setTokens(res.data.tokens.accessToken, res.data.tokens.refreshToken);
-    return res.data.user;
-  }
-  throw new Error(res.message);
+  await api.post('/auth/register/', payload);
+  return loginUser({ email: payload.email, password: payload.password });
 }
 
 // ---- Login ----
 export async function loginUser(payload: LoginPayload): Promise<AuthUser> {
-  const res = await api.post<AuthResponseData>('/auth/login', payload);
-  if (res.data) {
-    setTokens(res.data.tokens.accessToken, res.data.tokens.refreshToken);
-    return res.data.user;
+  const res = await api.post<BackendTokenPair>('/auth/login/', payload);
+  if (!res.data?.access || !res.data.refresh) {
+    throw new Error('El servidor no devolvio una sesion valida.');
   }
-  throw new Error(res.message);
+
+  setTokens(res.data.access, res.data.refresh);
+  return getCurrentUser();
 }
 
 // ---- Get current user (validates token) ----
 export async function getCurrentUser(): Promise<AuthUser> {
-  const res = await api.get<AuthUser>('/auth/me');
+  const res = await api.get<AuthUser>('/auth/users/me/');
   if (res.data) return res.data;
   throw new Error(res.message);
 }
 
 // ---- Logout ----
 export async function logoutUser(): Promise<void> {
-  try {
-    await api.post('/auth/logout', {});
-  } finally {
-    clearTokens();
-  }
+  clearTokens();
 }

@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  Star,
+  Sparkles,
   Search,
   Filter,
   Grid,
@@ -9,60 +9,248 @@ import {
   Heart,
   Eye,
   ShoppingCart as CartIcon,
-  Sparkles,
-  TrendingUp
+  TrendingUp,
+  Package,
 } from 'lucide-react';
+
 import { useCart } from '../contexts/CartContext';
 import { useSearch } from '../contexts/SearchContext';
 import { useUser } from '../contexts/UserContext';
 import { useToast } from '../contexts/ToastContext';
+import {
+  getCategories,
+  getProducts,
+  type Product as CatalogProduct,
+  type ProductCategory,
+} from '../services/products.service';
 
-interface Product {
-  id: string;
-  name: string;
-  category: string;
-  sizes: string[];
-  price: string;
-  image: string;
-  rating?: number;
-  reviews?: number;
-  badge?: 'nuevo' | 'popular' | 'oferta';
-  description?: string;
+type ViewMode = 'grid' | 'list';
+type PriceRange = 'all' | 'low' | 'mid' | 'high';
+type CollectionFilter = 'all' | 'featured' | 'recent';
+type CatalogBadge = 'nuevo' | 'destacado';
+
+const FALLBACK_IMAGE =
+  'https://images.unsplash.com/photo-1608248597279-f99d160bfcbc?w=900&q=80';
+
+function formatPrice(price: number | null, currency = 'COP'): string {
+  if (price === null) {
+    return 'Consultar';
+  }
+
+  return new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency,
+    maximumFractionDigits: 0,
+  }).format(price);
 }
 
-interface CatalogItem {
-  id: number;
-  name: string;
-  unitsPerDisplay: string;
-  stock: number;
-  price: number;
+function isRecentProduct(createdAt: string): boolean {
+  const createdTime = new Date(createdAt).getTime();
+  if (Number.isNaN(createdTime)) {
+    return false;
+  }
+
+  const THIRTY_DAYS = 1000 * 60 * 60 * 24 * 30;
+  return Date.now() - createdTime <= THIRTY_DAYS;
 }
 
-export function ProductCatalog() {
+function getProductBadge(product: CatalogProduct): CatalogBadge | undefined {
+  if (product.is_featured) {
+    return 'destacado';
+  }
+
+  if (isRecentProduct(product.created_at)) {
+    return 'nuevo';
+  }
+
+  return undefined;
+}
+
+function getProductImage(product: CatalogProduct): string {
+  return product.primary_image ?? product.image_urls[0] ?? FALLBACK_IMAGE;
+}
+
+function getProductSizes(product: CatalogProduct): string[] {
+  return product.sizes.length > 0 ? product.sizes : ['Presentación única'];
+}
+
+function getProductDescription(product: CatalogProduct): string {
+  if (product.description.trim()) {
+    return product.description;
+  }
+
+  return `Disponible en ${getProductSizes(product).length} presentación(es).`;
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return 'No se pudo cargar el catálogo en este momento.';
+}
+
+interface ProductCatalogProps {
+  onLoginRequired?: () => void;
+}
+
+export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
   const { addItem } = useCart();
   const { searchQuery: globalSearchQuery } = useSearch();
-  const { toggleSaveProduct, isProductSaved } = useUser();
+  const { currentUser, toggleSaveProduct, isProductSaved } = useUser();
   const toast = useToast();
 
-  const [activeCategory, setActiveCategory] = useState('capilar');
+  const [categories, setCategories] = useState<ProductCategory[]>([]);
+  const [products, setProducts] = useState<CatalogProduct[]>([]);
+  const [activeCategory, setActiveCategory] = useState('all');
   const [localSearchQuery, setLocalSearchQuery] = useState('');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [selectedSizes, setSelectedSizes] = useState<Record<string, string>>({});
-  const [priceRange, setPriceRange] = useState<'all' | 'low' | 'mid' | 'high'>('all');
-  const [minRating, setMinRating] = useState(0);
+  const [priceRange, setPriceRange] = useState<PriceRange>('all');
+  const [collectionFilter, setCollectionFilter] = useState<CollectionFilter>('all');
   const [showFilters, setShowFilters] = useState(false);
-  const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
+  const [quickViewProduct, setQuickViewProduct] = useState<CatalogProduct | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleAddToCart = (product: Product, closeModal?: boolean) => {
-    const size = selectedSizes[product.id] || product.sizes[0];
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadCatalog() {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const [catalogCategories, catalogProducts] = await Promise.all([
+          getCategories(),
+          getProducts({
+            limit: 100,
+            active: true,
+            ordering: 'name',
+          }),
+        ]);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setCategories(catalogCategories.filter((category) => category.is_active));
+        setProducts(catalogProducts.data.filter((product) => product.is_active));
+      } catch (loadError) {
+        if (!isMounted) {
+          return;
+        }
+
+        setError(getErrorMessage(loadError));
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadCatalog();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (globalSearchQuery) {
+      setLocalSearchQuery(globalSearchQuery);
+    }
+  }, [globalSearchQuery]);
+
+  useEffect(() => {
+    if (
+      activeCategory !== 'all' &&
+      categories.length > 0 &&
+      !categories.some((category) => category.id === activeCategory)
+    ) {
+      setActiveCategory('all');
+    }
+  }, [activeCategory, categories]);
+
+  const categoryTabs = useMemo(
+    () => [
+      { id: 'all', label: 'Todos' },
+      ...categories.map((category) => ({
+        id: category.id,
+        label: category.name,
+      })),
+    ],
+    [categories],
+  );
+
+  const productsByCategory = useMemo(() => {
+    return products.reduce<Record<string, CatalogProduct[]>>((accumulator, product) => {
+      if (!accumulator[product.category_id]) {
+        accumulator[product.category_id] = [];
+      }
+
+      accumulator[product.category_id].push(product);
+      return accumulator;
+    }, {});
+  }, [products]);
+
+  const currentProducts = useMemo(() => {
+    return products.filter((product) => {
+      const matchesCategory =
+        activeCategory === 'all' || product.category_id === activeCategory;
+
+      const normalizedSearch = localSearchQuery.trim().toLowerCase();
+      const sizes = getProductSizes(product);
+
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        product.name.toLowerCase().includes(normalizedSearch) ||
+        product.category_name.toLowerCase().includes(normalizedSearch) ||
+        product.description.toLowerCase().includes(normalizedSearch) ||
+        sizes.some((size) => size.toLowerCase().includes(normalizedSearch));
+
+      const productPrice = product.price ?? 0;
+      let matchesPrice = true;
+
+      if (priceRange === 'low') {
+        matchesPrice = productPrice < 25000;
+      } else if (priceRange === 'mid') {
+        matchesPrice = productPrice >= 25000 && productPrice < 100000;
+      } else if (priceRange === 'high') {
+        matchesPrice = productPrice >= 100000;
+      }
+
+      let matchesCollection = true;
+      if (collectionFilter === 'featured') {
+        matchesCollection = product.is_featured;
+      } else if (collectionFilter === 'recent') {
+        matchesCollection = isRecentProduct(product.created_at);
+      }
+
+      return matchesCategory && matchesSearch && matchesPrice && matchesCollection;
+    });
+  }, [activeCategory, collectionFilter, localSearchQuery, priceRange, products]);
+
+  const handleAddToCart = (product: CatalogProduct, closeModal?: boolean) => {
+    if (!currentUser) {
+      if (closeModal) {
+        setQuickViewProduct(null);
+      }
+      toast.info('Inicia sesion para anadir productos al carrito');
+      onLoginRequired?.();
+      return;
+    }
+
+    const sizes = getProductSizes(product);
+    const size = selectedSizes[product.id] || sizes[0];
 
     addItem({
       id: `${product.id}-${size}`,
       name: product.name,
-      category: product.category,
+      category: product.category_name,
       size,
-      price: parseFloat(product.price.replace(/\./g, '')),
-      image: product.image,
+      price: product.price ?? 0,
+      image: getProductImage(product),
     });
 
     toast.success(`${product.name} añadido al carrito`);
@@ -73,8 +261,13 @@ export function ProductCatalog() {
   };
 
   const handleToggleSave = (productId: string, productName: string) => {
-    const wasSaved = isProductSaved(productId);
+    if (!currentUser) {
+      toast.info('Inicia sesion para guardar productos');
+      onLoginRequired?.();
+      return;
+    }
 
+    const wasSaved = isProductSaved(productId);
     toggleSaveProduct(productId);
 
     if (wasSaved) {
@@ -83,255 +276,6 @@ export function ProductCatalog() {
       toast.success(`${productName} guardado para después`);
     }
   };
-
-  useEffect(() => {
-    if (globalSearchQuery) {
-      setLocalSearchQuery(globalSearchQuery);
-    }
-  }, [globalSearchQuery]);
-
-  const categories = [
-    { id: 'capilar', label: 'Capilar' },
-    { id: 'corporal', label: 'Corporal' },
-    { id: 'baby', label: 'Baby' },
-    { id: 'personal', label: 'Personal' },
-    { id: 'aseo', label: 'Aseo' },
-    { id: 'antibacterial', label: 'Antibacterial' },
-    { id: 'laboratorio', label: 'Laboratorio' }
-  ];
-
-  const productImageByCategory: Record<string, string> = {
-    capilar: 'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?w=600&q=80',
-    corporal: 'https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?w=600&q=80',
-    baby: 'https://images.unsplash.com/photo-1515488042361-ee00e0ddd4e4?w=600&q=80',
-    personal: 'https://images.unsplash.com/photo-1585386959984-a4155224a1ad?w=600&q=80',
-    aseo: 'https://images.unsplash.com/photo-1583947581924-860bda6a26df?w=600&q=80',
-    antibacterial: 'https://images.unsplash.com/photo-1584744982491-665216d95f8b?w=600&q=80',
-    laboratorio: 'https://images.unsplash.com/photo-1582719471384-894fbb16e074?w=600&q=80'
-  };
-
-  const getCategoryFromName = (name: string): string => {
-    const normalized = name.toLowerCase();
-
-    if (
-      normalized.includes('bebe') ||
-      normalized.includes('bebé')
-    ) {
-      return 'baby';
-    }
-
-    if (
-      normalized.includes('capilar') ||
-      normalized.includes('shampoo') ||
-      normalized.includes('acondicionador') ||
-      normalized.includes('crema de peinar') ||
-      normalized.includes('silicona') ||
-      normalized.includes('keratina') ||
-      normalized.includes('full liso') ||
-      normalized.includes('tono sobre tono') ||
-      normalized.includes('fusion amino')
-    ) {
-      return 'capilar';
-    }
-
-    if (
-      normalized.includes('corporal') ||
-      normalized.includes('crema para manos') ||
-      normalized.includes('body splash') ||
-      normalized.includes('locion') ||
-      normalized.includes('menthus') ||
-      normalized.includes('pomada') ||
-      normalized.includes('vaselina')
-    ) {
-      return 'corporal';
-    }
-
-    if (
-      normalized.includes('desodorante') ||
-      normalized.includes('removedor')
-    ) {
-      return 'personal';
-    }
-
-    if (
-      normalized.includes('alcohol') ||
-      normalized.includes('amonio') ||
-      normalized.includes('jabon') ||
-      normalized.includes('jabón') ||
-      normalized === 'galon' ||
-      normalized === 'pimpina' ||
-      normalized.includes('galon') ||
-      normalized.includes('pimpina')
-    ) {
-      return 'aseo';
-    }
-
-    if (normalized.includes('gel antibacterial')) {
-      return 'antibacterial';
-    }
-
-    if (normalized.includes('recolector')) {
-      return 'laboratorio';
-    }
-
-    return 'personal';
-  };
-
-  const formatPrice = (price: number): string => {
-    return price.toLocaleString('es-CO');
-  };
-
-  const catalogItems: CatalogItem[] = [
-    { id: 1, name: 'ACEITE BEBE / AGUACATE 50ML * 12 DISPLAY', unitsPerDisplay: '12', stock: 432, price: 1609 },
-    { id: 2, name: 'ACEITE BEBE / AGUACATE 70ML * 12 DISPLAY', unitsPerDisplay: '12', stock: 336, price: 2052 },
-    { id: 3, name: 'ACEITE BEBE / AGUACATE 90ML * 12 DISPLAY', unitsPerDisplay: '12', stock: 288, price: 2337 },
-    { id: 4, name: 'ACEITES 3 MAS', unitsPerDisplay: '6', stock: 288, price: 1472 },
-    { id: 5, name: 'ACEITES SACHET 8 ML', unitsPerDisplay: '30', stock: 1440, price: 754 },
-    { id: 6, name: 'ACEITE CAPILAR 60ML', unitsPerDisplay: 'N/A', stock: 290, price: 2940 },
-    { id: 7, name: 'ACEITE CAPILAR 120ML', unitsPerDisplay: 'N/A', stock: 110, price: 4324 },
-    { id: 8, name: 'ACEITE CORPORAL 120ML', unitsPerDisplay: 'N/A', stock: 110, price: 4527 },
-    { id: 9, name: 'ACEITE CORPORAL 250ML', unitsPerDisplay: 'N/A', stock: 60, price: 7888 },
-    { id: 10, name: 'BODY SPLASH 250ML', unitsPerDisplay: 'N/A', stock: 70, price: 10823 },
-    { id: 11, name: 'CREMA PARA MANOS Y CUERPO 1000ML', unitsPerDisplay: 'N/A', stock: 15, price: 14540 },
-    { id: 12, name: 'CREMA PARA MANOS Y CUERPO 120ML', unitsPerDisplay: 'N/A', stock: 110, price: 3114 },
-    { id: 13, name: 'CREMA PARA MANOS Y CUERPO 250ML', unitsPerDisplay: 'N/A', stock: 80, price: 7165 },
-    { id: 14, name: 'CREMA PARA MANOS Y CUERPO 500ML', unitsPerDisplay: 'N/A', stock: 30, price: 10219 },
-    { id: 15, name: 'FULL LISO TERMOPROTECTOR DISPLAY * 30 UNDS 15grms', unitsPerDisplay: '24', stock: 28, price: 892 },
-    { id: 16, name: 'FULL LISO DISPLAY * 30 UNDS 15grms', unitsPerDisplay: '36', stock: 960, price: 846 },
-    { id: 17, name: 'FUSION AMINO 3 PASOS DISPLAY * 6 PAQUETES', unitsPerDisplay: '6', stock: 84, price: 12701 },
-    { id: 18, name: 'GEL CAPILAR 1000gr DISPLAY * 12 UNDS', unitsPerDisplay: '12', stock: 24, price: 17107 },
-    { id: 19, name: 'GEL CAPILAR 100gr DISPLAY * 48 UNDS', unitsPerDisplay: '48', stock: 192, price: 2642 },
-    { id: 20, name: 'GEL CAPILAR 250gr DISPLAY * 40 UNDS', unitsPerDisplay: '40', stock: 80, price: 5093 },
-    { id: 21, name: 'GEL CAPILAR 500gr DISPLAY * 24 UNDS', unitsPerDisplay: '24', stock: 48, price: 9289 },
-    { id: 22, name: 'GEL CAPILAR SACHET 12gr DISPLAY * 36 SOBRES', unitsPerDisplay: '36', stock: 1440, price: 558 },
-    { id: 23, name: 'GEL CAPILAR SACHET 30gr DISPLAY * 24 SOBRES', unitsPerDisplay: '24', stock: 576, price: 999 },
-    { id: 24, name: 'GEL CAPILAR SACHET 80gr DISPLAY * 12 SOBRES', unitsPerDisplay: '20', stock: 240, price: 2032 },
-    { id: 25, name: 'LOCION TERMICA ARNICA / CANNABIS 375ml', unitsPerDisplay: 'N/A', stock: 54, price: 22804 },
-    { id: 26, name: 'LOCION TERMICA ARNICA/ CANNABIS 150mL', unitsPerDisplay: 'N/A', stock: 110, price: 10770 },
-    { id: 27, name: 'LOCION TERMICA ARNICA/ CANNABIS 60mL', unitsPerDisplay: 'N/A', stock: 290, price: 6036 },
-    { id: 28, name: 'LOCION MENTOLADA (Pinguino)', unitsPerDisplay: 'N/A', stock: 110, price: 10151 },
-    { id: 29, name: 'MENTHUS 1000gr VERDE & AZUL', unitsPerDisplay: '12', stock: 24, price: 21280 },
-    { id: 30, name: 'MENTHUS 10gr VERDE & AZUL', unitsPerDisplay: '36', stock: 1440, price: 940 },
-    { id: 31, name: 'MENTHUS 110gr VERDE & AZUL', unitsPerDisplay: '48', stock: 192, price: 4387 },
-    { id: 32, name: 'MENTHUS 220gr VERDE & AZUL', unitsPerDisplay: '40', stock: 80, price: 8807 },
-    { id: 33, name: 'MENTHUS 30gr VERDE & AZUL', unitsPerDisplay: '12', stock: 576, price: 1778 },
-    { id: 34, name: 'MENTHUS NUEVA PRESENTACION 120gr', unitsPerDisplay: '48', stock: 192, price: 4403 },
-    { id: 35, name: 'MENTHUS NUEVA PRESENTACION 250gr', unitsPerDisplay: '40', stock: 80, price: 7959 },
-    { id: 36, name: 'POMADA RUBIC 20gr', unitsPerDisplay: '12', stock: 576, price: 2202 },
-    { id: 37, name: 'POMADA RUBIC 80gr', unitsPerDisplay: '40', stock: 80, price: 5785 },
-    { id: 38, name: 'POMADA RUBIC 200gr', unitsPerDisplay: '48', stock: 192, price: 14310 },
-    { id: 39, name: 'RECOLECTOR 50*50', unitsPerDisplay: '50', stock: 1000, price: 322 },
-    { id: 40, name: 'RECOLECTOR COPRO', unitsPerDisplay: '50', stock: 1000, price: 355 },
-    { id: 41, name: 'RECOLECTOR MUESTRA', unitsPerDisplay: '50', stock: 1000, price: 339 },
-    { id: 42, name: 'REMOVEDOR 50ML DISPLAY * 12 UNDS', unitsPerDisplay: '12', stock: 432, price: 1447 },
-    { id: 43, name: 'SHAMPOO CEBOLLA/ROMERO 350gr', unitsPerDisplay: 'N/A', stock: 60, price: 1152 },
-    { id: 44, name: 'ACONDICIONADOR CEBOLLA/ROMERO 350gr', unitsPerDisplay: 'N/A', stock: 60, price: 11398 },
-    { id: 45, name: 'CREMA DE PEINAR CEBOLLA/ROMERO 350gr', unitsPerDisplay: 'N/A', stock: 60, price: 11398 },
-    { id: 46, name: 'SHAMPOO CEBOLLA/ROMERO 30gr', unitsPerDisplay: '22', stock: 576, price: 1305 },
-    { id: 47, name: 'ACONDICIONADOR CEBOLLA/ROMERO 30gr', unitsPerDisplay: '22', stock: 528, price: 1305 },
-    { id: 48, name: 'CREMA DE PEINAR CEBOLLA/ROMERO 30gr', unitsPerDisplay: '22', stock: 528, price: 1305 },
-    { id: 49, name: 'SILICONA VERDE (LINO) / ARGAN 30ML', unitsPerDisplay: '12', stock: 576, price: 4549 },
-    { id: 50, name: 'SILICONA VERDE (LINO) / ARGAN 50ML', unitsPerDisplay: '12', stock: 336, price: 5484 },
-    { id: 51, name: 'SILICONA VERDE (LINO) / ARGAN 8ML (SACHET)', unitsPerDisplay: '30', stock: 1800, price: 1443 },
-    { id: 52, name: 'SILICONA VERDE (LINO) / ARGAN 8ML (VIDRIO)', unitsPerDisplay: '175', stock: 700, price: 2126 },
-    { id: 53, name: 'TONO SOBRE TONO 30gr DISPLAY * 24 UNDS', unitsPerDisplay: '24', stock: 576, price: 1694 },
-    { id: 54, name: 'TRATAMIENTO KERATINA 250gr', unitsPerDisplay: '40', stock: 80, price: 5944 },
-    { id: 55, name: 'TRATAMIENTO KERATINA 30gr', unitsPerDisplay: '24', stock: 576, price: 1270 },
-    { id: 56, name: 'VASELINA ROSADA / AZUL 20gr', unitsPerDisplay: '12', stock: 576, price: 1439 },
-    { id: 57, name: 'VASELINA ROSADA / AZUL 80gr', unitsPerDisplay: '48', stock: 80, price: 4420 },
-    { id: 58, name: 'VASELINA ROSADA / AZUL 200gr', unitsPerDisplay: '40', stock: 192, price: 9992 },
-    { id: 59, name: 'DESODORANTE CORPORAL 8G', unitsPerDisplay: '18', stock: 48, price: 1059 },
-    { id: 60, name: 'JABON T/ VALVULA 1000ML', unitsPerDisplay: '1000', stock: 15, price: 9198 },
-    { id: 61, name: 'JABON T/ CHUPO 1000ML', unitsPerDisplay: '1000', stock: 15, price: 8313 },
-    { id: 62, name: 'JABON T/ VALVULA 500ML', unitsPerDisplay: '500', stock: 30, price: 5874 },
-    { id: 63, name: 'JABON T/ CHUPO 500ML', unitsPerDisplay: '500', stock: 30, price: 4830 },
-    { id: 64, name: 'JABON T/ VALVULA 300ML', unitsPerDisplay: '300', stock: 50, price: 4892 },
-    { id: 65, name: 'JABON T/ CHUPO 300ML', unitsPerDisplay: '300', stock: 50, price: 3557 },
-    { id: 66, name: 'JABON T/ VALVULA 120ML', unitsPerDisplay: '120', stock: 120, price: 2059 },
-    { id: 67, name: 'GALON', unitsPerDisplay: '3750', stock: 6, price: 26148 },
-    { id: 68, name: 'PIMPINA', unitsPerDisplay: '20000', stock: 1, price: 151265 },
-    { id: 69, name: 'ALCOHOL 70% T / SPRAY 1000ML', unitsPerDisplay: '1000', stock: 15, price: 13114 },
-    { id: 70, name: 'ALCOHOL 70% T / ROSCA 1000ML', unitsPerDisplay: '1000', stock: 15, price: 11601 },
-    { id: 71, name: 'ALCOHOL 70% T / SPRAY 800ML', unitsPerDisplay: '800', stock: 38, price: 10398 },
-    { id: 72, name: 'ALCOHOL 70% T / ROSCA 800ML', unitsPerDisplay: '800', stock: 38, price: 8975 },
-    { id: 73, name: 'ALCOHOL 70% T / SPRAY 700ML', unitsPerDisplay: '700', stock: 38, price: 9653 },
-    { id: 74, name: 'ALCOHOL 70% T / ROSCA 700ML', unitsPerDisplay: '700', stock: 38, price: 8129 },
-    { id: 75, name: 'ALCOHOL 70% T / SPRAY 500ML', unitsPerDisplay: '500', stock: 30, price: 7672 },
-    { id: 76, name: 'ALCOHOL 70% T / ROSCA 500ML', unitsPerDisplay: '500', stock: 30, price: 6435 },
-    { id: 77, name: 'ALCOHOL 70% T / SPRAY 250ML', unitsPerDisplay: '250', stock: 65, price: 5420 },
-    { id: 78, name: 'ALCOHOL 70% T / ROSCA 250ML', unitsPerDisplay: '250', stock: 65, price: 4014 },
-    { id: 79, name: 'ALCOHOL 70% T / SPRAY 120ML', unitsPerDisplay: '120', stock: 110, price: 2756 },
-    { id: 80, name: 'ALCOHOL 70% GALON', unitsPerDisplay: '3750', stock: 6, price: 41289 },
-    { id: 81, name: 'ALCOHOL 70% PIMPINA', unitsPerDisplay: '20000', stock: 1, price: 231883 },
-    { id: 82, name: 'AMONIO T / SPRAY 1000ML', unitsPerDisplay: '1000', stock: 15, price: 9218 },
-    { id: 83, name: 'AMONIO GALON', unitsPerDisplay: '3750', stock: 6, price: 25567 },
-    { id: 84, name: 'AMONIO PIMPINA', unitsPerDisplay: '20000', stock: 1, price: 145933 },
-    { id: 85, name: 'GEL ANTIBACTERIAL 50ML', unitsPerDisplay: '50', stock: 432, price: 1608 },
-    { id: 86, name: 'GEL ANTIBACTERIAL 120ML', unitsPerDisplay: '120', stock: 110, price: 2975 },
-    { id: 87, name: 'GEL ANTIBACTERIAL T/CHUPO 240ML', unitsPerDisplay: '240', stock: 60, price: 5165 },
-    { id: 88, name: 'GEL ANTIBACTERIAL T/VALVULA 240ML', unitsPerDisplay: '240', stock: 60, price: 6588 },
-    { id: 89, name: 'GEL ANTIBACTERIAL T/CHUPO 500ML', unitsPerDisplay: '500', stock: 30, price: 8882 },
-    { id: 90, name: 'GEL ANTIBACTERIAL T/VALVULA 500ML', unitsPerDisplay: '500', stock: 30, price: 10233 },
-    { id: 91, name: 'GEL ANTIBACTERIAL T/CHUPO 1000ML', unitsPerDisplay: '1000', stock: 15, price: 16272 },
-    { id: 92, name: 'GEL ANTIBACTERIAL T/VALVULA 1000ML', unitsPerDisplay: '1000', stock: 15, price: 17623 },
-    { id: 93, name: 'GEL ANTIBACTERIAL GALON', unitsPerDisplay: '3750', stock: 6, price: 50084 },
-    { id: 94, name: 'GEL ANTIBACTERIAL PIMPINA', unitsPerDisplay: '20000', stock: 1, price: 291155 }
-  ];
-
-  const products: Record<string, Product[]> = catalogItems.reduce((acc, item) => {
-    const categoryId = getCategoryFromName(item.name);
-
-    const size =
-      item.unitsPerDisplay === 'N/A'
-        ? 'Unidad'
-        : `${item.unitsPerDisplay} unds`;
-
-    const product: Product = {
-      id: `producto-${item.id}`,
-      name: item.name,
-      category: categories.find((category) => category.id === categoryId)?.label || 'Personal',
-      sizes: [size],
-      price: formatPrice(item.price),
-      image: productImageByCategory[categoryId],
-      rating: item.stock <= 10 ? 4 : 5,
-      reviews: item.stock,
-      badge: item.id <= 5 ? 'nuevo' : item.stock >= 1000 ? 'popular' : undefined,
-      description: `Stock disponible: ${item.stock} unidades. Presentación: ${size}.`
-    };
-
-    if (!acc[categoryId]) {
-      acc[categoryId] = [];
-    }
-
-    acc[categoryId].push(product);
-
-    return acc;
-  }, {} as Record<string, Product[]>);
-
-  const allProducts = products[activeCategory] || [];
-
-  const currentProducts = allProducts.filter((product) => {
-    const matchesSearch =
-      product.name.toLowerCase().includes(localSearchQuery.toLowerCase()) ||
-      product.category.toLowerCase().includes(localSearchQuery.toLowerCase()) ||
-      product.sizes.some((size) => size.toLowerCase().includes(localSearchQuery.toLowerCase()));
-
-    const price = parseFloat(product.price.replace(/\./g, ''));
-
-    let matchesPrice = true;
-
-    if (priceRange === 'low') {
-      matchesPrice = price < 25000;
-    } else if (priceRange === 'mid') {
-      matchesPrice = price >= 25000 && price < 100000;
-    } else if (priceRange === 'high') {
-      matchesPrice = price >= 100000;
-    }
-
-    const matchesRating = !product.rating || product.rating >= minRating;
-
-    return matchesSearch && matchesPrice && matchesRating;
-  });
 
   return (
     <section id="catalogo" className="py-20 bg-secondary">
@@ -347,7 +291,9 @@ export function ProductCatalog() {
           </div>
 
           <h2 className="text-4xl md:text-5xl font-bold leading-none mb-8">
-            Todos los<br />Productos
+            Todos los
+            <br />
+            Productos
           </h2>
 
           <div className="flex flex-col sm:flex-row gap-4 mb-8">
@@ -360,7 +306,7 @@ export function ProductCatalog() {
               <input
                 type="search"
                 value={localSearchQuery}
-                onChange={(e) => setLocalSearchQuery(e.target.value)}
+                onChange={(event) => setLocalSearchQuery(event.target.value)}
                 placeholder="Buscar productos..."
                 className="w-full pl-10 pr-4 py-3 bg-transparent border border-border text-xs focus:outline-none focus:border-foreground transition-colors"
               />
@@ -422,7 +368,7 @@ export function ProductCatalog() {
                       ].map((option) => (
                         <button
                           key={option.value}
-                          onClick={() => setPriceRange(option.value as 'all' | 'low' | 'mid' | 'high')}
+                          onClick={() => setPriceRange(option.value as PriceRange)}
                           className={`px-3 py-1.5 text-xs border transition-colors ${
                             priceRange === option.value
                               ? 'bg-foreground text-background border-foreground'
@@ -437,29 +383,25 @@ export function ProductCatalog() {
 
                   <div>
                     <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-3">
-                      Calificación mínima
+                      Colección
                     </div>
 
                     <div className="flex flex-wrap gap-2">
-                      {[0, 3, 4, 5].map((rating) => (
+                      {[
+                        { value: 'all', label: 'Todos' },
+                        { value: 'featured', label: 'Destacados' },
+                        { value: 'recent', label: 'Novedades' },
+                      ].map((option) => (
                         <button
-                          key={rating}
-                          onClick={() => setMinRating(rating)}
-                          className={`px-3 py-1.5 text-xs border transition-colors flex items-center gap-1 ${
-                            minRating === rating
+                          key={option.value}
+                          onClick={() => setCollectionFilter(option.value as CollectionFilter)}
+                          className={`px-3 py-1.5 text-xs border transition-colors ${
+                            collectionFilter === option.value
                               ? 'bg-foreground text-background border-foreground'
                               : 'border-border hover:border-foreground'
                           }`}
                         >
-                          {rating === 0 ? (
-                            'Todas'
-                          ) : (
-                            <>
-                              {rating}
-                              <Star className="w-3 h-3 fill-current" strokeWidth={1} />
-                              +
-                            </>
-                          )}
+                          {option.label}
                         </button>
                       ))}
                     </div>
@@ -470,16 +412,16 @@ export function ProductCatalog() {
           </AnimatePresence>
 
           <div className="flex gap-4 border-b border-border overflow-x-auto scrollbar-hide mt-8">
-            {categories.map((category) => {
-              const count = products[category.id]?.length || 0;
+            {categoryTabs.map((category) => {
+              const count =
+                category.id === 'all'
+                  ? products.length
+                  : productsByCategory[category.id]?.length || 0;
 
               return (
                 <button
                   key={category.id}
-                  onClick={() => {
-                    setActiveCategory(category.id);
-                    setLocalSearchQuery('');
-                  }}
+                  onClick={() => setActiveCategory(category.id)}
                   className={`pb-3 px-2 text-xs tracking-wider uppercase transition-all relative whitespace-nowrap flex-shrink-0 ${
                     activeCategory === category.id
                       ? 'opacity-100'
@@ -487,9 +429,7 @@ export function ProductCatalog() {
                   }`}
                 >
                   {category.label}
-                  <span className="ml-2 text-[10px] opacity-60">
-                    ({count})
-                  </span>
+                  <span className="ml-2 text-[10px] opacity-60">({count})</span>
 
                   {activeCategory === category.id && (
                     <motion.div
@@ -503,172 +443,189 @@ export function ProductCatalog() {
           </div>
         </motion.div>
 
-        {localSearchQuery && (
+        {isLoading && (
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-px bg-border">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div key={index} className="bg-background">
+                <div className="aspect-[3/4] bg-muted animate-pulse" />
+                <div className="p-4 border-t border-border space-y-3">
+                  <div className="h-3 w-20 bg-muted animate-pulse" />
+                  <div className="h-5 w-3/4 bg-muted animate-pulse" />
+                  <div className="h-4 w-24 bg-muted animate-pulse" />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!isLoading && error && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="text-center py-20 border border-border bg-background"
+          >
+            <Package className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-30" strokeWidth={1} />
+            <div className="text-sm mb-2">No pudimos cargar el catálogo.</div>
+            <div className="text-xs text-muted-foreground">{error}</div>
+          </motion.div>
+        )}
+
+        {!isLoading && !error && localSearchQuery && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             className="text-xs text-muted-foreground mb-4"
           >
-            {currentProducts.length} resultado{currentProducts.length !== 1 ? 's' : ''} encontrado{currentProducts.length !== 1 ? 's' : ''}
+            {currentProducts.length} resultado{currentProducts.length !== 1 ? 's' : ''}{' '}
+            encontrado{currentProducts.length !== 1 ? 's' : ''}
           </motion.div>
         )}
 
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={`${activeCategory}-${viewMode}`}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.4 }}
-            className={
-              viewMode === 'grid'
-                ? 'grid grid-cols-2 md:grid-cols-3 gap-px bg-border'
-                : 'space-y-px bg-border'
-            }
-          >
-            {currentProducts.map((product, index) => (
-              <motion.div
-                key={product.id}
-                initial={{ opacity: 0, y: 40 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.02 }}
-                className={`group bg-background ${viewMode === 'list' ? 'flex' : ''} relative`}
-              >
-                <div
-                  className={`bg-secondary overflow-hidden relative ${
-                    viewMode === 'grid' ? 'aspect-[3/4]' : 'w-32 h-32'
-                  }`}
-                >
-                  <motion.img
-                    whileHover={{ scale: 1.08 }}
-                    transition={{ duration: 0.6 }}
-                    src={product.image}
-                    alt={product.name}
-                    loading="lazy"
-                    decoding="async"
-                    className="w-full h-full object-cover"
-                  />
+        {!isLoading && !error && (
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={`${activeCategory}-${viewMode}`}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.4 }}
+              className={
+                viewMode === 'grid'
+                  ? 'grid grid-cols-2 md:grid-cols-3 gap-px bg-border'
+                  : 'space-y-px bg-border'
+              }
+            >
+              {currentProducts.map((product, index) => {
+                const sizes = getProductSizes(product);
+                const badge = getProductBadge(product);
 
-                  {product.badge && (
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      className="absolute top-3 left-3 px-3 py-1.5 bg-foreground text-background text-[9px] tracking-[0.2em] uppercase font-medium flex items-center gap-1.5"
-                    >
-                      {product.badge === 'nuevo' && (
-                        <Sparkles className="w-3 h-3" strokeWidth={1.5} />
-                      )}
-
-                      {product.badge === 'popular' && (
-                        <TrendingUp className="w-3 h-3" strokeWidth={1.5} />
-                      )}
-
-                      {product.badge}
-                    </motion.div>
-                  )}
-
+                return (
                   <motion.div
-                    initial={{ opacity: 0 }}
-                    whileHover={{ opacity: 1 }}
-                    className="absolute inset-0 bg-foreground/60 backdrop-blur-sm flex items-center justify-center gap-2 opacity-0 transition-opacity"
+                    key={product.id}
+                    initial={{ opacity: 0, y: 40 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.02 }}
+                    className={`group bg-background ${viewMode === 'list' ? 'flex' : ''} relative`}
                   >
-                    <motion.button
-                      whileHover={{ scale: 1.1 }}
-                      whileTap={{ scale: 0.9 }}
-                      onClick={() => setQuickViewProduct(product)}
-                      className="p-3 bg-background text-foreground rounded-full hover:bg-background/90 transition-colors"
-                      aria-label="Vista rápida"
+                    <div
+                      className={`bg-secondary overflow-hidden relative ${
+                        viewMode === 'grid' ? 'aspect-[3/4]' : 'w-32 h-32'
+                      }`}
                     >
-                      <Eye className="w-4 h-4" strokeWidth={1.5} />
-                    </motion.button>
-
-                    <motion.button
-                      whileHover={{ scale: 1.1 }}
-                      whileTap={{ scale: 0.9 }}
-                      onClick={() => handleToggleSave(product.id, product.name)}
-                      className="p-3 bg-background text-foreground rounded-full hover:bg-background/90 transition-colors"
-                      aria-label={isProductSaved(product.id) ? 'Quitar de guardados' : 'Guardar producto'}
-                    >
-                      <Heart
-                        className={`w-4 h-4 ${isProductSaved(product.id) ? 'fill-current' : ''}`}
-                        strokeWidth={1.5}
+                      <motion.img
+                        whileHover={{ scale: 1.08 }}
+                        transition={{ duration: 0.6 }}
+                        src={getProductImage(product)}
+                        alt={product.name}
+                        loading="lazy"
+                        decoding="async"
+                        className="w-full h-full object-cover"
                       />
-                    </motion.button>
-                  </motion.div>
-                </div>
 
-                <div
-                  className={`p-4 border-t border-border ${
-                    viewMode === 'list'
-                      ? 'flex-1 border-t-0 border-l flex flex-col justify-center'
-                      : ''
-                  }`}
-                >
-                  <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-1.5">
-                    {product.category}
-                  </div>
+                      {badge && (
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          className="absolute top-3 left-3 px-3 py-1.5 bg-foreground text-background text-[9px] tracking-[0.2em] uppercase font-medium flex items-center gap-1.5"
+                        >
+                          {badge === 'nuevo' ? (
+                            <Sparkles className="w-3 h-3" strokeWidth={1.5} />
+                          ) : (
+                            <TrendingUp className="w-3 h-3" strokeWidth={1.5} />
+                          )}
+                          {badge}
+                        </motion.div>
+                      )}
 
-                  <h3 className={viewMode === 'grid' ? 'text-sm mb-2' : 'text-base mb-3'}>
-                    {product.name}
-                  </h3>
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        whileHover={{ opacity: 1 }}
+                        className="absolute inset-0 bg-foreground/60 backdrop-blur-sm flex items-center justify-center gap-2 opacity-0 transition-opacity"
+                      >
+                        <motion.button
+                          whileHover={{ scale: 1.1 }}
+                          whileTap={{ scale: 0.9 }}
+                          onClick={() => setQuickViewProduct(product)}
+                          className="p-3 bg-background text-foreground rounded-full hover:bg-background/90 transition-colors"
+                          aria-label="Vista rápida"
+                        >
+                          <Eye className="w-4 h-4" strokeWidth={1.5} />
+                        </motion.button>
 
-                  {product.rating && (
-                    <div className="flex items-center gap-1.5 mb-2">
-                      <div className="flex gap-0.5">
-                        {[...Array(5)].map((_, i) => (
-                          <Star
-                            key={i}
-                            className={`w-2.5 h-2.5 ${
-                              i < product.rating! ? 'fill-foreground' : ''
-                            }`}
-                            strokeWidth={1}
+                        <motion.button
+                          whileHover={{ scale: 1.1 }}
+                          whileTap={{ scale: 0.9 }}
+                          onClick={() => handleToggleSave(product.id, product.name)}
+                          className="p-3 bg-background text-foreground rounded-full hover:bg-background/90 transition-colors"
+                          aria-label={isProductSaved(product.id) ? 'Quitar de guardados' : 'Guardar producto'}
+                        >
+                          <Heart
+                            className={`w-4 h-4 ${isProductSaved(product.id) ? 'fill-current' : ''}`}
+                            strokeWidth={1.5}
                           />
+                        </motion.button>
+                      </motion.div>
+                    </div>
+
+                    <div
+                      className={`p-4 border-t border-border ${
+                        viewMode === 'list'
+                          ? 'flex-1 border-t-0 border-l flex flex-col justify-center'
+                          : ''
+                      }`}
+                    >
+                      <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-1.5">
+                        {product.category_name}
+                      </div>
+
+                      <h3 className={viewMode === 'grid' ? 'text-sm mb-2' : 'text-base mb-3'}>
+                        {product.name}
+                      </h3>
+
+                      <div className="flex items-center gap-1.5 mb-2 text-[10px] text-muted-foreground">
+                        <Package className="w-3 h-3" strokeWidth={1.25} />
+                        {sizes.length} presentación{sizes.length !== 1 ? 'es' : ''}
+                      </div>
+
+                      <div className={`flex flex-wrap gap-1.5 mb-3 ${viewMode === 'list' ? 'mb-4' : ''}`}>
+                        {sizes.map((size) => (
+                          <button
+                            key={size}
+                            onClick={() => setSelectedSizes({ ...selectedSizes, [product.id]: size })}
+                            className={`text-[10px] border px-1.5 py-0.5 transition-colors ${
+                              (selectedSizes[product.id] ?? sizes[0]) === size
+                                ? 'bg-foreground text-background border-foreground'
+                                : 'text-muted-foreground border-border hover:border-foreground'
+                            }`}
+                          >
+                            {size}
+                          </button>
                         ))}
                       </div>
 
-                      <span className="text-[10px] text-muted-foreground">
-                        Stock: {product.reviews}
-                      </span>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className={viewMode === 'grid' ? 'text-xs' : 'text-sm'}>
+                          {formatPrice(product.price, product.currency ?? 'COP')}
+                        </div>
+
+                        <motion.button
+                          whileHover={{ x: 3 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => handleAddToCart(product)}
+                          className="text-[10px] tracking-wider uppercase hover:opacity-50 transition-opacity"
+                        >
+                          Añadir →
+                        </motion.button>
+                      </div>
                     </div>
-                  )}
+                  </motion.div>
+                );
+              })}
+            </motion.div>
+          </AnimatePresence>
+        )}
 
-                  <div className={`flex flex-wrap gap-1.5 mb-3 ${viewMode === 'list' ? 'mb-4' : ''}`}>
-                    {product.sizes.map((size) => (
-                      <button
-                        key={size}
-                        onClick={() => setSelectedSizes({ ...selectedSizes, [product.id]: size })}
-                        className={`text-[10px] border px-1.5 py-0.5 transition-colors ${
-                          selectedSizes[product.id] === size
-                            ? 'bg-foreground text-background border-foreground'
-                            : 'text-muted-foreground border-border hover:border-foreground'
-                        }`}
-                      >
-                        {size}
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className={viewMode === 'grid' ? 'text-xs' : 'text-sm'}>
-                      ${product.price}
-                    </div>
-
-                    <motion.button
-                      whileHover={{ x: 3 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => handleAddToCart(product)}
-                      className="text-[10px] tracking-wider uppercase hover:opacity-50 transition-opacity"
-                    >
-                      Añadir →
-                    </motion.button>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </motion.div>
-        </AnimatePresence>
-
-        {currentProducts.length === 0 && (
+        {!isLoading && !error && currentProducts.length === 0 && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -679,9 +636,7 @@ export function ProductCatalog() {
               strokeWidth={1}
             />
 
-            <div className="text-sm text-muted-foreground">
-              No se encontraron productos
-            </div>
+            <div className="text-sm text-muted-foreground">No se encontraron productos</div>
           </motion.div>
         )}
       </div>
@@ -707,22 +662,19 @@ export function ProductCatalog() {
               <div className="grid md:grid-cols-2">
                 <div className="aspect-[4/3] md:aspect-square bg-secondary relative">
                   <img
-                    src={quickViewProduct.image}
+                    src={getProductImage(quickViewProduct)}
                     alt={quickViewProduct.name}
                     className="w-full h-full object-cover"
                   />
 
-                  {quickViewProduct.badge && (
+                  {getProductBadge(quickViewProduct) && (
                     <div className="absolute top-6 left-6 px-4 py-2 bg-foreground text-background text-[10px] tracking-[0.2em] uppercase font-medium flex items-center gap-2">
-                      {quickViewProduct.badge === 'nuevo' && (
+                      {getProductBadge(quickViewProduct) === 'nuevo' ? (
                         <Sparkles className="w-3 h-3" strokeWidth={1.5} />
-                      )}
-
-                      {quickViewProduct.badge === 'popular' && (
+                      ) : (
                         <TrendingUp className="w-3 h-3" strokeWidth={1.5} />
                       )}
-
-                      {quickViewProduct.badge}
+                      {getProductBadge(quickViewProduct)}
                     </div>
                   )}
                 </div>
@@ -737,41 +689,25 @@ export function ProductCatalog() {
                   </button>
 
                   <div className="text-[9px] tracking-[0.3em] uppercase text-muted-foreground mb-4">
-                    {quickViewProduct.category}
+                    {quickViewProduct.category_name}
                   </div>
 
                   <h2 className="text-3xl md:text-4xl mb-4 leading-tight">
                     {quickViewProduct.name}
                   </h2>
 
-                  {quickViewProduct.rating && (
-                    <div className="flex items-center gap-2 mb-6">
-                      <div className="flex gap-1">
-                        {[...Array(5)].map((_, i) => (
-                          <Star
-                            key={i}
-                            className={`w-4 h-4 ${
-                              i < quickViewProduct.rating! ? 'fill-foreground' : 'fill-muted'
-                            }`}
-                            strokeWidth={1}
-                          />
-                        ))}
-                      </div>
+                  <div className="flex items-center gap-2 mb-6 text-xs text-muted-foreground">
+                    <Package className="w-4 h-4" strokeWidth={1.25} />
+                    {getProductSizes(quickViewProduct).length} presentación
+                    {getProductSizes(quickViewProduct).length !== 1 ? 'es' : ''}
+                  </div>
 
-                      <span className="text-xs text-muted-foreground">
-                        Stock: {quickViewProduct.reviews}
-                      </span>
-                    </div>
-                  )}
-
-                  {quickViewProduct.description && (
-                    <p className="text-sm text-muted-foreground mb-8 leading-relaxed">
-                      {quickViewProduct.description}
-                    </p>
-                  )}
+                  <p className="text-sm text-muted-foreground mb-8 leading-relaxed">
+                    {getProductDescription(quickViewProduct)}
+                  </p>
 
                   <div className="text-3xl mb-6">
-                    ${quickViewProduct.price}
+                    {formatPrice(quickViewProduct.price, quickViewProduct.currency ?? 'COP')}
                   </div>
 
                   <div className="mb-8">
@@ -780,12 +716,12 @@ export function ProductCatalog() {
                     </div>
 
                     <div className="flex flex-wrap gap-2">
-                      {quickViewProduct.sizes.map((size) => (
+                      {getProductSizes(quickViewProduct).map((size) => (
                         <button
                           key={size}
                           onClick={() => setSelectedSizes({ ...selectedSizes, [quickViewProduct.id]: size })}
                           className={`px-4 py-2 text-xs border transition-all ${
-                            selectedSizes[quickViewProduct.id] === size
+                            (selectedSizes[quickViewProduct.id] ?? getProductSizes(quickViewProduct)[0]) === size
                               ? 'bg-foreground text-background border-foreground'
                               : 'border-border hover:border-foreground'
                           }`}

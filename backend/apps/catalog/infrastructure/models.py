@@ -6,6 +6,7 @@ from shared.infrastructure.models import BaseModel
 class Category(BaseModel):
     name = models.CharField(max_length=120)
     slug = models.SlugField(unique=True)
+    image_url = models.URLField(blank=True)
     parent = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="children")
     is_active = models.BooleanField(default=True)
 

@@ -14,4 +14,5 @@ class RegisterUser:
             password=data.password,
             first_name=data.first_name,
             last_name=data.last_name,
+            phone=data.phone,
         )

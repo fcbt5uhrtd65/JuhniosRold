@@ -1,12 +1,12 @@
 // ============================================================
 // API Client Base — Juhnios Rold Frontend
-// Connects to backend at VITE_API_URL (default: /api via Vite proxy)
-// Falls back gracefully when backend is unavailable.
+// Connects to backend at VITE_API_URL (default: /api/v1 via Vite proxy)
+// and normalizes both DRF raw responses and custom enveloped payloads.
 // ============================================================
 
 export const API_BASE_URL: string =
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (import.meta as any).env?.VITE_API_URL ?? '/api';
+  (import.meta as any).env?.VITE_API_URL ?? '/api/v1';
 
 // ---- Token management ----
 export const TOKEN_KEYS = {
@@ -51,6 +51,83 @@ export interface ApiResponse<T = unknown> {
   meta?: Record<string, unknown>;
 }
 
+function isApiResponseEnvelope<T>(value: unknown): value is ApiResponse<T> {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  return 'success' in value && ('data' in value || 'message' in value);
+}
+
+function extractErrors(payload: unknown): string[] | undefined {
+  if (!payload || typeof payload !== 'object') {
+    return undefined;
+  }
+
+  const detail = (payload as { detail?: unknown }).detail;
+  if (typeof detail === 'string') {
+    return [detail];
+  }
+
+  const message = (payload as { message?: unknown }).message;
+  if (typeof message === 'string') {
+    return [message];
+  }
+
+  const fieldErrors = Object.entries(payload as Record<string, unknown>)
+    .flatMap(([field, value]) => {
+      if (Array.isArray(value)) {
+        return value
+          .filter((item): item is string => typeof item === 'string')
+          .map((item) => `${field}: ${item}`);
+      }
+
+      if (typeof value === 'string') {
+        return [`${field}: ${value}`];
+      }
+
+      return [];
+    });
+
+  return fieldErrors.length > 0 ? fieldErrors : undefined;
+}
+
+function extractMessage(payload: unknown, status: number): string {
+  if (typeof payload === 'string' && payload.trim()) {
+    return payload;
+  }
+
+  if (payload && typeof payload === 'object') {
+    const asRecord = payload as Record<string, unknown>;
+
+    if (typeof asRecord.message === 'string' && asRecord.message.trim()) {
+      return asRecord.message;
+    }
+
+    if (typeof asRecord.detail === 'string' && asRecord.detail.trim()) {
+      return asRecord.detail;
+    }
+  }
+
+  if (status >= 500) {
+    return 'Ocurrió un error interno al comunicarse con el servidor.';
+  }
+
+  if (status === 401) {
+    return 'No autorizado. Por favor inicia sesión de nuevo.';
+  }
+
+  if (status === 403) {
+    return 'No tienes permisos para realizar esta acción.';
+  }
+
+  if (status === 404) {
+    return 'No se encontró el recurso solicitado.';
+  }
+
+  return `Error ${status}`;
+}
+
 // ---- Custom API Error ----
 export class ApiError extends Error {
   status: number;
@@ -75,16 +152,12 @@ export async function isBackendAvailable(): Promise<boolean> {
   _checkPromise = (async () => {
     const { signal, clear } = createTimeoutSignal(3000);
     try {
-      // Use the proxied health endpoint so it works in all environments
-      const healthUrl = API_BASE_URL.endsWith('/api')
-        ? `${API_BASE_URL.slice(0, -4)}/health`
-        : '/health';
-
-      const res = await fetch(healthUrl, { method: 'GET', signal });
-      clear();
+      const res = await fetch('/health', { method: 'GET', signal });
       _backendAvailable = res.ok;
     } catch {
       _backendAvailable = false;
+    } finally {
+      clear();
     }
     // Re-check after 60s
     setTimeout(() => { _backendAvailable = null; }, 60_000);
@@ -101,21 +174,25 @@ async function refreshAccessToken(): Promise<string | null> {
 
   const { signal, clear } = createTimeoutSignal(8000);
   try {
-    const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+    const res = await fetch(`${API_BASE_URL}/auth/token/refresh/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
+      body: JSON.stringify({ refresh: refreshToken }),
       signal,
     });
     clear();
 
     if (!res.ok) { clearTokens(); return null; }
 
-    const data: ApiResponse<{ accessToken: string; refreshToken: string }> = await res.json();
-    if (data.success && data.data) {
-      setTokens(data.data.accessToken, data.data.refreshToken);
-      return data.data.accessToken;
+    const data = await res.json().catch(() => null) as
+      | { access?: string; refresh?: string }
+      | null;
+
+    if (data?.access) {
+      setTokens(data.access, data.refresh ?? refreshToken);
+      return data.access;
     }
+
     return null;
   } catch {
     clear();
@@ -131,11 +208,16 @@ export async function apiRequest<T>(
 ): Promise<ApiResponse<T>> {
   const url = `${API_BASE_URL}${endpoint}`;
   const token = getAccessToken();
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
 
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
   };
+
+  if (!isFormData && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
+  }
+
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
   // Use caller's signal or create a 15s timeout
@@ -154,19 +236,28 @@ export async function apiRequest<T>(
     const newToken = await refreshAccessToken();
     if (newToken) return apiRequest<T>(endpoint, options, false);
     clearTokens();
-    throw new ApiError('No autorizado. Por favor inicia sesión de nuevo.', 401);
+    return apiRequest<T>(endpoint, options, false);
   }
 
-  const data = await res.json().catch(() => ({
-    success: false,
-    message: 'Error al procesar la respuesta del servidor',
-  })) as ApiResponse<T>;
+  const payload = await res.json().catch(() => null) as T | ApiResponse<T> | null;
 
   if (!res.ok) {
-    throw new ApiError(data.message || `Error ${res.status}`, res.status, data.errors);
+    throw new ApiError(
+      extractMessage(payload, res.status),
+      res.status,
+      extractErrors(payload),
+    );
   }
 
-  return data;
+  if (isApiResponseEnvelope<T>(payload)) {
+    return payload;
+  }
+
+  return {
+    success: true,
+    message: 'OK',
+    data: payload ?? undefined,
+  };
 }
 
 // ---- Convenience helpers ----
