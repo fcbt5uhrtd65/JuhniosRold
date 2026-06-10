@@ -1,5 +1,6 @@
-import { defineConfig } from 'vite'
-import path from 'path'
+import { defineConfig, type Plugin, type ProxyOptions } from 'vite'
+import path from 'node:path'
+import type { ServerResponse } from 'node:http'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 
@@ -8,37 +9,64 @@ const hmrClientPort = Number(process.env.VITE_HMR_PORT ?? '5174')
 const hmrHost = process.env.VITE_HMR_HOST ?? 'localhost'
 const proxyTarget = process.env.VITE_PROXY_TARGET ?? 'http://localhost:4000'
 
-function figmaAssetResolver() {
+function figmaAssetResolver(): Plugin {
   return {
     name: 'figma-asset-resolver',
-    resolveId(id) {
+
+    resolveId(id: string): string | undefined {
       if (id.startsWith('figma:asset/')) {
         const filename = id.replace('figma:asset/', '')
         return path.resolve(__dirname, 'src/assets', filename)
       }
+
+      return undefined
     },
   }
 }
 
-function backendProxy(target: string) {
+function isServerResponse(value: unknown): value is ServerResponse {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'writeHead' in value &&
+    typeof (value as ServerResponse).writeHead === 'function'
+  )
+}
+
+function hasEndMethod(value: unknown): value is { end: (data?: string) => void } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'end' in value &&
+    typeof (value as { end?: unknown }).end === 'function'
+  )
+}
+
+function backendProxy(target: string): ProxyOptions {
   return {
     target,
     changeOrigin: true,
     secure: false,
-    configure: (proxy) => {
+
+    configure(proxy): void {
       proxy.on('error', (_err, _req, res) => {
         // Backend not running — return a JSON 503 so the frontend
         // falls back to demo/localStorage mode silently.
         try {
-          // res can be either http.ServerResponse or a net.Socket
-          if (typeof (res as { writeHead?: unknown }).writeHead === 'function') {
-            (res as import('http').ServerResponse).writeHead(503, {
+          if (isServerResponse(res)) {
+            res.writeHead(503, {
               'Content-Type': 'application/json',
             })
           }
-          res.end(
-            JSON.stringify({ success: false, message: 'Backend unavailable — demo mode active' }),
-          )
+
+          if (hasEndMethod(res)) {
+            res.end(
+              JSON.stringify({
+                success: false,
+                message: 'Backend unavailable — demo mode active',
+              }),
+            )
+          }
         } catch {
           // Socket already closed, ignore
         }
@@ -48,28 +76,29 @@ function backendProxy(target: string) {
 }
 
 export default defineConfig({
-  plugins: [
-    figmaAssetResolver(),
-    react(),
-    tailwindcss(),
-  ],
+  plugins: [figmaAssetResolver(), react(), tailwindcss()],
+
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
   },
+
   server: {
     host: '0.0.0.0',
     port: devServerPort,
     strictPort: true,
+
     proxy: {
       '/api': backendProxy(proxyTarget),
       '/health': backendProxy(proxyTarget),
     },
+
     hmr: {
       host: hmrHost,
       clientPort: hmrClientPort,
     },
   },
+
   assetsInclude: ['**/*.svg', '**/*.csv'],
 })
