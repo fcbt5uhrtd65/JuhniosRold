@@ -1,0 +1,92 @@
+# Aquí van definido todos los servicios docker
+
+name: juhniosrold
+
+services:
+
+  #servicio de la bd
+  db:
+    container_name: juhnios_postgres
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: mysecretpassword
+      POSTGRES_DB: juhniosdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - juhnios_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d juhniosdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  
+  #servicio del backend de python con django
+
+  backend:
+    container_name: juhnios-backend
+    build: 
+      context: ./backend
+      dockerfile: backend.Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    volumes:
+    # Código fuente montado para hot-reload
+      - ./backend:/app
+    environment:
+      # Database (usa los mismos valores que el servicio db)
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: mysecretpassword
+      DB_NAME: juhniosdb
+      PORT: "8000"
+      CORS_ORIGIN: "http://localhost:5174"
+      PYTHONUNBUFFERED: "1"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - juhnios_network
+
+  #servicio del frontend
+  frontend:
+    container_name: juhnios-frontend
+    build: 
+      context: ./frontend
+      dockerfile: frontend.Dockerfile
+    restart: unless-stopped 
+    ports:
+      - "5174:5173"
+    volumes:
+    #código fuente montado para hot reload
+      - ./frontend:/app
+    #volumen para node_modules en el contenedor
+      - /app/node_modules
+    environment:
+      NODE_ENV: "development"
+      CHOKIDAR_USEPOLLING: "true"
+      VITE_USE_POLLING: "true"
+      VITE_HMR_HOST: "localhost"
+      VITE_HMR_PORT: "5174"
+      VITE_DEV_SERVER_PORT: "5173"
+      VITE_PROXY_TARGET: "http://backend:8000"
+      VITE_API_URL: "http://localhost:8001"
+      TZ: "America/Bogota"
+    depends_on:
+      - backend
+    networks:
+      - juhnios_network
+    stdin_open: true
+    tty: true
+
+volumes:
+  postgres_data:
+
+networks:
+  juhnios_network:
+    driver: bridge
