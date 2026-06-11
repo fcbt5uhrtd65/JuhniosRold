@@ -3,6 +3,7 @@ import { useAdmin } from '../../contexts/AdminContext';
 import { Package, Clock, Check, X, Truck } from 'lucide-react';
 import { format } from 'date-fns';
 import type { Order } from '../../types/admin';
+import { AdminRegistrarGuia } from './AdminRegistrarGuia';
 
 export function AdminOrders() {
   const { orders, customers, updateOrderStatus } = useAdmin();
@@ -13,11 +14,18 @@ export function AdminOrders() {
         return <Clock className="w-4 h-4" strokeWidth={1} />;
       case 'pagado':
         return <Check className="w-4 h-4" strokeWidth={1} />;
+      case 'confirmado':
+      case 'procesando':
+      case 'empacado':
+        return <Package className="w-4 h-4" strokeWidth={1} />;
       case 'enviado':
+      case 'en_camino':
         return <Truck className="w-4 h-4" strokeWidth={1} />;
       case 'entregado':
         return <Package className="w-4 h-4" strokeWidth={1} />;
       case 'cancelado':
+      case 'devuelto':
+      case 'fallido':
         return <X className="w-4 h-4" strokeWidth={1} />;
     }
   };
@@ -28,11 +36,18 @@ export function AdminOrders() {
         return 'bg-yellow-100 text-yellow-800';
       case 'pagado':
         return 'bg-purple-100 text-purple-800';
+      case 'confirmado':
+      case 'procesando':
+      case 'empacado':
+        return 'bg-cyan-100 text-cyan-800';
       case 'enviado':
+      case 'en_camino':
         return 'bg-blue-100 text-blue-800';
       case 'entregado':
         return 'bg-green-100 text-green-800';
       case 'cancelado':
+      case 'devuelto':
+      case 'fallido':
         return 'bg-red-100 text-red-800';
     }
   };
@@ -188,6 +203,10 @@ export function AdminOrders() {
                       </button>
                     ))}
                   </div>
+                  <AdminRegistrarGuia
+                    pedidoId={order.id}
+                    onSaved={() => void updateOrderStatus(order.id, 'enviado')}
+                  />
                 </div>
               </div>
             </motion.div>

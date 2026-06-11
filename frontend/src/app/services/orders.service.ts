@@ -13,9 +13,12 @@ export type OrderStatus =
   | 'failed'
   | 'confirmed'
   | 'processing'
+  | 'packed'
   | 'shipped'
+  | 'in_transit'
   | 'delivered'
   | 'cancelled'
+  | 'returned'
   | 'refunded';
 
 export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'refunded';
@@ -146,9 +149,12 @@ function normalizeStatus(status: string): OrderStatus {
     normalized === 'failed' ||
     normalized === 'confirmed' ||
     normalized === 'processing' ||
+    normalized === 'packed' ||
     normalized === 'shipped' ||
+    normalized === 'in_transit' ||
     normalized === 'delivered' ||
-    normalized === 'cancelled'
+    normalized === 'cancelled' ||
+    normalized === 'returned'
   ) {
     return normalized;
   }
@@ -247,9 +253,12 @@ export async function getOrderStats(): Promise<OrderStats> {
     failed: 0,
     confirmed: 0,
     processing: 0,
+    packed: 0,
     shipped: 0,
+    in_transit: 0,
     delivered: 0,
     cancelled: 0,
+    returned: 0,
     refunded: 0,
   };
 
@@ -303,9 +312,12 @@ export function getOrderStatusLabel(status: OrderStatus): string {
     failed: 'Pago rechazado',
     confirmed: 'Confirmado',
     processing: 'Procesando',
+    packed: 'Empacado',
     shipped: 'En camino',
+    in_transit: 'En tránsito',
     delivered: 'Entregado',
     cancelled: 'Cancelado',
+    returned: 'Devuelto',
     refunded: 'Reembolsado',
   };
   return labels[status] ?? status;

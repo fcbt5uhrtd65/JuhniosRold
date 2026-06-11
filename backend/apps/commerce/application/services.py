@@ -2,8 +2,43 @@ from django.utils import timezone
 
 from shared.domain.exceptions import BusinessRuleViolation
 
+from apps.audit.application.services import AuditService
 from apps.inventory.application.use_cases import RegisterInventoryMovement
 from apps.inventory.infrastructure.models import InventoryMovement, Stock
+
+from ..infrastructure.models import Order, OrderStatusHistory
+
+
+class OrderStatusService:
+    @staticmethod
+    def change(*, order, status, actor=None, notes="", source="commerce"):
+        if status not in Order.Status.values:
+            raise BusinessRuleViolation("El estado solicitado no es válido.")
+        if order.status == status:
+            return order
+
+        previous_status = order.status
+        order.status = status
+        order.save(update_fields=("status", "updated_at"))
+        OrderStatusHistory.objects.create(
+            order=order,
+            status=status,
+            notes=notes,
+            changed_by=actor,
+        )
+        AuditService.record(
+            actor=actor,
+            module=source,
+            action="ORDER_STATUS_CHANGED",
+            resource_type="Order",
+            resource_id=order.id,
+            metadata={
+                "previous_status": previous_status,
+                "new_status": status,
+                "notes": notes,
+            },
+        )
+        return order
 
 
 class OrderInventoryService:

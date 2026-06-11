@@ -68,8 +68,11 @@ export interface CustomerOrder {
     | 'failed'
     | 'confirmed'
     | 'processing'
+    | 'packed'
     | 'shipped'
+    | 'in_transit'
     | 'delivered'
+    | 'returned'
     | 'refunded';
   fecha: string;
   direccionEnvio: string;

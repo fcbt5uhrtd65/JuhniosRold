@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 from rest_framework import permissions, status
 from rest_framework.decorators import action
@@ -10,6 +11,7 @@ from shared.interfaces.viewsets import SoftDeleteModelViewSet
 from apps.identity.interfaces.permissions import IsAdministrator
 from apps.inventory.infrastructure.models import Location
 
+from ..application.services import OrderStatusService
 from ..application.use_cases import ActiveCartService, CancelOrder, CheckoutCart
 from ..infrastructure.models import Cart, Order
 from ..infrastructure.serializers import (
@@ -152,6 +154,22 @@ class OrderViewSet(SoftDeleteModelViewSet):
         if self.action in ("create", "update", "partial_update", "destroy"):
             return (IsAdministrator(),)
         return super().get_permissions()
+
+    @transaction.atomic
+    def perform_update(self, serializer):
+        order = self.get_object()
+        previous_status = order.status
+        updated_order = serializer.save()
+        if updated_order.status != previous_status:
+            requested_status = updated_order.status
+            Order.objects.filter(pk=updated_order.pk).update(status=previous_status)
+            updated_order.status = previous_status
+            OrderStatusService.change(
+                order=updated_order,
+                status=requested_status,
+                actor=self.request.user,
+                notes="Estado actualizado desde la administración.",
+            )
 
     @action(detail=True, methods=("post",))
     def cancel(self, request, pk=None):

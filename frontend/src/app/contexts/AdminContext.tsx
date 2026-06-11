@@ -212,9 +212,14 @@ function mapApiOrder(o: {
     pending: 'pendiente',
     confirmed: 'confirmado',
     processing: 'procesando',
+    packed: 'empacado',
+    paid: 'pagado',
     shipped: 'enviado',
+    in_transit: 'en_camino',
     delivered: 'entregado',
     cancelled: 'cancelado',
+    returned: 'devuelto',
+    failed: 'fallido',
   };
   return {
     id: o.id,
@@ -538,10 +543,14 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       pendiente: 'pending',
       confirmado: 'confirmed',
       procesando: 'processing',
-      pagado: 'confirmed',
+      empacado: 'packed',
+      pagado: 'paid',
       enviado: 'shipped',
+      en_camino: 'in_transit',
       entregado: 'delivered',
       cancelado: 'cancelled',
+      devuelto: 'returned',
+      fallido: 'failed',
     };
 
     if (backendOnline && getAccessToken()) {

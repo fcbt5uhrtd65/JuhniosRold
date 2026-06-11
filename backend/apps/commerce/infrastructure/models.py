@@ -40,9 +40,12 @@ class Order(BaseModel):
         FAILED = "FAILED", "Fallido"
         CONFIRMED = "CONFIRMED", "Confirmado"
         PROCESSING = "PROCESSING", "En preparación"
-        SHIPPED = "SHIPPED", "Enviado"
+        PACKED = "PACKED", "Empacado"
+        SHIPPED = "SHIPPED", "Despachado"
+        IN_TRANSIT = "IN_TRANSIT", "En camino"
         DELIVERED = "DELIVERED", "Entregado"
         CANCELLED = "CANCELLED", "Cancelado"
+        RETURNED = "RETURNED", "Devuelto"
 
     number = models.CharField(max_length=40, unique=True, editable=False)
     customer = models.ForeignKey("customers.Customer", on_delete=models.PROTECT, related_name="orders")

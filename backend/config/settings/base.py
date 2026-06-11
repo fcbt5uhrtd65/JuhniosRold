@@ -36,6 +36,7 @@ LOCAL_APPS = [
     "apps.catalog",
     "apps.inventory",
     "apps.commerce",
+    "apps.envios",
     "apps.employees",
     "apps.human_resources",
     "apps.finance",
@@ -151,6 +152,17 @@ ECOMMERCE_FREE_SHIPPING_THRESHOLD = Decimal(
 )
 ECOMMERCE_SHIPPING_COST = Decimal(os.getenv("ECOMMERCE_SHIPPING_COST", "10000"))
 
+SHIPPING_PROVIDER = os.getenv("SHIPPING_PROVIDER", "mock").lower()
+SHIPPING_DEFAULT_CARRIER = os.getenv("SHIPPING_DEFAULT_CARRIER", "manual").lower()
+SHIPPING_TRACKING_UPDATE_INTERVAL_MINUTES = int(
+    os.getenv("SHIPPING_TRACKING_UPDATE_INTERVAL_MINUTES", "30")
+)
+SHIPPING_WEBHOOK_SECRET = os.getenv("SHIPPING_WEBHOOK_SECRET", "")
+ENVIA_API_KEY = os.getenv("ENVIA_API_KEY", "")
+ENVIA_API_URL = os.getenv("ENVIA_API_URL", "")
+COORDINADORA_API_KEY = os.getenv("COORDINADORA_API_KEY", "")
+COORDINADORA_API_URL = os.getenv("COORDINADORA_API_URL", "")
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
@@ -192,5 +204,9 @@ CELERY_BEAT_SCHEDULE = {
     "release-expired-wompi-reservations": {
         "task": "apps.commerce.infrastructure.tasks.release_expired_wompi_reservations",
         "schedule": 300.0,
+    },
+    "update-external-shipping-tracking": {
+        "task": "apps.envios.infrastructure.tasks.update_external_tracking",
+        "schedule": SHIPPING_TRACKING_UPDATE_INTERVAL_MINUTES * 60.0,
     },
 }

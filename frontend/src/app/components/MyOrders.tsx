@@ -13,6 +13,7 @@ import {
 import { useUser } from '../contexts/UserContext';
 import { useToast } from '../contexts/ToastContext';
 import { initiatePayment, resolveMockPayment } from '../services/payments.service';
+import { TrackingPedidoPage } from './TrackingPedidoPage';
 
 interface MyOrdersProps {
   isOpen: boolean;
@@ -27,6 +28,7 @@ export function MyOrders({ isOpen, onClose }: MyOrdersProps) {
     orderId: string;
     paymentId: string;
   } | null>(null);
+  const [trackingOrderId, setTrackingOrderId] = useState<string | null>(null);
 
   // Refresh orders from API when opened
   useEffect(() => {
@@ -50,15 +52,18 @@ export function MyOrders({ isOpen, onClose }: MyOrdersProps) {
       case 'procesando':
       case 'processing':
       case 'confirmed':
+      case 'packed':
         return <Package className="w-4 h-4 text-blue-600" strokeWidth={1} />;
       case 'enviado':
       case 'shipped':
+      case 'in_transit':
         return <Truck className="w-4 h-4 text-purple-600" strokeWidth={1} />;
       case 'entregado':
       case 'delivered':
         return <Check className="w-4 h-4 text-green-600" strokeWidth={1} />;
       case 'cancelado':
       case 'cancelled':
+      case 'returned':
       case 'refunded':
         return <AlertCircle className="w-4 h-4 text-red-600" strokeWidth={1} />;
       default:
@@ -79,17 +84,23 @@ export function MyOrders({ isOpen, onClose }: MyOrdersProps) {
       case 'procesando':
       case 'processing':
         return 'Procesando';
+      case 'packed':
+        return 'Empacado';
       case 'confirmed':
         return 'Confirmado';
       case 'enviado':
       case 'shipped':
         return 'En camino';
+      case 'in_transit':
+        return 'En tránsito';
       case 'entregado':
       case 'delivered':
         return 'Entregado';
       case 'cancelado':
       case 'cancelled':
         return 'Cancelado';
+      case 'returned':
+        return 'Devuelto';
       case 'refunded':
         return 'Reembolsado';
       default:
@@ -110,15 +121,18 @@ export function MyOrders({ isOpen, onClose }: MyOrdersProps) {
       case 'procesando':
       case 'processing':
       case 'confirmed':
+      case 'packed':
         return 'bg-blue-50 border-blue-200 text-blue-900';
       case 'enviado':
       case 'shipped':
+      case 'in_transit':
         return 'bg-purple-50 border-purple-200 text-purple-900';
       case 'entregado':
       case 'delivered':
         return 'bg-green-50 border-green-200 text-green-900';
       case 'cancelado':
       case 'cancelled':
+      case 'returned':
       case 'refunded':
         return 'bg-red-50 border-red-200 text-red-900';
       default:
@@ -323,6 +337,30 @@ export function MyOrders({ isOpen, onClose }: MyOrdersProps) {
                           {payingOrderId === order.id ? 'Iniciando...' : 'Pagar ahora'}
                         </button>
                       )}
+                    </div>
+                  )}
+
+                  {backendOnline && !canResumePayment(order.estado) && (
+                    <div className="mt-4 border-t border-border pt-4">
+                      <button
+                        type="button"
+                        onClick={() => setTrackingOrderId(
+                          trackingOrderId === order.id ? null : order.id,
+                        )}
+                        className="flex items-center gap-2 border border-border px-4 py-2 text-xs uppercase tracking-wider"
+                      >
+                        <Truck className="w-4 h-4" strokeWidth={1} />
+                        {trackingOrderId === order.id ? 'Ocultar seguimiento' : 'Ver seguimiento'}
+                      </button>
+                    </div>
+                  )}
+
+                  {trackingOrderId === order.id && (
+                    <div className="mt-4">
+                      <TrackingPedidoPage
+                        pedidoId={order.id}
+                        onClose={() => setTrackingOrderId(null)}
+                      />
                     </div>
                   )}
 

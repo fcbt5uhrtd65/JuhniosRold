@@ -46,10 +46,14 @@ export interface Order {
     | 'pendiente'
     | 'confirmado'
     | 'procesando'
+    | 'empacado'
     | 'pagado'
     | 'enviado'
+    | 'en_camino'
     | 'entregado'
-    | 'cancelado';
+    | 'cancelado'
+    | 'devuelto'
+    | 'fallido';
   fecha: string;
   metodoPago?: string;
 }
