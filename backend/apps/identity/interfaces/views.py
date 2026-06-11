@@ -1,17 +1,19 @@
-from django.contrib.auth.models import Group
 from rest_framework import generics, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from ..infrastructure.models import User
-from ..infrastructure.serializers import (
+from apps.identity.infrastructure.models import Component, Role, RoleComponentPermission, User
+from apps.identity.infrastructure.serializers import (
+    ComponentSerializer,
     PasswordResetConfirmSerializer,
     PasswordResetRequestSerializer,
     RegisterSerializer,
+    RoleComponentPermissionSerializer,
     RoleSerializer,
     UserSerializer,
 )
-from .permissions import IsAdministrator
+
+from .permissions import HasComponentAccess
 
 
 class RegisterView(generics.CreateAPIView):
@@ -51,11 +53,18 @@ class PasswordResetConfirmView(generics.GenericAPIView):
 
 
 class UserViewSet(viewsets.ModelViewSet):
-    queryset = User.objects.filter(deleted_at__isnull=True).prefetch_related("groups")
+    queryset = User.objects.filter(deleted_at__isnull=True).select_related("role")
     serializer_class = UserSerializer
-    permission_classes = (IsAdministrator,)
+    permission_classes = (HasComponentAccess,)
+    required_component = "identity.users"
     search_fields = ("email", "first_name", "last_name")
     ordering_fields = ("email", "date_joined")
+
+    def get_permissions(self):
+        if self.action in {"me", "change_password"}:
+            return (permissions.IsAuthenticated(),)
+        self.required_component_action = "view" if self.action in {"list", "retrieve"} else "edit"
+        return super().get_permissions()
 
     def perform_destroy(self, instance):
         instance.soft_delete()
@@ -102,26 +111,56 @@ class UserViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=("patch",), url_path="role")
     def role(self, request, pk=None):
         user = self.get_object()
-        role = str(request.data.get("role", "")).upper()
-        allowed_roles = {"ADMIN", "PRO", "SELLER", "DISTRIBUTOR", "CLIENT"}
-        if role not in allowed_roles:
+        role_code = str(request.data.get("role", "")).upper()
+        if not role_code:
             return Response(
                 {"role": ["El rol enviado no es valido."]},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        user.is_staff = role == "ADMIN"
-        user.save(update_fields=("is_staff",))
-        if role == "ADMIN":
-            user.groups.clear()
-        else:
-            group, _ = Group.objects.get_or_create(name=role)
-            user.groups.set((group,))
+        role = Role.objects.filter(code=role_code, deleted_at__isnull=True).first()
+        if not role:
+            return Response(
+                {"role": ["El rol enviado no existe."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user.role = role
+        user.save()
         return Response(self.get_serializer(user).data)
 
 
 class RoleViewSet(viewsets.ModelViewSet):
-    queryset = Group.objects.prefetch_related("permissions")
+    queryset = Role.objects.filter(deleted_at__isnull=True).prefetch_related("component_permissions__component")
     serializer_class = RoleSerializer
-    permission_classes = (IsAdministrator,)
-    search_fields = ("name",)
+    permission_classes = (HasComponentAccess,)
+    required_component = "identity.roles"
+    search_fields = ("code", "name")
+
+    def get_permissions(self):
+        self.required_component_action = "view" if self.action in {"list", "retrieve"} else "edit"
+        return super().get_permissions()
+
+
+class ComponentViewSet(viewsets.ModelViewSet):
+    queryset = Component.objects.filter(deleted_at__isnull=True)
+    serializer_class = ComponentSerializer
+    permission_classes = (HasComponentAccess,)
+    required_component = "identity.components"
+    search_fields = ("code", "name")
+
+    def get_permissions(self):
+        self.required_component_action = "view" if self.action in {"list", "retrieve"} else "edit"
+        return super().get_permissions()
+
+
+class RoleComponentPermissionViewSet(viewsets.ModelViewSet):
+    queryset = RoleComponentPermission.objects.filter(deleted_at__isnull=True).select_related("role", "component")
+    serializer_class = RoleComponentPermissionSerializer
+    permission_classes = (HasComponentAccess,)
+    required_component = "identity.roles"
+    search_fields = ("role__code", "component__code")
+
+    def get_permissions(self):
+        self.required_component_action = "view" if self.action in {"list", "retrieve"} else "edit"
+        return super().get_permissions()

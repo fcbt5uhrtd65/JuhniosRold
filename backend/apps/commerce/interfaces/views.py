@@ -8,7 +8,6 @@ from rest_framework.views import APIView
 
 from shared.interfaces.viewsets import SoftDeleteModelViewSet
 
-from apps.identity.interfaces.permissions import IsAdministrator
 from apps.inventory.infrastructure.models import Location
 
 from ..application.services import OrderStatusService
@@ -146,14 +145,21 @@ class OrderViewSet(SoftDeleteModelViewSet):
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        if self.request.user.is_staff:
+        has_access = getattr(self.request.user, "has_component_access", lambda *_args, **_kwargs: False)
+        if has_access("commerce.orders", "view"):
             return queryset
         return queryset.filter(customer__user=self.request.user)
 
     def get_permissions(self):
         if self.action in ("create", "update", "partial_update", "destroy"):
-            return (IsAdministrator(),)
+            return (permissions.IsAuthenticated(),)
         return super().get_permissions()
+
+    def check_permissions(self, request):
+        has_access = getattr(request.user, "has_component_access", lambda *_args, **_kwargs: False)
+        if self.action in ("create", "update", "partial_update", "destroy") and not has_access("commerce.orders", "edit"):
+            self.permission_denied(request, message="No tienes permiso para administrar pedidos.")
+        return super().check_permissions(request)
 
     @transaction.atomic
     def perform_update(self, serializer):

@@ -5,7 +5,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.employees.infrastructure.models import Department, Employee, Position
-from apps.identity.infrastructure.models import User
+from apps.identity.infrastructure.models import Role, User
 
 
 DEFAULT_ADMIN_PASSWORD = "Admin123!"
@@ -29,6 +29,17 @@ ADMIN_USERS = (
 
 @transaction.atomic
 def seed_admin_users(password, reset_passwords=False):
+    admin_role, _ = Role.all_objects.update_or_create(
+        code="ADMIN",
+        defaults={
+            "name": "Administrador",
+            "description": "Acceso total al sistema.",
+            "is_superuser": True,
+            "is_default": False,
+            "is_active": True,
+            "deleted_at": None,
+        },
+    )
     department, _ = Department.all_objects.update_or_create(
         name="Administracion",
         defaults={
@@ -56,15 +67,13 @@ def seed_admin_users(password, reset_passwords=False):
                 "first_name": admin_data["first_name"],
                 "last_name": admin_data["last_name"],
                 "is_active": True,
-                "is_staff": True,
-                "is_superuser": True,
+                "role": admin_role,
             },
         )
         user.first_name = admin_data["first_name"]
         user.last_name = admin_data["last_name"]
         user.is_active = True
-        user.is_staff = True
-        user.is_superuser = True
+        user.role = admin_role
         user.deleted_at = None
         if created or reset_passwords:
             user.set_password(password)

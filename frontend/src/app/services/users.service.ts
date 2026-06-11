@@ -4,7 +4,7 @@
 // ============================================================
 
 import { api } from './api';
-import type { AuthUser } from './auth.service';
+import type { AuthUser, UserRole } from './auth.service';
 
 export interface UpdateProfilePayload {
   first_name?: string;
@@ -64,7 +64,7 @@ export async function removeSavedProduct(productId: string): Promise<void> {
 export async function getAllUsers(params?: {
   page?: number;
   limit?: number;
-  role?: string;
+  role?: UserRole;
   search?: string;
 }): Promise<{ data: AuthUser[]; total: number; totalPages: number }> {
   const query = new URLSearchParams();
@@ -91,7 +91,7 @@ export async function getAllUsers(params?: {
 }
 
 // ---- Admin: Update user role ----
-export async function updateUserRole(userId: string, role: string): Promise<AuthUser> {
+export async function updateUserRole(userId: string, role: UserRole): Promise<AuthUser> {
   const res = await api.patch<AuthUser>(`/auth/users/${userId}/role/`, { role });
   if (res.data) return res.data;
   throw new Error(res.message);

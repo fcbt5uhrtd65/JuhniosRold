@@ -1,44 +1,87 @@
-from django.contrib.auth.models import Group, Permission
 from django.utils import timezone
 from rest_framework import serializers
 
+from apps.identity.infrastructure.models import (
+    Component,
+    PasswordResetToken,
+    Role,
+    RoleComponentPermission,
+    User,
+)
+
 from ..application.dtos import RegisterUserDTO
 from ..application.use_cases import RegisterUser
-from .models import PasswordResetToken, User
 from .tasks import send_password_reset_email
 
 
-class PermissionSerializer(serializers.ModelSerializer):
+class ComponentSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Permission
-        fields = ("id", "codename", "name")
+        model = Component
+        fields = (
+            "id",
+            "code",
+            "name",
+            "description",
+            "is_active",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = ("id", "created_at", "updated_at")
 
 
-class RoleSerializer(serializers.ModelSerializer):
-    permissions = PermissionSerializer(many=True, read_only=True)
-    permission_ids = serializers.PrimaryKeyRelatedField(
-        source="permissions",
-        queryset=Permission.objects.all(),
-        many=True,
+class RoleComponentPermissionSerializer(serializers.ModelSerializer):
+    component = ComponentSerializer(read_only=True)
+    component_id = serializers.PrimaryKeyRelatedField(
+        source="component",
+        queryset=Component.objects.filter(deleted_at__isnull=True),
         write_only=True,
-        required=False,
     )
 
     class Meta:
-        model = Group
-        fields = ("id", "name", "permissions", "permission_ids")
+        model = RoleComponentPermission
+        fields = (
+            "id",
+            "role",
+            "component",
+            "component_id",
+            "can_view",
+            "can_edit",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = ("id", "created_at", "updated_at")
+
+
+class RoleSerializer(serializers.ModelSerializer):
+    component_permissions = RoleComponentPermissionSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Role
+        fields = (
+            "id",
+            "code",
+            "name",
+            "description",
+            "is_superuser",
+            "is_default",
+            "is_active",
+            "component_permissions",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = ("id", "created_at", "updated_at", "component_permissions")
 
 
 class UserSerializer(serializers.ModelSerializer):
     role = serializers.SerializerMethodField()
-    created_at = serializers.DateTimeField(source="date_joined", read_only=True)
-    updated_at = serializers.SerializerMethodField()
-    roles = serializers.PrimaryKeyRelatedField(
-        source="groups",
-        queryset=Group.objects.all(),
-        many=True,
+    role_name = serializers.SerializerMethodField()
+    role_id = serializers.PrimaryKeyRelatedField(
+        source="role",
+        queryset=Role.objects.filter(deleted_at__isnull=True),
         required=False,
     )
+    created_at = serializers.DateTimeField(source="date_joined", read_only=True)
+    updated_at = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -50,19 +93,21 @@ class UserSerializer(serializers.ModelSerializer):
             "phone",
             "is_active",
             "is_staff",
+            "is_superuser",
             "role",
-            "roles",
+            "role_name",
+            "role_id",
             "date_joined",
             "created_at",
             "updated_at",
         )
-        read_only_fields = ("id", "date_joined")
+        read_only_fields = ("id", "date_joined", "created_at", "updated_at", "role")
 
     def get_role(self, user):
-        if user.is_superuser or user.is_staff:
-            return "ADMIN"
-        role = user.groups.values_list("name", flat=True).first()
-        return role.upper() if role else "CLIENT"
+        return user.role.code if user.role_id else ""
+
+    def get_role_name(self, user):
+        return user.role.name if user.role_id else ""
 
     def get_updated_at(self, user):
         return user.last_login or user.date_joined

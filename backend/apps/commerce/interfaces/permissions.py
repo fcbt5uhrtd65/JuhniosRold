@@ -5,6 +5,10 @@ class IsOrderOwnerOrStaff(BasePermission):
     message = "No tienes permiso para operar sobre este pedido."
 
     def has_object_permission(self, request, view, order):
-        if request.user.is_staff:
+        user = request.user
+        has_access = getattr(user, "has_component_access", lambda *_args, **_kwargs: False)
+        if getattr(user, "has_full_access", False):
             return True
-        return getattr(request.user, "customer_profile", None) == order.customer
+        if has_access("commerce.orders", "edit"):
+            return True
+        return getattr(user, "customer_profile", None) == order.customer

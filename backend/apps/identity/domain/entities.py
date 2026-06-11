@@ -1,12 +1,13 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from uuid import UUID
 
 
 @dataclass
 class RoleEntity:
-    id: int
+    id: UUID
+    code: str
     name: str
-    permissions: set[str] = field(default_factory=set)
+    is_superuser: bool = False
 
 
 @dataclass
@@ -16,4 +17,4 @@ class UserEntity:
     first_name: str
     last_name: str
     is_active: bool = True
-    roles: list[RoleEntity] = field(default_factory=list)
+    role: RoleEntity | None = None

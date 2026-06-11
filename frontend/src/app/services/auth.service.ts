@@ -5,7 +5,15 @@
 
 import { api, setTokens, clearTokens } from './api';
 
-export type UserRole = 'ADMIN' | 'PRO' | 'SELLER' | 'DISTRIBUTOR' | 'CLIENT';
+export type UserRole =
+  | 'ADMIN'
+  | 'CLIENT'
+  | 'PRO'
+  | 'SELLER'
+  | 'DISTRIBUTOR'
+  | 'RRHH'
+  | 'EMPLEADO'
+  | 'PEDIDOS';
 
 export interface AuthUser {
   id: string;

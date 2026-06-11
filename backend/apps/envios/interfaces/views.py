@@ -33,16 +33,6 @@ from .permissions import (
 )
 
 
-def _operator_roles(user):
-    roles = {name.upper() for name in user.groups.values_list("name", flat=True)}
-    return roles & {
-        "MANAGER",
-        "GERENTE",
-        "SELLER",
-        "VENDEDOR",
-    }
-
-
 class TransportadoraViewSet(SoftDeleteModelViewSet):
     queryset = TransportadoraModel.objects.all()
     serializer_class = TransportadoraSerializer
@@ -50,7 +40,7 @@ class TransportadoraViewSet(SoftDeleteModelViewSet):
     search_fields = ("codigo", "nombre")
 
     def get_permissions(self):
-        if self.action in {"create", "update", "partial_update", "destroy"}:
+        if self.action in {"list", "retrieve", "create", "update", "partial_update", "destroy"}:
             return (CanManageShipping(),)
         return (permissions.IsAuthenticated(),)
 
@@ -71,7 +61,8 @@ class EnvioViewSet(viewsets.ReadOnlyModelViewSet):
             "updated_by",
         ).prefetch_related("eventos", "eventos__changed_by")
         user = self.request.user
-        if user.is_superuser or user.is_staff or _operator_roles(user):
+        has_access = getattr(user, "has_component_access", lambda *_args, **_kwargs: False)
+        if has_access("envios.management", "view"):
             return queryset
         return queryset.filter(pedido__customer__user=user)
 
@@ -165,11 +156,8 @@ class PedidoTrackingView(APIView):
             ),
         )
         order = get_object_or_404(queryset, pk=pedido_id)
-        is_operator = (
-            request.user.is_superuser
-            or request.user.is_staff
-            or bool(_operator_roles(request.user))
-        )
+        has_access = getattr(request.user, "has_component_access", lambda *_args, **_kwargs: False)
+        is_operator = has_access("envios.tracking", "view")
         if not is_operator and order.customer.user_id != request.user.id:
             self.permission_denied(
                 request,

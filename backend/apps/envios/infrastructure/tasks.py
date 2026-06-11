@@ -60,7 +60,7 @@ def alert_shipping_incident(envio_id):
     envio = EnvioModel.objects.select_related("pedido").get(pk=envio_id)
     recipients = list(
         get_user_model().objects.filter(
-            is_staff=True,
+            role__is_superuser=True,
             is_active=True,
         ).exclude(email="").values_list("email", flat=True)
     )

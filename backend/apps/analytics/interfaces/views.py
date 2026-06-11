@@ -1,7 +1,7 @@
 from rest_framework import generics, serializers
 from rest_framework.response import Response
 
-from apps.identity.interfaces.permissions import IsAdministrator
+from apps.identity.interfaces.permissions import HasComponentAccess
 
 from ..application.queries import DashboardQuery
 from ..infrastructure.tasks import generate_report
@@ -26,7 +26,8 @@ class ReportExportSerializer(serializers.Serializer):
 
 class DashboardView(generics.GenericAPIView):
     serializer_class = DashboardResponseSerializer
-    permission_classes = (IsAdministrator,)
+    permission_classes = (HasComponentAccess,)
+    required_component = "analytics.management"
 
     def get(self, request):
         return Response(DashboardQuery().execute())
@@ -34,7 +35,12 @@ class DashboardView(generics.GenericAPIView):
 
 class ReportExportView(generics.GenericAPIView):
     serializer_class = ReportExportSerializer
-    permission_classes = (IsAdministrator,)
+    permission_classes = (HasComponentAccess,)
+    required_component = "analytics.management"
+
+    def get_permissions(self):
+        self.required_component_action = "view" if self.request.method == "GET" else "edit"
+        return super().get_permissions()
 
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
