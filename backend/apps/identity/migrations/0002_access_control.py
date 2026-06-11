@@ -18,7 +18,7 @@ def seed_access_control(apps, schema_editor):
 
     role_by_code = {}
     for role_def in ROLE_DEFINITIONS:
-        role, _ = Role.all_objects.update_or_create(
+        role, _ = Role.objects.update_or_create(
             code=role_def["code"],
             defaults={
                 "name": role_def["name"],
@@ -33,7 +33,7 @@ def seed_access_control(apps, schema_editor):
 
     component_by_code = {}
     for component_def in COMPONENT_DEFINITIONS:
-        component, _ = Component.all_objects.update_or_create(
+        component, _ = Component.objects.update_or_create(
             code=component_def["code"],
             defaults={
                 "name": component_def["name"],
@@ -48,7 +48,7 @@ def seed_access_control(apps, schema_editor):
     for role_code, component_permissions in permissions_matrix.items():
         role = role_by_code[role_code]
         for component_code, permission_data in component_permissions.items():
-            RoleComponentPermission.all_objects.update_or_create(
+            RoleComponentPermission.objects.update_or_create(
                 role=role,
                 component=component_by_code[component_code],
                 defaults={
