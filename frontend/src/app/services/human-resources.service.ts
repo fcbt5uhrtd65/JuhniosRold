@@ -261,6 +261,26 @@ export async function createVacationRequest(payload: VacationRequestPayload): Pr
   throw new Error(res.message);
 }
 
+export async function getMyVacationRequests(params?: { page?: number; limit?: number }): Promise<{
+  data: VacationRequest[];
+  total: number;
+  next: string | null;
+  previous: string | null;
+}> {
+  const query = buildQuery({
+    page: params?.page,
+    page_size: params?.limit,
+  });
+  const res = await api.get<VacationRequest[] | PaginatedResponse<VacationRequest>>(`${VACATIONS_PATH}me/${query}`);
+  return normalizeListResponse(res.data);
+}
+
+export async function createMyVacationRequest(payload: Omit<VacationRequestPayload, 'employee'>): Promise<VacationRequest> {
+  const res = await api.post<VacationRequest>(`${VACATIONS_PATH}me/`, payload);
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
 export async function approveVacationRequest(id: string): Promise<VacationRequest> {
   const res = await api.post<VacationRequest>(`${VACATIONS_PATH}${id}/approve/`, {});
   if (res.data) return res.data;

@@ -3,7 +3,7 @@ from django.core.management import call_command
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from apps.employees.infrastructure.models import Employee
+from apps.employees.infrastructure.models import Department, Employee
 
 
 class AdminSeederTests(TestCase):
@@ -74,3 +74,34 @@ class AdminSeederTests(TestCase):
 
         self.assertEqual(self.client.get("/api/v1/employees/").status_code, 200)
         self.assertEqual(self.client.get("/api/v1/customers/").status_code, 200)
+
+    def test_employee_catalog_routes_are_not_shadowed_by_the_employee_root_route(self):
+        call_command("seed_admin_users", password="InitialPass123!")
+        admin_user = get_user_model().objects.get(email="admin@juhnios.com")
+        self.client.force_authenticate(admin_user)
+
+        department_response = self.client.get("/api/v1/employees/departments/")
+        self.assertEqual(department_response.status_code, 200)
+
+        created_department = self.client.post(
+            "/api/v1/employees/departments/",
+            {"name": "Operaciones", "description": "Departamento de operaciones"},
+            format="json",
+        )
+        self.assertEqual(created_department.status_code, 201)
+        department_id = created_department.data["id"]
+        self.assertTrue(Department.objects.filter(id=department_id).exists())
+
+        positions_response = self.client.get("/api/v1/employees/positions/")
+        self.assertEqual(positions_response.status_code, 200)
+
+        created_position = self.client.post(
+            "/api/v1/employees/positions/",
+            {
+                "department": department_id,
+                "name": "Coordinador operativo",
+                "description": "Encargado de coordinar el flujo operativo",
+            },
+            format="json",
+        )
+        self.assertEqual(created_position.status_code, 201)

@@ -1,4 +1,6 @@
+from rest_framework import status
 from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from shared.interfaces.viewsets import SoftDeleteModelViewSet
@@ -47,8 +49,33 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
     filterset_fields = ("employee", "status")
 
     def get_permissions(self):
+        if self.action == "me":
+            return (IsAuthenticated(),)
         self.required_component_action = "view" if self.action in {"list", "retrieve"} else "edit"
         return super().get_permissions()
+
+    @action(detail=False, methods=("get", "post"), permission_classes=(IsAuthenticated,), url_path="me")
+    def me(self, request):
+        employee = getattr(request.user, "employee_profile", None)
+        if not employee:
+            return Response(
+                {"detail": "Tu usuario no tiene un perfil de empleado asociado."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if request.method == "POST":
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            vacation = serializer.save(employee=employee)
+            return Response(self.get_serializer(vacation).data, status=status.HTTP_201_CREATED)
+
+        queryset = self.get_queryset().filter(employee=employee).order_by("-created_at")
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
 
     @action(detail=True, methods=("post",))
     def approve(self, request, pk=None):

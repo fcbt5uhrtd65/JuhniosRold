@@ -37,6 +37,7 @@ import {
   type VacationRequest,
   type VacationRequestStatus,
 } from '../../services/human-resources.service';
+import { AdminStructure } from './AdminStructure';
 
 type HRTab = 'employees' | 'catalog' | 'vacations';
 
@@ -552,71 +553,7 @@ export function AdminHR() {
           )}
 
           {activeTab === 'catalog' && (
-            <div className="grid lg:grid-cols-2 gap-6">
-              <div className="border border-border">
-                <div className="p-4 border-b border-border bg-secondary/30 flex items-center gap-2">
-                  <Building2 className="w-4 h-4" strokeWidth={1} />
-                  <div className="text-xs tracking-[0.2em] uppercase">Departamentos</div>
-                </div>
-                <div className="divide-y divide-border">
-                  {departments.map((department) => (
-                    <div key={department.id} className="p-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <div className="font-medium">{department.name}</div>
-                          <div className="text-xs text-muted-foreground mt-1">
-                            {department.description || 'Sin descripción'}
-                          </div>
-                        </div>
-                        <span className={`inline-block px-2 py-1 border text-[10px] ${department.is_active ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
-                          {department.is_active ? 'Activo' : 'Inactivo'}
-                        </span>
-                      </div>
-                      <div className="mt-3 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                        {employees.filter(employee => employee.department === department.id).length} empleados
-                      </div>
-                    </div>
-                  ))}
-                  {departments.length === 0 && (
-                    <div className="p-8 text-center text-muted-foreground text-sm">
-                      No hay departamentos disponibles.
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="border border-border">
-                <div className="p-4 border-b border-border bg-secondary/30 flex items-center gap-2">
-                  <Briefcase className="w-4 h-4" strokeWidth={1} />
-                  <div className="text-xs tracking-[0.2em] uppercase">Cargos</div>
-                </div>
-                <div className="divide-y divide-border">
-                  {positions.map((position) => (
-                    <div key={position.id} className="p-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <div className="font-medium">{position.name}</div>
-                          <div className="text-xs text-muted-foreground mt-1">
-                            {departmentById.get(position.department)?.name ?? 'Sin departamento'}
-                          </div>
-                        </div>
-                        <span className={`inline-block px-2 py-1 border text-[10px] ${position.is_active ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
-                          {position.is_active ? 'Activo' : 'Inactivo'}
-                        </span>
-                      </div>
-                      <div className="mt-3 text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                        {employees.filter(employee => employee.position === position.id).length} empleados
-                      </div>
-                    </div>
-                  ))}
-                  {positions.length === 0 && (
-                    <div className="p-8 text-center text-muted-foreground text-sm">
-                      No hay cargos disponibles.
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
+            <AdminStructure />
           )}
 
           {activeTab === 'vacations' && (

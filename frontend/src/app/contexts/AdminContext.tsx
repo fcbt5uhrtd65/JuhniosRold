@@ -73,10 +73,21 @@ const STORAGE_KEYS = {
 
 const DEMO_ADMIN_PASSWORD = 'Admin123!';
 
+const INTERNAL_ROLES = new Set<User['rol']>([
+  'ADMIN',
+  'SELLER',
+  'DISTRIBUTOR',
+  'RRHH',
+  'EMPLEADO',
+  'PEDIDOS',
+]);
+
 // Offline demo users mirror the accounts created by seed_admin_users.
 const MOCK_USERS: User[] = [
-  { id: '1', nombre: 'Admin Principal', email: 'admin@juhnios.com', rol: 'admin' },
-  { id: '2', nombre: 'Admin Secundario', email: 'administrador2@juhnios.com', rol: 'admin' },
+  { id: '1', nombre: 'Admin Principal', email: 'admin@juhnios.com', rol: 'ADMIN' },
+  { id: '2', nombre: 'Recursos Humanos', email: 'rrhh@juhnios.com', rol: 'RRHH' },
+  { id: '3', nombre: 'Pedidos', email: 'pedidos@juhnios.com', rol: 'PEDIDOS' },
+  { id: '4', nombre: 'Empleado Demo', email: 'empleado@juhnios.com', rol: 'EMPLEADO' },
 ];
 
 const INITIAL_PRODUCTS: Product[] = [
@@ -281,7 +292,7 @@ function mapAdminUser(user: Awaited<ReturnType<typeof getCurrentUser>>): User {
     id: user.id,
     nombre: `${user.first_name} ${user.last_name}`.trim() || user.email,
     email: user.email,
-    rol: 'admin',
+    rol: user.role,
   };
 }
 
@@ -319,7 +330,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       if (online && getAccessToken()) {
         try {
           const user = await getCurrentUser();
-          if (user.role === 'ADMIN') {
+          if (INTERNAL_ROLES.has(user.role)) {
             const adminUser = mapAdminUser(user);
             setCurrentUser(adminUser);
             localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(adminUser));
@@ -371,36 +382,70 @@ export function AdminProvider({ children }: { children: ReactNode }) {
 
     setIsLoading(true);
     try {
-      const [apiProducts, stock] = await Promise.all([
-        getAllProducts(),
-        getInventoryStock(),
-      ]);
-      const mappedProducts = apiProducts.map(mapApiProduct);
-      const mappedInventory = mapApiInventory(stock, apiProducts);
-      setProducts(mappedProducts);
-      setInventory(mappedInventory);
-      localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(mappedProducts));
-      localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(mappedInventory));
+      const role = currentUser?.rol;
+      const canViewProducts = role === 'ADMIN' || role === 'SELLER';
+      const canViewInventory = role === 'ADMIN' || role === 'SELLER';
+      const canViewOrders = role === 'ADMIN' || role === 'SELLER' || role === 'DISTRIBUTOR' || role === 'PEDIDOS';
+      const canViewCustomers = role === 'ADMIN' || role === 'SELLER';
 
-      // Orders
-      const ordersRes = await getOrders({ limit: 100 }).catch(() => null);
-      if (ordersRes?.data) {
-        const mapped = ordersRes.data.map(mapApiOrder);
-        setOrders(mapped);
-        localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(mapped));
+      if (canViewProducts) {
+        try {
+          const apiProducts = await getAllProducts();
+          const mappedProducts = apiProducts.map(mapApiProduct);
+          setProducts(mappedProducts);
+          localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(mappedProducts));
+        } catch {
+          setProducts([]);
+        }
+      } else {
+        setProducts([]);
       }
 
-      // Customers are business profiles, not identity users.
-      const customersRes = await getCustomers({ limit: 100 }).catch(() => null);
-      if (customersRes?.data) {
-        const mapped = customersRes.data.map(mapApiCustomer);
-        setCustomers(mapped);
-        localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(mapped));
+      if (canViewInventory) {
+        try {
+          const [stock, apiProducts] = await Promise.all([
+            getInventoryStock(),
+            canViewProducts ? getAllProducts() : Promise.resolve([] as ApiProduct[]),
+          ]);
+          const mappedInventory = mapApiInventory(stock, apiProducts);
+          setInventory(mappedInventory);
+          localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(mappedInventory));
+        } catch {
+          setInventory([]);
+        }
+      } else {
+        setInventory([]);
+      }
+
+      if (canViewOrders) {
+        const ordersRes = await getOrders({ limit: 100 }).catch(() => null);
+        if (ordersRes?.data) {
+          const mapped = ordersRes.data.map(mapApiOrder);
+          setOrders(mapped);
+          localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(mapped));
+        } else {
+          setOrders([]);
+        }
+      } else {
+        setOrders([]);
+      }
+
+      if (canViewCustomers) {
+        const customersRes = await getCustomers({ limit: 100 }).catch(() => null);
+        if (customersRes?.data) {
+          const mapped = customersRes.data.map(mapApiCustomer);
+          setCustomers(mapped);
+          localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(mapped));
+        } else {
+          setCustomers([]);
+        }
+      } else {
+        setCustomers([]);
       }
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [currentUser?.rol]);
 
   useEffect(() => {
     if (currentUser && backendOnline && getAccessToken()) {
@@ -413,7 +458,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     try {
       const apiUser = await loginUser({ email, password });
       setBackendOnline(true);
-      if (apiUser.role !== 'ADMIN') {
+      if (!INTERNAL_ROLES.has(apiUser.role)) {
         clearTokens();
         return false;
       }

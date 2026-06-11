@@ -32,7 +32,7 @@ export function AdminLogin() {
           <div className="text-xs tracking-[0.3em] uppercase mb-4">
             JUHNIOS ROLD
           </div>
-          <h1 className="text-3xl mb-2">Panel Admin</h1>
+          <h1 className="text-3xl mb-2">Panel interno</h1>
           <div className="w-12 h-px bg-foreground mx-auto"></div>
         </div>
 
@@ -44,14 +44,14 @@ export function AdminLogin() {
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" strokeWidth={1} />
               <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 bg-transparent border border-border text-xs focus:outline-none focus:border-foreground transition-colors"
-                placeholder="admin@juhnios.com"
-                required
-              />
-            </div>
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full pl-10 pr-4 py-3 bg-transparent border border-border text-xs focus:outline-none focus:border-foreground transition-colors"
+              placeholder="usuario@juhnios.com"
+              required
+            />
+          </div>
           </div>
 
           <div>
@@ -86,14 +86,20 @@ export function AdminLogin() {
 
         <div className="mt-6 p-4 bg-secondary border border-border">
           <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-3">
-            Demo - Usuarios de prueba:
+            Demo - Usuarios internos:
           </div>
           <div className="space-y-2 text-xs">
             <div>
               <strong>Admin:</strong> admin@juhnios.com
             </div>
             <div>
-              <strong>Admin 2:</strong> administrador2@juhnios.com
+              <strong>RRHH:</strong> rrhh@juhnios.com
+            </div>
+            <div>
+              <strong>Pedidos:</strong> pedidos@juhnios.com
+            </div>
+            <div>
+              <strong>Empleado:</strong> empleado@juhnios.com
             </div>
             <div className="text-[10px] text-muted-foreground mt-2">
               Contraseña demo: Admin123!

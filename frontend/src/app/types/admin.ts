@@ -1,14 +1,6 @@
-export type UserRole =
-  | 'admin'
-  | 'cliente'
-  | 'pro'
-  | 'vendedor'
-  | 'distribuidor'
-  | 'rrhh'
-  | 'empleado'
-  | 'pedidos'
-  | 'contador'
-  | 'abogado';
+import type { UserRole as AuthUserRole } from '../services/auth.service';
+
+export type UserRole = AuthUserRole;
 
 export interface User {
   id: string;

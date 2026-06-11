@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAdmin } from '../../contexts/AdminContext';
 import { AdminLogin } from './AdminLogin';
 import { AdminLayout } from './AdminLayout';
@@ -12,10 +12,33 @@ import { AdminReports } from './AdminReports';
 import { AdminPayroll } from './AdminPayroll';
 import { AdminHR } from './AdminHR';
 import { AdminLegal } from './AdminLegal';
+import { AdminEmployeePortal } from './AdminEmployeePortal';
+
+function getDefaultViewForRole(role?: string) {
+  switch (role) {
+    case 'RRHH':
+      return 'hr';
+    case 'PEDIDOS':
+      return 'orders';
+    case 'EMPLEADO':
+      return 'employee-portal';
+    case 'SELLER':
+      return 'products';
+    case 'DISTRIBUTOR':
+      return 'orders';
+    case 'ADMIN':
+    default:
+      return 'dashboard';
+  }
+}
 
 export function Admin() {
   const { currentUser } = useAdmin();
-  const [currentView, setCurrentView] = useState('dashboard');
+  const [currentView, setCurrentView] = useState(getDefaultViewForRole(currentUser?.rol));
+
+  useEffect(() => {
+    setCurrentView(getDefaultViewForRole(currentUser?.rol));
+  }, [currentUser?.rol]);
 
   if (!currentUser) {
     return <AdminLogin />;
@@ -43,6 +66,8 @@ export function Admin() {
         return <AdminHR />;
       case 'legal':
         return <AdminLegal />;
+      case 'employee-portal':
+        return <AdminEmployeePortal />;
       default:
         return <AdminDashboard />;
     }

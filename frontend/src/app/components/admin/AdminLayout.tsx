@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { useAdmin } from '../../contexts/AdminContext';
 import {
@@ -12,6 +12,7 @@ import {
   Calculator,
   Briefcase,
   Scale,
+  CalendarClock,
   LogOut,
   Menu,
   X,
@@ -28,17 +29,42 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'products', label: 'Productos', icon: Package },
-    { id: 'inventory', label: 'Inventario', icon: Warehouse },
-    { id: 'orders', label: 'Pedidos', icon: ShoppingCart },
-    { id: 'customers', label: 'Clientes', icon: Users },
-    { id: 'payments', label: 'Pagos', icon: CreditCard },
-    { id: 'reports', label: 'Reportes', icon: BarChart3 },
-    { id: 'payroll', label: 'Nómina', icon: Calculator },
-    { id: 'hr', label: 'RRHH', icon: Briefcase },
-    { id: 'legal', label: 'Legal', icon: Scale },
-  ];
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['ADMIN', 'SELLER'] },
+    { id: 'products', label: 'Productos', icon: Package, roles: ['ADMIN', 'SELLER'] },
+    { id: 'inventory', label: 'Inventario', icon: Warehouse, roles: ['ADMIN', 'SELLER'] },
+    { id: 'orders', label: 'Pedidos', icon: ShoppingCart, roles: ['ADMIN', 'SELLER', 'DISTRIBUTOR', 'PEDIDOS'] },
+    { id: 'customers', label: 'Clientes', icon: Users, roles: ['ADMIN', 'SELLER'] },
+    { id: 'payments', label: 'Pagos', icon: CreditCard, roles: ['ADMIN', 'SELLER'] },
+    { id: 'reports', label: 'Reportes', icon: BarChart3, roles: ['ADMIN', 'SELLER'] },
+    { id: 'payroll', label: 'Nómina', icon: Calculator, roles: ['ADMIN', 'RRHH'] },
+    { id: 'hr', label: 'RRHH', icon: Briefcase, roles: ['ADMIN', 'RRHH'] },
+    { id: 'employee-portal', label: 'Mis solicitudes', icon: CalendarClock, roles: ['ADMIN', 'EMPLEADO'] },
+    { id: 'legal', label: 'Legal', icon: Scale, roles: ['ADMIN'] },
+  ] as const;
+
+  const allowedNavItems = useMemo(() => {
+    if (!currentUser) return navItems;
+    return navItems.filter(item => item.roles.includes(currentUser.rol));
+  }, [currentUser, navItems]);
+
+  const roleLabel = useMemo(() => {
+    switch (currentUser?.rol) {
+      case 'ADMIN':
+        return 'Administrador';
+      case 'RRHH':
+        return 'Recursos humanos';
+      case 'PEDIDOS':
+        return 'Pedidos y seguimiento';
+      case 'EMPLEADO':
+        return 'Empleado';
+      case 'SELLER':
+        return 'Vendedor';
+      case 'DISTRIBUTOR':
+        return 'Distribuidor';
+      default:
+        return currentUser?.rol ?? '';
+    }
+  }, [currentUser?.rol]);
 
   const Sidebar = () => (
     <div className="bg-secondary border-r border-border h-full flex flex-col">
@@ -49,7 +75,7 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
 
       <nav className="flex-1 p-4">
         <div className="space-y-1">
-          {navItems.map((item) => {
+          {allowedNavItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentView === item.id;
 
@@ -80,9 +106,7 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
             Usuario
           </div>
           <div className="text-xs mb-1">{currentUser?.nombre}</div>
-          <div className="text-[10px] text-muted-foreground capitalize">
-            {currentUser?.rol}
-          </div>
+          <div className="text-[10px] text-muted-foreground">{roleLabel}</div>
         </div>
         <button
           onClick={logout}
