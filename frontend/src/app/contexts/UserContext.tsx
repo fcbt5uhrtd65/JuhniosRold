@@ -169,29 +169,28 @@ export function UserProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     async function restoreSession() {
       setIsLoadingAuth(true);
-
-      // 1. Check if backend is reachable (fails silently if down)
-      let online = false;
-      try {
-        online = await isBackendAvailable();
-      } catch {
-        online = false;
-      }
-      setBackendOnline(online);
       localStorage.removeItem(STORAGE_KEYS.USER);
       localStorage.removeItem(STORAGE_KEYS.USERS_DB);
 
-      if (online && getAccessToken()) {
+      if (getAccessToken()) {
         try {
           const user = await getCurrentUser();
+          setBackendOnline(true);
           setCurrentUser(mapAuthUser(user));
           loadLocalSaved();
           await fetchOrdersFromApi();
           setIsLoadingAuth(false);
           return;
-        } catch {
-          clearTokens();
+        } catch (error) {
+          const serverResponded = error instanceof ApiError;
+          setBackendOnline(serverResponded);
+          if (serverResponded && error.status === 401) {
+            clearTokens();
+          }
         }
+      } else {
+        const online = await isBackendAvailable().catch(() => false);
+        setBackendOnline(online);
       }
 
       loadLocalSaved();
@@ -237,30 +236,25 @@ export function UserProvider({ children }: { children: ReactNode }) {
     email: string,
     password: string,
   ): Promise<AuthActionResult> => {
-    const online = await isBackendAvailable();
-    setBackendOnline(online);
-
-    if (!online) {
-      return {
-        ok: false,
-        message: 'No hay conexión con el servidor. Intenta nuevamente.',
-      };
-    }
-
     try {
       const user = await loginUser({
         email: email.trim().toLowerCase(),
         password,
       });
+      setBackendOnline(true);
       const mapped = mapAuthUser(user);
       setCurrentUser(mapped);
       await fetchOrdersFromApi();
       return { ok: true };
     } catch (error) {
       clearTokens();
+      const serverResponded = error instanceof ApiError;
+      setBackendOnline(serverResponded);
       return {
         ok: false,
-        message: authErrorMessage(error, 'Email o contraseña incorrectos.'),
+        message: serverResponded
+          ? authErrorMessage(error, 'Email o contraseña incorrectos.')
+          : 'No hay conexión con el servidor. Intenta nuevamente.',
       };
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -272,16 +266,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
     email: string,
     password: string,
   ): Promise<AuthActionResult> => {
-    const online = await isBackendAvailable();
-    setBackendOnline(online);
-
-    if (!online) {
-      return {
-        ok: false,
-        message: 'No hay conexión con el servidor. No se creó ninguna cuenta.',
-      };
-    }
-
     try {
       const parts = nombre.trim().split(/\s+/);
       const first_name = parts[0] ?? nombre;
@@ -292,13 +276,18 @@ export function UserProvider({ children }: { children: ReactNode }) {
         email: email.trim().toLowerCase(),
         password,
       });
+      setBackendOnline(true);
       setCurrentUser(mapAuthUser(user));
       return { ok: true };
     } catch (error) {
       clearTokens();
+      const serverResponded = error instanceof ApiError;
+      setBackendOnline(serverResponded);
       return {
         ok: false,
-        message: authErrorMessage(error, 'No fue posible crear la cuenta.'),
+        message: serverResponded
+          ? authErrorMessage(error, 'No fue posible crear la cuenta.')
+          : 'No hay conexión con el servidor. No se creó ninguna cuenta.',
       };
     }
   }, []);
@@ -370,24 +359,21 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }, [backendOnline]);
 
   const resetPassword = async (email: string): Promise<AuthActionResult> => {
-    const online = await isBackendAvailable();
-    setBackendOnline(online);
-    if (!online) {
-      return {
-        ok: false,
-        message: 'No hay conexión con el servidor.',
-      };
-    }
     try {
       await requestPasswordReset(email);
+      setBackendOnline(true);
       return { ok: true };
     } catch (error) {
+      const serverResponded = error instanceof ApiError;
+      setBackendOnline(serverResponded);
       return {
         ok: false,
-        message: authErrorMessage(
-          error,
-          'No fue posible solicitar la recuperación de contraseña.',
-        ),
+        message: serverResponded
+          ? authErrorMessage(
+              error,
+              'No fue posible solicitar la recuperación de contraseña.',
+            )
+          : 'No hay conexión con el servidor.',
       };
     }
   };

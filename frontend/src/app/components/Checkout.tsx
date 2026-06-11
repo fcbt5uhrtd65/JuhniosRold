@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { Check, CreditCard, Lock, Truck, X, XCircle } from 'lucide-react';
 
@@ -39,6 +40,15 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
 
   const shippingCost = total >= 80000 ? 0 : 10000;
   const finalTotal = total + shippingCost;
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isOpen]);
 
   const close = () => {
     if (!isSubmitting) {
@@ -109,9 +119,12 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
     try {
       await resolveMockPayment(mockPayment.paymentId, outcome);
       await reloadCart();
-      window.location.assign(
+      window.history.pushState(
+        {},
+        '',
         `/pago/resultado?pedido_id=${mockPayment.orderId}`,
       );
+      window.dispatchEvent(new PopStateEvent('popstate'));
     } catch (paymentError) {
       setError(
         paymentError instanceof Error
@@ -122,7 +135,7 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
     }
   };
 
-  return (
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
         <>
@@ -137,7 +150,7 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
-            className="fixed top-0 right-0 bottom-0 w-full max-w-2xl bg-background z-[210] flex flex-col shadow-2xl"
+            className="fixed top-0 right-0 bottom-0 w-full max-w-2xl bg-[#fafaf9] z-[210] flex flex-col shadow-2xl"
           >
             <div className="p-8 border-b border-border flex items-center justify-between">
               <div>
@@ -270,6 +283,7 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
           </motion.div>
         </>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }

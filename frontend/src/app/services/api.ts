@@ -32,6 +32,23 @@ export function clearTokens(): void {
   localStorage.removeItem(TOKEN_KEYS.REFRESH);
 }
 
+function tokenExpiresSoon(token: string, thresholdSeconds = 30): boolean {
+  try {
+    const encodedPayload = token.split('.')[1];
+    if (!encodedPayload) return true;
+    const normalized = encodedPayload.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized.padEnd(
+      Math.ceil(normalized.length / 4) * 4,
+      '=',
+    );
+    const payload = JSON.parse(atob(padded)) as { exp?: number };
+    if (!payload.exp) return true;
+    return payload.exp * 1000 <= Date.now() + thresholdSeconds * 1000;
+  } catch {
+    return true;
+  }
+}
+
 // ---- Safe timeout helper (replaces AbortSignal.timeout which is not universally available) ----
 function createTimeoutSignal(ms: number): { signal: AbortSignal; clear: () => void } {
   const controller = new AbortController();
@@ -141,34 +158,48 @@ export class ApiError extends Error {
   }
 }
 
-// ---- Backend reachability (cached, re-checks every 60s) ----
+// ---- Backend reachability (successful checks are cached briefly) ----
 let _backendAvailable: boolean | null = null;
 let _checkPromise: Promise<boolean> | null = null;
+
+function getBackendHealthUrl(): string {
+  const apiUrl = new URL(API_BASE_URL, window.location.origin);
+  return `${apiUrl.origin}/health/`;
+}
 
 export async function isBackendAvailable(): Promise<boolean> {
   if (_backendAvailable !== null) return _backendAvailable;
   if (_checkPromise) return _checkPromise;
 
   _checkPromise = (async () => {
-    const { signal, clear } = createTimeoutSignal(3000);
+    const { signal, clear } = createTimeoutSignal(5000);
     try {
-      const res = await fetch('/health', { method: 'GET', signal });
-      _backendAvailable = res.ok;
+      const res = await fetch(getBackendHealthUrl(), {
+        method: 'GET',
+        signal,
+      });
+      if (!res.ok) return false;
+
+      _backendAvailable = true;
+      setTimeout(() => {
+        _backendAvailable = null;
+      }, 15_000);
+      return true;
     } catch {
-      _backendAvailable = false;
+      // Do not cache transient network/proxy failures.
+      return false;
     } finally {
       clear();
     }
-    // Re-check after 60s
-    setTimeout(() => { _backendAvailable = null; }, 60_000);
-    return _backendAvailable;
   })().finally(() => { _checkPromise = null; });
 
   return _checkPromise;
 }
 
 // ---- Token refresh ----
-async function refreshAccessToken(): Promise<string | null> {
+let _refreshPromise: Promise<string | null> | null = null;
+
+async function performTokenRefresh(): Promise<string | null> {
   const refreshToken = getRefreshToken();
   if (!refreshToken) return null;
 
@@ -200,6 +231,14 @@ async function refreshAccessToken(): Promise<string | null> {
   }
 }
 
+async function refreshAccessToken(): Promise<string | null> {
+  if (_refreshPromise) return _refreshPromise;
+  _refreshPromise = performTokenRefresh().finally(() => {
+    _refreshPromise = null;
+  });
+  return _refreshPromise;
+}
+
 // ---- Core request function ----
 export async function apiRequest<T>(
   endpoint: string,
@@ -207,7 +246,14 @@ export async function apiRequest<T>(
   retry = true,
 ): Promise<ApiResponse<T>> {
   const url = `${API_BASE_URL}${endpoint}`;
-  const token = getAccessToken();
+  const isAuthenticationRequest =
+    endpoint === '/auth/login/' ||
+    endpoint === '/auth/register/' ||
+    endpoint.startsWith('/auth/token/');
+  let token = getAccessToken();
+  if (token && !isAuthenticationRequest && tokenExpiresSoon(token)) {
+    token = await refreshAccessToken();
+  }
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
 
   const headers: Record<string, string> = {
@@ -230,11 +276,6 @@ export async function apiRequest<T>(
   } finally {
     ownTimeout?.clear();
   }
-
-  const isAuthenticationRequest =
-    endpoint === '/auth/login/' ||
-    endpoint === '/auth/register/' ||
-    endpoint.startsWith('/auth/token/');
 
   // Refresh only expired authenticated sessions. A rejected login must not be retried.
   if (res.status === 401 && retry && !isAuthenticationRequest) {

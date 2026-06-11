@@ -34,6 +34,7 @@ import {
   type BackendCustomer,
 } from '../services/customers.service';
 import {
+  ApiError,
   getAccessToken,
   clearTokens,
   isBackendAvailable,
@@ -404,31 +405,25 @@ export function AdminProvider({ children }: { children: ReactNode }) {
 
   // ---- LOGIN ----
   const login = useCallback(async (email: string, password: string): Promise<boolean> => {
-    // Try real API
-    let online = false;
     try {
-      online = await isBackendAvailable();
-    } catch {
-      online = false;
-    }
-    setBackendOnline(online);
-
-    if (online) {
-      try {
-        const apiUser = await loginUser({ email, password });
-        if (apiUser.role !== 'ADMIN') {
-          clearTokens();
-          return false;
-        } else {
-          const adminUser = mapAdminUser(apiUser);
-          setCurrentUser(adminUser);
-          localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(adminUser));
-          return true;
-        }
-      } catch {
+      const apiUser = await loginUser({ email, password });
+      setBackendOnline(true);
+      if (apiUser.role !== 'ADMIN') {
         clearTokens();
         return false;
       }
+
+      const adminUser = mapAdminUser(apiUser);
+      setCurrentUser(adminUser);
+      localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(adminUser));
+      return true;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        setBackendOnline(true);
+        clearTokens();
+        return false;
+      }
+      setBackendOnline(false);
     }
 
     // Offline demo login.

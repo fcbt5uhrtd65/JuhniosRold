@@ -109,6 +109,12 @@ function AppContent() {
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
   const isPaymentResult = currentPath === '/pago/resultado';
 
+  useEffect(() => {
+    const handlePathChange = () => setCurrentPath(window.location.pathname);
+    window.addEventListener('popstate', handlePathChange);
+    return () => window.removeEventListener('popstate', handlePathChange);
+  }, []);
+
   const handleAdminAccess = async (email: string, password: string) => {
     const success = await login(email, password);
     if (success) {
