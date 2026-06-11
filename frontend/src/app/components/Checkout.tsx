@@ -108,6 +108,7 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
     setError('');
     try {
       await resolveMockPayment(mockPayment.paymentId, outcome);
+      await reloadCart();
       window.location.assign(
         `/pago/resultado?pedido_id=${mockPayment.orderId}`,
       );
@@ -130,13 +131,13 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={close}
-            className="fixed inset-0 bg-foreground/40 z-50"
+            className="fixed inset-0 bg-foreground/50 backdrop-blur-sm z-[200]"
           />
           <motion.div
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
-            className="fixed top-0 right-0 bottom-0 w-full max-w-2xl bg-background z-50 flex flex-col"
+            className="fixed top-0 right-0 bottom-0 w-full max-w-2xl bg-background z-[210] flex flex-col shadow-2xl"
           >
             <div className="p-8 border-b border-border flex items-center justify-between">
               <div>

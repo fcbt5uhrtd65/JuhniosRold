@@ -1,4 +1,5 @@
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
@@ -33,7 +34,11 @@ class MockCheckoutFlowTests(TestCase):
             last_name="Cliente",
             email=self.user.email,
         )
-        category = Category.objects.create(name="Capilar", slug="mock-capilar")
+        category = Category.objects.create(
+            name="Capilar",
+            slug="mock-capilar",
+            image_url="https://example.com/capilar.jpg",
+        )
         product = Product.objects.create(
             category=category,
             name="Tratamiento",
@@ -107,6 +112,10 @@ class MockCheckoutFlowTests(TestCase):
         self.assertEqual(len(restored.data["items"]), 1)
         self.assertEqual(restored.data["items"][0]["variant_id"], str(self.variant.id))
         self.assertEqual(Decimal(restored.data["items"][0]["quantity"]), Decimal("2"))
+        self.assertEqual(
+            restored.data["items"][0]["image_url"],
+            "https://example.com/capilar.jpg",
+        )
 
     def test_adding_same_variant_accumulates_in_single_database_line(self):
         self.add_to_cart(quantity=1)
@@ -150,6 +159,32 @@ class MockCheckoutFlowTests(TestCase):
         )
         self.assertTrue(approved.data["invoice_number"].startswith("FAC-JR-"))
 
+    @patch(
+        "apps.commerce.infrastructure.tasks."
+        "send_order_payment_confirmation.apply_async",
+        side_effect=RuntimeError("broker unavailable"),
+    )
+    def test_approved_payment_succeeds_when_confirmation_cannot_be_enqueued(
+        self,
+        _apply_async,
+    ):
+        self.add_to_cart(quantity=1)
+        order_id, payment_id = self.checkout_and_start_payment()
+
+        with self.captureOnCommitCallbacks(execute=True):
+            approved = self.client.post(
+                f"/api/v1/commerce/payments/mock/{payment_id}/resolve/",
+                {"outcome": "approved"},
+                format="json",
+            )
+
+        self.assertEqual(approved.status_code, 200)
+        self.assertEqual(Order.objects.get(pk=order_id).status, Order.Status.PAID)
+        self.assertEqual(
+            Payment.objects.get(pk=payment_id).status,
+            Payment.Status.APPROVED,
+        )
+
     def test_declined_mock_payment_releases_stock_and_does_not_invoice(self):
         self.add_to_cart(quantity=2)
         order_id, payment_id = self.checkout_and_start_payment()
@@ -170,6 +205,15 @@ class MockCheckoutFlowTests(TestCase):
         self.assertFalse(
             FinancialTransaction.objects.filter(reference=order.number).exists()
         )
+        restored_cart = Cart.objects.get(
+            customer=self.customer,
+            checked_out_at__isnull=True,
+        )
+        self.assertEqual(
+            CartItem.objects.get(cart=restored_cart, variant=self.variant).quantity,
+            Decimal("2"),
+        )
+        self.assertEqual(order.restored_cart_id, restored_cart.id)
 
     def test_customer_can_retry_failed_order_after_signing_in_again(self):
         self.add_to_cart(quantity=2)
@@ -204,6 +248,41 @@ class MockCheckoutFlowTests(TestCase):
         self.assertEqual(self.stock.quantity, Decimal("8"))
         self.assertEqual(self.stock.reserved_quantity, Decimal("0"))
         self.assertEqual(SalesInvoice.objects.filter(order_id=order_id).count(), 1)
+        self.assertFalse(
+            CartItem.objects.filter(
+                cart__customer=self.customer,
+                cart__checked_out_at__isnull=True,
+                variant=self.variant,
+            ).exists()
+        )
+
+    def test_repeated_decline_does_not_duplicate_restored_cart_items(self):
+        self.add_to_cart(quantity=2)
+        order_id, first_payment_id = self.checkout_and_start_payment()
+        self.client.post(
+            f"/api/v1/commerce/payments/mock/{first_payment_id}/resolve/",
+            {"outcome": "declined"},
+            format="json",
+        )
+        retry = self.client.post(
+            "/api/v1/commerce/payments/start/",
+            {"order_id": order_id},
+            format="json",
+        )
+        self.client.post(
+            f"/api/v1/commerce/payments/mock/{retry.data['payment_id']}/resolve/",
+            {"outcome": "declined"},
+            format="json",
+        )
+
+        active_cart = Cart.objects.get(
+            customer=self.customer,
+            checked_out_at__isnull=True,
+        )
+        self.assertEqual(
+            CartItem.objects.get(cart=active_cart, variant=self.variant).quantity,
+            Decimal("2"),
+        )
 
     def test_checkout_marks_old_cart_and_next_login_gets_new_empty_cart(self):
         self.add_to_cart(quantity=1)

@@ -5,6 +5,7 @@ from django.db import transaction
 from apps.finance.application.invoicing import GenerateSalesInvoice
 
 from ..services import OrderInventoryService
+from .cart import ActiveCartService
 from ...domain.exceptions import PaymentIntegrityError
 from ...domain.repositories import PaymentGateway
 from ...infrastructure.models import Order, OrderStatusHistory, Payment, PaymentWebhookEvent
@@ -116,6 +117,7 @@ class ConfirmWompiPayment:
 
         if incoming_status == Payment.Status.APPROVED:
             OrderInventoryService.consume(order)
+            ActiveCartService().remove_restored_order_items(order=order)
             self._change_order_status(order, Order.Status.PAID, "Pago aprobado por Wompi.")
             GenerateSalesInvoice().execute(order=order, payment=payment)
             order_id = str(order.id)
@@ -135,6 +137,7 @@ class ConfirmWompiPayment:
             ).exists()
             if not newer_attempt_exists:
                 OrderInventoryService.release(order)
+                ActiveCartService().restore_order_items(order=order)
                 self._change_order_status(
                     order,
                     Order.Status.FAILED,
@@ -184,6 +187,6 @@ class ConfirmWompiPayment:
 
     @staticmethod
     def _send_payment_confirmation(order_id):
-        from ...infrastructure.tasks import send_order_payment_confirmation
+        from ...infrastructure.tasks import enqueue_order_payment_confirmation
 
-        send_order_payment_confirmation.delay(order_id)
+        enqueue_order_payment_confirmation(order_id)

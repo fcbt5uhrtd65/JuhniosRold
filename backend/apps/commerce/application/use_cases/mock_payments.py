@@ -9,6 +9,7 @@ from shared.domain.exceptions import BusinessRuleViolation
 from apps.finance.application.invoicing import GenerateSalesInvoice
 
 from ..services import OrderInventoryService
+from .cart import ActiveCartService
 from ...infrastructure.models import Order, OrderStatusHistory, Payment
 
 
@@ -95,11 +96,13 @@ class ResolveMockPayment:
         if approved:
             payment.status = Payment.Status.APPROVED
             OrderInventoryService.consume(order, actor=actor)
+            ActiveCartService().remove_restored_order_items(order=order)
             order.status = Order.Status.PAID
             notes = "Pago aprobado por el proveedor simulado."
         else:
             payment.status = Payment.Status.DECLINED
             OrderInventoryService.release(order)
+            ActiveCartService().restore_order_items(order=order)
             order.status = Order.Status.FAILED
             notes = "Pago rechazado por el proveedor simulado."
 
@@ -128,6 +131,6 @@ class ResolveMockPayment:
 
     @staticmethod
     def _send_confirmation(order_id):
-        from ...infrastructure.tasks import send_order_payment_confirmation
+        from ...infrastructure.tasks import enqueue_order_payment_confirmation
 
-        send_order_payment_confirmation.delay(order_id)
+        enqueue_order_payment_confirmation(order_id)

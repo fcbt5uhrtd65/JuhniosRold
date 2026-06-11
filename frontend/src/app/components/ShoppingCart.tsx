@@ -64,6 +64,10 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
                         <img
                           src={item.image}
                           alt={item.name}
+                          onError={(event) => {
+                            event.currentTarget.src =
+                              'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?w=300&q=80';
+                          }}
                           className="w-20 h-20 object-cover bg-secondary"
                         />
                         <div className="flex-1">

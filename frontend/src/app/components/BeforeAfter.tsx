@@ -84,7 +84,9 @@ function ComparisonSlider({ transformation, autoReveal }: { transformation: Tran
       {/* Before image (clipped) */}
       <div
         className="absolute inset-0 overflow-hidden"
-        style={{ clipPath: `inset(0 ${100 - sliderPosition}% 0 0)` }}
+        style={{
+          clipPath: `inset(0% ${100 - sliderPosition}% 0% 0%)`,
+        }}
       >
         <img
           src={transformation.before}

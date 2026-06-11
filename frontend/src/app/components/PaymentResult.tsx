@@ -14,7 +14,11 @@ const FINAL_STATUSES = new Set([
   'EXPIRED',
 ]);
 
-export function PaymentResult() {
+interface PaymentResultProps {
+  onReturnToStore: () => void;
+}
+
+export function PaymentResult({ onReturnToStore }: PaymentResultProps) {
   const orderId = new URLSearchParams(window.location.search).get('pedido_id');
   const [payment, setPayment] = useState<PaymentStatus | null>(null);
   const [error, setError] = useState('');
@@ -94,12 +98,13 @@ export function PaymentResult() {
           </div>
         )}
         {error && <div className="text-sm text-red-700 mb-6">{error}</div>}
-        <a
-          href="/"
+        <button
+          type="button"
+          onClick={onReturnToStore}
           className="inline-block px-8 py-4 bg-foreground text-background text-xs tracking-wider uppercase"
         >
           Volver a la tienda
-        </a>
+        </button>
       </section>
     </main>
   );

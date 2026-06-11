@@ -1,3 +1,4 @@
+import logging
 from datetime import timedelta
 
 from celery import shared_task
@@ -9,8 +10,10 @@ from django.utils import timezone
 from ..application.services import OrderInventoryService
 from .models import Order, OrderStatusHistory, Payment
 
+logger = logging.getLogger(__name__)
 
-@shared_task
+
+@shared_task(ignore_result=True)
 def send_order_payment_confirmation(order_id):
     order = Order.objects.select_related("customer").get(pk=order_id)
     send_mail(
@@ -24,6 +27,20 @@ def send_order_payment_confirmation(order_id):
         recipient_list=[order.customer.email],
         fail_silently=False,
     )
+
+
+def enqueue_order_payment_confirmation(order_id):
+    try:
+        send_order_payment_confirmation.apply_async(
+            args=(order_id,),
+            retry=False,
+            ignore_result=True,
+        )
+    except Exception:
+        logger.exception(
+            "No fue posible encolar la confirmación del pedido %s.",
+            order_id,
+        )
 
 
 @shared_task

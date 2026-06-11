@@ -63,6 +63,13 @@ class Order(BaseModel):
     inventory_reserved_at = models.DateTimeField(null=True, blank=True)
     inventory_consumed_at = models.DateTimeField(null=True, blank=True)
     inventory_released_at = models.DateTimeField(null=True, blank=True)
+    restored_cart = models.ForeignKey(
+        Cart,
+        on_delete=models.SET_NULL,
+        related_name="restored_orders",
+        null=True,
+        blank=True,
+    )
 
     def save(self, *args, **kwargs):
         if not self.number:

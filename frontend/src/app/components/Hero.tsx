@@ -103,12 +103,12 @@ export function Hero() {
   const slideVariants = {
     enter: (dir: number) => ({
       clipPath: dir > 0
-        ? 'inset(0 100% 0 0)'
-        : 'inset(0 0 0 100%)',
+        ? 'inset(0% 100% 0% 0%)'
+        : 'inset(0% 0% 0% 100%)',
       opacity: 1,
     }),
     center: {
-      clipPath: 'inset(0 0% 0 0)',
+      clipPath: 'inset(0% 0% 0% 0%)',
       opacity: 1,
       transition: {
         clipPath: { duration: 0.85, ease: [0.76, 0, 0.24, 1] },
@@ -116,8 +116,8 @@ export function Hero() {
     },
     exit: (dir: number) => ({
       clipPath: dir > 0
-        ? 'inset(0 0 0 100%)'
-        : 'inset(0 100% 0 0)',
+        ? 'inset(0% 0% 0% 100%)'
+        : 'inset(0% 100% 0% 0%)',
       opacity: 1,
       transition: {
         clipPath: { duration: 0.85, ease: [0.76, 0, 0.24, 1] },

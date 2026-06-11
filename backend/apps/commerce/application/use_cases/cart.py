@@ -82,3 +82,57 @@ class ActiveCartService:
         cart = self.get_or_create(customer)
         CartItem.objects.filter(cart=cart).delete()
         return cart
+
+    @transaction.atomic
+    def restore_order_items(self, *, order):
+        order.refresh_from_db(fields=("restored_cart",))
+        if order.restored_cart_id:
+            return order.restored_cart
+
+        cart = self.get_or_create(order.customer)
+        cart = Cart.objects.select_for_update().get(pk=cart.pk)
+        for order_item in order.items.select_related("variant"):
+            item = CartItem.all_objects.filter(
+                cart=cart,
+                variant=order_item.variant,
+            ).first()
+            if item:
+                item.deleted_at = None
+                item.quantity += order_item.quantity
+                item.save(update_fields=("quantity", "deleted_at", "updated_at"))
+            else:
+                CartItem.objects.create(
+                    cart=cart,
+                    variant=order_item.variant,
+                    quantity=order_item.quantity,
+                )
+
+        order.restored_cart = cart
+        order.save(update_fields=("restored_cart", "updated_at"))
+        return cart
+
+    @transaction.atomic
+    def remove_restored_order_items(self, *, order):
+        order.refresh_from_db(fields=("restored_cart",))
+        cart = order.restored_cart
+        if not cart:
+            return
+
+        cart = Cart.objects.select_for_update().get(pk=cart.pk)
+        if cart.checked_out_at is None:
+            for order_item in order.items.select_related("variant"):
+                item = CartItem.objects.filter(
+                    cart=cart,
+                    variant=order_item.variant,
+                ).first()
+                if not item:
+                    continue
+                remaining = item.quantity - order_item.quantity
+                if remaining > 0:
+                    item.quantity = remaining
+                    item.save(update_fields=("quantity", "updated_at"))
+                else:
+                    item.delete()
+
+        order.restored_cart = None
+        order.save(update_fields=("restored_cart", "updated_at"))

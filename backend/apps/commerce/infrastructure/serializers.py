@@ -52,7 +52,14 @@ class CartItemSerializer(serializers.ModelSerializer):
     def get_image_url(self, item):
         product = item.variant.product
         primary = next((image for image in product.images.all() if image.is_primary), None)
-        return primary.image.url if primary else product.image_url
+        if primary:
+            request = self.context.get("request")
+            return (
+                request.build_absolute_uri(primary.image.url)
+                if request
+                else primary.image.url
+            )
+        return product.image_url or product.category.image_url
 
     def get_subtotal(self, item):
         price = self._price(item)

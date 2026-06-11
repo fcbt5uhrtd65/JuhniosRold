@@ -318,11 +318,11 @@ export function AdminProvider({ children }: { children: ReactNode }) {
             setCurrentUser(adminUser);
             localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(adminUser));
           } else {
-            clearTokens();
+            setCurrentUser(null);
             localStorage.removeItem(STORAGE_KEYS.USER);
           }
         } catch {
-          clearTokens();
+          setCurrentUser(null);
           localStorage.removeItem(STORAGE_KEYS.USER);
         }
       } else if (!online) {

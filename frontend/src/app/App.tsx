@@ -106,7 +106,8 @@ function PublicSite({ onLoginClick }: { onLoginClick: () => void }) {
 function AppContent() {
   const { login, currentUser, isLoading } = useAdmin();
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const isPaymentResult = window.location.pathname === '/pago/resultado';
+  const [currentPath, setCurrentPath] = useState(window.location.pathname);
+  const isPaymentResult = currentPath === '/pago/resultado';
 
   const handleAdminAccess = async (email: string, password: string) => {
     const success = await login(email, password);
@@ -117,7 +118,14 @@ function AppContent() {
   };
 
   if (isPaymentResult) {
-    return <PaymentResult />;
+    return (
+      <PaymentResult
+        onReturnToStore={() => {
+          window.history.replaceState({}, '', '/#catalogo');
+          setCurrentPath('/');
+        }}
+      />
+    );
   }
 
   if (isLoading && !currentUser) {
