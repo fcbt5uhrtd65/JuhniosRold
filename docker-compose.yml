@@ -44,6 +44,8 @@ services:
       DJANGO_DEBUG: "true"
       DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,backend
       CORS_ALLOWED_ORIGINS: http://localhost:5174,http://localhost
+      FRONTEND_URL: http://localhost:5174
+      BACKEND_URL: http://localhost:8001
       DB_HOST: db
       DB_PORT: "5432"
       DB_USER: postgres
@@ -52,6 +54,18 @@ services:
       ADMIN_SEED_PASSWORD: ${ADMIN_SEED_PASSWORD:-Admin123!}
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
+      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-mock}
+      WOMPI_ENVIRONMENT: ${WOMPI_ENVIRONMENT:-sandbox}
+      WOMPI_PUBLIC_KEY: ${WOMPI_PUBLIC_KEY:-}
+      WOMPI_PRIVATE_KEY: ${WOMPI_PRIVATE_KEY:-}
+      WOMPI_EVENTS_SECRET: ${WOMPI_EVENTS_SECRET:-}
+      WOMPI_INTEGRITY_SECRET: ${WOMPI_INTEGRITY_SECRET:-}
+      WOMPI_SANDBOX_URL: ${WOMPI_SANDBOX_URL:-https://sandbox.wompi.co/v1}
+      WOMPI_PRODUCTION_URL: ${WOMPI_PRODUCTION_URL:-https://production.wompi.co/v1}
+      ECOMMERCE_WAREHOUSE_CODE: ${ECOMMERCE_WAREHOUSE_CODE:-PRINCIPAL}
+      ECOMMERCE_LOCATION_CODE: ${ECOMMERCE_LOCATION_CODE:-CATALOGO}
+      ECOMMERCE_FREE_SHIPPING_THRESHOLD: ${ECOMMERCE_FREE_SHIPPING_THRESHOLD:-80000}
+      ECOMMERCE_SHIPPING_COST: ${ECOMMERCE_SHIPPING_COST:-10000}
       PYTHONUNBUFFERED: "1"
     depends_on:
       db:
@@ -129,6 +143,47 @@ services:
       DB_NAME: juhniosdb
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
+      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-mock}
+      WOMPI_ENVIRONMENT: ${WOMPI_ENVIRONMENT:-sandbox}
+      WOMPI_PUBLIC_KEY: ${WOMPI_PUBLIC_KEY:-}
+      WOMPI_PRIVATE_KEY: ${WOMPI_PRIVATE_KEY:-}
+      WOMPI_EVENTS_SECRET: ${WOMPI_EVENTS_SECRET:-}
+      WOMPI_INTEGRITY_SECRET: ${WOMPI_INTEGRITY_SECRET:-}
+      WOMPI_SANDBOX_URL: ${WOMPI_SANDBOX_URL:-https://sandbox.wompi.co/v1}
+      WOMPI_PRODUCTION_URL: ${WOMPI_PRODUCTION_URL:-https://production.wompi.co/v1}
+    depends_on:
+      backend:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - juhnios_network
+
+  celery-beat:
+    container_name: juhnios-celery-beat
+    build:
+      context: ./backend
+      dockerfile: backend.Dockerfile
+    restart: unless-stopped
+    command: celery -A config beat --loglevel=info
+    volumes:
+      - ./backend:/app
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.development
+      DJANGO_SECRET_KEY: development-only-change-me
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: postgres
+      DB_PASSWORD: mysecretpassword
+      DB_NAME: juhniosdb
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-mock}
+      WOMPI_ENVIRONMENT: ${WOMPI_ENVIRONMENT:-sandbox}
+      WOMPI_PUBLIC_KEY: ${WOMPI_PUBLIC_KEY:-}
+      WOMPI_PRIVATE_KEY: ${WOMPI_PRIVATE_KEY:-}
+      WOMPI_EVENTS_SECRET: ${WOMPI_EVENTS_SECRET:-}
+      WOMPI_INTEGRITY_SECRET: ${WOMPI_INTEGRITY_SECRET:-}
     depends_on:
       backend:
         condition: service_healthy

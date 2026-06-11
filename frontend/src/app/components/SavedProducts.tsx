@@ -3,6 +3,8 @@ import { X, Heart, ShoppingCart, Trash2 } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
 import { useCart } from '../contexts/CartContext';
 import { useAdmin } from '../contexts/AdminContext';
+import { useToast } from '../contexts/ToastContext';
+import { getProductById } from '../services/products.service';
 
 interface SavedProductsProps {
   isOpen: boolean;
@@ -13,6 +15,7 @@ export function SavedProducts({ isOpen, onClose }: SavedProductsProps) {
   const { savedProducts, toggleSaveProduct } = useUser();
   const { addItem } = useCart();
   const { products } = useAdmin();
+  const toast = useToast();
 
   if (!isOpen) return null;
 
@@ -24,15 +27,37 @@ export function SavedProducts({ isOpen, onClose }: SavedProductsProps) {
     })
     .filter((p) => p !== null);
 
-  const handleAddToCart = (product: any) => {
-    addItem({
-      id: product.id,
-      name: product.nombre,
-      price: product.precio,
-      image: product.imagen || 'https://images.unsplash.com/photo-1571875257727-256c39da42af?w=600&q=80',
-      size: product.presentacion,
-      quantity: 1,
-    });
+  const handleAddToCart = async (product: any) => {
+    try {
+      const catalogProduct = await getProductById(product.id);
+      const variant =
+        catalogProduct.variants.find(
+          item =>
+            item.is_active &&
+            item.presentation === product.presentacion,
+        ) ?? catalogProduct.variants.find(item => item.is_active);
+      if (!variant) {
+        toast.warning('Este producto no tiene una presentación disponible.');
+        return;
+      }
+      const added = await addItem({
+        variantId: variant.id,
+        name: catalogProduct.name,
+        category: catalogProduct.category_name,
+        price: variant.current_price ?? catalogProduct.price ?? 0,
+        image:
+          catalogProduct.primary_image ||
+          product.imagen ||
+          'https://images.unsplash.com/photo-1571875257727-256c39da42af?w=600&q=80',
+        size: variant.presentation,
+        quantity: 1,
+      });
+      if (added) toast.success(`${catalogProduct.name} añadido al carrito`);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : 'No fue posible cargar el producto.',
+      );
+    }
   };
 
   return (

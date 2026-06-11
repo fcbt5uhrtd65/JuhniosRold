@@ -1,6 +1,14 @@
 from django.contrib import admin
 
-from .models import Cart, CartItem, Order, OrderItem, OrderStatusHistory
+from .models import (
+    Cart,
+    CartItem,
+    Order,
+    OrderItem,
+    OrderStatusHistory,
+    Payment,
+    PaymentWebhookEvent,
+)
 
 
 class CartItemInline(admin.TabularInline):
@@ -20,6 +28,22 @@ class OrderStatusHistoryInline(admin.TabularInline):
     extra = 0
     fields = ("status", "notes", "changed_by", "created_at")
     readonly_fields = ("created_at",)
+
+
+class PaymentInline(admin.TabularInline):
+    model = Payment
+    extra = 0
+    fields = (
+        "reference",
+        "amount_in_cents",
+        "currency",
+        "status",
+        "provider",
+        "payment_method",
+        "provider_transaction_id",
+        "created_at",
+    )
+    readonly_fields = fields
 
 
 @admin.register(Cart)
@@ -52,7 +76,7 @@ class OrderAdmin(admin.ModelAdmin):
     )
     list_select_related = ("customer",)
     date_hierarchy = "created_at"
-    inlines = (OrderItemInline, OrderStatusHistoryInline)
+    inlines = (OrderItemInline, PaymentInline, OrderStatusHistoryInline)
 
 
 @admin.register(OrderItem)
@@ -69,3 +93,61 @@ class OrderStatusHistoryAdmin(admin.ModelAdmin):
     search_fields = ("order__number", "notes", "changed_by__email")
     list_select_related = ("order", "changed_by")
     date_hierarchy = "created_at"
+
+
+@admin.register(Payment)
+class PaymentAdmin(admin.ModelAdmin):
+    list_display = (
+        "reference",
+        "order",
+        "amount_in_cents",
+        "currency",
+        "status",
+        "provider",
+        "payment_method",
+        "provider_transaction_id",
+        "created_at",
+    )
+    list_filter = ("provider", "status", "currency", "payment_method", "created_at")
+    search_fields = ("reference", "order__number", "provider_transaction_id")
+    readonly_fields = (
+        "order",
+        "reference",
+        "amount_in_cents",
+        "currency",
+        "status",
+        "provider",
+        "payment_method",
+        "provider_transaction_id",
+        "created_at",
+        "updated_at",
+    )
+    list_select_related = ("order",)
+
+
+@admin.register(PaymentWebhookEvent)
+class PaymentWebhookEventAdmin(admin.ModelAdmin):
+    list_display = (
+        "event_type",
+        "reference",
+        "transaction_id",
+        "transaction_status",
+        "environment",
+        "processed",
+        "created_at",
+    )
+    list_filter = ("event_type", "environment", "transaction_status", "processed")
+    search_fields = ("checksum", "reference", "transaction_id")
+    readonly_fields = (
+        "event_type",
+        "checksum",
+        "environment",
+        "event_timestamp",
+        "transaction_id",
+        "reference",
+        "transaction_status",
+        "processed",
+        "processing_error",
+        "created_at",
+        "updated_at",
+    )

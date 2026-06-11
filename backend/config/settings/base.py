@@ -1,5 +1,6 @@
 import os
 from datetime import timedelta
+from decimal import Decimal
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -113,7 +114,42 @@ CORS_ALLOWED_ORIGINS = [
 ]
 CORS_ALLOW_CREDENTIALS = True
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5174")
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8001")
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "no-reply@juhniosrold.com")
+
+PAYMENT_PROVIDER = os.getenv("PAYMENT_PROVIDER", "mock").lower()
+if PAYMENT_PROVIDER not in {"mock", "wompi"}:
+    raise ValueError("PAYMENT_PROVIDER debe ser 'mock' o 'wompi'.")
+
+WOMPI_ENVIRONMENT = os.getenv("WOMPI_ENVIRONMENT", "sandbox").lower()
+if WOMPI_ENVIRONMENT not in {"sandbox", "production"}:
+    raise ValueError("WOMPI_ENVIRONMENT debe ser 'sandbox' o 'production'.")
+
+WOMPI_PUBLIC_KEY = os.getenv("WOMPI_PUBLIC_KEY", "")
+WOMPI_PRIVATE_KEY = os.getenv("WOMPI_PRIVATE_KEY", "")
+WOMPI_EVENTS_SECRET = os.getenv("WOMPI_EVENTS_SECRET", "")
+WOMPI_INTEGRITY_SECRET = os.getenv("WOMPI_INTEGRITY_SECRET", "")
+WOMPI_SANDBOX_URL = os.getenv("WOMPI_SANDBOX_URL", "https://sandbox.wompi.co/v1")
+WOMPI_PRODUCTION_URL = os.getenv(
+    "WOMPI_PRODUCTION_URL",
+    "https://production.wompi.co/v1",
+)
+WOMPI_BASE_URL = (
+    WOMPI_SANDBOX_URL
+    if WOMPI_ENVIRONMENT == "sandbox"
+    else WOMPI_PRODUCTION_URL
+)
+WOMPI_HTTP_TIMEOUT = int(os.getenv("WOMPI_HTTP_TIMEOUT", "10"))
+WOMPI_CHECKOUT_EXPIRATION_MINUTES = int(
+    os.getenv("WOMPI_CHECKOUT_EXPIRATION_MINUTES", "30")
+)
+
+ECOMMERCE_WAREHOUSE_CODE = os.getenv("ECOMMERCE_WAREHOUSE_CODE", "PRINCIPAL")
+ECOMMERCE_LOCATION_CODE = os.getenv("ECOMMERCE_LOCATION_CODE", "CATALOGO")
+ECOMMERCE_FREE_SHIPPING_THRESHOLD = Decimal(
+    os.getenv("ECOMMERCE_FREE_SHIPPING_THRESHOLD", "80000")
+)
+ECOMMERCE_SHIPPING_COST = Decimal(os.getenv("ECOMMERCE_SHIPPING_COST", "10000"))
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
@@ -152,3 +188,9 @@ CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0")
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://redis:6379/1")
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 30 * 60
+CELERY_BEAT_SCHEDULE = {
+    "release-expired-wompi-reservations": {
+        "task": "apps.commerce.infrastructure.tasks.release_expired_wompi_reservations",
+        "schedule": 300.0,
+    },
+}

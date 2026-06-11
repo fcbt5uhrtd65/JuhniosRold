@@ -4,6 +4,7 @@ import { ShoppingBag, Eye, Package, Heart, Star, X } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
 import { useUser } from '../contexts/UserContext';
 import { useToast } from '../contexts/ToastContext';
+import { getProductBySlug } from '../services/products.service';
 
 interface Product {
   name: string;
@@ -238,18 +239,35 @@ export function PowerProducts() {
   const [detailsProduct, setDetailsProduct] = useState<Product | null>(null);
   const [selectedSize, setSelectedSize] = useState<Record<string, string>>({});
 
-  const handleAddToCart = (product: Product, closeModal?: () => void) => {
+  const handleAddToCart = async (product: Product, closeModal?: () => void) => {
     const size = selectedSize[product.id] || product.sizes?.[0] || '120ml';
-    addItem({
-      id: `${product.id}-${size}`,
-      name: product.name,
-      category: product.category,
-      size,
-      price: parseFloat(product.price.replace('.', '')),
-      image: product.image,
-    });
-    toast.success(`${product.name} añadido al carrito`);
-    if (closeModal) closeModal();
+    try {
+      const catalogProduct = await getProductBySlug(product.id);
+      const variant =
+        catalogProduct.variants.find(
+          item => item.is_active && item.presentation === size,
+        ) ?? catalogProduct.variants.find(item => item.is_active);
+      if (!variant) {
+        toast.warning('Este producto no tiene una presentación disponible.');
+        return;
+      }
+      const added = await addItem({
+        variantId: variant.id,
+        name: catalogProduct.name,
+        category: catalogProduct.category_name,
+        size: variant.presentation,
+        price: variant.current_price ?? catalogProduct.price ?? 0,
+        image: catalogProduct.primary_image ?? product.image,
+      });
+      if (added) {
+        toast.success(`${catalogProduct.name} añadido al carrito`);
+        closeModal?.();
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : 'No fue posible cargar el producto.',
+      );
+    }
   };
 
   const handleToggleSave = (productId: string, productName: string) => {

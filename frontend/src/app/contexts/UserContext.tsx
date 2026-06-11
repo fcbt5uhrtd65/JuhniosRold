@@ -16,6 +16,7 @@ import {
   registerUser,
   getCurrentUser,
   logoutUser,
+  requestPasswordReset,
   type AuthUser,
 } from '../services/auth.service';
 import {
@@ -24,7 +25,12 @@ import {
   type Order,
   type CreateOrderPayload,
 } from '../services/orders.service';
-import { getAccessToken, clearTokens, isBackendAvailable } from '../services/api';
+import {
+  ApiError,
+  getAccessToken,
+  clearTokens,
+  isBackendAvailable,
+} from '../services/api';
 
 // ---- Normalised customer profile (compatible with legacy mock) ----
 export interface CustomerUser {
@@ -56,6 +62,10 @@ export interface CustomerOrder {
     | 'enviado'
     | 'entregado'
     | 'cancelado'
+    | 'pending'
+    | 'payment_pending'
+    | 'paid'
+    | 'failed'
     | 'confirmed'
     | 'processing'
     | 'shipped'
@@ -77,8 +87,12 @@ interface UserContextType {
   orders: CustomerOrder[];
   isLoadingAuth: boolean;
   backendOnline: boolean;
-  login: (email: string, password: string) => Promise<boolean>;
-  register: (nombre: string, email: string, password: string) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<AuthActionResult>;
+  register: (
+    nombre: string,
+    email: string,
+    password: string,
+  ) => Promise<AuthActionResult>;
   logout: () => Promise<void>;
   toggleSaveProduct: (productoId: string) => void;
   isProductSaved: (productoId: string) => boolean;
@@ -88,7 +102,7 @@ interface UserContextType {
     },
   ) => Promise<void>;
   loadOrders: () => Promise<void>;
-  resetPassword: (email: string) => boolean;
+  resetPassword: (email: string) => Promise<AuthActionResult>;
   updateProfile: (updates: Partial<CustomerUser>) => void;
 }
 
@@ -101,17 +115,17 @@ const STORAGE_KEYS = {
   USERS_DB: 'customer_users_db',
 };
 
-// ---- localStorage mock helpers ----
-interface MockUser extends CustomerUser { password: string }
+interface AuthActionResult {
+  ok: boolean;
+  message?: string;
+}
 
-const getMockUsers = (): MockUser[] => {
-  const stored = localStorage.getItem(STORAGE_KEYS.USERS_DB);
-  return stored ? JSON.parse(stored) : [];
-};
-
-const saveMockUsers = (users: MockUser[]) => {
-  localStorage.setItem(STORAGE_KEYS.USERS_DB, JSON.stringify(users));
-};
+function authErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof ApiError) {
+    return error.errors?.join(' ') || error.message;
+  }
+  return error instanceof Error ? error.message : fallback;
+}
 
 // ---- Map backend AuthUser → CustomerUser ----
 function mapAuthUser(u: AuthUser): CustomerUser {
@@ -164,6 +178,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
         online = false;
       }
       setBackendOnline(online);
+      localStorage.removeItem(STORAGE_KEYS.USER);
+      localStorage.removeItem(STORAGE_KEYS.USERS_DB);
 
       if (online && getAccessToken()) {
         try {
@@ -176,12 +192,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
         } catch {
           clearTokens();
         }
-      }
-
-      // 2. Fallback: restore from localStorage
-      const savedUser = localStorage.getItem(STORAGE_KEYS.USER);
-      if (savedUser) {
-        try { setCurrentUser(JSON.parse(savedUser)); } catch { /* ignore corrupt data */ }
       }
 
       loadLocalSaved();
@@ -223,34 +233,36 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }, [savedProducts]);
 
   // ---- LOGIN ----
-  const login = useCallback(async (email: string, password: string): Promise<boolean> => {
-    // Try real API first
+  const login = useCallback(async (
+    email: string,
+    password: string,
+  ): Promise<AuthActionResult> => {
     const online = await isBackendAvailable();
     setBackendOnline(online);
 
-    if (online) {
-      try {
-        const user = await loginUser({ email, password });
-        const mapped = mapAuthUser(user);
-        setCurrentUser(mapped);
-        await fetchOrdersFromApi();
-        return true;
-      } catch {
-        // Fall through to mock
-      }
+    if (!online) {
+      return {
+        ok: false,
+        message: 'No hay conexión con el servidor. Intenta nuevamente.',
+      };
     }
 
-    // Mock localStorage login
-    const users = getMockUsers();
-    const found = users.find(u => u.email === email && u.password === password);
-    if (found) {
-      const { password: _, ...withoutPw } = found;
-      setCurrentUser(withoutPw);
-      localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(withoutPw));
-      loadLocalOrders();
-      return true;
+    try {
+      const user = await loginUser({
+        email: email.trim().toLowerCase(),
+        password,
+      });
+      const mapped = mapAuthUser(user);
+      setCurrentUser(mapped);
+      await fetchOrdersFromApi();
+      return { ok: true };
+    } catch (error) {
+      clearTokens();
+      return {
+        ok: false,
+        message: authErrorMessage(error, 'Email o contraseña incorrectos.'),
+      };
     }
-    return false;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -259,40 +271,36 @@ export function UserProvider({ children }: { children: ReactNode }) {
     nombre: string,
     email: string,
     password: string,
-  ): Promise<boolean> => {
+  ): Promise<AuthActionResult> => {
     const online = await isBackendAvailable();
     setBackendOnline(online);
 
-    if (online) {
-      try {
-        const parts = nombre.trim().split(' ');
-        const first_name = parts[0] ?? nombre;
-        const last_name = parts.slice(1).join(' ') || '';
-        const user = await registerUser({ first_name, last_name, email, password });
-        setCurrentUser(mapAuthUser(user));
-        return true;
-      } catch {
-        // Check duplicate email in mock
-      }
+    if (!online) {
+      return {
+        ok: false,
+        message: 'No hay conexión con el servidor. No se creó ninguna cuenta.',
+      };
     }
 
-    // Mock register
-    const users = getMockUsers();
-    if (users.find(u => u.email === email)) return false;
-
-    const newUser: MockUser = {
-      id: Date.now().toString(),
-      nombre,
-      email,
-      password,
-    };
-    users.push(newUser);
-    saveMockUsers(users);
-
-    const { password: _, ...withoutPw } = newUser;
-    setCurrentUser(withoutPw);
-    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(withoutPw));
-    return true;
+    try {
+      const parts = nombre.trim().split(/\s+/);
+      const first_name = parts[0] ?? nombre;
+      const last_name = parts.slice(1).join(' ');
+      const user = await registerUser({
+        first_name,
+        last_name,
+        email: email.trim().toLowerCase(),
+        password,
+      });
+      setCurrentUser(mapAuthUser(user));
+      return { ok: true };
+    } catch (error) {
+      clearTokens();
+      return {
+        ok: false,
+        message: authErrorMessage(error, 'No fue posible crear la cuenta.'),
+      };
+    }
   }, []);
 
   // ---- LOGOUT ----
@@ -361,17 +369,27 @@ export function UserProvider({ children }: { children: ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [backendOnline]);
 
-  // ---- RESET PASSWORD (mock only) ----
-  const resetPassword = (email: string): boolean => {
-    const users = getMockUsers();
-    const idx = users.findIndex(u => u.email === email);
-    if (idx === -1) return false;
-
-    const tempPassword = Math.random().toString(36).slice(-8);
-    users[idx].password = tempPassword;
-    saveMockUsers(users);
-    alert(`Tu contraseña temporal es: ${tempPassword}\n\nEn producción, esto se enviará a tu correo.`);
-    return true;
+  const resetPassword = async (email: string): Promise<AuthActionResult> => {
+    const online = await isBackendAvailable();
+    setBackendOnline(online);
+    if (!online) {
+      return {
+        ok: false,
+        message: 'No hay conexión con el servidor.',
+      };
+    }
+    try {
+      await requestPasswordReset(email);
+      return { ok: true };
+    } catch (error) {
+      return {
+        ok: false,
+        message: authErrorMessage(
+          error,
+          'No fue posible solicitar la recuperación de contraseña.',
+        ),
+      };
+    }
   };
 
   // ---- UPDATE PROFILE ----
@@ -379,14 +397,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
     if (!currentUser) return;
     const updated = { ...currentUser, ...updates };
     setCurrentUser(updated);
-    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(updated));
-
-    const users = getMockUsers();
-    const idx = users.findIndex(u => u.id === currentUser.id);
-    if (idx !== -1) {
-      users[idx] = { ...users[idx], ...updates };
-      saveMockUsers(users);
-    }
   };
 
   return (

@@ -18,5 +18,9 @@ services:
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.production
 
+  celery-beat:
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.production
+
   nginx:
     profiles: []

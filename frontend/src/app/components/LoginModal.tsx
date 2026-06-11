@@ -29,15 +29,15 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
     try {
       // Handle forgot password
       if (isForgotPassword) {
-        const ok = resetPassword(email);
-        if (ok) {
-          setSuccess('Se ha enviado una contraseña temporal a tu correo');
+        const result = await resetPassword(email);
+        if (result.ok) {
+          setSuccess('Si el correo existe, recibirás instrucciones para cambiar tu contraseña');
           setTimeout(() => {
             setIsForgotPassword(false);
             setEmail('');
           }, 3000);
         } else {
-          setError('No existe una cuenta con este email');
+          setError(result.message || 'No fue posible solicitar la recuperación');
         }
         return;
       }
@@ -46,27 +46,31 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
         const isAdmin = await onAdminAccess(email, password);
         if (isAdmin) return;
 
-        const ok = await customerLogin(email, password);
-        if (ok) {
+        const result = await customerLogin(email, password);
+        if (result.ok) {
           onClose();
           setEmail('');
           setPassword('');
         } else {
-          setError('Email o contraseña incorrectos');
+          setError(result.message || 'Email o contraseña incorrectos');
         }
       } else {
         if (!nombre.trim()) {
           setError('Por favor ingresa tu nombre completo');
           return;
         }
-        const ok = await customerRegister(nombre, email, password);
-        if (ok) {
+        if (password.length < 8) {
+          setError('La contraseña debe tener al menos 8 caracteres.');
+          return;
+        }
+        const result = await customerRegister(nombre, email, password);
+        if (result.ok) {
           onClose();
           setNombre('');
           setEmail('');
           setPassword('');
         } else {
-          setError('Este email ya está registrado');
+          setError(result.message || 'No fue posible crear la cuenta');
         }
       }
     } finally {
@@ -209,6 +213,7 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
                       type="password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
+                      minLength={isLogin ? undefined : 8}
                       className="w-full pl-10 pr-3 py-3 bg-transparent border border-border text-xs focus:outline-none focus:border-foreground transition-colors"
                       placeholder="••••••••"
                       required

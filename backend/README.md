@@ -65,3 +65,9 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
 
 El override de producción ejecuta migraciones, recopila estáticos, inicia
 Gunicorn y publica el sistema mediante Nginx.
+
+## Pagos Wompi
+
+La integración segura con Wompi, sus variables de entorno, endpoints, estados
+y flujo de inventario están documentados en
+[`apps/commerce/WOMPI_INTEGRATION.md`](apps/commerce/WOMPI_INTEGRATION.md).

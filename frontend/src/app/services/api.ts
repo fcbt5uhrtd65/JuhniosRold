@@ -231,12 +231,16 @@ export async function apiRequest<T>(
     ownTimeout?.clear();
   }
 
-  // 401 → try refresh once
-  if (res.status === 401 && retry) {
+  const isAuthenticationRequest =
+    endpoint === '/auth/login/' ||
+    endpoint === '/auth/register/' ||
+    endpoint.startsWith('/auth/token/');
+
+  // Refresh only expired authenticated sessions. A rejected login must not be retried.
+  if (res.status === 401 && retry && !isAuthenticationRequest) {
     const newToken = await refreshAccessToken();
     if (newToken) return apiRequest<T>(endpoint, options, false);
     clearTokens();
-    return apiRequest<T>(endpoint, options, false);
   }
 
   const payload = await res.json().catch(() => null) as T | ApiResponse<T> | null;

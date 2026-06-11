@@ -33,13 +33,26 @@ class Stock(BaseModel):
     variant = models.ForeignKey("catalog.ProductVariant", on_delete=models.PROTECT, related_name="stocks")
     location = models.ForeignKey(Location, on_delete=models.PROTECT, related_name="stocks")
     quantity = models.DecimalField(max_digits=14, decimal_places=3, default=0)
+    reserved_quantity = models.DecimalField(max_digits=14, decimal_places=3, default=0)
     minimum_quantity = models.DecimalField(max_digits=14, decimal_places=3, default=0)
 
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=("variant", "location"), name="unique_stock_per_variant_location"),
             models.CheckConstraint(condition=models.Q(quantity__gte=0), name="stock_quantity_non_negative"),
+            models.CheckConstraint(
+                condition=models.Q(reserved_quantity__gte=0),
+                name="stock_reserved_quantity_non_negative",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(reserved_quantity__lte=models.F("quantity")),
+                name="stock_reserved_quantity_lte_quantity",
+            ),
         ]
+
+    @property
+    def available_quantity(self):
+        return self.quantity - self.reserved_quantity
 
 
 class InventoryMovement(BaseModel):

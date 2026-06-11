@@ -1,3 +1,7 @@
-from .infrastructure.models import FinancialTransaction
+from .infrastructure.models import (
+    FinancialTransaction,
+    SalesInvoice,
+    SalesInvoiceLine,
+)
 
-__all__ = ("FinancialTransaction",)
+__all__ = ("FinancialTransaction", "SalesInvoice", "SalesInvoiceLine")

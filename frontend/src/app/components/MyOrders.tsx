@@ -1,7 +1,18 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { X, Package, Truck, Check, Clock, AlertCircle, RefreshCw } from 'lucide-react';
+import {
+  X,
+  Package,
+  Truck,
+  Check,
+  Clock,
+  AlertCircle,
+  RefreshCw,
+  CreditCard,
+} from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
+import { useToast } from '../contexts/ToastContext';
+import { initiatePayment, resolveMockPayment } from '../services/payments.service';
 
 interface MyOrdersProps {
   isOpen: boolean;
@@ -10,6 +21,12 @@ interface MyOrdersProps {
 
 export function MyOrders({ isOpen, onClose }: MyOrdersProps) {
   const { orders, loadOrders, backendOnline } = useUser();
+  const toast = useToast();
+  const [payingOrderId, setPayingOrderId] = useState<string | null>(null);
+  const [mockPayment, setMockPayment] = useState<{
+    orderId: string;
+    paymentId: string;
+  } | null>(null);
 
   // Refresh orders from API when opened
   useEffect(() => {
@@ -24,7 +41,12 @@ export function MyOrders({ isOpen, onClose }: MyOrdersProps) {
     switch (status) {
       case 'pendiente':
       case 'pending':
+      case 'payment_pending':
         return <Clock className="w-4 h-4 text-yellow-600" strokeWidth={1} />;
+      case 'paid':
+        return <Check className="w-4 h-4 text-green-600" strokeWidth={1} />;
+      case 'failed':
+        return <AlertCircle className="w-4 h-4 text-red-600" strokeWidth={1} />;
       case 'procesando':
       case 'processing':
       case 'confirmed':
@@ -48,7 +70,12 @@ export function MyOrders({ isOpen, onClose }: MyOrdersProps) {
     switch (status) {
       case 'pendiente':
       case 'pending':
+      case 'payment_pending':
         return 'Pendiente de pago';
+      case 'paid':
+        return 'Pagado';
+      case 'failed':
+        return 'Pago rechazado';
       case 'procesando':
       case 'processing':
         return 'Procesando';
@@ -74,7 +101,12 @@ export function MyOrders({ isOpen, onClose }: MyOrdersProps) {
     switch (status) {
       case 'pendiente':
       case 'pending':
+      case 'payment_pending':
         return 'bg-yellow-50 border-yellow-200 text-yellow-900';
+      case 'paid':
+        return 'bg-green-50 border-green-200 text-green-900';
+      case 'failed':
+        return 'bg-red-50 border-red-200 text-red-900';
       case 'procesando':
       case 'processing':
       case 'confirmed':
@@ -91,6 +123,52 @@ export function MyOrders({ isOpen, onClose }: MyOrdersProps) {
         return 'bg-red-50 border-red-200 text-red-900';
       default:
         return 'bg-secondary border-border';
+    }
+  };
+
+  const canResumePayment = (status: string) =>
+    status === 'pendiente' ||
+    status === 'pending' ||
+    status === 'payment_pending' ||
+    status === 'failed';
+
+  const handleResumePayment = async (orderId: string) => {
+    setPayingOrderId(orderId);
+    try {
+      const payment = await initiatePayment(orderId);
+      if (payment.requires_redirect && payment.checkout_url) {
+        window.location.assign(payment.checkout_url);
+        return;
+      }
+      setMockPayment({ orderId, paymentId: payment.payment_id });
+      toast.info('Pago simulado listo. Elige aprobar o rechazar.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No fue posible iniciar el pago.');
+    } finally {
+      setPayingOrderId(null);
+    }
+  };
+
+  const handleResolveMock = async (outcome: 'approved' | 'declined') => {
+    if (!mockPayment) return;
+    setPayingOrderId(mockPayment.orderId);
+    try {
+      const result = await resolveMockPayment(mockPayment.paymentId, outcome);
+      await loadOrders();
+      if (outcome === 'approved') {
+        toast.success(
+          result.invoice_number
+            ? `Pago aprobado. Factura ${result.invoice_number} generada.`
+            : 'Pago aprobado.',
+        );
+      } else {
+        toast.warning('Pago rechazado. El inventario reservado fue liberado.');
+      }
+      setMockPayment(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No fue posible resolver el pago.');
+    } finally {
+      setPayingOrderId(null);
     }
   };
 
@@ -212,6 +290,41 @@ export function MyOrders({ isOpen, onClose }: MyOrdersProps) {
                       ${order.total.toLocaleString('es-CO')}
                     </span>
                   </div>
+
+                  {backendOnline && canResumePayment(order.estado) && (
+                    <div className="mt-4 pt-4 border-t border-border">
+                      {mockPayment?.orderId === order.id ? (
+                        <div className="flex flex-wrap gap-3">
+                          <button
+                            type="button"
+                            onClick={() => handleResolveMock('approved')}
+                            disabled={payingOrderId === order.id}
+                            className="px-4 py-2 bg-foreground text-background text-xs tracking-wider uppercase disabled:opacity-50"
+                          >
+                            Simular aprobado
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleResolveMock('declined')}
+                            disabled={payingOrderId === order.id}
+                            className="px-4 py-2 border border-red-300 text-red-700 text-xs tracking-wider uppercase disabled:opacity-50"
+                          >
+                            Simular rechazado
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleResumePayment(order.id)}
+                          disabled={payingOrderId === order.id}
+                          className="flex items-center gap-2 px-4 py-2 bg-foreground text-background text-xs tracking-wider uppercase disabled:opacity-50"
+                        >
+                          <CreditCard className="w-4 h-4" strokeWidth={1} />
+                          {payingOrderId === order.id ? 'Iniciando...' : 'Pagar ahora'}
+                        </button>
+                      )}
+                    </div>
+                  )}
 
                   {/* Shipping Address */}
                   {order.direccionEnvio && (

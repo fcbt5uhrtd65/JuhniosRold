@@ -73,6 +73,12 @@ export async function getCurrentUser(): Promise<AuthUser> {
   throw new Error(res.message);
 }
 
+export async function requestPasswordReset(email: string): Promise<void> {
+  await api.post('/auth/password-reset/', {
+    email: email.trim().toLowerCase(),
+  });
+}
+
 // ---- Logout ----
 export async function logoutUser(): Promise<void> {
   clearTokens();

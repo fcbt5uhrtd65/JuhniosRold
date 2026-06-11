@@ -27,6 +27,7 @@ import { FirstPurchasePopup } from './components/FirstPurchasePopup';
 import { LoginModal } from './components/LoginModal';
 import { ApiStatus } from './components/ApiStatus';
 import { ScrollToTop } from './components/ScrollToTop';
+import { PaymentResult } from './components/PaymentResult';
 
 
 function PublicSite({ onLoginClick }: { onLoginClick: () => void }) {
@@ -105,6 +106,7 @@ function PublicSite({ onLoginClick }: { onLoginClick: () => void }) {
 function AppContent() {
   const { login, currentUser, isLoading } = useAdmin();
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const isPaymentResult = window.location.pathname === '/pago/resultado';
 
   const handleAdminAccess = async (email: string, password: string) => {
     const success = await login(email, password);
@@ -113,6 +115,10 @@ function AppContent() {
     }
     return success;
   };
+
+  if (isPaymentResult) {
+    return <PaymentResult />;
+  }
 
   if (isLoading && !currentUser) {
     return (

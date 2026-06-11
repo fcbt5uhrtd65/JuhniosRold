@@ -231,7 +231,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
     });
   }, [activeCategory, collectionFilter, localSearchQuery, priceRange, products]);
 
-  const handleAddToCart = (product: CatalogProduct, closeModal?: boolean) => {
+  const handleAddToCart = async (product: CatalogProduct, closeModal?: boolean) => {
     if (!currentUser) {
       if (closeModal) {
         setQuickViewProduct(null);
@@ -243,17 +243,27 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
 
     const sizes = getProductSizes(product);
     const size = selectedSizes[product.id] || sizes[0];
+    const variant =
+      product.variants.find((item) => item.presentation === size) ??
+      product.variants[0];
 
-    addItem({
-      id: `${product.id}-${size}`,
+    if (!variant) {
+      toast.error('Este producto no tiene una variante disponible.');
+      return;
+    }
+
+    const added = await addItem({
+      variantId: variant.id,
       name: product.name,
       category: product.category_name,
       size,
-      price: product.price ?? 0,
+      price: variant?.current_price ?? product.price ?? 0,
       image: getProductImage(product),
     });
 
-    toast.success(`${product.name} añadido al carrito`);
+    if (added) {
+      toast.success(`${product.name} añadido al carrito`);
+    }
 
     if (closeModal) {
       setQuickViewProduct(null);

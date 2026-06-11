@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, ArrowRight } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
+import { useToast } from '../contexts/ToastContext';
+import { getProducts } from '../services/products.service';
 
 interface Question {
   id: number;
@@ -11,6 +13,7 @@ interface Question {
 
 export function DiagnosticoCapilar() {
   const { addItem } = useCart();
+  const toast = useToast();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
@@ -110,18 +113,50 @@ export function DiagnosticoCapilar() {
     }
   };
 
-  const handleAddAllToCart = () => {
+  const handleAddAllToCart = async () => {
     const recommendation = getRecommendation();
-    recommendation.products.forEach(product => {
-      addItem({
-        id: product.id,
-        name: product.name,
-        category: 'Aceites Capilares',
-        size: product.size,
-        price: product.price,
-        image: product.image,
-      });
-    });
+    try {
+      const resolvedProducts = await Promise.all(
+        recommendation.products.map(async product => {
+          const result = await getProducts({
+            search: product.name,
+            active: true,
+            limit: 10,
+          });
+          const catalogProduct =
+            result.data.find(
+              item => item.name.toLowerCase() === product.name.toLowerCase(),
+            ) ?? result.data[0];
+          const variant =
+            catalogProduct?.variants.find(
+              item => item.is_active && item.presentation === product.size,
+            ) ?? catalogProduct?.variants.find(item => item.is_active);
+          if (!catalogProduct || !variant) {
+            throw new Error(`${product.name} no está disponible en el catálogo.`);
+          }
+          return { catalogProduct, variant, fallbackImage: product.image };
+        }),
+      );
+
+      for (const { catalogProduct, variant, fallbackImage } of resolvedProducts) {
+        const added = await addItem({
+          variantId: variant.id,
+          name: catalogProduct.name,
+          category: catalogProduct.category_name,
+          size: variant.presentation,
+          price: variant.current_price ?? catalogProduct.price ?? 0,
+          image: catalogProduct.primary_image ?? fallbackImage,
+        });
+        if (!added) return;
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : 'No fue posible agregar la recomendación.',
+      );
+      return;
+    }
     setAddedToCart(true);
     setTimeout(() => {
       setAddedToCart(false);

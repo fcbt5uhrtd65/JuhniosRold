@@ -8,6 +8,9 @@ const ORDERS_PATH = '/commerce/orders/';
 
 export type OrderStatus =
   | 'pending'
+  | 'payment_pending'
+  | 'paid'
+  | 'failed'
   | 'confirmed'
   | 'processing'
   | 'shipped'
@@ -102,6 +105,16 @@ interface BackendOrderItem {
   created_at: string;
 }
 
+interface BackendPayment {
+  id: string;
+  provider: 'MOCK' | 'WOMPI';
+  reference: string;
+  status: 'PENDING' | 'APPROVED' | 'DECLINED' | 'ERROR' | 'VOIDED' | 'EXPIRED';
+  payment_method: string;
+  provider_transaction_id: string | null;
+  created_at: string;
+}
+
 interface BackendOrder {
   id: string;
   number: string;
@@ -114,6 +127,7 @@ interface BackendOrder {
   tracking_number: string;
   payment_reference: string;
   items: BackendOrderItem[];
+  payments: BackendPayment[];
   created_at: string;
   updated_at: string;
 }
@@ -127,6 +141,9 @@ function normalizeStatus(status: string): OrderStatus {
   const normalized = status.toLowerCase();
   if (
     normalized === 'pending' ||
+    normalized === 'payment_pending' ||
+    normalized === 'paid' ||
+    normalized === 'failed' ||
     normalized === 'confirmed' ||
     normalized === 'processing' ||
     normalized === 'shipped' ||
@@ -139,6 +156,19 @@ function normalizeStatus(status: string): OrderStatus {
 }
 
 function normalizeOrder(order: BackendOrder): Order {
+  const latestPayment = [...(order.payments ?? [])].sort(
+    (left, right) =>
+      new Date(right.created_at).getTime() - new Date(left.created_at).getTime(),
+  )[0];
+  const paymentStatus: PaymentStatus =
+    latestPayment?.status === 'APPROVED'
+      ? 'paid'
+      : latestPayment?.status === 'PENDING'
+        ? 'pending'
+        : latestPayment
+          ? 'failed'
+          : 'pending';
+
   return {
     id: order.id,
     order_number: order.number,
@@ -156,9 +186,9 @@ function normalizeOrder(order: BackendOrder): Order {
       phone: '',
       country: 'CO',
     },
-    payment_method: '',
-    payment_status: order.payment_reference ? 'paid' : 'pending',
-    payment_reference: order.payment_reference,
+    payment_method: latestPayment?.provider.toLowerCase() ?? '',
+    payment_status: paymentStatus,
+    payment_reference: latestPayment?.reference || order.payment_reference,
     items: order.items.map(item => ({
       id: item.id,
       order_id: item.order,
@@ -212,6 +242,9 @@ export async function getOrderStats(): Promise<OrderStats> {
   const result = await getOrders({ limit: 100 });
   const ordersByStatus = {
     pending: 0,
+    payment_pending: 0,
+    paid: 0,
+    failed: 0,
     confirmed: 0,
     processing: 0,
     shipped: 0,
@@ -265,6 +298,9 @@ export async function cancelOrder(id: string): Promise<Order> {
 export function getOrderStatusLabel(status: OrderStatus): string {
   const labels: Record<OrderStatus, string> = {
     pending: 'Pendiente',
+    payment_pending: 'Pendiente de pago',
+    paid: 'Pagado',
+    failed: 'Pago rechazado',
     confirmed: 'Confirmado',
     processing: 'Procesando',
     shipped: 'En camino',

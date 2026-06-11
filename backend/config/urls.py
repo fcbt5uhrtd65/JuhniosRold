@@ -18,6 +18,7 @@ urlpatterns = [
     path("api/v1/catalog/", include("apps.catalog.interfaces.urls")),
     path("api/v1/inventory/", include("apps.inventory.interfaces.urls")),
     path("api/v1/commerce/", include("apps.commerce.interfaces.urls")),
+    path("api/pagos/", include("apps.commerce.interfaces.payment_urls")),
     path("api/v1/employees/", include("apps.employees.interfaces.urls")),
     path("api/v1/hr/", include("apps.human_resources.interfaces.urls")),
     path("api/v1/finance/", include("apps.finance.interfaces.urls")),
