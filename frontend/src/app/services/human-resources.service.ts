@@ -52,6 +52,28 @@ function normalizeListResponse<T>(payload: T[] | PaginatedResponse<T> | undefine
   };
 }
 
+function buildVacationRequestBody(
+  payload: Omit<VacationRequestPayload, 'employee'>,
+): FormData | Record<string, string | boolean> {
+  if (payload.support_document instanceof Blob) {
+    const formData = new FormData();
+    Object.entries(payload).forEach(([key, value]) => {
+      if (value === null || value === undefined || value === '') return;
+      if (value instanceof Blob) {
+        formData.append(key, value);
+      } else {
+        formData.append(key, String(value));
+      }
+    });
+    return formData;
+  }
+
+  const { support_document: _supportDocument, ...rest } = payload;
+  return Object.fromEntries(
+    Object.entries(rest).filter(([, value]) => value !== null && value !== undefined && value !== ''),
+  ) as Record<string, string | boolean>;
+}
+
 export type VacationRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 export type VacationRequestType = 'VACATION' | 'PERMISSION';
 export type PayrollStatus = 'DRAFT' | 'APPROVED' | 'PAID';
@@ -78,6 +100,7 @@ export interface VacationRequest {
   start_time: string | null;
   end_time: string | null;
   reason: string;
+  support_document: string | null;
   status: VacationRequestStatus;
   reviewed_by: string | null;
   reviewed_at: string | null;
@@ -154,6 +177,7 @@ export interface VacationRequestPayload {
   start_time?: string | null;
   end_time?: string | null;
   reason?: string;
+  support_document?: File | null;
 }
 
 export interface PayrollPayload {
@@ -265,7 +289,19 @@ export async function getVacationRequests(params?: ListVacationParams): Promise<
 }
 
 export async function createVacationRequest(payload: VacationRequestPayload): Promise<VacationRequest> {
-  const res = await api.post<VacationRequest>(VACATIONS_PATH, payload);
+  const res = await api.post<VacationRequest>(
+    VACATIONS_PATH,
+    buildVacationRequestBody({
+      request_type: payload.request_type,
+      start_date: payload.start_date,
+      end_date: payload.end_date,
+      is_full_day: payload.is_full_day,
+      start_time: payload.start_time,
+      end_time: payload.end_time,
+      reason: payload.reason,
+      support_document: payload.support_document,
+    }),
+  );
   if (res.data) return res.data;
   throw new Error(res.message);
 }
@@ -285,7 +321,7 @@ export async function getMyVacationRequests(params?: { page?: number; limit?: nu
 }
 
 export async function createMyVacationRequest(payload: Omit<VacationRequestPayload, 'employee'>): Promise<VacationRequest> {
-  const res = await api.post<VacationRequest>(`${VACATIONS_PATH}me/`, payload);
+  const res = await api.post<VacationRequest>(`${VACATIONS_PATH}me/`, buildVacationRequestBody(payload));
   if (res.data) return res.data;
   throw new Error(res.message);
 }

@@ -174,6 +174,11 @@ function getRequestScheduleLabel(request: VacationRequest): string {
   return `${dateLabel} · Horario parcial`;
 }
 
+function getSupportDocumentName(url: string): string {
+  const cleanUrl = url.split('?')[0];
+  return decodeURIComponent(cleanUrl.split('/').pop() ?? 'soporte');
+}
+
 const INTERNAL_EMPLOYEE_ROLES: UserRole[] = ['ADMIN', 'RRHH', 'EMPLEADO', 'PEDIDOS', 'SELLER', 'DISTRIBUTOR'];
 
 export function AdminHR() {
@@ -654,21 +659,44 @@ export function AdminHR() {
                             </span>
                           </td>
                           <td className="p-3">
-                            <div className="flex items-center justify-center gap-2">
-                              <button
-                                onClick={() => handleVacationAction(request, 'approve')}
-                                disabled={request.status !== 'PENDING' || vacationActionId === request.id}
-                                className="px-3 py-1.5 border border-green-200 text-green-700 hover:bg-green-50 transition-colors disabled:opacity-50"
-                              >
-                                Aprobar
-                              </button>
-                              <button
-                                onClick={() => handleVacationAction(request, 'reject')}
-                                disabled={request.status !== 'PENDING' || vacationActionId === request.id}
-                                className="px-3 py-1.5 border border-red-200 text-red-700 hover:bg-red-50 transition-colors disabled:opacity-50"
-                              >
-                                Rechazar
-                              </button>
+                            <div className="flex flex-col items-center gap-2">
+                              {request.support_document ? (
+                                <div className="flex flex-wrap items-center justify-center gap-2">
+                                  <a
+                                    href={request.support_document}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="px-3 py-1.5 border border-border text-foreground hover:bg-secondary/50 transition-colors"
+                                  >
+                                    Vista previa
+                                  </a>
+                                  <a
+                                    href={request.support_document}
+                                    download={getSupportDocumentName(request.support_document)}
+                                    className="px-3 py-1.5 border border-border text-foreground hover:bg-secondary/50 transition-colors"
+                                  >
+                                    Descargar
+                                  </a>
+                                </div>
+                              ) : (
+                                <div className="text-[10px] text-muted-foreground">Sin soporte</div>
+                              )}
+                              <div className="flex items-center justify-center gap-2">
+                                <button
+                                  onClick={() => handleVacationAction(request, 'approve')}
+                                  disabled={request.status !== 'PENDING' || vacationActionId === request.id}
+                                  className="px-3 py-1.5 border border-green-200 text-green-700 hover:bg-green-50 transition-colors disabled:opacity-50"
+                                >
+                                  Aprobar
+                                </button>
+                                <button
+                                  onClick={() => handleVacationAction(request, 'reject')}
+                                  disabled={request.status !== 'PENDING' || vacationActionId === request.id}
+                                  className="px-3 py-1.5 border border-red-200 text-red-700 hover:bg-red-50 transition-colors disabled:opacity-50"
+                                >
+                                  Rechazar
+                                </button>
+                              </div>
                             </div>
                           </td>
                         </tr>

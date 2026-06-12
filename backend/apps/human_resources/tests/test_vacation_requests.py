@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework.test import APIClient
 
 from apps.employees.infrastructure.models import Department, Employee, Position
@@ -91,3 +92,52 @@ class VacationRequestPortalTests(TestCase):
         self.assertFalse(response.data["is_full_day"])
         self.assertEqual(response.data["start_time"], "08:00:00")
         self.assertEqual(response.data["end_time"], "11:00:00")
+
+    def test_employee_can_attach_pdf_support_document(self):
+        support_file = SimpleUploadedFile(
+            "certificado.pdf",
+            b"%PDF-1.4\n%test\n",
+            content_type="application/pdf",
+        )
+
+        response = self.client.post(
+            "/api/v1/hr/vacations/me/",
+            {
+                "request_type": "PERMISSION",
+                "start_date": "2026-07-02",
+                "end_date": "2026-07-02",
+                "is_full_day": False,
+                "start_time": "12:00",
+                "reason": "Cita medica",
+                "support_document": support_file,
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertIn("support_document", response.data)
+        self.assertIn("certificado.pdf", response.data["support_document"])
+
+    def test_employee_cannot_attach_unsupported_support_document(self):
+        support_file = SimpleUploadedFile(
+            "justificante.txt",
+            b"texto invalido",
+            content_type="text/plain",
+        )
+
+        response = self.client.post(
+            "/api/v1/hr/vacations/me/",
+            {
+                "request_type": "PERMISSION",
+                "start_date": "2026-07-02",
+                "end_date": "2026-07-02",
+                "is_full_day": False,
+                "start_time": "12:00",
+                "reason": "Asuntos familiares",
+                "support_document": support_file,
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("support_document", response.data)

@@ -1,3 +1,4 @@
+from django.core.validators import FileExtensionValidator
 from django.conf import settings
 from django.db import models
 
@@ -35,6 +36,12 @@ class VacationRequest(BaseModel):
     start_time = models.TimeField(null=True, blank=True)
     end_time = models.TimeField(null=True, blank=True)
     reason = models.TextField(blank=True)
+    support_document = models.FileField(
+        upload_to="hr/vacations/support/",
+        null=True,
+        blank=True,
+        validators=[FileExtensionValidator(allowed_extensions=("pdf", "png", "jpg", "jpeg"))],
+    )
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
     reviewed_at = models.DateTimeField(null=True, blank=True)

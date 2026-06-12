@@ -348,19 +348,27 @@ export async function apiRequest<T>(
   };
 }
 
+function prepareBody(body: unknown): BodyInit {
+  if (typeof FormData !== 'undefined' && body instanceof FormData) {
+    return body;
+  }
+
+  return JSON.stringify(body);
+}
+
 // ---- Convenience helpers ----
 export const api = {
   get: <T>(endpoint: string, signal?: AbortSignal) =>
     apiRequest<T>(endpoint, { method: 'GET', ...(signal ? { signal } : {}) }),
 
   post: <T>(endpoint: string, body: unknown) =>
-    apiRequest<T>(endpoint, { method: 'POST', body: JSON.stringify(body) }),
+    apiRequest<T>(endpoint, { method: 'POST', body: prepareBody(body) }),
 
   patch: <T>(endpoint: string, body: unknown) =>
-    apiRequest<T>(endpoint, { method: 'PATCH', body: JSON.stringify(body) }),
+    apiRequest<T>(endpoint, { method: 'PATCH', body: prepareBody(body) }),
 
   put: <T>(endpoint: string, body: unknown) =>
-    apiRequest<T>(endpoint, { method: 'PUT', body: JSON.stringify(body) }),
+    apiRequest<T>(endpoint, { method: 'PUT', body: prepareBody(body) }),
 
   delete: <T>(endpoint: string) =>
     apiRequest<T>(endpoint, { method: 'DELETE' }),

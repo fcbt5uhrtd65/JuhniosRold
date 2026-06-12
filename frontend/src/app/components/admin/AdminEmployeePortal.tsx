@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
-import { CalendarClock, CheckCircle2, Clock3, FileText, Send, UserRound } from 'lucide-react';
+import { CalendarClock, CheckCircle2, Clock3, FileText, Paperclip, Send, UserRound, X } from 'lucide-react';
 import { useAdmin } from '../../contexts/AdminContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getEmployees, type Employee } from '../../services/employees.service';
@@ -25,6 +25,7 @@ interface VacationFormState {
   start_time: string;
   end_time: string;
   reason: string;
+  support_document: File | null;
 }
 
 const EMPTY_FORM: VacationFormState = {
@@ -37,6 +38,7 @@ const EMPTY_FORM: VacationFormState = {
   start_time: '',
   end_time: '',
   reason: '',
+  support_document: null,
 };
 
 function formatDate(value: string): string {
@@ -75,6 +77,13 @@ function getStatusBadge(status: VacationRequestStatus): string {
 
 function getRequestTypeLabel(type: VacationRequestType): string {
   return type === 'PERMISSION' ? 'Permiso' : 'Vacaciones';
+}
+
+function isAllowedSupportDocument(file: File): boolean {
+  const allowedMimeTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
+  const allowedExtensions = ['pdf', 'png', 'jpg', 'jpeg'];
+  const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
+  return allowedMimeTypes.includes(file.type) || allowedExtensions.includes(extension);
 }
 
 function getRequestScheduleLabel(request: VacationRequest): string {
@@ -173,6 +182,11 @@ export function AdminEmployeePortal() {
       return;
     }
 
+    if (form.support_document && !isAllowedSupportDocument(form.support_document)) {
+      toast.error('El soporte debe ser PDF o una imagen PNG/JPG');
+      return;
+    }
+
     setSaving(true);
     try {
       await createMyVacationRequest({
@@ -182,6 +196,7 @@ export function AdminEmployeePortal() {
         is_full_day,
         ...(is_full_day ? {} : { start_time: form.start_time, end_time: form.time_mode === 'TIME_RANGE' ? form.end_time : null }),
         reason: form.reason,
+        support_document: form.support_document,
       });
       toast.success('Solicitud enviada a RRHH');
       setForm(EMPTY_FORM);
@@ -400,6 +415,47 @@ export function AdminEmployeePortal() {
               />
             </div>
 
+            <div>
+              <label className="block text-xs mb-2">Documento de soporte</label>
+              <label className="flex items-center gap-3 w-full px-4 py-3 border border-dashed border-border bg-secondary/10 cursor-pointer hover:bg-secondary/20 transition-colors">
+                <Paperclip className="w-4 h-4 text-muted-foreground shrink-0" strokeWidth={1} />
+                <div className="text-sm flex-1">
+                  <div className="font-medium">
+                    {form.support_document ? form.support_document.name : 'Subir PDF, PNG o JPG'}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Adjunta soportes como cita médica, certificado o constancia.
+                  </div>
+                </div>
+                {form.support_document && (
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setForm({ ...form, support_document: null });
+                    }}
+                    className="p-2 hover:bg-background border border-border transition-colors"
+                    aria-label="Quitar documento de soporte"
+                  >
+                    <X className="w-4 h-4" strokeWidth={1} />
+                  </button>
+                )}
+                <input
+                  key={form.support_document?.name ?? 'empty'}
+                  type="file"
+                  accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      support_document: event.target.files?.[0] ?? null,
+                    })
+                  }
+                  className="hidden"
+                />
+              </label>
+            </div>
+
             <div className="border border-border bg-secondary/20 p-4 text-xs text-muted-foreground space-y-1">
               <div className="font-medium text-foreground">Resumen</div>
               <div>Tipo: {getRequestTypeLabel(form.request_type)}</div>
@@ -416,6 +472,7 @@ export function AdminEmployeePortal() {
                     ? `Desde ${form.start_time || 'pendiente'} hasta fin del día`
                     : `De ${form.start_time || 'pendiente'} a ${form.end_time || 'pendiente'}`}
               </div>
+              <div>Soporte: {form.support_document ? form.support_document.name : 'Sin adjuntar'}</div>
             </div>
 
             <div className="flex items-center gap-3 pt-2">
@@ -458,6 +515,9 @@ export function AdminEmployeePortal() {
                     </div>
                     <div className="text-xs text-muted-foreground mt-1">
                       {request.reason || 'Sin motivo'}
+                    </div>
+                    <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mt-2">
+                      Soporte: {request.support_document ? 'Adjunto' : 'Sin adjuntar'}
                     </div>
                     <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mt-2">
                       Registrada {formatDate(request.created_at)}

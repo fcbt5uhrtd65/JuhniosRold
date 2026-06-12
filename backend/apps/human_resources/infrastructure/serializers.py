@@ -1,6 +1,15 @@
+from pathlib import Path
+
 from rest_framework import serializers
 
 from .models import Attendance, EmployeeDocument, Payroll, PayrollItem, PerformanceReview, VacationRequest
+
+ALLOWED_SUPPORT_CONTENT_TYPES = {
+    "application/pdf",
+    "image/png",
+    "image/jpeg",
+    "image/jpg",
+}
 
 
 class AttendanceSerializer(serializers.ModelSerializer):
@@ -45,6 +54,24 @@ class VacationRequestSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(errors)
 
         return attrs
+
+    def validate_support_document(self, file):
+        if not file:
+            return file
+
+        extension = Path(file.name).suffix.lower().lstrip(".")
+        if extension not in {"pdf", "png", "jpg", "jpeg"}:
+            raise serializers.ValidationError(
+                "El documento de soporte solo puede ser PDF o una imagen PNG/JPG."
+            )
+
+        content_type = getattr(file, "content_type", None)
+        if content_type and content_type.lower() not in ALLOWED_SUPPORT_CONTENT_TYPES:
+            raise serializers.ValidationError(
+                "El documento de soporte solo puede ser PDF o una imagen PNG/JPG."
+            )
+
+        return file
 
 
 class PayrollItemSerializer(serializers.ModelSerializer):
