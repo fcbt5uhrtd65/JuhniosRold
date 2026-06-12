@@ -4,7 +4,7 @@
 // ============================================================
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { ApiError } from '../services/api';
+import { ApiError, AuthSessionError } from '../services/api';
 
 export interface ApiRequestState<T> {
   data: T | null;
@@ -39,6 +39,10 @@ export function useApiMutation<T, P = unknown>(
         setData(result);
         return result;
       } catch (err) {
+        if (err instanceof AuthSessionError) {
+          setError(null);
+          return null;
+        }
         const msg =
           err instanceof ApiError
             ? err.message
@@ -92,6 +96,10 @@ export function useApiQuery<T>(
       setData(result);
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') return;
+      if (err instanceof AuthSessionError) {
+        setError(null);
+        return;
+      }
       const msg =
         err instanceof ApiError
           ? err.message

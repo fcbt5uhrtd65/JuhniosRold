@@ -4,6 +4,7 @@
 // ============================================================
 
 import { api } from './api';
+import type { UserRole } from './auth.service';
 
 const EMPLOYEES_PATH = '/employees/';
 const DEPARTMENTS_PATH = '/employees/departments/';
@@ -90,6 +91,7 @@ export interface Contract {
 export interface Employee {
   id: string;
   user: string | null;
+  user_role_code: UserRole | '';
   employee_code: string;
   document_number: string;
   first_name: string;
@@ -124,6 +126,8 @@ export interface PositionPayload {
 
 export interface EmployeePayload {
   user?: string | null;
+  user_role?: UserRole | '';
+  user_password?: string;
   employee_code: string;
   document_number: string;
   first_name: string;

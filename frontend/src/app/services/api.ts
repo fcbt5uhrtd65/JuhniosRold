@@ -231,6 +231,34 @@ async function performTokenRefresh(): Promise<string | null> {
   }
 }
 
+export class AuthSessionError extends ApiError {
+  constructor(message = 'Tu sesión expiró o ya no tiene credenciales válidas.') {
+    super(message, 401);
+    this.name = 'AuthSessionError';
+  }
+}
+
+type AuthSessionListener = (reason: 'missing-token' | 'expired-token' | 'unauthorized') => void;
+
+const authSessionListeners = new Set<AuthSessionListener>();
+
+export function onAuthSessionInvalidated(listener: AuthSessionListener): () => void {
+  authSessionListeners.add(listener);
+  return () => {
+    authSessionListeners.delete(listener);
+  };
+}
+
+function notifyAuthSessionInvalidated(reason: 'missing-token' | 'expired-token' | 'unauthorized'): void {
+  authSessionListeners.forEach((listener) => {
+    try {
+      listener(reason);
+    } catch {
+      // Listener errors should not break request handling.
+    }
+  });
+}
+
 async function refreshAccessToken(): Promise<string | null> {
   if (_refreshPromise) return _refreshPromise;
   _refreshPromise = performTokenRefresh().finally(() => {
@@ -251,8 +279,16 @@ export async function apiRequest<T>(
     endpoint === '/auth/register/' ||
     endpoint.startsWith('/auth/token/');
   let token = getAccessToken();
+  if (!token && !isAuthenticationRequest) {
+    notifyAuthSessionInvalidated('missing-token');
+    throw new AuthSessionError();
+  }
   if (token && !isAuthenticationRequest && tokenExpiresSoon(token)) {
     token = await refreshAccessToken();
+  }
+  if (!token && !isAuthenticationRequest) {
+    notifyAuthSessionInvalidated('missing-token');
+    throw new AuthSessionError();
   }
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
 
@@ -282,11 +318,18 @@ export async function apiRequest<T>(
     const newToken = await refreshAccessToken();
     if (newToken) return apiRequest<T>(endpoint, options, false);
     clearTokens();
+    notifyAuthSessionInvalidated('unauthorized');
+    throw new AuthSessionError();
   }
 
   const payload = await res.json().catch(() => null) as T | ApiResponse<T> | null;
 
   if (!res.ok) {
+    if (res.status === 401) {
+      clearTokens();
+      notifyAuthSessionInvalidated('unauthorized');
+      throw new AuthSessionError();
+    }
     throw new ApiError(
       extractMessage(payload, res.status),
       res.status,

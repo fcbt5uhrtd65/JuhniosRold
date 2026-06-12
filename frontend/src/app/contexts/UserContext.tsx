@@ -29,6 +29,7 @@ import {
   ApiError,
   getAccessToken,
   clearTokens,
+  onAuthSessionInvalidated,
   isBackendAvailable,
 } from '../services/api';
 
@@ -168,6 +169,14 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [backendOnline, setBackendOnline] = useState(false);
 
+  const resetUserSession = useCallback(() => {
+    setCurrentUser(null);
+    setSavedProducts([]);
+    setOrders([]);
+    setBackendOnline(false);
+    setIsLoadingAuth(false);
+  }, []);
+
   // ---- On mount: restore session ----
   useEffect(() => {
     async function restoreSession() {
@@ -189,6 +198,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
           setBackendOnline(serverResponded);
           if (serverResponded && error.status === 401) {
             clearTokens();
+            resetUserSession();
+            return;
           }
         }
       } else {
@@ -204,6 +215,14 @@ export function UserProvider({ children }: { children: ReactNode }) {
     restoreSession();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    return onAuthSessionInvalidated(() => {
+      resetUserSession();
+      localStorage.removeItem(STORAGE_KEYS.USER);
+      localStorage.removeItem(STORAGE_KEYS.USERS_DB);
+    });
+  }, [resetUserSession]);
 
   // ---- localStorage helpers ----
   const loadLocalSaved = () => {
@@ -300,10 +319,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
     if (backendOnline && getAccessToken()) {
       try { await logoutUser(); } catch { /* ignore */ }
     }
-    setCurrentUser(null);
-    setOrders([]);
+    resetUserSession();
     localStorage.removeItem(STORAGE_KEYS.USER);
-  }, [backendOnline]);
+  }, [backendOnline, resetUserSession]);
 
   // ---- SAVED PRODUCTS ----
   const toggleSaveProduct = (productoId: string) => {

@@ -37,6 +37,7 @@ import {
   ApiError,
   getAccessToken,
   clearTokens,
+  onAuthSessionInvalidated,
   isBackendAvailable,
 } from '../services/api';
 
@@ -306,6 +307,17 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [backendOnline, setBackendOnline] = useState(false);
 
+  const resetAdminSession = useCallback(() => {
+    setCurrentUser(null);
+    setProducts([]);
+    setInventory([]);
+    setOrders([]);
+    setPayments([]);
+    setCustomers([]);
+    setBackendOnline(false);
+    setIsLoading(false);
+  }, []);
+
   // Restore data and validate an administrative session on mount.
   useEffect(() => {
     const savedProducts = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
@@ -361,6 +373,13 @@ export function AdminProvider({ children }: { children: ReactNode }) {
 
     void restoreSession();
   }, []);
+
+  useEffect(() => {
+    return onAuthSessionInvalidated(() => {
+      resetAdminSession();
+      localStorage.removeItem(STORAGE_KEYS.USER);
+    });
+  }, [resetAdminSession]);
 
   // Persist changes
   useEffect(() => { if (products.length > 0) localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products)); }, [products]);
@@ -494,10 +513,10 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     if (backendOnline && getAccessToken()) {
       logoutUser().catch(() => {});
     }
-    setCurrentUser(null);
+    resetAdminSession();
     clearTokens();
     localStorage.removeItem(STORAGE_KEYS.USER);
-  }, [backendOnline]);
+  }, [backendOnline, resetAdminSession]);
 
   // ---- Product CRUD ----
   const addProduct = useCallback(async (product: Omit<Product, 'id'>) => {

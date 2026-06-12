@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { SearchBar } from './SearchBar';
 import { useToast } from '../../contexts/ToastContext';
+import { getRoleLabel } from '../../utils/permissions';
 import {
   createEmployee,
   deleteEmployee,
@@ -30,6 +31,7 @@ import {
   type Position,
   updateEmployee,
 } from '../../services/employees.service';
+import type { UserRole } from '../../services/auth.service';
 import {
   approveVacationRequest,
   getVacationRequests,
@@ -43,6 +45,8 @@ type HRTab = 'employees' | 'catalog' | 'vacations';
 
 interface EmployeeFormState {
   user: string;
+  user_role: UserRole | '';
+  user_password: string;
   employee_code: string;
   document_number: string;
   first_name: string;
@@ -60,6 +64,8 @@ interface EmployeeFormState {
 
 const EMPTY_EMPLOYEE_FORM: EmployeeFormState = {
   user: '',
+  user_role: '',
+  user_password: '',
   employee_code: '',
   document_number: '',
   first_name: '',
@@ -130,6 +136,8 @@ function requestStatusBadge(status: VacationRequestStatus): string {
   };
   return styles[status];
 }
+
+const INTERNAL_EMPLOYEE_ROLES: UserRole[] = ['ADMIN', 'RRHH', 'EMPLEADO', 'PEDIDOS', 'SELLER', 'DISTRIBUTOR'];
 
 export function AdminHR() {
   const toast = useToast();
@@ -246,6 +254,8 @@ export function AdminHR() {
     setEditingEmployee(employee);
     setEmployeeForm({
       user: employee.user ?? '',
+      user_role: employee.user_role_code ?? '',
+      user_password: '',
       employee_code: employee.employee_code,
       document_number: employee.document_number,
       first_name: employee.first_name,
@@ -275,6 +285,8 @@ export function AdminHR() {
 
     const payload: EmployeePayload = {
       ...(employeeForm.user ? { user: employeeForm.user } : {}),
+      ...(employeeForm.user_role ? { user_role: employeeForm.user_role } : {}),
+      ...(employeeForm.user_password ? { user_password: employeeForm.user_password } : {}),
       employee_code: employeeForm.employee_code.trim(),
       document_number: employeeForm.document_number.trim(),
       first_name: employeeForm.first_name.trim(),
@@ -347,6 +359,7 @@ export function AdminHR() {
   };
 
   const activeEmployees = employees.filter(employee => employee.status === 'ACTIVE');
+  const needsCredentialPair = !editingEmployee?.user && (employeeForm.user_role !== '' || employeeForm.user_password !== '');
   const statusOptions = activeTab === 'vacations'
     ? [
         { value: 'all', label: 'Todos los estados' },
@@ -727,6 +740,41 @@ export function AdminHR() {
                       className="w-full px-4 py-2.5 border border-border bg-transparent focus:outline-none focus:border-foreground text-sm"
                       placeholder="+57 300 123 4567"
                     />
+                  </div>
+                </div>
+
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs mb-2">Rol de acceso</label>
+                    <select
+                      value={employeeForm.user_role}
+                      required={needsCredentialPair}
+                      onChange={(event) => setEmployeeForm({ ...employeeForm, user_role: event.target.value as UserRole | '' })}
+                      className="w-full px-4 py-2.5 border border-border bg-background focus:outline-none focus:border-foreground text-sm"
+                    >
+                      <option value="">Sin rol de acceso</option>
+                      {INTERNAL_EMPLOYEE_ROLES.map((role) => (
+                        <option key={role} value={role}>
+                          {getRoleLabel(role)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs mb-2">Contraseña</label>
+                    <input
+                      type="password"
+                      value={employeeForm.user_password}
+                      onChange={(event) => setEmployeeForm({ ...employeeForm, user_password: event.target.value })}
+                      className="w-full px-4 py-2.5 border border-border bg-transparent focus:outline-none focus:border-foreground text-sm"
+                      placeholder={editingEmployee?.user ? 'Dejar en blanco para conservar la contraseña actual' : 'Crear credenciales de acceso'}
+                      required={needsCredentialPair}
+                      minLength={needsCredentialPair ? 8 : undefined}
+                    />
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Si asignas un rol de acceso, debes definir una contraseña. En edición, dejarlo vacío conserva la actual.
+                    </p>
                   </div>
                 </div>
 
