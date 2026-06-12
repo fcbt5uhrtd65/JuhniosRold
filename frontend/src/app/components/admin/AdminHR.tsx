@@ -137,6 +137,43 @@ function requestStatusBadge(status: VacationRequestStatus): string {
   return styles[status];
 }
 
+function formatTime(value: string | null | undefined): string {
+  if (!value) return 'Sin hora';
+  const normalized = value.length === 5 ? `${value}:00` : value;
+  const parsed = new Date(`1970-01-01T${normalized}`);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleTimeString('es-CO', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+}
+
+function getRequestTypeLabel(type: string): string {
+  return type === 'PERMISSION' ? 'Permiso' : 'Vacaciones';
+}
+
+function getRequestScheduleLabel(request: VacationRequest): string {
+  const dateLabel =
+    request.start_date === request.end_date
+      ? parseDate(request.start_date)
+      : `${parseDate(request.start_date)} - ${parseDate(request.end_date)}`;
+
+  if (request.is_full_day) {
+    return `${dateLabel} · Jornada completa`;
+  }
+
+  if (request.start_time && request.end_time) {
+    return `${dateLabel} · ${formatTime(request.start_time)} - ${formatTime(request.end_time)}`;
+  }
+
+  if (request.start_time) {
+    return `${dateLabel} · Desde ${formatTime(request.start_time)} hasta fin del día`;
+  }
+
+  return `${dateLabel} · Horario parcial`;
+}
+
 const INTERNAL_EMPLOYEE_ROLES: UserRole[] = ['ADMIN', 'RRHH', 'EMPLEADO', 'PEDIDOS', 'SELLER', 'DISTRIBUTOR'];
 
 export function AdminHR() {
@@ -576,6 +613,7 @@ export function AdminHR() {
                   <thead>
                     <tr className="border-b border-border bg-secondary/30">
                       <th className="text-left p-3 font-medium">Empleado</th>
+                      <th className="text-left p-3 font-medium">Tipo</th>
                       <th className="text-left p-3 font-medium">Fechas</th>
                       <th className="text-left p-3 font-medium">Motivo</th>
                       <th className="text-left p-3 font-medium">Estado</th>
@@ -594,7 +632,15 @@ export function AdminHR() {
                             </div>
                           </td>
                           <td className="p-3">
-                            <div>{parseDate(request.start_date)} - {parseDate(request.end_date)}</div>
+                            <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
+                              {getRequestTypeLabel(request.request_type)}
+                            </div>
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              {request.is_full_day ? 'Jornada completa' : 'Horario parcial'}
+                            </div>
+                          </td>
+                          <td className="p-3">
+                            <div>{getRequestScheduleLabel(request)}</div>
                             <div className="text-muted-foreground mt-1">
                               Registrada: {parseDate(request.created_at)}
                             </div>

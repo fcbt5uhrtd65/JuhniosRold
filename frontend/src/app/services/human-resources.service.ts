@@ -53,6 +53,7 @@ function normalizeListResponse<T>(payload: T[] | PaginatedResponse<T> | undefine
 }
 
 export type VacationRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+export type VacationRequestType = 'VACATION' | 'PERMISSION';
 export type PayrollStatus = 'DRAFT' | 'APPROVED' | 'PAID';
 
 export interface Attendance {
@@ -70,8 +71,12 @@ export interface Attendance {
 export interface VacationRequest {
   id: string;
   employee: string;
+  request_type: VacationRequestType;
   start_date: string;
   end_date: string;
+  is_full_day: boolean;
+  start_time: string | null;
+  end_time: string | null;
   reason: string;
   status: VacationRequestStatus;
   reviewed_by: string | null;
@@ -142,8 +147,12 @@ export interface AttendancePayload {
 
 export interface VacationRequestPayload {
   employee: string;
+  request_type: VacationRequestType;
   start_date: string;
   end_date: string;
+  is_full_day: boolean;
+  start_time?: string | null;
+  end_time?: string | null;
   reason?: string;
 }
 

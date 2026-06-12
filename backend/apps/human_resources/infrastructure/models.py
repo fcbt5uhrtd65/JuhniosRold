@@ -18,14 +18,22 @@ class Attendance(BaseModel):
 
 
 class VacationRequest(BaseModel):
+    class RequestType(models.TextChoices):
+        VACATION = "VACATION", "Vacaciones"
+        PERMISSION = "PERMISSION", "Permiso"
+
     class Status(models.TextChoices):
         PENDING = "PENDING", "Pendiente"
         APPROVED = "APPROVED", "Aprobada"
         REJECTED = "REJECTED", "Rechazada"
 
     employee = models.ForeignKey("employees.Employee", on_delete=models.CASCADE, related_name="vacations")
+    request_type = models.CharField(max_length=20, choices=RequestType.choices, default=RequestType.VACATION)
     start_date = models.DateField()
     end_date = models.DateField()
+    is_full_day = models.BooleanField(default=True)
+    start_time = models.TimeField(null=True, blank=True)
+    end_time = models.TimeField(null=True, blank=True)
     reason = models.TextField(blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)

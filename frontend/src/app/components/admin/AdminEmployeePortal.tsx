@@ -9,22 +9,50 @@ import {
   getMyVacationRequests,
   type VacationRequest,
   type VacationRequestStatus,
+  type VacationRequestType,
 } from '../../services/human-resources.service';
 
+type RequestPeriodMode = 'SINGLE_DAY' | 'DATE_RANGE';
+type RequestTimeMode = 'FULL_DAY' | 'FROM_TIME' | 'TIME_RANGE';
+
 interface VacationFormState {
+  request_type: VacationRequestType;
+  period_mode: RequestPeriodMode;
+  time_mode: RequestTimeMode;
+  single_date: string;
   start_date: string;
   end_date: string;
+  start_time: string;
+  end_time: string;
   reason: string;
 }
 
 const EMPTY_FORM: VacationFormState = {
+  request_type: 'PERMISSION',
+  period_mode: 'SINGLE_DAY',
+  time_mode: 'FULL_DAY',
+  single_date: '',
   start_date: '',
   end_date: '',
+  start_time: '',
+  end_time: '',
   reason: '',
 };
 
 function formatDate(value: string): string {
   return new Date(value).toLocaleDateString('es-CO');
+}
+
+function formatTime(value: string | null | undefined): string {
+  if (!value) return 'Sin hora';
+  const normalized = value.length === 5 ? `${value}:00` : value;
+  const parsed = new Date(`1970-01-01T${normalized}`);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleTimeString('es-CO', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
 }
 
 function getStatusLabel(status: VacationRequestStatus): string {
@@ -43,6 +71,31 @@ function getStatusBadge(status: VacationRequestStatus): string {
     REJECTED: 'bg-red-50 text-red-700 border-red-200',
   };
   return styles[status];
+}
+
+function getRequestTypeLabel(type: VacationRequestType): string {
+  return type === 'PERMISSION' ? 'Permiso' : 'Vacaciones';
+}
+
+function getRequestScheduleLabel(request: VacationRequest): string {
+  const dateLabel =
+    request.start_date === request.end_date
+      ? formatDate(request.start_date)
+      : `${formatDate(request.start_date)} - ${formatDate(request.end_date)}`;
+
+  if (request.is_full_day) {
+    return `${dateLabel} · Jornada completa`;
+  }
+
+  if (request.start_time && request.end_time) {
+    return `${dateLabel} · ${formatTime(request.start_time)} - ${formatTime(request.end_time)}`;
+  }
+
+  if (request.start_time) {
+    return `${dateLabel} · Desde ${formatTime(request.start_time)} hasta fin del día`;
+  }
+
+  return `${dateLabel} · Horario parcial`;
 }
 
 function getEmployeeName(employee: Employee): string {
@@ -101,11 +154,33 @@ export function AdminEmployeePortal() {
       return;
     }
 
+    const start_date = form.period_mode === 'SINGLE_DAY' ? form.single_date : form.start_date;
+    const end_date = form.period_mode === 'SINGLE_DAY' ? form.single_date : form.end_date;
+    const is_full_day = form.time_mode === 'FULL_DAY';
+
+    if (!start_date || !end_date) {
+      toast.error('Debes indicar las fechas de la solicitud');
+      return;
+    }
+
+    if (!is_full_day && !form.start_time) {
+      toast.error('Debes indicar la hora de inicio');
+      return;
+    }
+
+    if (form.time_mode === 'TIME_RANGE' && !form.end_time) {
+      toast.error('Debes indicar la hora final');
+      return;
+    }
+
     setSaving(true);
     try {
       await createMyVacationRequest({
-        start_date: form.start_date,
-        end_date: form.end_date,
+        request_type: form.request_type,
+        start_date,
+        end_date,
+        is_full_day,
+        ...(is_full_day ? {} : { start_time: form.start_time, end_time: form.time_mode === 'TIME_RANGE' ? form.end_time : null }),
         reason: form.reason,
       });
       toast.success('Solicitud enviada a RRHH');
@@ -193,26 +268,126 @@ export function AdminEmployeePortal() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs mb-2">Fecha inicio</label>
-                <input
-                  type="date"
-                  required
-                  value={form.start_date}
-                  onChange={(event) => setForm({ ...form, start_date: event.target.value })}
-                  className="w-full px-4 py-2.5 border border-border bg-transparent focus:outline-none focus:border-foreground text-sm"
-                />
+                <label className="block text-xs mb-2">Tipo de solicitud</label>
+                <select
+                  value={form.request_type}
+                  onChange={(event) => setForm({ ...form, request_type: event.target.value as VacationRequestType })}
+                  className="w-full px-4 py-2.5 border border-border bg-background focus:outline-none focus:border-foreground text-sm"
+                >
+                  <option value="PERMISSION">Permiso</option>
+                  <option value="VACATION">Vacaciones</option>
+                </select>
               </div>
               <div>
-                <label className="block text-xs mb-2">Fecha fin</label>
+                <label className="block text-xs mb-2">Duración</label>
+                <select
+                  value={form.period_mode}
+                  onChange={(event) => setForm({ ...form, period_mode: event.target.value as RequestPeriodMode })}
+                  className="w-full px-4 py-2.5 border border-border bg-background focus:outline-none focus:border-foreground text-sm"
+                >
+                  <option value="SINGLE_DAY">Un solo día</option>
+                  <option value="DATE_RANGE">Varios días</option>
+                </select>
+              </div>
+            </div>
+
+            {form.period_mode === 'SINGLE_DAY' ? (
+              <div>
+                <label className="block text-xs mb-2">Fecha</label>
                 <input
                   type="date"
                   required
-                  value={form.end_date}
-                  onChange={(event) => setForm({ ...form, end_date: event.target.value })}
+                  value={form.single_date}
+                  onChange={(event) => setForm({ ...form, single_date: event.target.value })}
                   className="w-full px-4 py-2.5 border border-border bg-transparent focus:outline-none focus:border-foreground text-sm"
                 />
               </div>
+            ) : (
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs mb-2">Fecha inicio</label>
+                  <input
+                    type="date"
+                    required
+                    value={form.start_date}
+                    onChange={(event) => setForm({ ...form, start_date: event.target.value })}
+                    className="w-full px-4 py-2.5 border border-border bg-transparent focus:outline-none focus:border-foreground text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs mb-2">Fecha fin</label>
+                  <input
+                    type="date"
+                    required
+                    value={form.end_date}
+                    onChange={(event) => setForm({ ...form, end_date: event.target.value })}
+                    className="w-full px-4 py-2.5 border border-border bg-transparent focus:outline-none focus:border-foreground text-sm"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs mb-2">Cobertura del horario</label>
+              <div className="grid gap-3 sm:grid-cols-3">
+                {[
+                  { value: 'FULL_DAY', label: 'Jornada completa' },
+                  { value: 'FROM_TIME', label: 'Desde una hora' },
+                  { value: 'TIME_RANGE', label: 'Rango de horas' },
+                ].map((option) => (
+                  <label
+                    key={option.value}
+                    className={`flex items-center gap-2 border px-3 py-2 text-xs cursor-pointer ${
+                      form.time_mode === option.value
+                        ? 'border-foreground bg-secondary/30'
+                        : 'border-border'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="time_mode"
+                      value={option.value}
+                      checked={form.time_mode === option.value}
+                      onChange={(event) => setForm({ ...form, time_mode: event.target.value as RequestTimeMode })}
+                    />
+                    {option.label}
+                  </label>
+                ))}
+              </div>
             </div>
+
+            {form.time_mode !== 'FULL_DAY' && (
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs mb-2">Hora inicio</label>
+                  <input
+                    type="time"
+                    required
+                    value={form.start_time}
+                    onChange={(event) => setForm({ ...form, start_time: event.target.value })}
+                    className="w-full px-4 py-2.5 border border-border bg-transparent focus:outline-none focus:border-foreground text-sm"
+                  />
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    {form.time_mode === 'FROM_TIME'
+                      ? 'Se usará desde esta hora hasta el final del día.'
+                      : 'Se repetirá este rango en todos los días del periodo.'}
+                  </p>
+                </div>
+
+                {form.time_mode === 'TIME_RANGE' && (
+                  <div>
+                    <label className="block text-xs mb-2">Hora fin</label>
+                    <input
+                      type="time"
+                      required
+                      value={form.end_time}
+                      onChange={(event) => setForm({ ...form, end_time: event.target.value })}
+                      className="w-full px-4 py-2.5 border border-border bg-transparent focus:outline-none focus:border-foreground text-sm"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
 
             <div>
               <label className="block text-xs mb-2">Motivo</label>
@@ -223,6 +398,24 @@ export function AdminEmployeePortal() {
                 className="w-full px-4 py-2.5 border border-border bg-transparent focus:outline-none focus:border-foreground text-sm resize-none"
                 placeholder="Describe brevemente tu solicitud"
               />
+            </div>
+
+            <div className="border border-border bg-secondary/20 p-4 text-xs text-muted-foreground space-y-1">
+              <div className="font-medium text-foreground">Resumen</div>
+              <div>Tipo: {getRequestTypeLabel(form.request_type)}</div>
+              <div>
+                {form.period_mode === 'SINGLE_DAY'
+                  ? `Fecha: ${form.single_date || 'pendiente'}`
+                  : `Fechas: ${form.start_date || 'pendiente'} - ${form.end_date || 'pendiente'}`}
+              </div>
+              <div>
+                Horario:{' '}
+                {form.time_mode === 'FULL_DAY'
+                  ? 'Jornada completa'
+                  : form.time_mode === 'FROM_TIME'
+                    ? `Desde ${form.start_time || 'pendiente'} hasta fin del día`
+                    : `De ${form.start_time || 'pendiente'} a ${form.end_time || 'pendiente'}`}
+              </div>
             </div>
 
             <div className="flex items-center gap-3 pt-2">
@@ -257,8 +450,11 @@ export function AdminEmployeePortal() {
               >
                 <div className="flex items-start justify-between gap-4">
                   <div>
+                    <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-1">
+                      {getRequestTypeLabel(request.request_type)}
+                    </div>
                     <div className="font-medium">
-                      {formatDate(request.start_date)} - {formatDate(request.end_date)}
+                      {getRequestScheduleLabel(request)}
                     </div>
                     <div className="text-xs text-muted-foreground mt-1">
                       {request.reason || 'Sin motivo'}
