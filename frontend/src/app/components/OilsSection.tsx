@@ -2,323 +2,314 @@ import { useState, useRef } from 'react';
 import { motion, AnimatePresence, useInView } from 'motion/react';
 import { ArrowRight } from 'lucide-react';
 
-const oils = [
+const OLIVE = '#2D3A1F';
+const CREAM = '#F7F5F1';
+
+interface Oil {
+  index: string;
+  name: string;
+  subtitle: string;
+  detail: string;         // descripción larga solo para el item activo
+  purity: string;
+  origin: string;
+  compound: string;
+  image: string;          // imagen grande del lado izquierdo
+  thumb: string;          // miniatura circular en la lista
+}
+
+const oils: Oil[] = [
   {
+    index: '01',
     name: 'Aceite de Oliva',
     subtitle: 'Nutrición profunda',
-    description: 'Repara y fortalece desde la raíz. Rico en vitaminas A, D, E y K para una hidratación duradera.',
+    detail: 'Rico en antioxidantes y ácidos grasos esenciales. Hidrata, fortalece y da brillo natural.',
     purity: '100% puro',
     origin: 'Mediterráneo',
     compound: 'Olea europaea',
-    index: '01',
-    image: 'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=1200&q=80',
+    image: 'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=1200&q=85',
+    thumb: 'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=160&q=80',
   },
   {
+    index: '02',
     name: 'Aceite de Argán',
-    subtitle: 'Hidratación extrema',
-    description: 'Restaura el brillo natural. Alto contenido de ácidos grasos esenciales y vitamina E.',
+    subtitle: 'Reparación y elasticidad',
+    detail: 'Restaura el brillo natural. Alto contenido de ácidos grasos esenciales y vitamina E para una reparación profunda.',
     purity: '100% puro',
     origin: 'Marruecos',
     compound: 'Argania spinosa',
-    index: '02',
-    image: 'https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?w=1200&q=80',
+    image: 'https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?w=1200&q=85',
+    thumb: 'https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?w=160&q=80',
   },
   {
+    index: '03',
     name: 'Aceite de Uva',
-    subtitle: 'Antioxidante natural',
-    description: 'Protege y fortalece. Ligero y de rápida absorción con poderosos antioxidantes.',
+    subtitle: 'Ligero y protector',
+    detail: 'Protege y fortalece. Ligero y de rápida absorción con poderosos antioxidantes que sellan la cutícula.',
     purity: '100% puro',
     origin: 'Francia',
     compound: 'Vitis vinifera',
-    index: '03',
-    image: 'https://images.unsplash.com/photo-1566065363841-0e0d82b4a5c5?w=1200&q=80',
+    image: 'https://images.unsplash.com/photo-1566065363841-0e0d82b4a5c5?w=1200&q=85',
+    thumb: 'https://images.unsplash.com/photo-1566065363841-0e0d82b4a5c5?w=160&q=80',
   },
   {
+    index: '04',
     name: 'Aceite de Romero',
-    subtitle: 'Estimulante capilar',
-    description: 'Activa la circulación del cuero cabelludo y estimula el crecimiento natural del cabello.',
+    subtitle: 'Estimula y fortalece',
+    detail: 'Activa la circulación del cuero cabelludo y estimula el crecimiento natural del cabello desde la raíz.',
     purity: '100% puro',
     origin: 'España',
     compound: 'Rosmarinus officinalis',
-    index: '04',
-    image: 'https://images.unsplash.com/photo-1596240896925-a8e728c0d3c7?w=1200&q=80',
+    image: 'https://images.unsplash.com/photo-1596240896925-a8e728c0d3c7?w=1200&q=85',
+    thumb: 'https://images.unsplash.com/photo-1596240896925-a8e728c0d3c7?w=160&q=80',
   },
 ];
 
-// Floating golden particles in background
-function OilParticles() {
-  const particles = Array.from({ length: 12 }, (_, i) => ({
-    id: i,
-    x: 10 + Math.random() * 80,
-    y: 10 + Math.random() * 80,
-    size: 2 + Math.random() * 4,
-    delay: Math.random() * 4,
-    duration: 4 + Math.random() * 4,
-  }));
-
-  return (
-    <div className="absolute inset-0 pointer-events-none overflow-hidden">
-      {particles.map((p) => (
-        <motion.div
-          key={p.id}
-          className="absolute rounded-full"
-          style={{
-            left: `${p.x}%`,
-            top: `${p.y}%`,
-            width: p.size,
-            height: p.size,
-            background: 'radial-gradient(circle, rgba(180,140,60,0.5), rgba(180,140,60,0.1))',
-          }}
-          animate={{
-            y: [-10, -30, -10],
-            opacity: [0, 0.6, 0],
-            scale: [0.5, 1, 0.5],
-          }}
-          transition={{
-            duration: p.duration,
-            delay: p.delay,
-            repeat: Infinity,
-            ease: 'easeInOut',
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
 export function OilsSection() {
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [imageMousePos, setImageMousePos] = useState({ x: 0.5, y: 0.5 });
-  const imageRef = useRef<HTMLDivElement>(null);
+  const [active, setActive] = useState(0);
   const sectionRef = useRef<HTMLElement>(null);
-  const isInView = useInView(sectionRef, { once: true, margin: '-80px' });
+  const inView = useInView(sectionRef, { once: true, margin: '-80px' });
 
-  const activeOil = oils[activeIndex];
-
-  const handleImageMouseMove = (e: React.MouseEvent) => {
-    const rect = imageRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    setImageMousePos({
-      x: (e.clientX - rect.left) / rect.width,
-      y: (e.clientY - rect.top) / rect.height,
-    });
-  };
+  const oil = oils[active];
 
   return (
-    <section ref={sectionRef} className="py-24 bg-background relative overflow-hidden">
-      <OilParticles />
+    <section ref={sectionRef} className="py-20 overflow-hidden" style={{ backgroundColor: CREAM }}>
+      <div className="max-w-[1400px] mx-auto px-6 md:px-10 lg:px-14">
 
-      <div className="relative z-10 max-w-[1400px] mx-auto px-5 sm:px-8 md:px-12">
-
-        {/* Header */}
+        {/* ── ENCABEZADO ── */}
         <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          animate={isInView ? { opacity: 1, y: 0 } : {}}
-          transition={{ duration: 0.8 }}
-          className="mb-20"
+          initial={{ opacity: 0, y: 22 }}
+          animate={inView ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.65 }}
+          className="grid md:grid-cols-2 gap-6 items-start mb-12"
         >
-          <div className="flex items-end justify-between gap-8 flex-wrap">
-            <div>
-              <div className="text-[9px] tracking-[0.45em] uppercase text-muted-foreground mb-4">
+          {/* Izquierda: eyebrow + título */}
+          <div>
+            <div className="flex items-center gap-3 mb-3">
+              <span className="text-[9px] tracking-[0.42em] uppercase text-stone-400 font-medium">
                 Esencias naturales
-              </div>
-              <h2 className="text-4xl md:text-5xl leading-none">
-                Aceites<br />
-                <span className="text-muted-foreground/50">Puros</span>
-              </h2>
+              </span>
+              <div className="w-8 h-px bg-stone-300" />
             </div>
-            <p className="text-xs text-muted-foreground max-w-xs leading-relaxed">
-              Ingredientes de máxima pureza, seleccionados de los mejores orígenes del mundo para el cuidado profesional.
+            <h2
+              className="text-5xl md:text-6xl font-light text-stone-900 leading-tight"
+              style={{ fontFamily: "'Playfair Display', serif" }}
+            >
+              Aceites{' '}
+              <em
+                className="not-italic font-semibold"
+                style={{ fontStyle: 'italic', color: OLIVE }}
+              >
+                Puros
+              </em>
+            </h2>
+          </div>
+
+          {/* Derecha: descripción */}
+          <div className="md:pt-6">
+            <p className="text-sm text-stone-500 leading-relaxed max-w-sm">
+              Ingredientes de máxima pureza, seleccionados de los mejores orígenes
+              del mundo para el cuidado profesional de tu cabello.
             </p>
           </div>
         </motion.div>
 
-        {/* Main layout */}
-        <div className="grid lg:grid-cols-2 gap-12 items-center">
+        {/* ── CUERPO: 2 columnas ── */}
+        <div className="grid lg:grid-cols-[1fr_1.1fr] gap-10 items-start">
 
-          {/* Left: Image with tilt effect */}
+          {/* COLUMNA IZQUIERDA — imagen grande */}
           <motion.div
-            ref={imageRef}
-            initial={{ opacity: 0, x: -40 }}
-            animate={isInView ? { opacity: 1, x: 0 } : {}}
-            transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
-            onMouseMove={handleImageMouseMove}
-            onMouseLeave={() => setImageMousePos({ x: 0.5, y: 0.5 })}
-            className="relative aspect-[3/4] bg-secondary overflow-hidden cursor-none"
-            style={{ perspective: '1000px' }}
+            initial={{ opacity: 0, x: -32 }}
+            animate={inView ? { opacity: 1, x: 0 } : {}}
+            transition={{ duration: 0.85, ease: [0.16, 1, 0.3, 1] }}
+            className="relative"
           >
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={activeIndex}
-                initial={{ opacity: 0, scale: 1.06 }}
-                animate={{
-                  opacity: 1,
-                  scale: 1,
-                  rotateY: (imageMousePos.x - 0.5) * 6,
-                  rotateX: -(imageMousePos.y - 0.5) * 4,
-                }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                transition={{
-                  opacity: { duration: 0.6 },
-                  scale: { duration: 0.6 },
-                  rotateY: { type: 'spring', stiffness: 200, damping: 30 },
-                  rotateX: { type: 'spring', stiffness: 200, damping: 30 },
-                }}
-                className="absolute inset-0"
-                style={{ transformStyle: 'preserve-3d' }}
-              >
-                <img
-                  src={activeOil.image}
-                  alt={activeOil.name}
-                  className="w-full h-full object-cover"
+            <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-stone-200">
+              <AnimatePresence mode="wait">
+                <motion.img
+                  key={active}
+                  src={oil.image}
+                  alt={oil.name}
+                  initial={{ opacity: 0, scale: 1.04 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.55 }}
+                  className="absolute inset-0 w-full h-full object-cover"
+                  draggable={false}
                 />
-                {/* Shine effect */}
-                <motion.div
-                  className="absolute inset-0 pointer-events-none"
-                  animate={{
-                    background: `radial-gradient(circle at ${imageMousePos.x * 100}% ${imageMousePos.y * 100}%, rgba(255,255,255,0.12) 0%, transparent 60%)`,
-                  }}
-                  transition={{ type: 'spring', damping: 40 }}
-                />
-              </motion.div>
-            </AnimatePresence>
+              </AnimatePresence>
 
-            {/* Index number overlay */}
-            <div className="absolute top-6 left-6 z-10">
+              {/* Gradiente suave abajo para la tarjeta */}
+              <div
+                className="absolute inset-x-0 bottom-0 h-40 pointer-events-none"
+                style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.35) 0%, transparent 100%)' }}
+              />
+
+              {/* Tarjeta flotante "ORIGEN" */}
               <AnimatePresence mode="wait">
                 <motion.div
-                  key={activeIndex}
-                  initial={{ opacity: 0, y: -10 }}
+                  key={`badge-${active}`}
+                  initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  className="text-6xl font-light text-white/15 leading-none select-none"
+                  exit={{ opacity: 0 }}
+                  transition={{ delay: 0.25 }}
+                  className="absolute bottom-5 left-5 rounded-xl border border-white/20 backdrop-blur-md px-4 py-3"
+                  style={{ backgroundColor: 'rgba(247,245,241,0.90)' }}
                 >
-                  {activeOil.index}
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <span className="text-[8px] tracking-[0.32em] uppercase text-stone-400 font-medium">
+                      Origen
+                    </span>
+                    {/* pequeño ícono hoja */}
+                    <svg width="10" height="9" viewBox="0 0 10 9" fill="none">
+                      <path d="M5 8.5C5 8.5 0.5 5.8 0.5 3C0.5 1.4 1.9 0.5 3.2 0.5C3.9 0.5 4.5 0.8 5 1.3C5.5 0.8 6.1 0.5 6.8 0.5C8.1 0.5 9.5 1.4 9.5 3C9.5 5.8 5 8.5 5 8.5Z"
+                        stroke="#8B7355" strokeWidth="0.7" fill="none" strokeLinecap="round" />
+                    </svg>
+                  </div>
+                  <div className="text-sm font-medium text-stone-800">{oil.origin}</div>
+                  <div className="text-[9px] text-stone-400 italic mt-0.5">{oil.compound}</div>
                 </motion.div>
               </AnimatePresence>
             </div>
+          </motion.div>
 
-            {/* Origin badge */}
+          {/* COLUMNA DERECHA — lista + detalle */}
+          <motion.div
+            initial={{ opacity: 0, x: 32 }}
+            animate={inView ? { opacity: 1, x: 0 } : {}}
+            transition={{ duration: 0.85, delay: 0.12, ease: [0.16, 1, 0.3, 1] }}
+            className="flex flex-col"
+          >
+            {/* Lista de aceites */}
+            <div className="flex flex-col">
+              {oils.map((o, i) => {
+                const isActive = i === active;
+                return (
+                  <motion.button
+                    key={o.index}
+                    onClick={() => setActive(i)}
+                    initial={{ opacity: 0, x: 16 }}
+                    animate={inView ? { opacity: 1, x: 0 } : {}}
+                    transition={{ delay: 0.2 + i * 0.07 }}
+                    className={`w-full text-left transition-all duration-300 ${
+                      isActive
+                        ? 'rounded-xl mb-1'
+                        : 'border-b border-stone-200 last:border-b-0'
+                    }`}
+                    style={isActive ? { backgroundColor: 'white', border: `1px solid ${OLIVE}22` } : {}}
+                  >
+                    {/* Fila siempre visible */}
+                    <div className={`flex items-center gap-4 ${isActive ? 'px-5 pt-5 pb-4' : 'py-4'}`}>
+                      {/* Número */}
+                      <span className="text-[10px] font-mono text-stone-300 flex-shrink-0 w-5 text-right">
+                        {o.index}
+                      </span>
+
+                      {/* Miniatura circular */}
+                      <div
+                        className={`rounded-full overflow-hidden flex-shrink-0 transition-all duration-300 ${
+                          isActive ? 'w-14 h-14' : 'w-10 h-10'
+                        }`}
+                      >
+                        <img src={o.thumb} alt={o.name} className="w-full h-full object-cover" draggable={false} />
+                      </div>
+
+                      {/* Nombre + beneficio */}
+                      <div className="flex-1 min-w-0">
+                        <div
+                          className={`font-light text-stone-900 leading-snug transition-all duration-300 ${
+                            isActive ? 'text-xl' : 'text-base'
+                          }`}
+                          style={{ fontFamily: "'Playfair Display', serif" }}
+                        >
+                          {o.name}
+                        </div>
+                        <div className="text-[11px] text-stone-400 mt-0.5">{o.subtitle}</div>
+                      </div>
+
+                      {/* Flecha / botón circular */}
+                      {isActive ? (
+                        <div
+                          className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+                          style={{ backgroundColor: OLIVE }}
+                        >
+                          <ArrowRight className="w-4 h-4 text-white" strokeWidth={2} />
+                        </div>
+                      ) : (
+                        <ArrowRight
+                          className="w-3.5 h-3.5 text-stone-300 flex-shrink-0"
+                          strokeWidth={1.5}
+                        />
+                      )}
+                    </div>
+
+                    {/* Detalle expandido — solo para el activo */}
+                    <AnimatePresence>
+                      {isActive && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+                          className="overflow-hidden"
+                        >
+                          <div className="px-5 pb-5">
+                            <p className="text-[11px] text-stone-500 leading-relaxed">
+                              {o.detail}
+                            </p>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.button>
+                );
+              })}
+            </div>
+
+            {/* Texto descriptivo del aceite activo */}
             <AnimatePresence mode="wait">
               <motion.div
-                key={`origin-${activeIndex}`}
-                initial={{ opacity: 0, y: 10 }}
+                key={`desc-${active}`}
+                initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                transition={{ delay: 0.3 }}
-                className="absolute bottom-6 left-6 z-10 bg-background/95 backdrop-blur-sm border border-border/50 px-4 py-3"
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.35 }}
+                className="mt-7 mb-5"
               >
-                <div className="text-[8px] tracking-[0.35em] uppercase text-muted-foreground mb-1">Origen</div>
-                <div className="text-sm">{activeOil.origin}</div>
-                <div className="text-[9px] text-muted-foreground/50 font-mono italic mt-0.5">
-                  {activeOil.compound}
-                </div>
+                <p className="text-sm text-stone-500 leading-relaxed">
+                  Repara y fortalece desde la raíz. Rico en vitaminas A, D, E y K para
+                  una hidratación duradera y un cabello visiblemente más saludable.
+                </p>
               </motion.div>
             </AnimatePresence>
 
-            {/* Progress bar for image */}
-            <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-white/10 z-10">
-              <motion.div
-                className="h-full bg-white/50"
-                animate={{ width: `${((activeIndex + 1) / oils.length) * 100}%` }}
-                transition={{ duration: 0.5, ease: 'easeInOut' }}
-              />
-            </div>
-          </motion.div>
-
-          {/* Right: Oil selector */}
-          <motion.div
-            initial={{ opacity: 0, x: 40 }}
-            animate={isInView ? { opacity: 1, x: 0 } : {}}
-            transition={{ duration: 0.9, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
-            className="space-y-0"
-          >
-            {/* Oil list */}
-            <div className="border-t border-border">
-              {oils.map((oil, index) => (
-                <motion.button
-                  key={oil.name}
-                  onClick={() => setActiveIndex(index)}
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={isInView ? { opacity: 1, x: 0 } : {}}
-                  transition={{ delay: 0.3 + index * 0.08 }}
-                  className={`w-full text-left border-b border-border transition-all duration-400 group ${
-                    activeIndex === index ? '' : 'opacity-35 hover:opacity-60'
-                  }`}
+            {/* Cards PUREZA + CERTIFICADO */}
+            <div className="grid grid-cols-2 gap-3 mb-5">
+              {[
+                { label: 'Pureza',      value: oil.purity },
+                { label: 'Certificado', value: 'Orgánico' },
+              ].map(({ label, value }) => (
+                <div
+                  key={label}
+                  className="rounded-xl border border-stone-200 px-5 py-4 bg-white"
                 >
-                  <div className="py-6 flex items-baseline justify-between gap-4">
-                    <div className="flex items-baseline gap-4">
-                      <span className="text-[10px] font-mono text-muted-foreground/40 flex-shrink-0">
-                        {oil.index}
-                      </span>
-                      <div>
-                        <div className={`transition-all duration-400 ${activeIndex === index ? 'text-2xl' : 'text-lg'}`}>
-                          {oil.name}
-                        </div>
-                        <motion.div
-                          className="text-xs text-muted-foreground overflow-hidden"
-                          animate={{
-                            height: activeIndex === index ? 'auto' : 0,
-                            opacity: activeIndex === index ? 1 : 0,
-                            marginTop: activeIndex === index ? 4 : 0,
-                          }}
-                          transition={{ duration: 0.35 }}
-                        >
-                          {oil.subtitle}
-                        </motion.div>
-                      </div>
-                    </div>
-
-                    <motion.div
-                      animate={{
-                        x: activeIndex === index ? 0 : -8,
-                        opacity: activeIndex === index ? 1 : 0,
-                        rotate: activeIndex === index ? 0 : -45,
-                      }}
-                      transition={{ duration: 0.25 }}
-                    >
-                      <ArrowRight className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
-                    </motion.div>
+                  <div className="text-[8px] tracking-[0.3em] uppercase text-stone-400 mb-1.5 font-medium">
+                    {label}
                   </div>
-                </motion.button>
+                  <div className="text-base font-medium text-stone-800">{value}</div>
+                </div>
               ))}
             </div>
 
-            {/* Active oil detail */}
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={activeIndex}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -15 }}
-                transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-                className="pt-8 space-y-6"
-              >
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  {activeOil.description}
-                </p>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="border border-border p-4 group hover:bg-secondary transition-colors">
-                    <div className="text-[8px] tracking-[0.35em] uppercase text-muted-foreground mb-2">Pureza</div>
-                    <div className="text-base">{activeOil.purity}</div>
-                  </div>
-                  <div className="border border-border p-4 group hover:bg-secondary transition-colors">
-                    <div className="text-[8px] tracking-[0.35em] uppercase text-muted-foreground mb-2">Certificado</div>
-                    <div className="text-base">Orgánico</div>
-                  </div>
-                </div>
-
-                <motion.button
-                  whileHover={{ scale: 1.02, y: -2 }}
-                  whileTap={{ scale: 0.98 }}
-                  className="w-full flex items-center justify-between text-xs tracking-[0.2em] uppercase border border-border px-6 py-4 hover:bg-foreground hover:text-background transition-all duration-300 group"
-                >
-                  <span>Ver detalles del producto</span>
-                  <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" strokeWidth={1.5} />
-                </motion.button>
-              </motion.div>
-            </AnimatePresence>
+            {/* CTA ancho */}
+            <motion.button
+              whileHover={{ opacity: 0.88, scale: 1.01 }}
+              whileTap={{ scale: 0.98 }}
+              className="w-full flex items-center justify-between px-7 py-4 text-white text-[11px] tracking-[0.25em] uppercase font-semibold rounded-xl transition-opacity"
+              style={{ backgroundColor: OLIVE }}
+            >
+              Ver detalles del producto
+              <ArrowRight className="w-4 h-4" strokeWidth={2} />
+            </motion.button>
           </motion.div>
         </div>
       </div>

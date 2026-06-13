@@ -1,89 +1,53 @@
 import { motion } from 'motion/react';
-import { Package, CreditCard, MapPin, Clock } from 'lucide-react';
+import { ShieldCheck, Truck, Star, Headphones } from 'lucide-react';
+
+const trustItems = [
+  {
+    icon: ShieldCheck,
+    title: 'Pagos seguros',
+    sub: 'Compra protegida',
+  },
+  {
+    icon: Truck,
+    title: 'Envíos a todo Colombia',
+    sub: 'Rápidos y seguros',
+  },
+  {
+    icon: Star,
+    title: 'Garantía de satisfacción',
+    sub: 'Resultados que importan',
+  },
+  {
+    icon: Headphones,
+    title: 'Atención personalizada',
+    sub: 'Estamos para ti',
+  },
+];
 
 export function ShippingInfo() {
-  const shippingCities = [
-    'Bogotá', 'Medellín', 'Cali', 'Barranquilla', 'Cartagena',
-    'Bucaramanga', 'Pereira', 'Manizales', 'Santa Marta'
-  ];
-
-  const paymentMethods = [
-    { name: 'Nequi', logo: '💳' },
-    { name: 'Daviplata', logo: '💳' },
-    { name: 'PSE', logo: '🏦' },
-    { name: 'Efectivo', logo: '💵' },
-    { name: 'Tarjetas', logo: '💳' }
-  ];
-
   return (
-    <section className="py-12 bg-secondary border-y border-border">
-      <div className="max-w-[1400px] mx-auto px-8 md:px-12">
-        <div className="grid md:grid-cols-4 gap-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center"
-          >
-            <Package className="w-6 h-6 mx-auto mb-3" strokeWidth={1} />
-            <div className="text-[10px] tracking-[0.2em] uppercase mb-1.5">
-              Envío gratis
-            </div>
-            <div className="text-[10px] text-muted-foreground">
-              Compras desde $80.000
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.1 }}
-            className="text-center"
-          >
-            <Clock className="w-6 h-6 mx-auto mb-3" strokeWidth={1} />
-            <div className="text-[10px] tracking-[0.2em] uppercase mb-1.5">
-              Entrega rápida
-            </div>
-            <div className="text-[10px] text-muted-foreground">
-              2-5 días hábiles
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.2 }}
-            className="text-center"
-          >
-            <CreditCard className="w-6 h-6 mx-auto mb-3" strokeWidth={1} />
-            <div className="text-[10px] tracking-[0.2em] uppercase mb-1.5">
-              Pago seguro
-            </div>
-            <div className="text-[10px] text-muted-foreground">
-              Todos los métodos
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.3 }}
-            className="text-center"
-          >
-            <MapPin className="w-6 h-6 mx-auto mb-3" strokeWidth={1} />
-            <div className="text-[10px] tracking-[0.2em] uppercase mb-1.5">
-              Cobertura nacional
-            </div>
-            <div className="text-[10px] text-muted-foreground">
-              +20 ciudades
-            </div>
-          </motion.div>
+    <section className="bg-white border-b border-stone-100">
+      <div className="max-w-[1400px] mx-auto px-6 md:px-10 lg:px-14">
+        <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-stone-100">
+          {trustItems.map(({ icon: Icon, title, sub }, i) => (
+            <motion.div
+              key={title}
+              initial={{ opacity: 0, y: 12 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: i * 0.07, duration: 0.5 }}
+              className="flex items-center gap-3.5 px-6 py-5 md:px-8 md:py-6"
+            >
+              <div className="w-9 h-9 rounded-xl bg-stone-50 border border-stone-100 flex items-center justify-center flex-shrink-0">
+                <Icon className="w-4 h-4 text-stone-500" strokeWidth={1.5} />
+              </div>
+              <div>
+                <div className="text-[11px] font-semibold text-stone-800 leading-snug">{title}</div>
+                <div className="text-[10px] text-stone-400 mt-0.5 leading-none">{sub}</div>
+              </div>
+            </motion.div>
+          ))}
         </div>
-
-        
       </div>
     </section>
   );

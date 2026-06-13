@@ -5,7 +5,6 @@ import { SearchProvider } from './contexts/SearchContext';
 import { UserProvider } from './contexts/UserContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { Admin } from './components/admin/Admin';
-import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
 import { ShippingInfo } from './components/ShippingInfo';
 import { PowerProducts } from './components/PowerProducts';
@@ -13,13 +12,12 @@ import { ProductCatalog } from './components/ProductCatalog';
 import { BeforeAfter } from './components/BeforeAfter';
 import { Ingredients } from './components/Ingredients';
 import { OilsSection } from './components/OilsSection';
-import { BabyProducts } from './components/BabyProducts';
 import { WholesaleBuyers } from './components/WholesaleBuyers';
 import { Comunidad } from './components/Comunidad';
 import { ModoPro } from './components/ModoPro';
-import { FAQ } from './components/FAQ';
 import { ReferralProgram } from './components/ReferralProgram';
 import { DiagnosticoCapilar } from './components/DiagnosticoCapilar';
+import { PromoBanner } from './components/PromoBanner';
 import { LocationMap } from './components/LocationMap';
 import { Footer } from './components/Footer';
 import { WhatsAppButton } from './components/WhatsAppButton';
@@ -40,16 +38,21 @@ function PublicSite({ onLoginClick }: { onLoginClick: () => void }) {
 
   return (
     <div className="min-h-screen bg-background text-foreground antialiased">
-      <Navbar onLoginClick={onLoginClick} />
       <main>
-        {/* Hero */}
-        <Hero />
+        {/* Hero con Navbar integrado adentro */}
+        <Hero onLoginClick={onLoginClick} />
 
         {/* Trust bar */}
         <ShippingInfo />
 
-        {/* Featured products — editorial layout */}
+        {/* Featured products — card grid */}
         <PowerProducts />
+
+        {/* Promo banner */}
+        <PromoBanner />
+
+        {/* Full product catalog — right after promo */}
+        <ProductCatalog onLoginRequired={onLoginClick} />
 
         {/* Before/After transformations */}
         <BeforeAfter />
@@ -65,27 +68,16 @@ function PublicSite({ onLoginClick }: { onLoginClick: () => void }) {
           <OilsSection />
         </section>
 
-        {/* Baby Products Section */}
-        <section id="bebe">
-          <BabyProducts />
-        </section>
-
         {/* Wholesale / Raw Materials Section */}
         <section id="mayorista">
           <WholesaleBuyers />
         </section>
-
-        {/* Full product catalog */}
-        <ProductCatalog onLoginRequired={onLoginClick} />
 
         {/* Community / Instagram wall */}
         <Comunidad />
 
         {/* Modo Pro */}
         <ModoPro />
-
-        {/* FAQ */}
-        <FAQ />
 
         {/* Referral program */}
         <ReferralProgram />

@@ -1,65 +1,34 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { motion, AnimatePresence, useInView } from 'motion/react';
 import { ArrowRight, X, Check } from 'lucide-react';
 
+const OLIVE = '#2D3A1F';
+
 const categories = [
-  { name: 'Aceites esenciales', code: '01', detail: '80+ variedades' },
-  { name: 'Extractos botánicos', code: '02', detail: 'Certificados orgánicos' },
-  { name: 'Mantecas naturales', code: '03', detail: 'Origen directo' },
-  { name: 'Activos cosméticos', code: '04', detail: 'Alta concentración' },
-  { name: 'Conservantes', code: '05', detail: 'Sin parabenos' },
-  { name: 'Emulsionantes', code: '06', detail: 'Biodegradables' },
-  { name: 'Fragancias', code: '07', detail: '100% naturales' },
-  { name: 'Colorantes', code: '08', detail: 'Food-grade' },
+  { name: 'Aceites esenciales',  code: '01' },
+  { name: 'Extractos botánicos', code: '02' },
+  { name: 'Mantecas naturales',  code: '03' },
+  { name: 'Activos cosméticos',  code: '04' },
+  { name: 'Conservantes',        code: '05' },
+  { name: 'Emulsionantes',       code: '06' },
+  { name: 'Fragancias',          code: '07' },
+  { name: 'Colorantes',          code: '08' },
 ];
 
 const stats = [
-  { value: 200, label: 'Ingredientes', unit: '+' },
-  { value: 50, label: 'Descuento', unit: '%' },
-  { value: 5, label: 'Mínimo', unit: ' kg' },
-  { value: 15, label: 'Experiencia', unit: ' años' },
+  { value: '200+', label: 'Ingredientes'   },
+  { value: '50%',  label: 'Dto. por volumen' },
+  { value: '5 kg', label: 'Pedido mínimo'  },
+  { value: '15',   label: 'Años de exp.'   },
 ];
-
-// Animated counting number
-function CountUp({ target, unit, inView }: { target: number; unit: string; inView: boolean }) {
-  const [count, setCount] = useState(0);
-  const hasRun = useRef(false);
-
-  useEffect(() => {
-    if (!inView || hasRun.current) return;
-    hasRun.current = true;
-
-    const duration = 1800;
-    const start = performance.now();
-
-    const animate = (now: number) => {
-      const elapsed = now - start;
-      const progress = Math.min(elapsed / duration, 1);
-      // Ease out expo
-      const eased = 1 - Math.pow(2, -10 * progress);
-      setCount(Math.round(eased * target));
-      if (progress < 1) requestAnimationFrame(animate);
-    };
-
-    setTimeout(() => requestAnimationFrame(animate), 200);
-  }, [inView, target]);
-
-  return (
-    <div className="flex items-baseline justify-end gap-0.5">
-      <span className="text-3xl font-light tabular-nums">{count}</span>
-      <span className="text-sm opacity-50 font-light">{unit}</span>
-    </div>
-  );
-}
 
 export function WholesaleBuyers() {
   const [showModal, setShowModal] = useState(false);
-  const [hoveredCategory, setHoveredCategory] = useState<number | null>(null);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData]   = useState({
     company: '', contact: '', email: '', phone: '', category: '', volume: '',
   });
-  const statsRef = useRef<HTMLDivElement>(null);
-  const isInView = useInView(statsRef, { once: true, margin: '-100px' });
+  const ref    = useRef<HTMLDivElement>(null);
+  const inView = useInView(ref, { once: true, margin: '-60px' });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,289 +38,165 @@ export function WholesaleBuyers() {
   };
 
   return (
-    <section className="py-20 bg-foreground text-background overflow-hidden relative">
-      {/* Subtle grid lines decoration */}
-      <div
-        className="absolute inset-0 opacity-[0.03] pointer-events-none"
-        style={{
-          backgroundImage: `linear-gradient(rgba(255,255,255,1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,1) 1px, transparent 1px)`,
-          backgroundSize: '80px 80px',
-        }}
-      />
+    <section id="mayorista" className="py-12 px-4 md:px-8 lg:px-14" style={{ backgroundColor: '#F7F5F1' }}>
+      <motion.div
+        ref={ref}
+        initial={{ opacity: 0, y: 24 }}
+        animate={inView ? { opacity: 1, y: 0 } : {}}
+        transition={{ duration: 0.7 }}
+        className="relative max-w-[1400px] mx-auto rounded-[32px] overflow-hidden"
+        style={{ minHeight: 420 }}
+      >
+        {/* ── Imagen de fondo ── */}
+        <img
+          src="https://images.unsplash.com/photo-1556228578-8c89e6adf883?w=1800&q=88"
+          alt="Materias primas naturales"
+          className="absolute inset-0 w-full h-full object-cover"
+          draggable={false}
+        />
 
-      <div className="relative max-w-[1400px] mx-auto px-5 sm:px-8">
+        {/* ── Overlay doble: oscuro general + gradiente lateral ── */}
+        <div className="absolute inset-0" style={{ backgroundColor: 'rgba(10,13,8,0.62)' }} />
+        <div
+          className="absolute inset-0"
+          style={{ background: 'linear-gradient(105deg, rgba(10,13,8,0.55) 0%, transparent 60%)' }}
+        />
 
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          className="mb-16"
-        >
-          <div className="flex items-end justify-between gap-8 flex-wrap">
-            <div>
-              <div className="text-[10px] tracking-[0.45em] uppercase text-background/40 mb-4">
-                Para fabricantes
-              </div>
-              <h2
-                className="text-5xl md:text-6xl lg:text-7xl font-light tracking-tight leading-none"
-                style={{ fontFamily: "'Playfair Display', serif" }}
-              >
-                Materias<br />
-                <span className="text-background/40">primas</span>
-              </h2>
-            </div>
+        {/* ── Contenido ── */}
+        <div className="relative h-full px-10 md:px-14 lg:px-20 py-14 flex flex-col justify-between gap-10 lg:flex-row lg:items-center">
 
-            {/* Stats Grid with CountUp */}
-            <div ref={statsRef} className="hidden lg:grid grid-cols-4 gap-8">
-              {stats.map((stat, i) => (
-                <motion.div
-                  key={stat.label}
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: i * 0.1 }}
-                  className="text-right"
-                >
-                  <CountUp target={stat.value} unit={stat.unit} inView={isInView} />
-                  <div className="text-[8px] tracking-[0.25em] uppercase text-background/40 mt-1">
-                    {stat.label}
-                  </div>
-                </motion.div>
+          {/* BLOQUE IZQUIERDO */}
+          <div className="flex flex-col max-w-sm">
+            <p className="text-[9px] tracking-[0.46em] uppercase text-white/40 mb-5">
+              Para fabricantes · B2B
+            </p>
+            <h2
+              className="text-[44px] md:text-[52px] font-light text-white leading-[0.95] tracking-tight mb-5"
+              style={{ fontFamily: "'Playfair Display', serif" }}
+            >
+              Materias<br />
+              <em style={{ fontStyle: 'italic', color: '#A8C090' }}>primas</em>
+            </h2>
+            <div className="w-8 h-px mb-5" style={{ backgroundColor: '#A8C090' }} />
+            <p className="text-[13px] text-white/55 leading-relaxed mb-8">
+              Ingredientes botánicos de la más alta calidad para marcas que no se conforman con menos.
+            </p>
+
+            {/* Bullets */}
+            <ul className="space-y-2.5">
+              {['Stock permanente garantizado', 'Muestras gratuitas disponibles', 'Asesoría técnica incluida'].map(item => (
+                <li key={item} className="flex items-center gap-2.5">
+                  <Check className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#A8C090' }} strokeWidth={2.5} />
+                  <span className="text-[12px] text-white/60">{item}</span>
+                </li>
               ))}
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Main Grid */}
-        <div className="grid lg:grid-cols-3 gap-px bg-background/10">
-
-          {/* Categories — 2 cols */}
-          <div className="lg:col-span-2 bg-foreground p-8 md:p-12">
-            <div className="text-[9px] tracking-[0.4em] uppercase text-background/30 mb-6">
-              Categorías disponibles
-            </div>
-            <div className="grid sm:grid-cols-2 gap-0">
-              {categories.map((cat, index) => (
-                <motion.div
-                  key={cat.code}
-                  initial={{ opacity: 0, x: -20 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: index * 0.06 }}
-                  onHoverStart={() => setHoveredCategory(index)}
-                  onHoverEnd={() => setHoveredCategory(null)}
-                  className="relative overflow-hidden cursor-default"
-                >
-                  {/* Hover fill */}
-                  <motion.div
-                    className="absolute inset-0 bg-background/5"
-                    initial={{ scaleX: 0 }}
-                    animate={{ scaleX: hoveredCategory === index ? 1 : 0 }}
-                    style={{ originX: 0 }}
-                    transition={{ duration: 0.25, ease: 'easeOut' }}
-                  />
-
-                  <div className="relative py-5 px-3 border-b border-background/10 flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                      <div className="text-3xl font-light opacity-15 tabular-nums w-10 flex-shrink-0">
-                        {cat.code}
-                      </div>
-                      <div>
-                        <div className="text-base md:text-lg">{cat.name}</div>
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{
-                            opacity: hoveredCategory === index ? 1 : 0,
-                            height: hoveredCategory === index ? 'auto' : 0,
-                          }}
-                          className="text-[9px] tracking-[0.2em] uppercase text-background/40 overflow-hidden"
-                        >
-                          {cat.detail}
-                        </motion.div>
-                      </div>
-                    </div>
-
-                    <motion.div
-                      animate={{
-                        x: hoveredCategory === index ? 0 : -10,
-                        opacity: hoveredCategory === index ? 1 : 0,
-                      }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      <ArrowRight className="w-4 h-4" strokeWidth={1.5} />
-                    </motion.div>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
+            </ul>
           </div>
 
-          {/* CTA Panel */}
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true }}
-            className="bg-background text-foreground p-8 md:p-12 flex flex-col justify-between"
-          >
-            <div>
-              <h3
-                className="text-2xl md:text-3xl mb-4 leading-tight"
-                style={{ fontFamily: "'Playfair Display', serif" }}
-              >
-                Solicita nuestro catálogo completo
-              </h3>
-              <p className="text-xs text-muted-foreground mb-8 leading-relaxed">
-                Descuentos progresivos según volumen.<br />
-                Entrega en 24–48 horas.
-              </p>
+          {/* BLOQUE DERECHO */}
+          <div className="flex flex-col gap-7 lg:items-end">
 
-              {/* Benefits */}
-              <div className="space-y-4 mb-8">
-                {[
-                  'Certificaciones internacionales',
-                  'Stock permanente garantizado',
-                  'Asesoría técnica incluida',
-                  'Muestras gratuitas disponibles',
-                ].map((benefit, i) => (
-                  <motion.div
-                    key={benefit}
-                    initial={{ opacity: 0, x: -10 }}
-                    whileInView={{ opacity: 1, x: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: i * 0.08 }}
-                    className="flex items-start gap-3 text-xs group"
+            {/* Stats grid 2×2 */}
+            <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-white/10">
+              {stats.map(({ value, label }) => (
+                <div
+                  key={label}
+                  className="flex flex-col px-7 py-5"
+                  style={{ backgroundColor: 'rgba(255,255,255,0.07)' }}
+                >
+                  <span
+                    className="text-[34px] font-light text-white leading-none"
+                    style={{ fontFamily: "'Playfair Display', serif" }}
                   >
-                    <div className="w-4 h-4 border border-foreground/20 flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:bg-foreground group-hover:border-foreground transition-colors">
-                      <Check className="w-2.5 h-2.5 group-hover:text-background transition-colors" strokeWidth={2.5} />
-                    </div>
-                    <span className="leading-relaxed text-muted-foreground group-hover:text-foreground transition-colors">
-                      {benefit}
-                    </span>
-                  </motion.div>
-                ))}
-              </div>
+                    {value}
+                  </span>
+                  <span className="text-[9px] tracking-[0.22em] uppercase text-white/40 mt-2">
+                    {label}
+                  </span>
+                </div>
+              ))}
             </div>
 
+            {/* Categorías en 2 columnas compactas */}
+            <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 w-full">
+              {categories.map(cat => (
+                <div key={cat.code} className="flex items-center gap-2">
+                  <span
+                    className="text-[10px] font-light w-5 flex-shrink-0"
+                    style={{ color: '#A8C090', fontFamily: "'Playfair Display', serif" }}
+                  >
+                    {cat.code}
+                  </span>
+                  <span className="text-[11px] text-white/50">{cat.name}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* CTA */}
             <motion.button
+              whileHover={{ opacity: 0.88 }}
+              whileTap={{ scale: 0.97 }}
               onClick={() => setShowModal(true)}
-              whileHover={{ scale: 1.02, y: -2 }}
-              whileTap={{ scale: 0.98 }}
-              className="w-full flex items-center justify-between px-6 py-4 bg-foreground text-background group relative overflow-hidden"
+              className="flex items-center justify-between gap-4 px-7 py-4 rounded-2xl text-white text-[11px] tracking-[0.24em] uppercase font-semibold w-full"
+              style={{ backgroundColor: OLIVE }}
             >
-              <motion.div
-                className="absolute inset-0 bg-foreground/80 origin-left"
-                initial={{ scaleX: 0 }}
-                whileHover={{ scaleX: 1 }}
-                transition={{ duration: 0.3 }}
-              />
-              <span className="relative z-10 text-xs tracking-wider uppercase">Contactar ahora</span>
-              <ArrowRight className="relative z-10 w-4 h-4 group-hover:translate-x-1 transition-transform" strokeWidth={1.5} />
+              Solicitar catálogo mayorista
+              <ArrowRight className="w-4 h-4 flex-shrink-0" strokeWidth={2} />
             </motion.button>
-          </motion.div>
+          </div>
         </div>
+      </motion.div>
 
-        {/* Mobile Stats */}
-        <div className="grid grid-cols-4 gap-4 mt-8 lg:hidden">
-          {stats.map((stat, i) => (
-            <motion.div
-              key={stat.label}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: i * 0.1 }}
-              className="text-center"
-            >
-              <div className="flex items-baseline justify-center gap-0.5">
-                <div className="text-2xl font-light">{stat.value}</div>
-                <div className="text-xs opacity-50">{stat.unit}</div>
-              </div>
-              <div className="text-[8px] tracking-[0.2em] uppercase text-background/40 mt-1">
-                {stat.label}
-              </div>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-
-      {/* Modal */}
+      {/* ── MODAL ── */}
       <AnimatePresence>
         {showModal && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+            style={{ backgroundColor: 'rgba(10,12,8,0.75)', backdropFilter: 'blur(8px)' }}
             onClick={() => setShowModal(false)}
           >
             <motion.div
-              initial={{ scale: 0.92, opacity: 0, y: 20 }}
+              initial={{ scale: 0.96, opacity: 0, y: 14 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.92, opacity: 0, y: 20 }}
-              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-              onClick={(e) => e.stopPropagation()}
-              className="bg-background text-foreground max-w-md w-full overflow-hidden"
+              exit={{ scale: 0.96, opacity: 0, y: 14 }}
+              transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-white rounded-3xl max-w-md w-full shadow-2xl overflow-hidden"
             >
-              <div className="flex items-center justify-between p-6 border-b border-border">
+              <div className="flex items-center justify-between px-7 py-5 border-b border-stone-100">
                 <div>
-                  <h3 className="text-xl mb-1">Solicitar catálogo</h3>
-                  <p className="text-[10px] text-muted-foreground tracking-wider uppercase">
-                    Te contactaremos en menos de 24h
-                  </p>
+                  <h3 className="text-base font-medium text-stone-900">Solicitar catálogo</h3>
+                  <p className="text-[10px] text-stone-400 mt-0.5">Te contactamos en menos de 24 h</p>
                 </div>
-                <motion.button
-                  whileHover={{ rotate: 90 }}
-                  transition={{ duration: 0.2 }}
-                  onClick={() => setShowModal(false)}
-                  className="p-2 hover:bg-secondary transition-colors"
-                >
-                  <X className="w-4 h-4" strokeWidth={1.5} />
-                </motion.button>
+                <button onClick={() => setShowModal(false)} className="p-2 rounded-full hover:bg-stone-100 transition-colors">
+                  <X className="w-4 h-4 text-stone-400" strokeWidth={1.5} />
+                </button>
               </div>
-
-              <form onSubmit={handleSubmit} className="p-6 space-y-3">
-                <input
-                  type="text" required
-                  placeholder="Nombre de la empresa"
-                  value={formData.company}
-                  onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-                  className="w-full px-4 py-3 bg-secondary border-0 focus:outline-none focus:ring-1 focus:ring-foreground/20 text-sm placeholder:text-muted-foreground/50"
-                />
-                <input
-                  type="text" required
-                  placeholder="Persona de contacto"
-                  value={formData.contact}
-                  onChange={(e) => setFormData({ ...formData, contact: e.target.value })}
-                  className="w-full px-4 py-3 bg-secondary border-0 focus:outline-none focus:ring-1 focus:ring-foreground/20 text-sm placeholder:text-muted-foreground/50"
-                />
-                <div className="grid grid-cols-2 gap-3">
+              <form onSubmit={handleSubmit} className="px-7 py-6 space-y-3">
+                {[
+                  { placeholder: 'Empresa',             key: 'company', type: 'text'  },
+                  { placeholder: 'Persona de contacto', key: 'contact', type: 'text'  },
+                  { placeholder: 'Email',               key: 'email',   type: 'email' },
+                  { placeholder: 'Teléfono',            key: 'phone',   type: 'tel'   },
+                ].map(({ placeholder, key, type }) => (
                   <input
-                    type="email" required placeholder="Email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full px-4 py-3 bg-secondary border-0 focus:outline-none focus:ring-1 focus:ring-foreground/20 text-sm placeholder:text-muted-foreground/50"
+                    key={key} type={type} required placeholder={placeholder}
+                    value={formData[key as keyof typeof formData]}
+                    onChange={e => setFormData({ ...formData, [key]: e.target.value })}
+                    className="w-full px-4 py-3 border border-stone-200 rounded-xl text-sm text-stone-800 placeholder:text-stone-300 focus:outline-none focus:border-stone-400 transition-colors"
                   />
-                  <input
-                    type="tel" required placeholder="Teléfono"
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full px-4 py-3 bg-secondary border-0 focus:outline-none focus:ring-1 focus:ring-foreground/20 text-sm placeholder:text-muted-foreground/50"
-                  />
-                </div>
-                <select
-                  required value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  className="w-full px-4 py-3 bg-secondary border-0 focus:outline-none focus:ring-1 focus:ring-foreground/20 text-sm text-foreground"
+                ))}
+                <select required value={formData.category}
+                  onChange={e => setFormData({ ...formData, category: e.target.value })}
+                  className="w-full px-4 py-3 border border-stone-200 rounded-xl text-sm text-stone-700 focus:outline-none focus:border-stone-400 bg-white"
                 >
                   <option value="">Categoría de interés</option>
-                  {categories.map((cat) => (
-                    <option key={cat.code} value={cat.name}>{cat.name}</option>
-                  ))}
+                  {categories.map(c => <option key={c.code} value={c.name}>{c.name}</option>)}
                 </select>
-                <select
-                  required value={formData.volume}
-                  onChange={(e) => setFormData({ ...formData, volume: e.target.value })}
-                  className="w-full px-4 py-3 bg-secondary border-0 focus:outline-none focus:ring-1 focus:ring-foreground/20 text-sm text-foreground"
+                <select required value={formData.volume}
+                  onChange={e => setFormData({ ...formData, volume: e.target.value })}
+                  className="w-full px-4 py-3 border border-stone-200 rounded-xl text-sm text-stone-700 focus:outline-none focus:border-stone-400 bg-white"
                 >
                   <option value="">Volumen mensual estimado</option>
                   <option value="5-20kg">5–20 kg</option>
@@ -359,13 +204,12 @@ export function WholesaleBuyers() {
                   <option value="50-100kg">50–100 kg</option>
                   <option value="100kg+">Más de 100 kg</option>
                 </select>
-                <motion.button
-                  type="submit"
-                  whileHover={{ scale: 1.01 }}
-                  whileTap={{ scale: 0.98 }}
-                  className="w-full px-6 py-4 bg-foreground text-background hover:bg-foreground/90 transition-colors text-xs tracking-[0.25em] uppercase mt-4"
+                <motion.button type="submit" whileHover={{ opacity: 0.88 }} whileTap={{ scale: 0.98 }}
+                  className="w-full flex items-center justify-between px-6 py-3.5 text-white text-[11px] tracking-[0.24em] uppercase font-semibold rounded-xl mt-1"
+                  style={{ backgroundColor: OLIVE }}
                 >
                   Enviar solicitud
+                  <ArrowRight className="w-4 h-4" strokeWidth={2} />
                 </motion.button>
               </form>
             </motion.div>

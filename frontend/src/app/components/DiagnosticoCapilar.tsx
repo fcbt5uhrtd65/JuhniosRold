@@ -1,9 +1,12 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, ArrowRight } from 'lucide-react';
+import { X, ArrowRight, FlaskConical, Leaf, Heart, MapPin } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
 import { useToast } from '../contexts/ToastContext';
 import { getProducts } from '../services/products.service';
+
+const OLIVE = '#2D3A1F';
+const CREAM = '#F7F5F1';
 
 interface Question {
   id: number;
@@ -55,15 +58,10 @@ export function DiagnosticoCapilar() {
 
   const handleAnswer = (value: string) => {
     setAnswers({ ...answers, [currentQuestion]: value });
-
     if (currentQuestion < questions.length - 1) {
-      setTimeout(() => {
-        setCurrentQuestion(currentQuestion + 1);
-      }, 300);
+      setTimeout(() => setCurrentQuestion(currentQuestion + 1), 300);
     } else {
-      setTimeout(() => {
-        setShowResults(true);
-      }, 300);
+      setTimeout(() => setShowResults(true), 300);
     }
   };
 
@@ -174,44 +172,136 @@ export function DiagnosticoCapilar() {
 
   const progress = ((currentQuestion + 1) / questions.length) * 100;
 
+  const benefitsStrip = [
+    { icon: Leaf,         label: 'FÓRMULAS NATURALES',       sub: 'Ingredientes puros' },
+    { icon: FlaskConical, label: 'SIN QUÍMICOS AGRESIVOS',   sub: 'Cero sulfatos y parabenos' },
+    { icon: Heart,        label: 'CRUELTY FREE',             sub: 'No testado en animales' },
+    { icon: MapPin,       label: 'HECHO EN COLOMBIA',        sub: 'Apoyamos lo local' },
+  ];
+
   return (
     <>
-      {/* CTA Section */}
-      <section className="py-20 bg-background">
-        <div className="max-w-5xl mx-auto px-5 sm:px-8 text-center">
+      {/* ─── BANNER CTA ─────────────────────────────────────── */}
+      <section className="py-16 overflow-hidden" style={{ backgroundColor: '#FAFAF8' }}>
+        <div className="max-w-[1400px] mx-auto px-6 md:px-10 lg:px-14">
+
+          {/* Banner horizontal */}
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 32 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
+            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+            className="rounded-3xl overflow-hidden grid md:grid-cols-[1fr_1.15fr]"
+            style={{ backgroundColor: CREAM, minHeight: 420 }}
           >
-            <div className="mb-3">
-              <span className="text-[10px] tracking-[0.3em] uppercase text-muted-foreground">
-                Diagnóstico Personalizado
-              </span>
+            {/* Izquierda: foto producto */}
+            <div className="relative min-h-[280px] md:min-h-0">
+              <img
+                src="https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?w=900&q=85"
+                alt="Aceites naturales Juhnios Rold"
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+              {/* Overlay suave izquierda→transparente */}
+              <div
+                className="absolute inset-0 hidden md:block"
+                style={{ background: `linear-gradient(to right, transparent 70%, ${CREAM})` }}
+              />
             </div>
 
-            <h2 className="text-4xl sm:text-5xl md:text-6xl mb-6 leading-tight">
-              Descubre qué necesita<br />tu cabello
-            </h2>
+            {/* Derecha: contenido */}
+            <div className="flex flex-col justify-center px-8 py-10 md:px-12 md:py-14 md:pl-6">
+              {/* Eyebrow */}
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-5 h-px bg-stone-400" />
+                <span className="text-[9px] tracking-[0.38em] uppercase text-stone-500 font-medium">
+                  Diagnóstico personalizado
+                </span>
+              </div>
 
-            <p className="text-muted-foreground mb-12 max-w-xl mx-auto">
-              Tres preguntas. Una recomendación profesional.<br />
-              Concentraciones clínicamente efectivas.
-            </p>
+              {/* Título Playfair */}
+              <h2
+                className="text-3xl sm:text-4xl xl:text-5xl font-light text-stone-900 leading-snug mb-5"
+                style={{ fontFamily: "'Playfair Display', serif" }}
+              >
+                Descubre qué necesita<br />
+                <em
+                  className="not-italic font-semibold"
+                  style={{ fontStyle: 'italic', color: OLIVE }}
+                >
+                  tu cabello
+                </em>
+              </h2>
 
-            <motion.button
-              onClick={() => setIsModalOpen(true)}
-              whileHover={{ opacity: 0.8 }}
-              className="inline-flex items-center gap-2 px-8 py-4 bg-foreground text-background text-sm tracking-wide"
-            >
-              Comenzar diagnóstico
-              <ArrowRight className="w-4 h-4" strokeWidth={1.5} />
-            </motion.button>
+              <p className="text-sm text-stone-500 leading-relaxed mb-7 max-w-sm">
+                Tres preguntas. Una recomendación profesional personalizada con
+                concentraciones clínicamente efectivas, sin químicos agresivos.
+              </p>
+
+              {/* Mini beneficios */}
+              <ul className="space-y-2.5 mb-8">
+                {[
+                  '100% personalizado para tu tipo de cabello',
+                  'Fórmulas naturales y efectivas',
+                  'Recomendación de expertos capilares',
+                ].map(item => (
+                  <li key={item} className="flex items-center gap-2.5">
+                    <div
+                      className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0"
+                      style={{ backgroundColor: `${OLIVE}18` }}
+                    >
+                      <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: OLIVE }} />
+                    </div>
+                    <span className="text-xs text-stone-600">{item}</span>
+                  </li>
+                ))}
+              </ul>
+
+              {/* CTA */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                <motion.button
+                  onClick={() => setIsModalOpen(true)}
+                  whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                  className="inline-flex items-center gap-2.5 px-7 py-3.5 text-white text-[11px] tracking-[0.22em] uppercase font-semibold rounded-full transition-all"
+                  style={{ backgroundColor: OLIVE }}
+                >
+                  Comenzar diagnóstico
+                  <ArrowRight className="w-3.5 h-3.5" strokeWidth={2.5} />
+                </motion.button>
+               
+              </div>
+            </div>
           </motion.div>
+
+          {/* ── Strip de beneficios ────────────────────────── */}
+          <div className="mt-5 grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {benefitsStrip.map(({ icon: Icon, label, sub }, i) => (
+              <motion.div
+                key={label}
+                initial={{ opacity: 0, y: 16 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: i * 0.08, duration: 0.5 }}
+                className="flex items-center gap-3.5 px-5 py-4 bg-white rounded-2xl border border-stone-100"
+              >
+                <div
+                  className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{ backgroundColor: `${OLIVE}12` }}
+                >
+                  <Icon className="w-4 h-4" style={{ color: OLIVE }} strokeWidth={1.5} />
+                </div>
+                <div>
+                  <div className="text-[9px] tracking-[0.18em] uppercase font-semibold text-stone-700 leading-snug">
+                    {label}
+                  </div>
+                  <div className="text-[9px] text-stone-400 mt-0.5">{sub}</div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
         </div>
       </section>
 
-      {/* Modal */}
+      {/* ─── MODAL QUIZ (lógica preservada íntegramente) ──── */}
       <AnimatePresence>
         {isModalOpen && (
           <motion.div
@@ -220,25 +310,19 @@ export function DiagnosticoCapilar() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
             className="fixed inset-0 bg-background/95 z-50 flex items-center justify-center p-4"
-            onClick={() => {
-              setIsModalOpen(false);
-              resetQuiz();
-            }}
+            onClick={() => { setIsModalOpen(false); resetQuiz(); }}
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.98 }}
               transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-              onClick={(e) => e.stopPropagation()}
-              className="relative bg-background border border-border max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+              onClick={e => e.stopPropagation()}
+              className="relative bg-background border border-border max-w-4xl w-full max-h-[90vh] overflow-y-auto rounded-3xl"
             >
-              {/* Close Button */}
+              {/* Cerrar */}
               <button
-                onClick={() => {
-                  setIsModalOpen(false);
-                  resetQuiz();
-                }}
+                onClick={() => { setIsModalOpen(false); resetQuiz(); }}
                 className="absolute top-4 right-4 sm:top-6 sm:right-6 p-2 hover:opacity-50 transition-opacity z-10"
               >
                 <X className="w-5 h-5" strokeWidth={1} />
@@ -254,7 +338,7 @@ export function DiagnosticoCapilar() {
                       exit={{ opacity: 0 }}
                       transition={{ duration: 0.2 }}
                     >
-                      {/* Progress */}
+                      {/* Progreso */}
                       <div className="mb-12">
                         <div className="flex justify-between text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-3">
                           <span>Pregunta {currentQuestion + 1} de {questions.length}</span>
@@ -265,7 +349,8 @@ export function DiagnosticoCapilar() {
                             initial={{ width: 0 }}
                             animate={{ width: `${progress}%` }}
                             transition={{ duration: 0.3, ease: "easeOut" }}
-                            className="h-full bg-foreground"
+                            className="h-full"
+                            style={{ backgroundColor: OLIVE }}
                           />
                         </div>
                       </div>
@@ -290,7 +375,7 @@ export function DiagnosticoCapilar() {
                                 animate={{ opacity: 1, x: 0 }}
                                 transition={{ delay: idx * 0.05, duration: 0.2 }}
                                 onClick={() => handleAnswer(option.value)}
-                                className={`w-full text-left py-4 px-6 border transition-all ${
+                                className={`w-full text-left py-4 px-6 border transition-all rounded-xl ${
                                   answers[currentQuestion] === option.value
                                     ? 'border-foreground bg-foreground text-background'
                                     : 'border-border hover:border-foreground'
@@ -312,12 +397,12 @@ export function DiagnosticoCapilar() {
                       transition={{ duration: 0.3 }}
                       className="grid md:grid-cols-2 gap-8 md:gap-12"
                     >
-                      {/* Left: Image */}
+                      {/* Imagen */}
                       <motion.div
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: 0.2, duration: 0.4 }}
-                        className="relative aspect-[16/10] sm:aspect-[3/4] md:aspect-[3/4] bg-secondary"
+                        className="relative aspect-[16/10] sm:aspect-[3/4] md:aspect-[3/4] bg-secondary rounded-2xl overflow-hidden"
                       >
                         <img
                           src={getRecommendation().image}
@@ -326,7 +411,7 @@ export function DiagnosticoCapilar() {
                         />
                       </motion.div>
 
-                      {/* Right: Content */}
+                      {/* Contenido */}
                       <motion.div
                         initial={{ opacity: 0, x: 20 }}
                         animate={{ opacity: 1, x: 0 }}
@@ -354,12 +439,9 @@ export function DiagnosticoCapilar() {
                         <motion.button
                           onClick={handleAddAllToCart}
                           disabled={addedToCart}
-                          whileHover={{ opacity: 0.8 }}
-                          className={`w-full py-4 text-sm tracking-wide transition-all ${
-                            addedToCart
-                              ? 'bg-foreground/50 text-background'
-                              : 'bg-foreground text-background'
-                          }`}
+                          whileHover={{ opacity: 0.85 }}
+                          className="w-full py-4 text-sm tracking-wide transition-all text-white rounded-full"
+                          style={{ backgroundColor: addedToCart ? `${OLIVE}80` : OLIVE }}
                         >
                           {addedToCart ? 'Agregado al carrito' : 'Agregar al carrito'}
                         </motion.button>
