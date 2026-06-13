@@ -38,7 +38,7 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
     zipCode: '',
   });
 
-  const shippingCost = total >= 80000 ? 0 : 10000;
+  const shippingCost = total >= 80000 ? 0 : 100;
   const finalTotal = total + shippingCost;
 
   useEffect(() => {

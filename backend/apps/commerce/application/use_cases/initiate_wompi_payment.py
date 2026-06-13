@@ -63,9 +63,14 @@ class InitiateWompiPayment:
             currency=payment.currency,
             expiration_time=expiration_time,
         )
-        redirect_url = (
+        configured_redirect_url = (
             f"{settings.FRONTEND_URL.rstrip('/')}/pago/resultado"
             f"?pedido_id={order.id}"
+        )
+        redirect_url = (
+            configured_redirect_url
+            if configured_redirect_url.startswith("https://")
+            else ""
         )
         checkout_url = self.gateway.build_checkout_url(
             **{

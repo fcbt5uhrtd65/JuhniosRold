@@ -27,6 +27,7 @@ class WompiClient:
     def _validate_configuration(self):
         required = {
             "WOMPI_PUBLIC_KEY": self.public_key,
+            "WOMPI_PRIVATE_KEY": self.private_key,
             "WOMPI_EVENTS_SECRET": self.events_secret,
             "WOMPI_INTEGRITY_SECRET": self.integrity_secret,
         }
@@ -39,6 +40,7 @@ class WompiClient:
         expected_prefix = "test" if self.environment == "sandbox" else "prod"
         expected_values = {
             "WOMPI_PUBLIC_KEY": f"pub_{expected_prefix}_",
+            "WOMPI_PRIVATE_KEY": f"prv_{expected_prefix}_",
             "WOMPI_EVENTS_SECRET": f"{expected_prefix}_events_",
             "WOMPI_INTEGRITY_SECRET": f"{expected_prefix}_integrity_",
         }
@@ -52,6 +54,16 @@ class WompiClient:
                 "Las credenciales de Wompi no corresponden al ambiente configurado: "
                 + ", ".join(invalid)
                 + "."
+            )
+
+        expected_base_url = {
+            "sandbox": "https://sandbox.wompi.co/v1",
+            "production": "https://production.wompi.co/v1",
+        }[self.environment]
+        if self.base_url != expected_base_url:
+            raise PaymentConfigurationError(
+                f"WOMPI_BASE_URL debe ser {expected_base_url} para el ambiente "
+                f"{self.environment}."
             )
 
     def build_integrity_signature(

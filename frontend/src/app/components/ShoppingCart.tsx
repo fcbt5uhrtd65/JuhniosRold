@@ -121,7 +121,7 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
                     </div>
                     <div className="flex justify-between text-lg pt-4 border-t border-border">
                       <span>Total</span>
-                      <span>${(total >= 80000 ? total : total + 10000).toLocaleString('es-CO')}</span>
+                      <span>${(total >= 80000 ? total : total + 100).toLocaleString('es-CO')}</span>
                     </div>
                   </div>
 

@@ -12,7 +12,10 @@ from apps.commerce.application.use_cases import (
     CreateOrder,
     InitiateWompiPayment,
 )
-from apps.commerce.domain.exceptions import InvalidWebhookSignature
+from apps.commerce.domain.exceptions import (
+    InvalidWebhookSignature,
+    PaymentConfigurationError,
+)
 from apps.commerce.infrastructure.models import (
     Order,
     Payment,
@@ -153,6 +156,18 @@ class WompiPaymentTests(TestCase):
         self.assertEqual(payment.amount_in_cents, 10_000_000)
         self.assertEqual(checkout.reference, payment.reference)
         self.assertIn(payment.reference, checkout.checkout_url)
+        self.assertEqual(checkout.redirect_url, "")
+
+    @override_settings(FRONTEND_URL="https://shop.example.com")
+    def test_initiate_payment_uses_https_redirect_url(self):
+        order = self.create_order()
+
+        checkout = self.initiate_payment(order)
+
+        self.assertEqual(
+            checkout.redirect_url,
+            f"https://shop.example.com/pago/resultado?pedido_id={order.id}",
+        )
 
     def test_approved_webhook_consumes_inventory_once(self):
         order = self.create_order()
@@ -262,6 +277,14 @@ class WompiPaymentTests(TestCase):
         self.assertEqual(response.data["reference"], Payment.objects.get(order=order).reference)
         self.assertNotIn("private_key", response.data)
 
+    def test_requested_order_detail_alias_returns_owned_order(self):
+        order = self.create_order()
+
+        response = self.client.get(f"/api/pedidos/{order.id}/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["id"], str(order.id))
+
     def test_start_endpoint_returns_404_for_unknown_order(self):
         response = self.client.post(
             "/api/pagos/wompi/iniciar/",
@@ -343,3 +366,15 @@ class WompiPaymentTests(TestCase):
         }
         with self.assertRaises(InvalidWebhookSignature):
             WompiClient().validate_event(payload)
+
+    @override_settings(
+        WOMPI_BASE_URL="https://checkout.wompi.co/l/not-an-api-base-url"
+    )
+    def test_wompi_configuration_rejects_checkout_link_as_api_url(self):
+        with self.assertRaises(PaymentConfigurationError):
+            WompiClient()
+
+    @override_settings(WOMPI_PRIVATE_KEY="")
+    def test_wompi_configuration_requires_private_key(self):
+        with self.assertRaises(PaymentConfigurationError):
+            WompiClient()
