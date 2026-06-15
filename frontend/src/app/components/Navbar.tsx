@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, X, User, Gift, Heart, Sparkles, Bell, ChevronRight, ArrowRight } from 'lucide-react';
+import {
+  Search, X, User, Heart, Bell,
+  ChevronRight, ArrowRight, ChevronDown, Instagram
+} from 'lucide-react';
 import { ShoppingCart } from './ShoppingCart';
 import { UserDropdown } from './UserDropdown';
 import { useSearch } from '../contexts/SearchContext';
@@ -17,38 +20,52 @@ interface Notification {
   read: boolean;
 }
 
-interface SeasonalCampaign {
-  month: number;
-  event: string;
-  ribbon: string;
-  icon: any;
-  discount: string;
-  product: string;
-  bgColor: string;
-  textColor: string;
-}
+const TikTokIcon = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5" />
+  </svg>
+);
 
-const navLinks = [
-  { href: '#',          label: 'Inicio',      sub: 'Volver al inicio' },
-  { href: '#productos', label: 'Productos',    sub: 'Colección completa' },
-  { href: '#aceites',   label: 'Aceites',      sub: 'Naturales & premium' },
-  { href: '#bebe',      label: 'Bebé',         sub: 'Cuidado especial' },
-  { href: '#mayorista', label: 'Mayorista',    sub: 'Materias primas' },
-  { href: '#pro',       label: 'Pro',          sub: 'Programa profesional' },
-  { href: '#comunidad', label: 'Experiencia',  sub: 'Comunidad & rituales' },
-  { href: '#contacto',  label: 'Contacto',     sub: 'Escríbenos' },
+const LeafIcon = () => (
+  <svg width="22" height="18" viewBox="0 0 28 22" fill="none">
+    <path d="M14 20C14 20 4 14 4 7C4 3.5 7 1 10.5 1C12 1 13.2 1.6 14 2.5C14.8 1.6 16 1 17.5 1C21 1 24 3.5 24 7C24 14 14 20 14 20Z" stroke="#8B7355" strokeWidth="1" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M14 20V6" stroke="#8B7355" strokeWidth="0.8" strokeLinecap="round" strokeDasharray="1.5 2"/>
+    <path d="M14 10C12 8.5 9 8 7 9" stroke="#8B7355" strokeWidth="0.8" strokeLinecap="round"/>
+    <path d="M14 14C16 12.5 19 12 21 13" stroke="#8B7355" strokeWidth="0.8" strokeLinecap="round"/>
+  </svg>
+);
+
+const mainNavLinks = [
+  { href: '#',            label: 'Inicio',         hasDropdown: false },
+  { href: '#productos',   label: 'Productos',      hasDropdown: true  },
+  { href: '#diagnostico', label: 'Diagnóstico',    hasDropdown: false },
+  { href: '#resultados',  label: 'Antes y Después',hasDropdown: false },
+  { href: '#pro',         label: 'Modo PRO',       hasDropdown: false },
 ];
+
+const allNavLinks = [
+  { href: '#',          label: 'Inicio',     sub: 'Volver al inicio' },
+  { href: '#productos', label: 'Productos',  sub: 'Colección completa' },
+  { href: '#aceites',   label: 'Aceites',    sub: 'Naturales & premium' },
+  { href: '#bebe',      label: 'Bebé',       sub: 'Cuidado especial' },
+  { href: '#mayorista', label: 'Mayorista',  sub: 'Materias primas' },
+  { href: '#pro',       label: 'Modo PRO',   sub: 'Programa profesional' },
+  { href: '#comunidad', label: 'Comunidad',  sub: 'Comunidad & rituales' },
+  { href: '#contacto',  label: 'Contacto',   sub: 'Escríbenos' },
+];
+
+const OLIVE = '#2D3A1F';
 
 export function Navbar({ onLoginClick }: NavbarProps = {}) {
   const { searchQuery, setSearchQuery, isSearchOpen, setIsSearchOpen } = useSearch();
   const { currentUser, orders } = useUser();
-  const [scrolled, setScrolled]           = useState(false);
-  const [menuOpen, setMenuOpen]           = useState(false);
-  const [showModal, setShowModal]         = useState(false);
-  const [showBanner, setShowBanner]       = useState(false);
+  const [scrolled, setScrolled]                   = useState(false);
+  const [hidden, setHidden]                        = useState(false);
+  const [menuOpen, setMenuOpen]                   = useState(false);
+  const [showModal, setShowModal]                 = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const bannerRef = useRef<HTMLDivElement>(null);
-  const [bannerHeight, setBannerHeight]   = useState(64);
+  const [activeLink, setActiveLink]               = useState('#');
+  const lastScrollY = useRef(0);
 
   useEffect(() => {
     const seen = sessionStorage.getItem('hasSeenSeasonalModal');
@@ -66,8 +83,19 @@ export function Navbar({ onLoginClick }: NavbarProps = {}) {
   ] : [];
 
   useEffect(() => {
-    const fn = () => setScrolled(window.scrollY > 60);
-    window.addEventListener('scroll', fn);
+    const fn = () => {
+      const current = window.scrollY;
+      setScrolled(current > 40);
+      if (current < 80) {
+        setHidden(false);
+      } else if (current > lastScrollY.current + 4) {
+        setHidden(true);
+      } else if (current < lastScrollY.current - 4) {
+        setHidden(false);
+      }
+      lastScrollY.current = current;
+    };
+    window.addEventListener('scroll', fn, { passive: true });
     return () => window.removeEventListener('scroll', fn);
   }, []);
 
@@ -78,353 +106,346 @@ export function Navbar({ onLoginClick }: NavbarProps = {}) {
 
   const handleCloseModal = () => {
     setShowModal(false);
-    setShowBanner(true);
     sessionStorage.setItem('hasSeenSeasonalModal', 'true');
   };
 
-  const campaigns: SeasonalCampaign[] = [
-    { month: 5,  event: 'Día de las Madres', ribbon: 'Para ella',  icon: Heart,    discount: '40% de descuento', product: 'Colección completa',    bgColor: 'from-rose-50 to-pink-50',   textColor: 'text-rose-900'  },
-    { month: 3,  event: 'Día de la Mujer',   ribbon: '8 de marzo', icon: Sparkles, discount: '35% de descuento', product: 'Aceites premium',        bgColor: 'from-purple-50 to-pink-50', textColor: 'text-purple-900'},
-    { month: 6,  event: 'Día del Padre',     ribbon: 'Para él',    icon: Gift,     discount: '30% de descuento', product: 'Productos seleccionados', bgColor: 'from-blue-50 to-slate-50',  textColor: 'text-slate-900' },
-    { month: 12, event: 'Fin de Año',        ribbon: 'Especial',   icon: Gift,     discount: '25% de descuento', product: 'Kits de regalo',         bgColor: 'from-amber-50 to-yellow-50',textColor: 'text-amber-900' },
-    { month: 2,  event: 'Amor y Amistad',    ribbon: 'Febrero',    icon: Heart,    discount: '30% de descuento', product: 'Dúos y kits',            bgColor: 'from-red-50 to-pink-50',    textColor: 'text-red-900'   },
-  ];
-
-  const currentMonth   = new Date().getMonth() + 1;
-  const activeCampaign = campaigns.find(c => c.month === currentMonth);
-  const bannerShown    = !!(activeCampaign && showBanner);
-
-  useEffect(() => {
-    if (!bannerShown || !bannerRef.current) return;
-    const update = () => setBannerHeight(bannerRef.current?.offsetHeight ?? 64);
-    update();
-    window.addEventListener('resize', update);
-    return () => window.removeEventListener('resize', update);
-  }, [bannerShown]);
+  const handleNavClick = (href: string, e: React.MouseEvent) => {
+    if (href === '#') { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+    setActiveLink(href);
+    setMenuOpen(false);
+  };
 
   return (
     <>
-      {/* ── Seasonal Modal ── */}
-      {activeCampaign && showModal && (
-        <motion.div
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
-        >
+      {/* ── MODAL BIENVENIDA ── */}
+      <AnimatePresence>
+        {showModal && (
           <motion.div
-            initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            className="relative bg-rose-50 max-w-4xl w-full overflow-hidden"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/55 backdrop-blur-sm z-[200] flex items-center justify-center p-4"
           >
-            <button onClick={handleCloseModal} className="absolute top-4 right-4 p-2 hover:opacity-50 transition-opacity z-10 text-gray-600">
-              <X className="w-5 h-5" strokeWidth={1.5} />
-            </button>
-            <div className="grid md:grid-cols-2">
-              <div className="relative h-[220px] sm:h-[320px] md:h-auto">
-                <img src="https://images.unsplash.com/photo-1752652011858-302f08a6dc9f?w=800&q=80" alt="Mamá e hija" className="w-full h-full object-cover" />
-              </div>
-              <div className="p-6 sm:p-8 md:p-12 flex flex-col justify-center">
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="flex items-center gap-2 text-rose-400 mb-6">
-                  <Heart className="w-4 h-4" strokeWidth={1.5} />
-                  <span className="text-[10px] tracking-[0.3em] uppercase">Para ella</span>
-                </motion.div>
-                <motion.h2 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="text-3xl md:text-4xl leading-tight mb-6 text-gray-900">
-                  Para quien siempre estuvo
-                </motion.h2>
-                <motion.p initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="text-sm text-gray-600 mb-8 leading-relaxed">
-                  Este mes celebramos el cuidado que transformó
-                </motion.p>
-                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="mb-8">
-                  <div className="flex items-baseline gap-2 mb-1">
-                    <span className="text-[10px] tracking-[0.2em] uppercase text-gray-500">Hasta</span>
-                    <span className="text-5xl font-light text-rose-600">40%</span>
-                  </div>
-                  <p className="text-xs text-gray-500 tracking-wide">en productos seleccionados este mayo</p>
-                </motion.div>
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }} className="flex items-center gap-2 text-xs text-gray-500 mb-8">
-                  <Gift className="w-3.5 h-3.5" strokeWidth={1.5} />
-                  <span>Disponible durante mayo</span>
-                </motion.div>
-                <motion.button
-                  initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }}
-                  whileHover={{ scale: 1.02 }} onClick={handleCloseModal}
-                  className="flex items-center justify-center gap-2 w-full py-4 bg-rose-700 text-white text-xs tracking-[0.25em] uppercase hover:bg-rose-800 transition-colors"
-                >
-                  Descubrir colección <ChevronRight className="w-4 h-4" strokeWidth={1.5} />
-                </motion.button>
-              </div>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-
-      {/* ── Seasonal Banner ── */}
-      {bannerShown && (
-        <motion.div
-          ref={bannerRef}
-          initial={{ y: -100, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.5 }}
-          className={`fixed top-0 left-0 right-0 z-50 bg-gradient-to-r ${activeCampaign!.bgColor} border-b border-border/50`}
-        >
-          <div className="max-w-[1400px] mx-auto px-4 sm:px-8 md:px-12 py-3 md:py-5">
-            <div className="flex items-center justify-between gap-2 md:gap-4">
-              <div className="flex items-center gap-2 md:gap-4 shrink-0">
-                <motion.div
-                  initial={{ rotate: -5, scale: 0.9 }} animate={{ rotate: 0, scale: 1 }} transition={{ delay: 0.3, type: 'spring' }}
-                  className={`relative px-3 py-1.5 bg-background/90 backdrop-blur-sm border border-border ${activeCampaign!.textColor}`}
-                >
-                  <div className="flex items-center gap-1.5">
-                    {activeCampaign!.icon && <activeCampaign.icon className="w-3 h-3" strokeWidth={1.5} />}
-                    <span className="text-[9px] tracking-[0.2em] uppercase font-medium">{activeCampaign!.ribbon}</span>
-                  </div>
-                </motion.div>
-                <span className={`hidden lg:block text-xs ${activeCampaign!.textColor}/60 tracking-wide`}>{activeCampaign!.event}</span>
-              </div>
-              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="flex-1 text-center min-w-0">
-                <div className={`${activeCampaign!.textColor} flex flex-wrap items-baseline justify-center gap-x-1.5 gap-y-0`}>
-                  <span className="text-base md:text-2xl font-serif tracking-tight">{activeCampaign!.discount}</span>
-                  <span className="text-[10px] md:text-sm opacity-60">en</span>
-                  <span className="text-xs md:text-base font-light hidden sm:inline">{activeCampaign!.product}</span>
-                </div>
-              </motion.div>
-              <div className="flex items-center gap-2 shrink-0">
-                <motion.a href="#catalogo" whileHover={{ scale: 1.05 }} className="hidden md:inline-flex items-center gap-2 px-5 py-2.5 bg-foreground text-background text-[10px] tracking-[0.25em] uppercase hover:opacity-90 transition-opacity">
-                  Ver productos
-                </motion.a>
-                <button onClick={() => setShowBanner(false)} className={`p-2 hover:opacity-50 transition-opacity ${activeCampaign!.textColor}/60`} aria-label="Cerrar">
-                  <X className="w-4 h-4" strokeWidth={1} />
-                </button>
-              </div>
-            </div>
-          </div>
-        </motion.div>
-      )}
-
-      {/* ── Main Navbar ── */}
-      <motion.nav
-        initial={{ y: -80, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-        className={`fixed left-0 right-0 z-40 transition-all duration-500 ${
-          scrolled ? 'bg-background/95 backdrop-blur-md border-b border-border' : 'bg-transparent'
-        }`}
-        style={{ top: bannerShown ? `${bannerHeight}px` : '0' }}
-      >
-        <div className="max-w-[1400px] mx-auto px-8 md:px-12">
-          <div className="flex items-center justify-between py-5">
-
-            {/* Logo */}
-            <motion.a
-              href="#"
-              onClick={(e) => { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-              className="relative group cursor-pointer"
+            <motion.div
+              initial={{ scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+              className="relative bg-[#F7F3EE] max-w-3xl w-full overflow-hidden rounded-3xl shadow-2xl"
             >
-              <div className="text-xs tracking-[0.35em] uppercase">JUHNIOS ROLD</div>
-              <motion.div
-                className="absolute -bottom-1 left-0 h-px bg-foreground"
-                initial={{ width: '2rem' }}
-                whileHover={{ width: '100%' }}
-                transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-              />
-            </motion.a>
-
-            {/* Right actions */}
-            <div className="flex items-center gap-5">
-
-              {/* Search */}
-              <motion.button
-                whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-                onClick={() => setIsSearchOpen(!isSearchOpen)}
-                className="hover:opacity-50 transition-opacity"
-                title="Buscar"
-              >
-                <Search className="w-4 h-4" strokeWidth={1} />
-              </motion.button>
-
-              {/* Notifications */}
-              {currentUser && (
-                <div className="relative hidden md:block">
+              <button onClick={handleCloseModal} className="absolute top-4 right-4 p-2 hover:opacity-50 transition-opacity z-10 text-stone-500">
+                <X className="w-5 h-5" strokeWidth={1.5} />
+              </button>
+              <div className="grid md:grid-cols-2">
+                <div className="relative h-[220px] sm:h-[300px] md:h-auto">
+                  <img src="https://images.unsplash.com/photo-1752652011858-302f08a6dc9f?w=800&q=80" alt="Juhnios Rold" className="w-full h-full object-cover" />
+                </div>
+                <div className="p-8 md:p-12 flex flex-col justify-center">
+                  <div className="flex items-center gap-2 text-[#8B7355] mb-5">
+                    <Heart className="w-3.5 h-3.5" strokeWidth={1.5} />
+                    <span className="text-[10px] tracking-[0.3em] uppercase">Juhnios Rold</span>
+                  </div>
+                  <h2 className="text-2xl md:text-3xl font-light leading-snug mb-4 text-stone-800" style={{ fontFamily: "'Playfair Display', serif" }}>
+                    Belleza natural que transforma
+                  </h2>
+                  <p className="text-sm text-stone-500 mb-6 leading-relaxed">
+                    Descubre nuestra colección de cuidado capilar con ingredientes 100% naturales.
+                  </p>
+                  <div className="flex items-baseline gap-2 mb-7">
+                    <span className="text-[10px] tracking-[0.2em] uppercase text-stone-400">Envío gratis desde</span>
+                    <span className="text-3xl font-light text-stone-800">$80.000</span>
+                  </div>
                   <motion.button
-                    whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-                    onClick={() => setShowNotifications(!showNotifications)}
-                    className="hover:opacity-50 transition-opacity relative"
+                    whileHover={{ scale: 1.02 }} onClick={handleCloseModal}
+                    className="flex items-center justify-center gap-2 w-full py-3.5 text-white text-[11px] tracking-[0.2em] uppercase font-medium rounded-xl"
+                    style={{ backgroundColor: OLIVE }}
                   >
-                    <Bell className="w-4 h-4" strokeWidth={1} />
-                    {notifications.filter(n => !n.read).length > 0 && (
-                      <span className="absolute -top-1 -right-1 w-1.5 h-1.5 bg-foreground rounded-full" />
-                    )}
+                    Explorar colección <ChevronRight className="w-4 h-4" strokeWidth={1.5} />
                   </motion.button>
-                  <AnimatePresence>
-                    {showNotifications && (
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── NAVBAR — pill flotante con bordes redondeados ── */}
+      <motion.div
+        initial={{ y: -20, opacity: 0 }}
+        animate={{ y: hidden ? -90 : 0, opacity: 1 }}
+        transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+        className="fixed left-3 right-3 md:left-5 md:right-5 lg:left-7 lg:right-7 z-40"
+        style={{ top: '14px' }}
+      >
+        <div className={`bg-white rounded-[20px] transition-shadow duration-300 ${
+          scrolled ? 'shadow-[0_4px_24px_rgba(0,0,0,0.10)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.06)]'
+        }`}>
+          <div className="px-5 md:px-7 lg:px-9">
+            <div className="flex items-center justify-between h-[68px] gap-4">
+
+              {/* LOGO */}
+              <a
+                href="#"
+                onClick={e => { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                className="flex-shrink-0 flex items-center gap-2.5 cursor-pointer group"
+              >
+                <div className="opacity-80 group-hover:opacity-100 transition-opacity">
+                  <LeafIcon />
+                </div>
+                <div>
+                  <div className="text-[13.5px] tracking-[0.2em] uppercase font-semibold text-stone-900 leading-none">
+                    JUHNIOS ROLD
+                  </div>
+                  <div className="text-[7.5px] tracking-[0.28em] uppercase text-[#8B7355] mt-0.5 font-light">
+                    CUIDADO CAPILAR NATURAL
+                  </div>
+                </div>
+              </a>
+
+              {/* MENÚ CENTRAL */}
+              <nav className="hidden lg:flex items-center gap-0">
+                {mainNavLinks.map(link => {
+                  const isActive = activeLink === link.href;
+                  return (
+                    <a
+                      key={link.href}
+                      href={link.href === '#' ? undefined : link.href}
+                      onClick={e => handleNavClick(link.href, e)}
+                      className={`relative flex items-center gap-1 px-4 h-[68px] text-[12px] tracking-[0.07em] transition-colors duration-200 ${
+                        isActive ? 'text-stone-900 font-medium' : 'text-stone-500 hover:text-stone-900'
+                      }`}
+                    >
+                      {link.label}
+                      {link.hasDropdown && <ChevronDown className="w-3 h-3 opacity-50" strokeWidth={1.5} />}
+                      {isActive && (
+                        <motion.div
+                          layoutId="activeNav"
+                          className="absolute bottom-0 left-3 right-3 h-[2px] rounded-t-full"
+                          style={{ backgroundColor: OLIVE }}
+                          transition={{ type: 'spring', stiffness: 350, damping: 30 }}
+                        />
+                      )}
+                    </a>
+                  );
+                })}
+              </nav>
+
+              {/* DERECHA */}
+              <div className="flex items-center gap-2">
+
+                {/* Buscador */}
+                <div className="hidden md:flex items-center">
+                  <AnimatePresence mode="wait">
+                    {isSearchOpen ? (
                       <motion.div
-                        initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-                        className="absolute right-0 mt-4 w-80 bg-background border border-border shadow-xl z-50"
+                        key="search-open"
+                        initial={{ width: 0, opacity: 0 }}
+                        animate={{ width: 200, opacity: 1 }}
+                        exit={{ width: 0, opacity: 0 }}
+                        transition={{ duration: 0.25 }}
+                        className="overflow-hidden"
                       >
-                        <div className="p-4 border-b border-border">
-                          <div className="text-[10px] tracking-[0.25em] uppercase">Notificaciones</div>
-                        </div>
-                        <div className="max-h-80 overflow-y-auto">
-                          {notifications.length === 0 ? (
-                            <div className="p-6 text-center text-xs text-muted-foreground">Sin notificaciones</div>
-                          ) : notifications.map(n => (
-                            <div key={n.id} className="p-4 border-b border-border hover:bg-secondary transition-colors">
-                              <div className="flex gap-3">
-                                <div className={`w-1.5 h-1.5 rounded-full mt-2 flex-shrink-0 ${n.type === 'order' ? 'bg-blue-500' : n.type === 'promo' ? 'bg-green-500' : 'bg-gray-400'}`} />
-                                <div className="text-xs flex-1">{n.message}</div>
-                              </div>
-                            </div>
-                          ))}
+                        <div className="flex items-center gap-2 px-3 py-2 bg-stone-50 border border-stone-200 rounded-full">
+                          <Search className="w-3.5 h-3.5 text-stone-400 flex-shrink-0" strokeWidth={1.5} />
+                          <input
+                            autoFocus type="search" placeholder="Buscar productos…"
+                            value={searchQuery}
+                            onChange={e => {
+                              setSearchQuery(e.target.value);
+                              if (e.target.value) document.getElementById('catalogo')?.scrollIntoView({ behavior: 'smooth' });
+                            }}
+                            className="bg-transparent text-[12px] focus:outline-none placeholder:text-stone-400 text-stone-700 w-full"
+                          />
+                          <button onClick={() => { setIsSearchOpen(false); setSearchQuery(''); }}>
+                            <X className="w-3 h-3 text-stone-400 hover:text-stone-600 transition-colors" strokeWidth={1.5} />
+                          </button>
                         </div>
                       </motion.div>
+                    ) : (
+                      <motion.button
+                        key="search-closed"
+                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                        onClick={() => setIsSearchOpen(true)}
+                        className="p-2 rounded-full hover:bg-stone-100 text-stone-400 hover:text-stone-600 transition-all"
+                      >
+                        <Search className="w-4 h-4" strokeWidth={1.5} />
+                      </motion.button>
                     )}
                   </AnimatePresence>
                 </div>
-              )}
 
-              {/* User */}
-              {currentUser ? (
-                <UserDropdown />
-              ) : (
-                <motion.button
-                  whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-                  onClick={onLoginClick}
-                  className="hover:opacity-50 transition-opacity"
-                  title="Iniciar sesión"
+                {/* Notificaciones */}
+                {currentUser && (
+                  <div className="relative hidden md:block">
+                    <button
+                      onClick={() => setShowNotifications(!showNotifications)}
+                      className="relative p-2 rounded-full hover:bg-stone-100 text-stone-500 hover:text-stone-700 transition-all"
+                    >
+                      <Bell className="w-4 h-4" strokeWidth={1.5} />
+                      {notifications.filter(n => !n.read).length > 0 && (
+                        <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-red-500 rounded-full" />
+                      )}
+                    </button>
+                    <AnimatePresence>
+                      {showNotifications && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -6, scale: 0.97 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                          transition={{ duration: 0.16 }}
+                          className="absolute right-0 mt-2 w-80 bg-white border border-stone-100 shadow-xl rounded-2xl z-50 overflow-hidden"
+                        >
+                          <div className="p-4 border-b border-stone-100">
+                            <div className="text-[10px] tracking-[0.25em] uppercase text-stone-500">Notificaciones</div>
+                          </div>
+                          <div className="max-h-64 overflow-y-auto">
+                            {notifications.length === 0 ? (
+                              <div className="p-6 text-center text-xs text-stone-400">Sin notificaciones</div>
+                            ) : notifications.map(n => (
+                              <div key={n.id} className="p-4 border-b border-stone-50 hover:bg-stone-50 transition-colors">
+                                <div className="flex gap-3">
+                                  <div className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${n.type === 'order' ? 'bg-blue-400' : 'bg-emerald-400'}`} />
+                                  <div className="text-xs text-stone-600">{n.message}</div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )}
+
+                {/* Mi cuenta */}
+                <div className="hidden md:block">
+                  {currentUser ? (
+                    <UserDropdown />
+                  ) : (
+                    <button
+                      onClick={onLoginClick}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-full hover:bg-stone-100 text-stone-600 hover:text-stone-900 transition-all"
+                    >
+                      <User className="w-4 h-4" strokeWidth={1.5} />
+                      <span className="text-[11px] tracking-wide hidden xl:inline">Mi cuenta</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Carrito */}
+                <div className="border border-stone-200 rounded-full overflow-hidden">
+                  <ShoppingCart onLoginRequired={onLoginClick} />
+                </div>
+
+                {/* CTA Comprar ahora */}
+                <motion.a
+                  href="#catalogo"
+                  whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                  className="hidden md:inline-flex items-center gap-2 px-5 py-2.5 text-white text-[11px] tracking-[0.15em] uppercase font-medium rounded-full hover:opacity-90 transition-opacity"
+                  style={{ backgroundColor: OLIVE }}
                 >
-                  <User className="w-4 h-4" strokeWidth={1} />
-                </motion.button>
-              )}
+                  Comprar ahora
+                  <ArrowRight className="w-3 h-3" strokeWidth={2} />
+                </motion.a>
 
-              {/* Cart */}
-              <ShoppingCart onLoginRequired={onLoginClick} />
-
-              {/* Menu trigger — two clean lines */}
-              <button
-                onClick={() => setMenuOpen(true)}
-                className="flex flex-col gap-[5px] group ml-1 p-1"
-                aria-label="Abrir menú"
-              >
-                <span className="block w-5 h-px bg-current transition-opacity group-hover:opacity-40" />
-                <span className="block w-3 h-px bg-current transition-opacity group-hover:opacity-40" />
-              </button>
+                {/* Hamburguesa mobile */}
+                <button
+                  onClick={() => setMenuOpen(true)}
+                  className="lg:hidden flex flex-col gap-[5px] p-2 rounded-full hover:bg-stone-100 transition-colors"
+                  aria-label="Abrir menú"
+                >
+                  <span className="block w-4 h-px bg-stone-700" />
+                  <span className="block w-3 h-px bg-stone-400" />
+                </button>
+              </div>
             </div>
           </div>
-
-          {/* Search bar */}
-          <AnimatePresence>
-            {isSearchOpen && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
-                className="border-t border-border overflow-hidden"
-              >
-                <div className="py-5">
-                  <input
-                    type="search" placeholder="Buscar productos..." autoFocus
-                    value={searchQuery}
-                    onChange={(e) => {
-                      setSearchQuery(e.target.value);
-                      if (e.target.value) document.getElementById('catalogo')?.scrollIntoView({ behavior: 'smooth' });
-                    }}
-                    className="w-full bg-transparent border-b border-border pb-2 text-xs focus:outline-none focus:border-foreground transition-colors placeholder:text-muted-foreground"
-                  />
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
         </div>
-      </motion.nav>
+      </motion.div>
 
-      {/* ── Slide-in Menu Panel (right side) ── */}
+      {/* ── MENÚ LATERAL MOBILE ── */}
       <AnimatePresence>
         {menuOpen && (
           <>
-            {/* Backdrop */}
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              transition={{ duration: 0.3 }}
+              transition={{ duration: 0.22 }}
               onClick={() => setMenuOpen(false)}
-              className="fixed inset-0 bg-foreground/10 backdrop-blur-sm z-40"
+              className="fixed inset-0 bg-black/25 backdrop-blur-sm z-[150]"
             />
-
-            {/* Panel */}
             <motion.div
               initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
-              transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-              className="fixed top-0 right-0 bottom-0 z-50 w-full max-w-sm bg-background border-l border-border flex flex-col"
+              transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
+              className="fixed top-0 right-0 bottom-0 z-[160] w-full max-w-xs bg-white shadow-2xl flex flex-col rounded-l-3xl overflow-hidden"
             >
-              {/* Header */}
-              <div className="flex items-center justify-between px-8 py-6 border-b border-border">
-                <span className="tracking-[0.4em] uppercase text-muted-foreground text-[17px]">MENÚ</span>
-                <button
-                  onClick={() => setMenuOpen(false)}
-                  className="hover:opacity-50 transition-opacity"
-                  aria-label="Cerrar menú"
-                >
-                  <X className="w-4 h-4" strokeWidth={1} />
+              <div className="flex items-center justify-between px-7 py-5 border-b border-stone-100">
+                <div>
+                  <div className="text-[13px] tracking-[0.22em] uppercase font-semibold text-stone-900">JUHNIOS ROLD</div>
+                  <div className="text-[8px] tracking-[0.25em] uppercase text-[#8B7355] mt-0.5">CUIDADO CAPILAR NATURAL</div>
+                </div>
+                <button onClick={() => setMenuOpen(false)} className="p-2 rounded-full hover:bg-stone-100 transition-colors">
+                  <X className="w-4 h-4 text-stone-400" strokeWidth={1.5} />
                 </button>
               </div>
 
-              {/* Nav links */}
-              <nav className="flex-1 flex flex-col justify-start px-[24px] py-[0px] pt-2 m-[0px]">
-                <div className="space-y-0">
-                  {navLinks.map((link, i) => (
-                    <motion.div
-                      key={link.href}
-                      initial={{ opacity: 0, x: 20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.05 + i * 0.06, ease: [0.22, 1, 0.36, 1] }}
-                      className="border-b border-border last:border-0"
+              <div className="px-5 py-4 border-b border-stone-100">
+                <div className="flex items-center gap-2.5 px-4 py-2.5 bg-stone-50 border border-stone-200 rounded-full">
+                  <Search className="w-3.5 h-3.5 text-stone-400" strokeWidth={1.5} />
+                  <input type="search" placeholder="Buscar productos…"
+                    value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                    className="bg-transparent text-[12px] focus:outline-none placeholder:text-stone-400 text-stone-700 w-full"
+                  />
+                </div>
+              </div>
+
+              <nav className="flex-1 overflow-y-auto px-4 py-3">
+                <div className="space-y-0.5">
+                  {allNavLinks.map((link, i) => (
+                    <motion.div key={link.href}
+                      initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.04 + i * 0.045 }}
                     >
                       <a
                         href={link.href === '#' ? undefined : link.href}
-                        onClick={(e) => {
-                          if (link.href === '#') { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
-                          setMenuOpen(false);
-                        }}
-                        className="group flex items-center justify-between py-4 hover:pl-2 transition-all duration-300"
+                        onClick={e => handleNavClick(link.href, e)}
+                        className={`group flex items-center justify-between px-4 py-3.5 rounded-xl transition-all duration-200 ${
+                          activeLink === link.href ? 'bg-stone-100' : 'hover:bg-stone-50'
+                        }`}
                       >
                         <div>
-                          <div className="tracking-wide text-foreground group-hover:opacity-60 transition-opacity text-[17px]">
-                            {link.label}
-                          </div>
-                          <div className="text-[9px] tracking-[0.25em] uppercase text-muted-foreground mt-0.5">
-                            {link.sub}
-                          </div>
+                          <div className="text-[14px] font-light text-stone-800">{link.label}</div>
+                          <div className="text-[9px] tracking-[0.18em] uppercase text-stone-400 mt-0.5">{link.sub}</div>
                         </div>
-                        <ArrowRight
-                          className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all duration-300"
-                          strokeWidth={1.5}
-                        />
+                        <ArrowRight className="w-3.5 h-3.5 text-stone-300 opacity-0 group-hover:opacity-100 transition-opacity" strokeWidth={1.5} />
                       </a>
                     </motion.div>
                   ))}
                 </div>
               </nav>
 
-              {/* Footer */}
-              <motion.div
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}
-                className="px-8 py-6 border-t border-border space-y-4"
-              >
-                {/* Login if not logged in */}
+              <div className="px-6 py-5 border-t border-stone-100 space-y-3">
                 {!currentUser && (
                   <button
                     onClick={() => { setMenuOpen(false); onLoginClick?.(); }}
-                    className="flex items-center gap-2 text-[10px] tracking-[0.25em] uppercase text-muted-foreground hover:text-foreground transition-colors"
+                    className="w-full py-3 text-white text-[11px] tracking-[0.18em] uppercase font-medium rounded-xl hover:opacity-90 transition-opacity"
+                    style={{ backgroundColor: OLIVE }}
                   >
-                    <User className="w-3.5 h-3.5" strokeWidth={1} />
                     Iniciar sesión
                   </button>
                 )}
-                <div className="flex items-center gap-5">
-                  <span className="text-[9px] tracking-[0.3em] uppercase text-muted-foreground">Síguenos</span>
-                  {['IG', 'TK', 'FB'].map(s => (
-                    <span key={s} className="text-[9px] tracking-[0.2em] uppercase text-muted-foreground hover:text-foreground transition-colors cursor-pointer">{s}</span>
-                  ))}
+                <a href="#catalogo" onClick={() => setMenuOpen(false)}
+                  className="w-full py-3 border border-stone-200 text-stone-700 text-[11px] tracking-[0.18em] uppercase font-medium rounded-xl hover:bg-stone-50 transition-colors flex items-center justify-center"
+                >
+                  Comprar ahora
+                </a>
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-[9px] tracking-[0.25em] uppercase text-stone-400">Síguenos</span>
+                  <div className="flex items-center gap-3">
+                    <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" className="text-stone-400 hover:text-stone-700 transition-colors">
+                      <Instagram className="w-3.5 h-3.5" strokeWidth={1.5} />
+                    </a>
+                    <a href="https://tiktok.com" target="_blank" rel="noopener noreferrer" className="text-stone-400 hover:text-stone-700 transition-colors">
+                      <TikTokIcon className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
                 </div>
-                <div className="text-[9px] text-muted-foreground">
-                  © 2026 Juhnios Rold · Bogotá, Colombia
-                </div>
-              </motion.div>
+                <div className="text-[9px] text-stone-300">© 2026 Juhnios Rold · Bogotá, Colombia</div>
+              </div>
             </motion.div>
           </>
         )}
