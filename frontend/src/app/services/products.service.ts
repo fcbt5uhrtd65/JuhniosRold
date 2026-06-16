@@ -3,7 +3,7 @@
 // Normalizes the DRF catalog API into frontend-friendly models.
 // ============================================================
 
-import { api } from './api';
+import { api, publicApi } from './api';
 
 const CATALOG_BASE_PATH = '/catalog';
 const PRODUCTS_PATH = `${CATALOG_BASE_PATH}/products/`;
@@ -421,7 +421,7 @@ export async function getCategories(forceRefresh = false): Promise<ProductCatego
     return categoriesCache;
   }
 
-  const res = await api.get<PaginatedResponse<BackendCategory>>(
+  const res = await publicApi.get<PaginatedResponse<BackendCategory>>(
     `${CATEGORIES_PATH}${buildCategoriesQuery()}`,
   );
 
@@ -432,7 +432,7 @@ export async function getCategories(forceRefresh = false): Promise<ProductCatego
 
 export async function getProducts(params?: ProductsQueryParams): Promise<PaginatedProducts> {
   const [res, categoryMap] = await Promise.all([
-    api.get<PaginatedResponse<BackendProduct>>(`${PRODUCTS_PATH}${buildProductsQuery(params)}`),
+    publicApi.get<PaginatedResponse<BackendProduct>>(`${PRODUCTS_PATH}${buildProductsQuery(params)}`),
     getCategoryMap(),
   ]);
 
@@ -482,7 +482,7 @@ export async function getFeaturedProducts(limit = 100): Promise<Product[]> {
 
 export async function getProductById(id: string): Promise<Product> {
   const [res, categoryMap] = await Promise.all([
-    api.get<BackendProduct>(`${PRODUCTS_PATH}${id}/`),
+    publicApi.get<BackendProduct>(`${PRODUCTS_PATH}${id}/`),
     getCategoryMap(),
   ]);
 

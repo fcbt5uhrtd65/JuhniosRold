@@ -348,6 +348,52 @@ export async function apiRequest<T>(
   };
 }
 
+export async function publicApiRequest<T>(
+  endpoint: string,
+  options: RequestInit = {},
+): Promise<ApiResponse<T>> {
+  const url = `${API_BASE_URL}${endpoint}`;
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+
+  const headers: Record<string, string> = {
+    ...(options.headers as Record<string, string>),
+  };
+
+  if (!isFormData && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  const ownTimeout = !options.signal ? createTimeoutSignal(15_000) : null;
+  const signal = options.signal ?? ownTimeout!.signal;
+
+  let res: Response;
+  try {
+    res = await fetch(url, { ...options, headers, signal });
+  } finally {
+    ownTimeout?.clear();
+  }
+
+  const payload = await res.json().catch(() => null) as T | ApiResponse<T> | null;
+
+  if (!res.ok) {
+    throw new ApiError(
+      extractMessage(payload, res.status),
+      res.status,
+      extractErrors(payload),
+    );
+  }
+
+  if (isApiResponseEnvelope<T>(payload)) {
+    return payload;
+  }
+
+  return {
+    success: true,
+    message: 'OK',
+    data: payload ?? undefined,
+  };
+}
+
 function prepareBody(body: unknown): BodyInit {
   if (typeof FormData !== 'undefined' && body instanceof FormData) {
     return body;
@@ -372,4 +418,9 @@ export const api = {
 
   delete: <T>(endpoint: string) =>
     apiRequest<T>(endpoint, { method: 'DELETE' }),
+};
+
+export const publicApi = {
+  get: <T>(endpoint: string, signal?: AbortSignal) =>
+    publicApiRequest<T>(endpoint, { method: 'GET', ...(signal ? { signal } : {}) }),
 };

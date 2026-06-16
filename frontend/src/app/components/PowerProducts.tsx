@@ -9,21 +9,30 @@ import {
 import { useCart } from '../contexts/CartContext';
 import { useUser } from '../contexts/UserContext';
 import { useToast } from '../contexts/ToastContext';
-import { getProductBySlug } from '../services/products.service';
+import {
+  getFeaturedProducts,
+  getProducts,
+  type Product as CatalogProduct,
+} from '../services/products.service';
 
 const OLIVE = '#2D3A1F';
+const FALLBACK_PRODUCT_IMAGE = 'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?w=900&q=85';
 
 interface Product {
   id: string;
+  slug: string;
   name: string;
   category: string;
   shortDesc: string;
   price: string;
+  priceValue: number;
+  currency: string;
   rating: number;
   reviews: number;
   badge: 'top' | 'nuevo' | 'pocas';
   images: string[];
   sizes?: string[];
+  variants?: CatalogProduct['variants'];
   description?: string;
   benefits?: string[];
   ingredients?: string[];
@@ -35,6 +44,82 @@ const BADGE_CONFIG = {
   nuevo: { label: 'Nuevo',             icon: Sparkles,   bg: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
   pocas: { label: 'Últimas unidades',  icon: Clock,      bg: 'bg-rose-50 text-rose-700 border-rose-200' },
 };
+
+function formatPrice(value: number | null): string {
+  return new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 }).format(value ?? 0);
+}
+
+function splitTextList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map(item => String(item).trim()).filter(Boolean);
+  }
+
+  if (typeof value === 'string') {
+    return value
+      .split(/[,;|]/)
+      .map(item => item.trim())
+      .filter(Boolean);
+  }
+
+  return [];
+}
+
+function pickVariantList(product: CatalogProduct, keys: string[]): string[] {
+  const wanted = keys.map(key => key.toLowerCase());
+  for (const variant of product.variants) {
+    for (const [key, value] of Object.entries(variant.attributes ?? {})) {
+      if (wanted.includes(key.toLowerCase())) {
+        const list = splitTextList(value);
+        if (list.length > 0) return list;
+      }
+    }
+  }
+  return [];
+}
+
+function buildShortDescription(description: string): string {
+  const clean = description.replace(/\s+/g, ' ').trim();
+  if (!clean) return 'Producto de cuidado capilar disponible en nuestro catálogo.';
+  return clean.length > 110 ? `${clean.slice(0, 107).trim()}...` : clean;
+}
+
+function productBadge(product: CatalogProduct): Product['badge'] {
+  const createdAt = new Date(product.created_at).getTime();
+  const daysSinceCreated = Number.isFinite(createdAt)
+    ? (Date.now() - createdAt) / (1000 * 60 * 60 * 24)
+    : 999;
+
+  if (daysSinceCreated <= 45) return 'nuevo';
+  return product.is_featured ? 'top' : 'top';
+}
+
+function mapCatalogProduct(product: CatalogProduct): Product {
+  const images = Array.from(new Set([
+    product.primary_image,
+    product.image_url,
+    ...product.image_urls,
+  ].filter((src): src is string => Boolean(src))));
+
+  return {
+    id: product.id,
+    slug: product.slug,
+    name: product.name,
+    category: product.category_name,
+    shortDesc: buildShortDescription(product.description),
+    price: formatPrice(product.price),
+    priceValue: product.price ?? 0,
+    currency: product.currency ?? 'COP',
+    rating: 5,
+    reviews: 0,
+    badge: productBadge(product),
+    images: images.length > 0 ? images : [FALLBACK_PRODUCT_IMAGE],
+    sizes: product.sizes,
+    variants: product.variants,
+    description: product.description,
+    benefits: pickVariantList(product, ['benefits', 'beneficios', 'beneficio']),
+    ingredients: pickVariantList(product, ['ingredients', 'ingredientes', 'ingrediente']),
+  };
+}
 
 function Stars({ rating }: { rating: number }) {
   return (
@@ -471,6 +556,25 @@ function ProductCard({ product, index, isSaved, onToggleSave, onAddToCart, onVie
   );
 }
 
+function ProductCardSkeleton({ index }: { index: number }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, delay: index * 0.08 }}
+      className="bg-white rounded-2xl border border-stone-100 overflow-hidden"
+    >
+      <div className="aspect-[3/4] bg-stone-100 animate-pulse" />
+      <div className="p-4 space-y-3">
+        <div className="h-3 w-24 bg-stone-100 rounded animate-pulse" />
+        <div className="h-4 w-3/4 bg-stone-100 rounded animate-pulse" />
+        <div className="h-3 w-full bg-stone-100 rounded animate-pulse" />
+        <div className="h-9 w-full bg-stone-100 rounded animate-pulse" />
+      </div>
+    </motion.div>
+  );
+}
+
 /* ── Componente principal ── */
 export function PowerProducts() {
   const { toggleSaveProduct, isProductSaved } = useUser();
@@ -479,86 +583,71 @@ export function PowerProducts() {
   const [selectedSize, setSelectedSize] = useState<Record<string, string>>({});
   const [viewProduct, setViewProduct]   = useState<Product | null>(null);
   const [currentSlide, setCurrentSlide] = useState(0);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const products: Product[] = [
-    {
-      id: 'aceite-romero',
-      name: 'Aceite de Romero',
-      category: 'Aceites Capilares',
-      shortDesc: 'Estimula el crecimiento y fortalece desde la raíz.',
-      price: '28.900',
-      rating: 4.9,
-      reviews: 128,
-      badge: 'top',
-      stock: 8,
-      images: [
-        'https://images.unsplash.com/photo-1571875257727-256c39da42af?w=800&q=85',
-        'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=800&q=80',
-        'https://images.unsplash.com/photo-1556228578-8c89e6adf883?w=800&q=80',
-      ],
-      sizes: ['8ml', '60ml', '120ml'],
-      description: 'Estimula el crecimiento capilar de forma natural. Rico en antioxidantes y nutrientes esenciales para fortalecer el cabello desde la raíz.',
-      benefits: ['Estimula el crecimiento', 'Fortalece las raíces', 'Previene la caída', 'Aporta brillo natural'],
-      ingredients: ['Aceite de romero', 'Vitamina E', 'Extracto de menta', 'Aceite de jojoba'],
-    },
-    {
-      id: 'silicona-lino',
-      name: 'Mascarilla Restaurativa',
-      category: 'Tratamientos',
-      shortDesc: 'Repara, hidrata y devuelve la vitalidad natural.',
-      price: '24.900',
-      rating: 4.8,
-      reviews: 96,
-      badge: 'nuevo',
-      images: [
-        'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?w=800&q=85',
-        'https://images.unsplash.com/photo-1556228720-195a672e8a03?w=800&q=80',
-        'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=800&q=80',
-      ],
-      sizes: ['8ml', '30ml', '50ml'],
-      description: 'Mascarilla restaurativa de acción profunda que repara el cabello dañado y devuelve su vitalidad desde la primera aplicación.',
-      benefits: ['Reparación profunda', 'Hidratación intensiva', 'Brillo y suavidad', 'Reduce el quiebre'],
-      ingredients: ['Aceite de oliva', 'Manteca de karité', 'Queratina', 'Aloe vera'],
-    },
-    {
-      id: 'tratamiento-keratina',
-      name: 'Tratamiento Keratina',
-      category: 'Tratamientos',
-      shortDesc: 'Reconstrucción profunda, brillo y suavidad extrema.',
-      price: '33.900',
-      rating: 4.9,
-      reviews: 72,
-      badge: 'pocas',
-      stock: 3,
-      images: [
-        'https://images.unsplash.com/photo-1519415510236-718bdfcd89c8?w=800&q=85',
-        'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?w=800&q=80',
-        'https://images.unsplash.com/photo-1585751119414-ef2636f8aede?w=800&q=80',
-      ],
-      sizes: ['30gr', '220gr'],
-      description: 'Reconstrucción profunda del cabello dañado con keratina hidrolizada. Resultados visibles desde la primera aplicación.',
-      benefits: ['Repara el cabello dañado', 'Reconstrucción profunda', 'Suavidad extrema', 'Efecto liso prolongado'],
-      ingredients: ['Keratina hidrolizada', 'Colágeno', 'Aminoácidos', 'Pantenol', 'Aceite de argán'],
-    },
-  ];
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadProducts() {
+      try {
+        setIsLoading(true);
+        setLoadError(null);
+
+        const featured = await getFeaturedProducts(3);
+        let source = featured;
+
+        if (source.length < 3) {
+          const catalog = await getProducts({ limit: 6, active: true });
+          const featuredIds = new Set(featured.map(product => product.id));
+          source = [
+            ...featured,
+            ...catalog.data.filter(product => !featuredIds.has(product.id)),
+          ];
+        }
+
+        if (mounted) {
+          setProducts(source.slice(0, 3).map(mapCatalogProduct));
+        }
+      } catch (error) {
+        if (mounted) {
+          setLoadError(error instanceof Error ? error.message : 'No fue posible cargar los productos destacados.');
+        }
+      } finally {
+        if (mounted) setIsLoading(false);
+      }
+    }
+
+    void loadProducts();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (products.length > 0 && currentSlide >= products.length) {
+      setCurrentSlide(0);
+    }
+  }, [currentSlide, products.length]);
 
   const handleAddToCart = async (product: Product) => {
     const size = selectedSize[product.id] || product.sizes?.[0] || '';
     try {
-      const catalogProduct = await getProductBySlug(product.id);
       const variant =
-        catalogProduct.variants.find(v => v.is_active && v.presentation === size) ??
-        catalogProduct.variants.find(v => v.is_active);
+        product.variants?.find(v => v.is_active && v.presentation === size) ??
+        product.variants?.find(v => v.is_active);
       if (!variant) { toast.warning('Sin presentación disponible.'); return; }
       const added = await addItem({
         variantId: variant.id,
-        name: catalogProduct.name,
-        category: catalogProduct.category_name,
+        name: product.name,
+        category: product.category,
         size: variant.presentation,
-        price: variant.current_price ?? catalogProduct.price ?? 0,
-        image: catalogProduct.primary_image ?? product.images[0],
+        price: variant.current_price ?? product.priceValue,
+        image: product.images[0],
       });
-      if (added) toast.success(`${catalogProduct.name} añadido al carrito`);
+      if (added) toast.success(`${product.name} añadido al carrito`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'No fue posible cargar el producto.');
     }
@@ -610,36 +699,52 @@ export function PowerProducts() {
 
         {/* Grid */}
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-8">
-          {products.map((p, i) => (
-            <ProductCard
-              key={p.id}
-              product={p}
-              index={i}
-              isSaved={isProductSaved(p.id)}
-              onToggleSave={handleToggleSave}
-              onAddToCart={handleAddToCart}
-              onView={setViewProduct}
-            />
-          ))}
+          {isLoading
+            ? Array.from({ length: 3 }, (_, i) => <ProductCardSkeleton key={i} index={i} />)
+            : products.map((p, i) => (
+                <ProductCard
+                  key={p.id}
+                  product={p}
+                  index={i}
+                  isSaved={isProductSaved(p.id)}
+                  onToggleSave={handleToggleSave}
+                  onAddToCart={handleAddToCart}
+                  onView={setViewProduct}
+                />
+              ))}
         </div>
 
-        {/* Dots nav */}
-        <div className="flex items-center justify-center gap-4">
-          <button onClick={() => setCurrentSlide(s => (s - 1 + total) % total)} className="p-1.5 text-stone-400 hover:text-stone-700 transition-colors">
-            <ChevronLeft className="w-4 h-4" strokeWidth={1.5} />
-          </button>
-          <div className="flex items-center gap-2">
-            {Array.from({ length: total }, (_, i) => (
-              <button key={i} onClick={() => setCurrentSlide(i)}
-                className={`rounded-full transition-all duration-300 ${currentSlide === i ? 'w-5 h-1.5' : 'w-1.5 h-1.5 bg-stone-200 hover:bg-stone-400'}`}
-                style={currentSlide === i ? { backgroundColor: OLIVE } : {}}
-              />
-            ))}
+        {!isLoading && loadError && (
+          <div className="mb-8 rounded-xl border border-rose-100 bg-rose-50 px-5 py-4 text-sm text-rose-700">
+            {loadError}
           </div>
-          <button onClick={() => setCurrentSlide(s => (s + 1) % total)} className="p-1.5 text-stone-400 hover:text-stone-700 transition-colors">
-            <ChevronRight className="w-4 h-4" strokeWidth={1.5} />
-          </button>
-        </div>
+        )}
+
+        {!isLoading && !loadError && products.length === 0 && (
+          <div className="mb-8 rounded-xl border border-stone-100 bg-stone-50 px-5 py-4 text-sm text-stone-500">
+            Aún no hay productos destacados disponibles.
+          </div>
+        )}
+
+        {/* Dots nav */}
+        {total > 1 && (
+          <div className="flex items-center justify-center gap-4">
+            <button onClick={() => setCurrentSlide(s => (s - 1 + total) % total)} className="p-1.5 text-stone-400 hover:text-stone-700 transition-colors">
+              <ChevronLeft className="w-4 h-4" strokeWidth={1.5} />
+            </button>
+            <div className="flex items-center gap-2">
+              {Array.from({ length: total }, (_, i) => (
+                <button key={i} onClick={() => setCurrentSlide(i)}
+                  className={`rounded-full transition-all duration-300 ${currentSlide === i ? 'w-5 h-1.5' : 'w-1.5 h-1.5 bg-stone-200 hover:bg-stone-400'}`}
+                  style={currentSlide === i ? { backgroundColor: OLIVE } : {}}
+                />
+              ))}
+            </div>
+            <button onClick={() => setCurrentSlide(s => (s + 1) % total)} className="p-1.5 text-stone-400 hover:text-stone-700 transition-colors">
+              <ChevronRight className="w-4 h-4" strokeWidth={1.5} />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Página de producto */}
