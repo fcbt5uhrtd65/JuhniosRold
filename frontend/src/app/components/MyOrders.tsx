@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
 import {
   X,
@@ -186,7 +187,7 @@ export function MyOrders({ isOpen, onClose }: MyOrdersProps) {
     }
   };
 
-  return (
+  return createPortal(
     <>
       <motion.div
         initial={{ opacity: 0 }}
@@ -381,6 +382,7 @@ export function MyOrders({ isOpen, onClose }: MyOrdersProps) {
           )}
         </div>
       </motion.div>
-    </>
+    </>,
+    document.body,
   );
 }

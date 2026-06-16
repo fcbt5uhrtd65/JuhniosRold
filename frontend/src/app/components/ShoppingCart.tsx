@@ -62,7 +62,7 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
           <motion.span
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
-            className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-foreground text-background text-[9px] font-medium flex items-center justify-center"
+            className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[9px] font-semibold flex items-center justify-center border-2 border-white shadow-sm"
           >
             {itemCount > 9 ? '9+' : itemCount}
           </motion.span>

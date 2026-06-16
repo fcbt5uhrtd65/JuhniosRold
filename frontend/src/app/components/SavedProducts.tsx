@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
 import { X, Heart, ShoppingCart, Trash2 } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
@@ -60,7 +61,7 @@ export function SavedProducts({ isOpen, onClose }: SavedProductsProps) {
     }
   };
 
-  return (
+  return createPortal(
     <>
       <motion.div
         initial={{ opacity: 0 }}
@@ -195,6 +196,7 @@ export function SavedProducts({ isOpen, onClose }: SavedProductsProps) {
           </div>
         )}
       </motion.div>
-    </>
+    </>,
+    document.body,
   );
 }

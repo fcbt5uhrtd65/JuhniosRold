@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
 import { X, User, Mail, Phone, MapPin, Save } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
@@ -34,7 +35,7 @@ export function UserProfile({ isOpen, onClose }: UserProfileProps) {
     }, 2000);
   };
 
-  return (
+  return createPortal(
     <>
       <motion.div
         initial={{ opacity: 0 }}
@@ -186,6 +187,7 @@ export function UserProfile({ isOpen, onClose }: UserProfileProps) {
           </div>
         </div>
       </motion.div>
-    </>
+    </>,
+    document.body,
   );
 }
