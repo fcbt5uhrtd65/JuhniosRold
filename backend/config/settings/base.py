@@ -32,6 +32,7 @@ THIRD_PARTY_APPS = [
 
 LOCAL_APPS = [
     "apps.identity",
+    "apps.geography",
     "apps.customers",
     "apps.catalog",
     "apps.inventory",
