@@ -76,6 +76,8 @@ import {
   type VacationRequestStatus,
 } from '../../services/human-resources.service';
 import { AdminStructure } from './AdminStructure';
+import { LocationPicker } from '../ui/LocationPicker';
+import { EMPTY_LOCATION, type LocationValue } from '../../services/geography.types';
 
 type HRTab = 'employees' | 'branches' | 'catalog' | 'vacations';
 type EmployeeModalTab =
@@ -709,6 +711,8 @@ export function AdminHR() {
   const [employeeForm, setEmployeeForm] = useState<EmployeeFormState>(EMPTY_EMPLOYEE_FORM);
   const [documentForm, setDocumentForm] = useState<DocumentFormState>(EMPTY_DOCUMENT_FORM);
   const [branchForm, setBranchForm] = useState<BranchFormState>(EMPTY_BRANCH_FORM);
+  const [employeeLocation, setEmployeeLocation] = useState<LocationValue>(EMPTY_LOCATION);
+  const [branchLocation, setBranchLocation] = useState<LocationValue>(EMPTY_LOCATION);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -857,6 +861,7 @@ export function AdminHR() {
   const openCreateModal = () => {
     setEditingEmployee(null);
     setEmployeeForm(EMPTY_EMPLOYEE_FORM);
+    setEmployeeLocation(EMPTY_LOCATION);
     setDocumentForm(EMPTY_DOCUMENT_FORM);
     setEmployeeDocuments([]);
     setChangeLogs([]);
@@ -869,6 +874,14 @@ export function AdminHR() {
   const openEditModal = (employee: Employee) => {
     setEditingEmployee(employee);
     setEmployeeForm(mapEmployeeToForm(employee));
+    setEmployeeLocation({
+      countryId: null,
+      countryName: 'Colombia',
+      stateId: null,
+      stateName: employee.residence_department ?? '',
+      cityId: null,
+      cityName: employee.city ?? '',
+    });
     setDocumentForm(EMPTY_DOCUMENT_FORM);
     setEmployeeModalTab('personal');
     setShowEmployeeModal(true);
@@ -885,6 +898,7 @@ export function AdminHR() {
   const openCreateBranchModal = () => {
     setEditingBranch(null);
     setBranchForm(EMPTY_BRANCH_FORM);
+    setBranchLocation(EMPTY_LOCATION);
     setShowBranchModal(true);
   };
 
@@ -903,6 +917,14 @@ export function AdminHR() {
       status: branch.status,
       is_active: branch.is_active,
     });
+    setBranchLocation({
+      countryId: null,
+      countryName: branch.country || 'Colombia',
+      stateId: null,
+      stateName: branch.department ?? '',
+      cityId: null,
+      cityName: branch.city ?? '',
+    });
     setShowBranchModal(true);
   };
 
@@ -920,6 +942,7 @@ export function AdminHR() {
     setShowEmployeeModal(false);
     setEditingEmployee(null);
     setEmployeeForm(EMPTY_EMPLOYEE_FORM);
+    setEmployeeLocation(EMPTY_LOCATION);
     setDocumentForm(EMPTY_DOCUMENT_FORM);
   };
 
@@ -927,6 +950,7 @@ export function AdminHR() {
     setShowBranchModal(false);
     setEditingBranch(null);
     setBranchForm(EMPTY_BRANCH_FORM);
+    setBranchLocation(EMPTY_LOCATION);
   };
 
   const handleDocumentUpload = async (employeeId: string) => {
@@ -959,7 +983,12 @@ export function AdminHR() {
     event.preventDefault();
     setSavingEmployee(true);
     try {
-      const payload = buildEmployeePayload(employeeForm);
+      const formWithLocation = {
+        ...employeeForm,
+        city: employeeLocation.cityName || employeeForm.city,
+        residence_department: employeeLocation.stateName || employeeForm.residence_department,
+      };
+      const payload = buildEmployeePayload(formWithLocation);
       const savedEmployee = editingEmployee
         ? await updateEmployee(editingEmployee.id, payload)
         : await createEmployee(payload);
@@ -1002,9 +1031,9 @@ export function AdminHR() {
         code: branchForm.code.trim(),
         name: branchForm.name.trim(),
         address: branchForm.address.trim(),
-        city: branchForm.city.trim(),
-        department: branchForm.department.trim(),
-        country: branchForm.country.trim(),
+        city: (branchLocation.cityName || branchForm.city).trim(),
+        department: (branchLocation.stateName || branchForm.department).trim(),
+        country: (branchLocation.countryName || branchForm.country).trim(),
         phone: branchForm.phone.trim(),
         email: branchForm.email.trim().toLowerCase(),
         responsible: cleanNullable(branchForm.responsible),
@@ -1112,8 +1141,12 @@ export function AdminHR() {
           setEmployeeForm((current) => ({ ...current, email: value, user_email: current.user_email || value, user_email_confirm: current.user_email_confirm || value }));
         }} />
         <TextInput label="Nacionalidad" value={employeeForm.nationality} onChange={(value) => setFormField('nationality', value)} />
-        <TextInput label="Ciudad / Municipio" value={employeeForm.city} onChange={(value) => setFormField('city', value)} />
-        <TextInput label="Departamento" value={employeeForm.residence_department} onChange={(value) => setFormField('residence_department', value)} />
+        <div className="sm:col-span-2 lg:col-span-2">
+          <LocationPicker
+            value={employeeLocation}
+            onChange={setEmployeeLocation}
+          />
+        </div>
         <SelectInput label="Sexo / Género" value={employeeForm.gender} onChange={(value) => setFormField('gender', value)} options={[
           { value: 'FEMALE', label: 'Femenino' },
           { value: 'MALE', label: 'Masculino' },
@@ -2173,9 +2206,9 @@ export function AdminHR() {
                 <TextInput label="Nombre" required value={branchForm.name} onChange={(value) => setBranchForm((current) => ({ ...current, name: value }))} />
                 <TextInput label="Código" required value={branchForm.code} onChange={(value) => setBranchForm((current) => ({ ...current, code: value }))} />
                 <TextInput label="Dirección" value={branchForm.address} onChange={(value) => setBranchForm((current) => ({ ...current, address: value }))} />
-                <TextInput label="Ciudad" value={branchForm.city} onChange={(value) => setBranchForm((current) => ({ ...current, city: value }))} />
-                <TextInput label="Departamento" value={branchForm.department} onChange={(value) => setBranchForm((current) => ({ ...current, department: value }))} />
-                <TextInput label="País" value={branchForm.country} onChange={(value) => setBranchForm((current) => ({ ...current, country: value }))} />
+                <div className="sm:col-span-2">
+                  <LocationPicker value={branchLocation} onChange={setBranchLocation} />
+                </div>
                 <TextInput label="Teléfono" value={branchForm.phone} onChange={(value) => setBranchForm((current) => ({ ...current, phone: value }))} />
                 <TextInput label="Correo" type="email" value={branchForm.email} onChange={(value) => setBranchForm((current) => ({ ...current, email: value }))} />
                 <SelectInput label="Responsable" value={branchForm.responsible} onChange={(value) => setBranchForm((current) => ({ ...current, responsible: value }))} options={activeEmployees.map((employee) => ({ value: employee.id, label: getEmployeeName(employee) }))} emptyLabel="Sin responsable" />

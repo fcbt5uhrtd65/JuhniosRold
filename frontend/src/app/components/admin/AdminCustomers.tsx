@@ -3,6 +3,8 @@ import { motion } from 'motion/react';
 import { useAdmin } from '../../contexts/AdminContext';
 import { Users, TrendingUp, DollarSign, Plus } from 'lucide-react';
 import { format } from 'date-fns';
+import { LocationPicker } from '../ui/LocationPicker';
+import { EMPTY_LOCATION, type LocationValue } from '../../services/geography.types';
 
 export function AdminCustomers() {
   const { customers, orders, addCustomer } = useAdmin();
@@ -15,18 +17,13 @@ export function AdminCustomers() {
     direccion: '',
     ciudad: '',
   });
+  const [customerLocation, setCustomerLocation] = useState<LocationValue>(EMPTY_LOCATION);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await addCustomer(formData);
-    setFormData({
-      documento: '',
-      nombre: '',
-      telefono: '',
-      email: '',
-      direccion: '',
-      ciudad: '',
-    });
+    await addCustomer({ ...formData, ciudad: customerLocation.cityName || formData.ciudad });
+    setFormData({ documento: '', nombre: '', telefono: '', email: '', direccion: '', ciudad: '' });
+    setCustomerLocation(EMPTY_LOCATION);
     setShowModal(false);
   };
 
@@ -246,16 +243,10 @@ export function AdminCustomers() {
                   />
                 </div>
 
-                <div>
-                  <label className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-2 block">
-                    Ciudad
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.ciudad}
-                    onChange={(e) => setFormData({ ...formData, ciudad: e.target.value })}
-                    className="w-full px-3 py-2 bg-transparent border border-border text-xs focus:outline-none focus:border-foreground"
-                    required
+                <div className="sm:col-span-2">
+                  <LocationPicker
+                    value={customerLocation}
+                    onChange={setCustomerLocation}
                   />
                 </div>
               </div>

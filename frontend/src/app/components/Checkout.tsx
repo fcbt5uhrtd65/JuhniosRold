@@ -10,6 +10,8 @@ import {
   initiatePayment,
   resolveMockPayment,
 } from '../services/payments.service';
+import { LocationPicker } from './ui/LocationPicker';
+import { EMPTY_LOCATION, type LocationValue } from '../services/geography.types';
 
 interface CheckoutProps {
   isOpen: boolean;
@@ -33,10 +35,9 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
     email: currentUser?.email ?? '',
     phone: currentUser?.telefono ?? '',
     address: currentUser?.direccion ?? '',
-    city: currentUser?.ciudad ?? '',
-    department: '',
     zipCode: '',
   });
+  const [shippingLocation, setShippingLocation] = useState<LocationValue>(EMPTY_LOCATION);
 
   const shippingCost = total >= 80000 ? 0 : 100;
   const finalTotal = total + shippingCost;
@@ -64,10 +65,10 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
       email: formData.email,
       phone: formData.phone,
       address_line1: formData.address,
-      city: formData.city,
-      department: formData.department,
+      city: shippingLocation.cityName,
+      department: shippingLocation.stateName,
       postal_code: formData.zipCode,
-      country: 'CO',
+      country: shippingLocation.countryName || 'Colombia',
     });
 
   const handlePayment = async () => {
@@ -82,11 +83,11 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
         formData.email,
         formData.phone,
         formData.address,
-        formData.city,
-        formData.department,
+        shippingLocation.cityName,
+        shippingLocation.stateName,
       ].some((value) => !value.trim())
     ) {
-      setError('Completa todos los datos obligatorios de envío.');
+      setError('Completa todos los datos obligatorios de envío, incluyendo ciudad y departamento.');
       return;
     }
 
@@ -208,8 +209,6 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
                       ['email', 'Email *', 'email'],
                       ['phone', 'Teléfono *', 'tel'],
                       ['address', 'Dirección *', 'text'],
-                      ['city', 'Ciudad *', 'text'],
-                      ['department', 'Departamento *', 'text'],
                       ['zipCode', 'Código postal', 'text'],
                     ].map(([field, label, type]) => (
                       <label
@@ -232,6 +231,13 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
                         />
                       </label>
                     ))}
+                    <div className="md:col-span-2">
+                      <LocationPicker
+                        value={shippingLocation}
+                        onChange={setShippingLocation}
+                        required
+                      />
+                    </div>
                   </div>
                   <div className="p-5 bg-secondary flex gap-4">
                     <CreditCard className="w-5 h-5 flex-shrink-0" strokeWidth={1} />

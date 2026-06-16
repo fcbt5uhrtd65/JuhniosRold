@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { motion } from 'motion/react';
 import { X, User, Mail, Phone, MapPin, Save } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
+import { LocationPicker } from './ui/LocationPicker';
+import { EMPTY_LOCATION, type LocationValue } from '../services/geography.types';
 
 interface UserProfileProps {
   isOpen: boolean;
@@ -17,13 +19,14 @@ export function UserProfile({ isOpen, onClose }: UserProfileProps) {
     direccion: currentUser?.direccion || '',
     ciudad: currentUser?.ciudad || '',
   });
+  const [profileLocation, setProfileLocation] = useState<LocationValue>(EMPTY_LOCATION);
   const [success, setSuccess] = useState(false);
 
   if (!isOpen || !currentUser) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    updateProfile(formData);
+    updateProfile({ ...formData, ciudad: profileLocation.cityName || formData.ciudad });
     setSuccess(true);
     setTimeout(() => {
       setSuccess(false);
@@ -148,18 +151,10 @@ export function UserProfile({ isOpen, onClose }: UserProfileProps) {
             </div>
 
             {/* Ciudad */}
-            <div>
-              <label className="block text-[10px] tracking-wider uppercase text-muted-foreground mb-2">
-                Ciudad
-              </label>
-              <input
-                type="text"
-                value={formData.ciudad}
-                onChange={(e) => setFormData({ ...formData, ciudad: e.target.value })}
-                className="w-full px-4 py-3 bg-transparent border border-border text-sm focus:outline-none focus:border-foreground transition-colors"
-                placeholder="Bogotá"
-              />
-            </div>
+            <LocationPicker
+              value={profileLocation}
+              onChange={setProfileLocation}
+            />
 
             {/* Submit Button */}
             <motion.button
