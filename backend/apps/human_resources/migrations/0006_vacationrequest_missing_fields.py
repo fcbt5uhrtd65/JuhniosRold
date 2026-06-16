@@ -6,6 +6,42 @@ from django.core.validators import FileExtensionValidator
 from django.db import migrations, models
 
 
+class AddFieldIfNotExists(migrations.AddField):
+    def database_forwards(self, app_label, schema_editor, from_state, to_state):
+        model = to_state.apps.get_model(app_label, self.model_name)
+        field = model._meta.get_field(self.name)
+        with schema_editor.connection.cursor() as cursor:
+            columns = {
+                column.name
+                for column in schema_editor.connection.introspection.get_table_description(
+                    cursor, model._meta.db_table
+                )
+            }
+        if field.column in columns:
+            return
+        super().database_forwards(app_label, schema_editor, from_state, to_state)
+
+
+class CreateModelIfNotExists(migrations.CreateModel):
+    def database_forwards(self, app_label, schema_editor, from_state, to_state):
+        model = to_state.apps.get_model(app_label, self.name)
+        if model._meta.db_table in schema_editor.connection.introspection.table_names():
+            return
+        super().database_forwards(app_label, schema_editor, from_state, to_state)
+
+
+class AddConstraintIfNotExists(migrations.AddConstraint):
+    def database_forwards(self, app_label, schema_editor, from_state, to_state):
+        model = to_state.apps.get_model(app_label, self.model_name)
+        with schema_editor.connection.cursor() as cursor:
+            constraints = schema_editor.connection.introspection.get_constraints(
+                cursor, model._meta.db_table
+            )
+        if self.constraint.name in constraints:
+            return
+        super().database_forwards(app_label, schema_editor, from_state, to_state)
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -16,12 +52,12 @@ class Migration(migrations.Migration):
 
     operations = [
         # Fields missing from vacationrequest
-        migrations.AddField(
+        AddFieldIfNotExists(
             model_name="vacationrequest",
             name="request_number",
             field=models.CharField(blank=True, max_length=30, null=True, unique=True),
         ),
-        migrations.AddField(
+        AddFieldIfNotExists(
             model_name="vacationrequest",
             name="subtype",
             field=models.CharField(blank=True, choices=[
@@ -51,27 +87,27 @@ class Migration(migrations.Migration):
                 ("OTHER", "Otro"),
             ], max_length=40),
         ),
-        migrations.AddField(
+        AddFieldIfNotExists(
             model_name="vacationrequest",
             name="days_count",
             field=models.DecimalField(blank=True, decimal_places=2, max_digits=6, null=True),
         ),
-        migrations.AddField(
+        AddFieldIfNotExists(
             model_name="vacationrequest",
             name="hours_count",
             field=models.DecimalField(blank=True, decimal_places=2, max_digits=7, null=True),
         ),
-        migrations.AddField(
+        AddFieldIfNotExists(
             model_name="vacationrequest",
             name="description",
             field=models.TextField(blank=True),
         ),
-        migrations.AddField(
+        AddFieldIfNotExists(
             model_name="vacationrequest",
             name="observations",
             field=models.TextField(blank=True),
         ),
-        migrations.AddField(
+        AddFieldIfNotExists(
             model_name="vacationrequest",
             name="due_date",
             field=models.DateField(blank=True, null=True),
@@ -100,7 +136,7 @@ class Migration(migrations.Migration):
             ], default="PENDING", max_length=20),
         ),
         # New tables
-        migrations.CreateModel(
+        CreateModelIfNotExists(
             name="VacationRequestAttachment",
             fields=[
                 ("id", models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
@@ -118,7 +154,7 @@ class Migration(migrations.Migration):
                 "abstract": False,
             },
         ),
-        migrations.CreateModel(
+        CreateModelIfNotExists(
             name="VacationRequestApprovalStep",
             fields=[
                 ("id", models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
@@ -138,7 +174,7 @@ class Migration(migrations.Migration):
                 "abstract": False,
             },
         ),
-        migrations.CreateModel(
+        CreateModelIfNotExists(
             name="VacationRequestHistory",
             fields=[
                 ("id", models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
@@ -157,7 +193,7 @@ class Migration(migrations.Migration):
                 "abstract": False,
             },
         ),
-        migrations.AddConstraint(
+        AddConstraintIfNotExists(
             model_name="vacationrequestapprovalstep",
             constraint=models.UniqueConstraint(fields=("request", "step"), name="unique_request_approval_step"),
         ),

@@ -61,7 +61,7 @@ def release_expired_wompi_reservations():
         with transaction.atomic():
             payment = (
                 Payment.objects.select_for_update()
-                .select_related("order__fulfillment_location")
+                .select_related("order")
                 .get(pk=payment_id)
             )
             if payment.status != Payment.Status.PENDING:
