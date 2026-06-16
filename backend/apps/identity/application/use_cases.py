@@ -22,8 +22,8 @@ class RegisterUser:
         )
         Customer.objects.create(
             user=user,
-            document_type="PENDING",
-            document_number=f"USR-{user.id.hex}",
+            document_type=data.document_type or "PENDING",
+            document_number=data.document_number or f"USR-{user.id.hex}",
             first_name=data.first_name or data.email.split("@")[0],
             last_name=data.last_name,
             email=user.email,

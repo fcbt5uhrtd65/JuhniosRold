@@ -123,6 +123,7 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
   const [showConfirm, setShowConfirm] = useState(false);
   const [terms, setTerms] = useState(false);
   // extra registro
+  const [tipoDocumento, setTipoDocumento] = useState('CC');
   const [documento, setDocumento] = useState('');
   const [telefono, setTelefono] = useState('');
   const [direccion, setDireccion] = useState('');
@@ -135,7 +136,7 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
     setError(''); setSuccess('');
     setNombre(''); setEmail(''); setPassword(''); setConfirm('');
     setShowPass(false); setShowConfirm(false); setTerms(false);
-    setDocumento(''); setTelefono(''); setDireccion('');
+    setTipoDocumento('CC'); setDocumento(''); setTelefono(''); setDireccion('');
     setRegLocation(EMPTY_LOCATION);
     setIsForgot(false);
   };
@@ -174,6 +175,7 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
           phone: telefono || undefined,
           address: direccion || undefined,
           city: regLocation.cityName || undefined,
+          document_type: tipoDocumento || undefined,
           document_number: documento || undefined,
         });
         if (result.ok) { reset(); onClose(); }
@@ -348,20 +350,41 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
                           required
                         />
                         <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[9px] tracking-[0.28em] uppercase text-stone-400 font-medium mb-1.5">
+                              Tipo de documento
+                            </label>
+                            <select
+                              value={tipoDocumento}
+                              onChange={e => setTipoDocumento(e.target.value)}
+                              className="w-full pl-3.5 pr-9 py-3 rounded-xl border border-[#E7E3DC] bg-white text-sm text-stone-800 focus:outline-none focus:border-[#2D3A1F] transition-all duration-200 appearance-none bg-no-repeat"
+                              style={{
+                                backgroundImage:
+                                  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23A8A29E' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")",
+                                backgroundPosition: 'right 0.875rem center',
+                              }}
+                            >
+                              <option value="CC">Cédula de Ciudadanía</option>
+                              <option value="CE">Cédula de Extranjería</option>
+                              <option value="PASSPORT">Pasaporte</option>
+                              <option value="NIT">NIT</option>
+                              <option value="OTHER">Otro</option>
+                            </select>
+                          </div>
                           <Field
-                            label="Documento"
+                            label="Número de documento"
                             value={documento} onChange={setDocumento}
-                            placeholder="Cédula / NIT"
+                            placeholder="Ej: 1000000001"
                             icon={CreditCard}
                           />
-                          <Field
-                            label="Teléfono"
-                            type="tel"
-                            value={telefono} onChange={setTelefono}
-                            placeholder="3001234567"
-                            icon={Phone}
-                          />
                         </div>
+                        <Field
+                          label="Teléfono"
+                          type="tel"
+                          value={telefono} onChange={setTelefono}
+                          placeholder="3001234567"
+                          icon={Phone}
+                        />
                       </>
                     )}
 

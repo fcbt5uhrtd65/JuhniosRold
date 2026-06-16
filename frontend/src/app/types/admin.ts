@@ -83,6 +83,7 @@ export interface Payment {
 
 export interface Customer {
   id: string;
+  tipoDocumento: string;
   documento: string;
   nombre: string;
   telefono: string;

@@ -40,6 +40,8 @@ export interface RegisterPayload {
   email: string;
   password: string;
   phone?: string;
+  document_type?: string;
+  document_number?: string;
 }
 
 export interface LoginPayload {

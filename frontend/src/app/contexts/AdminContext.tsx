@@ -136,6 +136,7 @@ const INITIAL_INVENTORY: Inventory[] = [
 const INITIAL_CUSTOMERS: Customer[] = [
   {
     id: '1',
+    tipoDocumento: 'CC',
     documento: '1000000001',
     nombre: 'María González',
     telefono: '3001234567',
@@ -147,6 +148,7 @@ const INITIAL_CUSTOMERS: Customer[] = [
   },
   {
     id: '2',
+    tipoDocumento: 'CC',
     documento: '1000000002',
     nombre: 'Andrea Ramírez',
     telefono: '3009876543',
@@ -266,6 +268,7 @@ function mapApiOrder(o: {
 function mapApiCustomer(customer: BackendCustomer): Customer {
   return {
     id: customer.id,
+    tipoDocumento: customer.document_type,
     documento: customer.document_number,
     nombre: `${customer.first_name} ${customer.last_name}`.trim(),
     telefono: customer.phone,
@@ -672,6 +675,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     if (backendOnline && getAccessToken()) {
       const nameParts = customer.nombre.trim().split(/\s+/);
       const created = await apiCreateCustomer({
+        document_type: customer.tipoDocumento,
         document_number: customer.documento,
         first_name: nameParts[0] ?? customer.nombre,
         last_name: nameParts.slice(1).join(' '),

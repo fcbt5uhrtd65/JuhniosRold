@@ -11,6 +11,7 @@ export function AdminCustomers() {
   const { customers, orders, addCustomer } = useAdmin();
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState({
+    tipoDocumento: 'CC',
     documento: '',
     nombre: '',
     telefono: '',
@@ -23,7 +24,7 @@ export function AdminCustomers() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     await addCustomer({ ...formData, ciudad: customerLocation.cityName || formData.ciudad });
-    setFormData({ documento: '', nombre: '', telefono: '', email: '', direccion: '', ciudad: '' });
+    setFormData({ tipoDocumento: 'CC', documento: '', nombre: '', telefono: '', email: '', direccion: '', ciudad: '' });
     setCustomerLocation(EMPTY_LOCATION);
     setShowModal(false);
   };
@@ -126,6 +127,9 @@ export function AdminCustomers() {
                     Cliente
                   </th>
                   <th className="px-4 py-3 text-left text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
+                    Documento
+                  </th>
+                  <th className="px-4 py-3 text-left text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
                     Contacto
                   </th>
                   <th className="px-4 py-3 text-left text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
@@ -150,6 +154,9 @@ export function AdminCustomers() {
                     <tr key={customer.id} className="hover:bg-background/50 transition-colors">
                       <td className="px-4 py-3">
                         <div className="text-xs">{customer.nombre}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="text-xs">{customer.tipoDocumento} {customer.documento}</div>
                       </td>
                       <td className="px-4 py-3">
                         <div className="text-xs">{customer.email}</div>
@@ -186,7 +193,7 @@ export function AdminCustomers() {
           <motion.div
             initial={{ scale: 0.9 }}
             animate={{ scale: 1 }}
-            className="bg-background p-6 max-w-2xl w-full"
+            className="bg-background p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
           >
             <h2 className="text-2xl mb-6">Nuevo Cliente</h2>
 
@@ -194,7 +201,25 @@ export function AdminCustomers() {
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
                   <label className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-2 block">
-                    Documento
+                    Tipo de Documento
+                  </label>
+                  <select
+                    value={formData.tipoDocumento}
+                    onChange={(e) => setFormData({ ...formData, tipoDocumento: e.target.value })}
+                    className="w-full px-3 py-2 bg-transparent border border-border text-xs focus:outline-none focus:border-foreground"
+                    required
+                  >
+                    <option value="CC">Cédula de Ciudadanía</option>
+                    <option value="CE">Cédula de Extranjería</option>
+                    <option value="PASSPORT">Pasaporte</option>
+                    <option value="NIT">NIT</option>
+                    <option value="OTHER">Otro</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-2 block">
+                    Número de Documento
                   </label>
                   <input
                     type="text"

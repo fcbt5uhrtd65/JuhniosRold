@@ -119,6 +119,8 @@ class RegisterSerializer(serializers.Serializer):
     first_name = serializers.CharField(required=False, allow_blank=True)
     last_name = serializers.CharField(required=False, allow_blank=True)
     phone = serializers.CharField(required=False, allow_blank=True)
+    document_type = serializers.CharField(required=False, allow_blank=True)
+    document_number = serializers.CharField(required=False, allow_blank=True)
 
     def create(self, validated_data):
         return RegisterUser().execute(RegisterUserDTO(**validated_data))

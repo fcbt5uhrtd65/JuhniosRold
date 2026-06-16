@@ -8,3 +8,5 @@ class RegisterUserDTO:
     first_name: str = ""
     last_name: str = ""
     phone: str = ""
+    document_type: str = ""
+    document_number: str = ""

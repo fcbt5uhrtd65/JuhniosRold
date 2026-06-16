@@ -96,7 +96,13 @@ interface UserContextType {
     nombre: string,
     email: string,
     password: string,
-    extra?: { phone?: string; address?: string; city?: string; document_number?: string },
+    extra?: {
+      phone?: string;
+      address?: string;
+      city?: string;
+      document_type?: string;
+      document_number?: string;
+    },
   ) => Promise<AuthActionResult>;
   logout: () => Promise<void>;
   toggleSaveProduct: (productoId: string) => void;
@@ -308,7 +314,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
     nombre: string,
     email: string,
     password: string,
-    extra?: { phone?: string; address?: string; city?: string; document_number?: string },
+    extra?: {
+      phone?: string;
+      address?: string;
+      city?: string;
+      document_type?: string;
+      document_number?: string;
+    },
   ): Promise<AuthActionResult> => {
     try {
       const parts = nombre.trim().split(/\s+/);
@@ -320,6 +332,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
         email: email.trim().toLowerCase(),
         password,
         phone: extra?.phone,
+        document_type: extra?.document_type,
+        document_number: extra?.document_number,
       });
       // Persist extra profile fields locally (API doesn't accept them at register time)
       if (extra?.address || extra?.city || extra?.document_number) {
