@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import {
+  AlertTriangle,
+  BarChart3,
   BadgeCheck,
   Briefcase,
   Building2,
@@ -8,86 +10,292 @@ import {
   Clock3,
   Edit2,
   FileText,
-  Mail,
-  Phone,
+  FileUp,
+  HeartPulse,
+  History,
+  KeyRound,
+  Landmark,
+  Plus,
+  Search,
+  Save,
+  Settings2,
+  ShieldCheck,
+  Eye,
   Trash2,
   UserPlus,
   Users,
+  Wallet,
   X,
 } from 'lucide-react';
+
 import { SearchBar } from './SearchBar';
 import { useToast } from '../../contexts/ToastContext';
 import { getRoleLabel } from '../../utils/permissions';
 import {
-  createEmployee,
   deleteEmployee,
+  createBranch,
+  deleteBranch,
+  getBranches,
   getDepartments,
+  getEmployeeChangeLogs,
+  getEmployeePositionHistory,
+  getEmployeeSalaryHistory,
   getEmployees,
   getPositions,
+  getWorkDays,
+  createEmployee,
+  updateBranch,
+  updateEmployee,
+  type Branch,
   type Department,
   type Employee,
+  type EmployeeChangeLog,
   type EmployeePayload,
+  type EmployeePositionHistory,
+  type EmployeeProfileStatus,
+  type EmployeeSalaryHistory,
   type EmployeeStatus,
   type Position,
-  updateEmployee,
+  type WorkDay,
 } from '../../services/employees.service';
 import type { UserRole } from '../../services/auth.service';
 import {
   approveVacationRequest,
+  createEmployeeDocument,
+  getEmployeeDocuments,
+  getHRNotifications,
+  getRequestsDashboard,
   getVacationRequests,
   rejectVacationRequest,
+  type EmployeeDocument,
+  type EmployeeDocumentStatus,
+  type EmployeeDocumentType,
+  type HRNotification,
+  type RequestsDashboard,
   type VacationRequest,
   type VacationRequestStatus,
 } from '../../services/human-resources.service';
 import { AdminStructure } from './AdminStructure';
 
-type HRTab = 'employees' | 'catalog' | 'vacations';
+type HRTab = 'employees' | 'branches' | 'catalog' | 'vacations';
+type EmployeeModalTab =
+  | 'personal'
+  | 'labor'
+  | 'social'
+  | 'banking'
+  | 'payroll'
+  | 'emergency'
+  | 'documents'
+  | 'access'
+  | 'history';
 
 interface EmployeeFormState {
   user: string;
   user_role: UserRole | '';
+  user_email: string;
+  user_email_confirm: string;
   user_password: string;
+  user_password_confirm: string;
   employee_code: string;
+  profile_status: EmployeeProfileStatus;
+  document_type: string;
   document_number: string;
+  document_issue_date: string;
+  document_issue_place: string;
   first_name: string;
   last_name: string;
+  date_of_birth: string;
   email: string;
   phone: string;
   address: string;
+  city: string;
+  residence_department: string;
+  photo: File | null;
+  nationality: string;
+  gender: string;
+  marital_status: string;
   department: string;
   position: string;
   manager: string;
+  employment_type: string;
+  contract_type: string;
   hire_date: string;
+  base_salary: string;
   termination_date: string;
   status: EmployeeStatus;
+  branch: string;
+  cost_center: string;
+  work_modality: string;
+  termination_reason: string;
+  work_observations: string;
+  eps: string;
+  pension_fund: string;
+  severance_fund: string;
+  arl: string;
+  arl_risk_level: string;
+  compensation_fund: string;
+  bank_name: string;
+  bank_account_type: string;
+  bank_account_number: string;
+  bank_account_holder: string;
+  bank_account_holder_document: string;
+  salary_type: string;
+  transport_allowance_applies: boolean;
+  integral_salary: boolean;
+  weekly_working_hours: string;
+  working_days: string[];
+  emergency_contact_name: string;
+  emergency_contact_relationship: string;
+  emergency_contact_mobile: string;
+  emergency_contact_alternate_phone: string;
+  emergency_contact_address: string;
 }
+
+interface DocumentFormState {
+  document_type: EmployeeDocumentType;
+  name: string;
+  file: File | null;
+  issued_at: string;
+  expires_at: string;
+  status: EmployeeDocumentStatus;
+  observations: string;
+}
+
+interface BranchFormState {
+  code: string;
+  name: string;
+  address: string;
+  city: string;
+  department: string;
+  country: string;
+  phone: string;
+  email: string;
+  responsible: string;
+  status: 'ACTIVE' | 'INACTIVE';
+  is_active: boolean;
+}
+
+const INTERNAL_EMPLOYEE_ROLES: UserRole[] = ['ADMIN', 'RRHH', 'EMPLEADO', 'PEDIDOS', 'SELLER', 'DISTRIBUTOR'];
 
 const EMPTY_EMPLOYEE_FORM: EmployeeFormState = {
   user: '',
   user_role: '',
+  user_email: '',
+  user_email_confirm: '',
   user_password: '',
+  user_password_confirm: '',
   employee_code: '',
+  profile_status: 'DRAFT',
+  document_type: 'CC',
   document_number: '',
+  document_issue_date: '',
+  document_issue_place: '',
   first_name: '',
   last_name: '',
+  date_of_birth: '',
   email: '',
   phone: '',
   address: '',
+  city: '',
+  residence_department: '',
+  photo: null,
+  nationality: 'Colombiana',
+  gender: '',
+  marital_status: '',
   department: '',
   position: '',
   manager: '',
+  employment_type: 'EMPLOYEE',
+  contract_type: 'INDEFINITE',
   hire_date: '',
+  base_salary: '',
   termination_date: '',
   status: 'ACTIVE',
+  branch: '',
+  cost_center: '',
+  work_modality: '',
+  termination_reason: '',
+  work_observations: '',
+  eps: '',
+  pension_fund: '',
+  severance_fund: '',
+  arl: '',
+  arl_risk_level: '',
+  compensation_fund: '',
+  bank_name: '',
+  bank_account_type: '',
+  bank_account_number: '',
+  bank_account_holder: '',
+  bank_account_holder_document: '',
+  salary_type: 'FIXED',
+  transport_allowance_applies: false,
+  integral_salary: false,
+  weekly_working_hours: '48',
+  working_days: [],
+  emergency_contact_name: '',
+  emergency_contact_relationship: '',
+  emergency_contact_mobile: '',
+  emergency_contact_alternate_phone: '',
+  emergency_contact_address: '',
 };
+
+const EMPTY_DOCUMENT_FORM: DocumentFormState = {
+  document_type: 'ID_COPY',
+  name: 'Copia de cédula',
+  file: null,
+  issued_at: '',
+  expires_at: '',
+  status: 'PENDING',
+  observations: '',
+};
+
+const EMPTY_BRANCH_FORM: BranchFormState = {
+  code: '',
+  name: '',
+  address: '',
+  city: '',
+  department: '',
+  country: 'Colombia',
+  phone: '',
+  email: '',
+  responsible: '',
+  status: 'ACTIVE',
+  is_active: true,
+};
+
+const DOCUMENT_TYPE_OPTIONS: Array<{ value: EmployeeDocumentType; label: string }> = [
+  { value: 'ID_COPY', label: 'Copia de cédula' },
+  { value: 'RESUME', label: 'Hoja de vida con soportes' },
+  { value: 'SIGNED_CONTRACT', label: 'Contrato firmado' },
+  { value: 'BANK_CERTIFICATE', label: 'Certificado bancario' },
+  { value: 'EPS_CERTIFICATE', label: 'Certificado EPS' },
+  { value: 'PENSION_CERTIFICATE', label: 'Certificado de pensión' },
+  { value: 'SEVERANCE_CERTIFICATE', label: 'Certificado de cesantías' },
+  { value: 'ARL_CERTIFICATE', label: 'Certificado ARL' },
+  { value: 'COMPENSATION_CERTIFICATE', label: 'Certificado Caja de Compensación' },
+  { value: 'WORK_CERTIFICATE', label: 'Certificados laborales' },
+  { value: 'OTHER', label: 'Otros documentos' },
+];
+
+const MODAL_TABS: Array<{ id: EmployeeModalTab; label: string; icon: typeof Users }> = [
+  { id: 'personal', label: 'Información Personal', icon: Users },
+  { id: 'labor', label: 'Información Laboral', icon: Briefcase },
+  { id: 'social', label: 'Seguridad Social', icon: ShieldCheck },
+  { id: 'banking', label: 'Datos Bancarios', icon: Landmark },
+  { id: 'payroll', label: 'Nómina', icon: Wallet },
+  { id: 'emergency', label: 'Emergencia', icon: HeartPulse },
+  { id: 'documents', label: 'Documentos', icon: FileText },
+  { id: 'access', label: 'Acceso', icon: KeyRound },
+  { id: 'history', label: 'Historial', icon: History },
+];
 
 function parseDate(value: string | null | undefined): string {
   if (!value) return 'Sin fecha';
   return new Date(value).toLocaleDateString('es-CO');
 }
 
-function formatCurrency(amount: number | string): string {
-  const parsed = typeof amount === 'number' ? amount : Number(amount);
+function formatCurrency(amount: number | string | null | undefined): string {
+  const parsed = typeof amount === 'number' ? amount : Number(amount ?? 0);
   return new Intl.NumberFormat('es-CO', {
     style: 'currency',
     currency: 'COP',
@@ -96,12 +304,17 @@ function formatCurrency(amount: number | string): string {
 }
 
 function getEmployeeName(employee: Employee): string {
-  return `${employee.first_name} ${employee.last_name}`.trim() || employee.employee_code;
+  return `${employee.first_name} ${employee.last_name}`.trim() || employee.employee_code || 'Empleado sin nombre';
+}
+
+function optionLabel<T extends string>(options: Array<{ value: T; label: string }>, value: string): string {
+  return options.find((option) => option.value === value)?.label ?? value;
 }
 
 function statusLabel(status: EmployeeStatus): string {
   const labels: Record<EmployeeStatus, string> = {
     ACTIVE: 'Activo',
+    INACTIVE: 'Inactivo',
     LEAVE: 'En licencia',
     SUSPENDED: 'Suspendido',
     TERMINATED: 'Retirado',
@@ -109,69 +322,114 @@ function statusLabel(status: EmployeeStatus): string {
   return labels[status];
 }
 
-function statusBadge(status: EmployeeStatus): string {
-  const styles: Record<EmployeeStatus, string> = {
-    ACTIVE: 'bg-green-50 text-green-700 border-green-200',
-    LEAVE: 'bg-blue-50 text-blue-700 border-blue-200',
-    SUSPENDED: 'bg-amber-50 text-amber-700 border-amber-200',
-    TERMINATED: 'bg-red-50 text-red-700 border-red-200',
+function profileStatusLabel(status: EmployeeProfileStatus): string {
+  const labels: Record<EmployeeProfileStatus, string> = {
+    DRAFT: 'Borrador',
+    REGISTERED: 'Registrado',
+    INCOMPLETE: 'Incompleto',
+    COMPLETE: 'Completo',
+    DOCUMENTED: 'Documentado',
+    RETIRED: 'Retirado',
   };
-  return styles[status];
+  return labels[status];
+}
+
+function statusBadge(status: EmployeeStatus | EmployeeProfileStatus | EmployeeDocumentStatus | VacationRequestStatus): string {
+  const styles: Record<string, string> = {
+    ACTIVE: 'bg-green-50 text-green-700 border-green-200',
+    COMPLETE: 'bg-green-50 text-green-700 border-green-200',
+    DOCUMENTED: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    LOADED: 'bg-green-50 text-green-700 border-green-200',
+    APPROVED: 'bg-green-50 text-green-700 border-green-200',
+    REGISTERED: 'bg-blue-50 text-blue-700 border-blue-200',
+    LEAVE: 'bg-blue-50 text-blue-700 border-blue-200',
+    DRAFT: 'bg-stone-50 text-stone-700 border-stone-200',
+    INCOMPLETE: 'bg-amber-50 text-amber-700 border-amber-200',
+    PENDING: 'bg-amber-50 text-amber-700 border-amber-200',
+    IN_REVIEW: 'bg-purple-50 text-purple-700 border-purple-200',
+    INACTIVE: 'bg-stone-50 text-stone-700 border-stone-200',
+    NOT_APPLICABLE: 'bg-stone-50 text-stone-700 border-stone-200',
+    SUSPENDED: 'bg-orange-50 text-orange-700 border-orange-200',
+    TERMINATED: 'bg-red-50 text-red-700 border-red-200',
+    RETIRED: 'bg-red-50 text-red-700 border-red-200',
+    EXPIRED: 'bg-red-50 text-red-700 border-red-200',
+    REJECTED: 'bg-red-50 text-red-700 border-red-200',
+  };
+  return styles[status] ?? 'bg-secondary text-muted-foreground border-border';
 }
 
 function requestStatusLabel(status: VacationRequestStatus): string {
   const labels: Record<VacationRequestStatus, string> = {
     PENDING: 'Pendiente',
+    IN_REVIEW: 'En revisión',
     APPROVED: 'Aprobada',
     REJECTED: 'Rechazada',
+    EXPIRED: 'Vencida',
   };
   return labels[status];
 }
 
-function requestStatusBadge(status: VacationRequestStatus): string {
-  const styles: Record<VacationRequestStatus, string> = {
-    PENDING: 'bg-amber-50 text-amber-700 border-amber-200',
-    APPROVED: 'bg-green-50 text-green-700 border-green-200',
-    REJECTED: 'bg-red-50 text-red-700 border-red-200',
+function documentStatusLabel(status: EmployeeDocumentStatus): string {
+  const labels: Record<EmployeeDocumentStatus, string> = {
+    PENDING: 'Pendiente',
+    LOADED: 'Cargado',
+    REJECTED: 'Rechazado',
+    EXPIRED: 'Vencido',
+    NOT_APPLICABLE: 'No aplica',
   };
-  return styles[status];
-}
-
-function formatTime(value: string | null | undefined): string {
-  if (!value) return 'Sin hora';
-  const normalized = value.length === 5 ? `${value}:00` : value;
-  const parsed = new Date(`1970-01-01T${normalized}`);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleTimeString('es-CO', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  });
+  return labels[status];
 }
 
 function getRequestTypeLabel(type: string): string {
-  return type === 'PERMISSION' ? 'Permiso' : 'Vacaciones';
+  const labels: Record<string, string> = {
+    PERMISSION: 'Permiso',
+    OVERTIME: 'Horas extras',
+    LEAVE: 'Licencia',
+    INCAPACITY: 'Incapacidad',
+    VACATION: 'Vacaciones',
+    OTHER: 'Otro',
+  };
+  return labels[type] ?? type;
 }
 
-function getRequestScheduleLabel(request: VacationRequest): string {
-  const dateLabel =
-    request.start_date === request.end_date
-      ? parseDate(request.start_date)
-      : `${parseDate(request.start_date)} - ${parseDate(request.end_date)}`;
+function getRequestSubtypeLabel(subtype: string): string {
+  const labels: Record<string, string> = {
+    PERSONAL: 'Personal',
+    MEDICAL: 'Médico',
+    ACADEMIC: 'Académico',
+    FAMILY: 'Familiar',
+    DAYTIME: 'Diurnas',
+    NIGHT: 'Nocturnas',
+    SUNDAY: 'Dominicales',
+    HOLIDAY: 'Festivas',
+    MATERNITY: 'Maternidad',
+    PATERNITY: 'Paternidad',
+    BEREAVEMENT: 'Luto',
+    MARRIAGE: 'Matrimonio',
+    DOMESTIC_CALAMITY: 'Calamidad doméstica',
+    UNPAID: 'No remunerada',
+    GENERAL_ILLNESS: 'Enfermedad general',
+    WORK_ACCIDENT: 'Accidente laboral',
+    COMMON_ACCIDENT: 'Accidente común',
+    OCCUPATIONAL_DISEASE: 'Enfermedad laboral',
+    INDIVIDUAL: 'Individuales',
+    COLLECTIVE: 'Colectivas',
+    SHIFT_CHANGE: 'Cambio de turno',
+    SCHEDULE_CHANGE: 'Cambio de horario',
+    ADMINISTRATIVE: 'Solicitud administrativa',
+    OTHER: 'Otro',
+  };
+  return labels[subtype] ?? (subtype || 'Sin subtipo');
+}
 
-  if (request.is_full_day) {
-    return `${dateLabel} · Jornada completa`;
-  }
-
-  if (request.start_time && request.end_time) {
-    return `${dateLabel} · ${formatTime(request.start_time)} - ${formatTime(request.end_time)}`;
-  }
-
-  if (request.start_time) {
-    return `${dateLabel} · Desde ${formatTime(request.start_time)} hasta fin del día`;
-  }
-
-  return `${dateLabel} · Horario parcial`;
+function approvalStepLabel(step: string): string {
+  const labels: Record<string, string> = {
+    REQUESTER: 'Solicitante',
+    MANAGER: 'Jefe inmediato',
+    HR: 'RRHH',
+    FINAL: 'Aprobación final',
+  };
+  return labels[step] ?? step;
 }
 
 function getSupportDocumentName(url: string): string {
@@ -179,47 +437,301 @@ function getSupportDocumentName(url: string): string {
   return decodeURIComponent(cleanUrl.split('/').pop() ?? 'soporte');
 }
 
-const INTERNAL_EMPLOYEE_ROLES: UserRole[] = ['ADMIN', 'RRHH', 'EMPLEADO', 'PEDIDOS', 'SELLER', 'DISTRIBUTOR'];
+function fieldValue(value: string | null | undefined): string {
+  return value ?? '';
+}
+
+function mapEmployeeToForm(employee: Employee): EmployeeFormState {
+  return {
+    ...EMPTY_EMPLOYEE_FORM,
+    user: employee.user ?? '',
+    user_role: employee.user_role_code ?? '',
+    user_email: employee.email,
+    user_email_confirm: employee.email,
+    employee_code: employee.employee_code,
+    profile_status: employee.profile_status,
+    document_type: employee.document_type || 'CC',
+    document_number: fieldValue(employee.document_number),
+    document_issue_date: fieldValue(employee.document_issue_date),
+    document_issue_place: employee.document_issue_place,
+    first_name: employee.first_name,
+    last_name: employee.last_name,
+    date_of_birth: fieldValue(employee.date_of_birth),
+    email: employee.email,
+    phone: employee.phone,
+    address: employee.address,
+    city: employee.city,
+    residence_department: employee.residence_department,
+    photo: null,
+    nationality: employee.nationality || 'Colombiana',
+    gender: employee.gender,
+    marital_status: employee.marital_status,
+    department: employee.department ?? '',
+    position: employee.position ?? '',
+    manager: employee.manager ?? '',
+    employment_type: employee.employment_type,
+    contract_type: employee.contract_type,
+    hire_date: fieldValue(employee.hire_date),
+    base_salary: employee.base_salary ? String(Number(employee.base_salary)) : '',
+    termination_date: fieldValue(employee.termination_date),
+    status: employee.status,
+    branch: employee.branch ?? '',
+    cost_center: employee.cost_center,
+    work_modality: employee.work_modality,
+    termination_reason: employee.termination_reason,
+    work_observations: employee.work_observations,
+    eps: employee.eps,
+    pension_fund: employee.pension_fund,
+    severance_fund: employee.severance_fund,
+    arl: employee.arl,
+    arl_risk_level: employee.arl_risk_level,
+    compensation_fund: employee.compensation_fund,
+    bank_name: employee.bank_name,
+    bank_account_type: employee.bank_account_type,
+    bank_account_number: employee.bank_account_number,
+    bank_account_holder: employee.bank_account_holder,
+    bank_account_holder_document: employee.bank_account_holder_document,
+    salary_type: employee.salary_type,
+    transport_allowance_applies: employee.transport_allowance_applies,
+    integral_salary: employee.integral_salary,
+    weekly_working_hours: employee.weekly_working_hours ? String(Number(employee.weekly_working_hours)) : '',
+    working_days: employee.working_days ?? [],
+    emergency_contact_name: employee.emergency_contact_name,
+    emergency_contact_relationship: employee.emergency_contact_relationship,
+    emergency_contact_mobile: employee.emergency_contact_mobile,
+    emergency_contact_alternate_phone: employee.emergency_contact_alternate_phone,
+    emergency_contact_address: employee.emergency_contact_address,
+  };
+}
+
+function cleanNullable(value: string): string | null {
+  return value.trim() ? value.trim() : null;
+}
+
+function buildEmployeePayload(form: EmployeeFormState): EmployeePayload {
+  return {
+    ...(form.user ? { user: form.user } : {}),
+    ...(form.user_role ? { user_role: form.user_role } : {}),
+    ...(form.user_email ? { user_email: form.user_email.trim().toLowerCase() } : {}),
+    ...(form.user_email_confirm ? { user_email_confirm: form.user_email_confirm.trim().toLowerCase() } : {}),
+    ...(form.user_password ? { user_password: form.user_password } : {}),
+    ...(form.user_password_confirm ? { user_password_confirm: form.user_password_confirm } : {}),
+    employee_code: form.employee_code.trim(),
+    profile_status: form.profile_status,
+    document_type: form.document_type as EmployeePayload['document_type'],
+    document_number: cleanNullable(form.document_number),
+    document_issue_date: cleanNullable(form.document_issue_date),
+    document_issue_place: form.document_issue_place.trim(),
+    first_name: form.first_name.trim(),
+    last_name: form.last_name.trim(),
+    date_of_birth: cleanNullable(form.date_of_birth),
+    email: form.email.trim().toLowerCase(),
+    phone: form.phone.trim(),
+    address: form.address.trim(),
+    city: form.city.trim(),
+    residence_department: form.residence_department.trim(),
+    ...(form.photo ? { photo: form.photo } : {}),
+    nationality: form.nationality.trim(),
+    gender: form.gender as EmployeePayload['gender'],
+    marital_status: form.marital_status as EmployeePayload['marital_status'],
+    department: cleanNullable(form.department),
+    position: cleanNullable(form.position),
+    manager: cleanNullable(form.manager),
+    employment_type: form.employment_type as EmployeePayload['employment_type'],
+    contract_type: form.contract_type as EmployeePayload['contract_type'],
+    hire_date: cleanNullable(form.hire_date),
+    ...(form.base_salary ? { base_salary: form.base_salary } : {}),
+    termination_date: cleanNullable(form.termination_date),
+    status: form.status,
+    branch: cleanNullable(form.branch),
+    cost_center: form.cost_center.trim(),
+    work_modality: form.work_modality as EmployeePayload['work_modality'],
+    termination_reason: form.termination_reason.trim(),
+    work_observations: form.work_observations.trim(),
+    eps: form.eps.trim(),
+    pension_fund: form.pension_fund.trim(),
+    severance_fund: form.severance_fund.trim(),
+    arl: form.arl.trim(),
+    arl_risk_level: form.arl_risk_level.trim(),
+    compensation_fund: form.compensation_fund.trim(),
+    bank_name: form.bank_name.trim(),
+    bank_account_type: form.bank_account_type as EmployeePayload['bank_account_type'],
+    bank_account_number: form.bank_account_number.trim(),
+    bank_account_holder: form.bank_account_holder.trim(),
+    bank_account_holder_document: form.bank_account_holder_document.trim(),
+    salary_type: form.salary_type as EmployeePayload['salary_type'],
+    transport_allowance_applies: form.transport_allowance_applies,
+    integral_salary: form.integral_salary,
+    weekly_working_hours: cleanNullable(form.weekly_working_hours),
+    working_days: form.working_days,
+    emergency_contact_name: form.emergency_contact_name.trim(),
+    emergency_contact_relationship: form.emergency_contact_relationship.trim(),
+    emergency_contact_mobile: form.emergency_contact_mobile.trim(),
+    emergency_contact_alternate_phone: form.emergency_contact_alternate_phone.trim(),
+    emergency_contact_address: form.emergency_contact_address.trim(),
+  };
+}
+
+function TextInput({
+  label,
+  value,
+  onChange,
+  type = 'text',
+  required = false,
+  placeholder = '',
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+  required?: boolean;
+  placeholder?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="block text-xs mb-2">{label}{required ? ' *' : ''}</span>
+      <input
+        type={type}
+        required={required}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="w-full px-4 py-2.5 border border-border bg-background focus:outline-none focus:border-foreground text-sm"
+        placeholder={placeholder}
+      />
+    </label>
+  );
+}
+
+function SelectInput({
+  label,
+  value,
+  onChange,
+  options,
+  required = false,
+  emptyLabel = 'Selecciona una opción',
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<{ value: string; label: string }>;
+  required?: boolean;
+  emptyLabel?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="block text-xs mb-2">{label}{required ? ' *' : ''}</span>
+      <select
+        required={required}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="w-full px-4 py-2.5 border border-border bg-background focus:outline-none focus:border-foreground text-sm"
+      >
+        <option value="">{emptyLabel}</option>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function TextareaInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="block text-xs mb-2">{label}</span>
+      <textarea
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        rows={3}
+        className="w-full px-4 py-2.5 border border-border bg-background focus:outline-none focus:border-foreground text-sm"
+      />
+    </label>
+  );
+}
+
+function ToggleInput({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) {
+  return (
+    <label className="flex items-center gap-3 px-4 py-3 border border-border bg-secondary/20 text-sm">
+      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+      {label}
+    </label>
+  );
+}
 
 export function AdminHR() {
   const toast = useToast();
   const [activeTab, setActiveTab] = useState<HRTab>('employees');
+  const [employeeModalTab, setEmployeeModalTab] = useState<EmployeeModalTab>('personal');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterDepartment, setFilterDepartment] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [branchSort, setBranchSort] = useState<'name' | 'code' | 'city' | 'status'>('name');
+  const [branchPage, setBranchPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [savingEmployee, setSavingEmployee] = useState(false);
+  const [savingDocument, setSavingDocument] = useState(false);
+  const [savingBranch, setSavingBranch] = useState(false);
   const [deletingEmployeeId, setDeletingEmployeeId] = useState<string | null>(null);
+  const [deletingBranchId, setDeletingBranchId] = useState<string | null>(null);
   const [vacationActionId, setVacationActionId] = useState<string | null>(null);
   const [showEmployeeModal, setShowEmployeeModal] = useState(false);
+  const [showEmployeeDetailModal, setShowEmployeeDetailModal] = useState(false);
+  const [showBranchModal, setShowBranchModal] = useState(false);
+  const [showBranchDetailModal, setShowBranchDetailModal] = useState(false);
+  const [showRequestDetailModal, setShowRequestDetailModal] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const [viewingEmployee, setViewingEmployee] = useState<Employee | null>(null);
+  const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
+  const [viewingBranch, setViewingBranch] = useState<Branch | null>(null);
+  const [viewingRequest, setViewingRequest] = useState<VacationRequest | null>(null);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [workDays, setWorkDays] = useState<WorkDay[]>([]);
   const [vacationRequests, setVacationRequests] = useState<VacationRequest[]>([]);
+  const [notifications, setNotifications] = useState<HRNotification[]>([]);
+  const [employeeDocuments, setEmployeeDocuments] = useState<EmployeeDocument[]>([]);
+  const [changeLogs, setChangeLogs] = useState<EmployeeChangeLog[]>([]);
+  const [salaryHistory, setSalaryHistory] = useState<EmployeeSalaryHistory[]>([]);
+  const [positionHistory, setPositionHistory] = useState<EmployeePositionHistory[]>([]);
+  const [requestsDashboard, setRequestsDashboard] = useState<RequestsDashboard | null>(null);
   const [employeeForm, setEmployeeForm] = useState<EmployeeFormState>(EMPTY_EMPLOYEE_FORM);
+  const [documentForm, setDocumentForm] = useState<DocumentFormState>(EMPTY_DOCUMENT_FORM);
+  const [branchForm, setBranchForm] = useState<BranchFormState>(EMPTY_BRANCH_FORM);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [departmentsRes, positionsRes, employeesRes, vacationsRes] = await Promise.allSettled([
+      const [departmentsRes, positionsRes, branchesRes, workDaysRes, employeesRes, vacationsRes, notificationsRes, dashboardRes] = await Promise.allSettled([
         getDepartments({ limit: 200 }),
-        getPositions({ limit: 200 }),
+        getPositions({ limit: 300 }),
+        getBranches({ limit: 200 }),
+        getWorkDays({ limit: 20 }),
         getEmployees({ limit: 200 }),
         getVacationRequests({ limit: 200 }),
+        getHRNotifications({ limit: 200, status: 'UNREAD' }),
+        getRequestsDashboard(),
       ]);
 
       if (departmentsRes.status === 'fulfilled') setDepartments(departmentsRes.value.data);
       if (positionsRes.status === 'fulfilled') setPositions(positionsRes.value.data);
+      if (branchesRes.status === 'fulfilled') setBranches(branchesRes.value.data);
+      if (workDaysRes.status === 'fulfilled') setWorkDays(workDaysRes.value.data);
       if (employeesRes.status === 'fulfilled') setEmployees(employeesRes.value.data);
       if (vacationsRes.status === 'fulfilled') setVacationRequests(vacationsRes.value.data);
-
-      const failures = [departmentsRes, positionsRes, employeesRes, vacationsRes].filter(
-        (result) => result.status === 'rejected',
-      );
-      if (failures.length > 0) {
-        console.warn('RRHH data partially unavailable', failures);
-      }
+      if (notificationsRes.status === 'fulfilled') setNotifications(notificationsRes.value.data);
+      if (dashboardRes.status === 'fulfilled') setRequestsDashboard(dashboardRes.value);
     } catch (error) {
       console.error(error);
       toast.error('No se pudo cargar la información de RRHH');
@@ -232,142 +744,243 @@ export function AdminHR() {
     void loadData();
   }, [loadData]);
 
-  const departmentById = useMemo(() => new Map(departments.map(department => [department.id, department])), [departments]);
-  const positionById = useMemo(() => new Map(positions.map(position => [position.id, position])), [positions]);
-  const employeeById = useMemo(() => new Map(employees.map(employee => [employee.id, employee])), [employees]);
+  const departmentById = useMemo(() => new Map(departments.map((department) => [department.id, department])), [departments]);
+  const positionById = useMemo(() => new Map(positions.map((position) => [position.id, position])), [positions]);
+  const branchById = useMemo(() => new Map(branches.map((branch) => [branch.id, branch])), [branches]);
+  const employeeById = useMemo(() => new Map(employees.map((employee) => [employee.id, employee])), [employees]);
 
   const positionsForSelectedDepartment = useMemo(
-    () => positions.filter(position => position.department === employeeForm.department),
+    () => positions.filter((position) => position.department === employeeForm.department),
     [employeeForm.department, positions],
   );
 
   const filteredEmployees = useMemo(() => {
+    const query = searchQuery.toLowerCase().trim();
     return employees.filter((employee) => {
-      const department = departmentById.get(employee.department);
-      const position = positionById.get(employee.position);
+      const department = employee.department ? departmentById.get(employee.department) : null;
+      const position = employee.position ? positionById.get(employee.position) : null;
+      const branch = employee.branch ? branchById.get(employee.branch) : null;
       const matchesSearch =
-        searchQuery.trim() === '' ||
-        getEmployeeName(employee).toLowerCase().includes(searchQuery.toLowerCase()) ||
-        employee.employee_code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        employee.document_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        employee.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        department?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        position?.name.toLowerCase().includes(searchQuery.toLowerCase());
-
+        !query ||
+        getEmployeeName(employee).toLowerCase().includes(query) ||
+        employee.employee_code.toLowerCase().includes(query) ||
+        (employee.document_number ?? '').toLowerCase().includes(query) ||
+        employee.email.toLowerCase().includes(query) ||
+        department?.name.toLowerCase().includes(query) ||
+        position?.name.toLowerCase().includes(query) ||
+        branch?.name.toLowerCase().includes(query);
       const matchesDepartment = filterDepartment === 'all' || employee.department === filterDepartment;
-      const matchesStatus = filterStatus === 'all' || employee.status === filterStatus;
-
+      const matchesStatus = filterStatus === 'all' || employee.status === filterStatus || employee.profile_status === filterStatus;
       return matchesSearch && matchesDepartment && matchesStatus;
     });
-  }, [departmentById, employees, filterDepartment, filterStatus, positionById, searchQuery]);
+  }, [branchById, departmentById, employees, filterDepartment, filterStatus, positionById, searchQuery]);
+
+  const filteredBranches = useMemo(() => {
+    const query = searchQuery.toLowerCase().trim();
+    return branches.filter((branch) => {
+      const matchesSearch =
+        !query ||
+        branch.name.toLowerCase().includes(query) ||
+        branch.code.toLowerCase().includes(query) ||
+        branch.city.toLowerCase().includes(query) ||
+        branch.department.toLowerCase().includes(query) ||
+        branch.country.toLowerCase().includes(query) ||
+        branch.responsible_name.toLowerCase().includes(query);
+      const matchesStatus = filterStatus === 'all' || branch.status === filterStatus;
+      return matchesSearch && matchesStatus;
+    });
+  }, [branches, filterStatus, searchQuery]);
+
+  const sortedBranches = useMemo(() => {
+    return [...filteredBranches].sort((left, right) => {
+      const leftValue = String(left[branchSort] ?? '').toLowerCase();
+      const rightValue = String(right[branchSort] ?? '').toLowerCase();
+      return leftValue.localeCompare(rightValue, 'es');
+    });
+  }, [branchSort, filteredBranches]);
+
+  const paginatedBranches = useMemo(() => {
+    const start = (branchPage - 1) * 10;
+    return sortedBranches.slice(start, start + 10);
+  }, [branchPage, sortedBranches]);
+
+  const branchTotalPages = Math.max(1, Math.ceil(sortedBranches.length / 10));
 
   const filteredVacationRequests = useMemo(() => {
+    const query = searchQuery.toLowerCase().trim();
     return vacationRequests.filter((request) => {
       const employee = employeeById.get(request.employee);
       const matchesSearch =
-        searchQuery.trim() === '' ||
-        employee?.first_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        employee?.last_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        employee?.employee_code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        request.reason.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesDepartment =
-        filterDepartment === 'all' || (employee ? employee.department === filterDepartment : false);
+        !query ||
+        employee?.first_name.toLowerCase().includes(query) ||
+        employee?.last_name.toLowerCase().includes(query) ||
+        employee?.employee_code.toLowerCase().includes(query) ||
+        request.reason.toLowerCase().includes(query);
+      const matchesDepartment = filterDepartment === 'all' || employee?.department === filterDepartment;
       const matchesStatus = filterStatus === 'all' || request.status === filterStatus;
       return matchesSearch && matchesDepartment && matchesStatus;
     });
   }, [employeeById, filterDepartment, filterStatus, searchQuery, vacationRequests]);
 
-  const stats = useMemo(() => {
-    return {
-      totalEmployees: employees.length,
-      activeEmployees: employees.filter(employee => employee.status === 'ACTIVE').length,
-      leaveEmployees: employees.filter(employee => employee.status === 'LEAVE').length,
-      pendingRequests: vacationRequests.filter(request => request.status === 'PENDING').length,
-    };
-  }, [employees, vacationRequests]);
+  const stats = useMemo(() => ({
+    profileCompletion: employees.length
+      ? Math.round(employees.reduce((sum, employee) => sum + employee.profile_completion_percentage, 0) / employees.length)
+      : 0,
+    pending: employees.reduce((sum, employee) => sum + employee.pending_documents_count, 0),
+    expiredDocuments: employees.reduce((sum, employee) => sum + employee.expired_documents_count, 0),
+    contractRemaining: (() => {
+      const finiteContracts = employees
+        .map((employee) => employee.remaining_contract_days)
+        .filter((value): value is number => typeof value === 'number');
+      if (finiteContracts.length === 0) return 'Contrato indefinido';
+      return `${Math.min(...finiteContracts)} días`;
+    })(),
+  }), [employees]);
+
+  const setFormField = <K extends keyof EmployeeFormState>(key: K, value: EmployeeFormState[K]) => {
+    setEmployeeForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const loadEmployeeExtras = async (employeeId: string) => {
+    const [documentsRes, changesRes, salariesRes, positionsRes] = await Promise.allSettled([
+      getEmployeeDocuments({ employee: employeeId, limit: 200 }),
+      getEmployeeChangeLogs(employeeId),
+      getEmployeeSalaryHistory(employeeId),
+      getEmployeePositionHistory(employeeId),
+    ]);
+    setEmployeeDocuments(documentsRes.status === 'fulfilled' ? documentsRes.value.data : []);
+    setChangeLogs(changesRes.status === 'fulfilled' ? changesRes.value.data : []);
+    setSalaryHistory(salariesRes.status === 'fulfilled' ? salariesRes.value.data : []);
+    setPositionHistory(positionsRes.status === 'fulfilled' ? positionsRes.value.data : []);
+  };
 
   const openCreateModal = () => {
     setEditingEmployee(null);
     setEmployeeForm(EMPTY_EMPLOYEE_FORM);
+    setDocumentForm(EMPTY_DOCUMENT_FORM);
+    setEmployeeDocuments([]);
+    setChangeLogs([]);
+    setSalaryHistory([]);
+    setPositionHistory([]);
+    setEmployeeModalTab('personal');
     setShowEmployeeModal(true);
   };
 
   const openEditModal = (employee: Employee) => {
     setEditingEmployee(employee);
-    setEmployeeForm({
-      user: employee.user ?? '',
-      user_role: employee.user_role_code ?? '',
-      user_password: '',
-      employee_code: employee.employee_code,
-      document_number: employee.document_number,
-      first_name: employee.first_name,
-      last_name: employee.last_name,
-      email: employee.email,
-      phone: employee.phone,
-      address: employee.address,
-      department: employee.department,
-      position: employee.position,
-      manager: employee.manager ?? '',
-      hire_date: employee.hire_date,
-      termination_date: employee.termination_date ?? '',
-      status: employee.status,
-    });
+    setEmployeeForm(mapEmployeeToForm(employee));
+    setDocumentForm(EMPTY_DOCUMENT_FORM);
+    setEmployeeModalTab('personal');
     setShowEmployeeModal(true);
+    void loadEmployeeExtras(employee.id);
+  };
+
+  const openEmployeeDetailModal = (employee: Employee) => {
+    setViewingEmployee(employee);
+    setEmployeeModalTab('personal');
+    setShowEmployeeDetailModal(true);
+    void loadEmployeeExtras(employee.id);
+  };
+
+  const openCreateBranchModal = () => {
+    setEditingBranch(null);
+    setBranchForm(EMPTY_BRANCH_FORM);
+    setShowBranchModal(true);
+  };
+
+  const openEditBranchModal = (branch: Branch) => {
+    setEditingBranch(branch);
+    setBranchForm({
+      code: branch.code,
+      name: branch.name,
+      address: branch.address,
+      city: branch.city,
+      department: branch.department,
+      country: branch.country || 'Colombia',
+      phone: branch.phone,
+      email: branch.email,
+      responsible: branch.responsible ?? '',
+      status: branch.status,
+      is_active: branch.is_active,
+    });
+    setShowBranchModal(true);
+  };
+
+  const openBranchDetailModal = (branch: Branch) => {
+    setViewingBranch(branch);
+    setShowBranchDetailModal(true);
+  };
+
+  const openRequestDetailModal = (request: VacationRequest) => {
+    setViewingRequest(request);
+    setShowRequestDetailModal(true);
   };
 
   const resetEmployeeModal = () => {
     setShowEmployeeModal(false);
     setEditingEmployee(null);
     setEmployeeForm(EMPTY_EMPLOYEE_FORM);
+    setDocumentForm(EMPTY_DOCUMENT_FORM);
+  };
+
+  const resetBranchModal = () => {
+    setShowBranchModal(false);
+    setEditingBranch(null);
+    setBranchForm(EMPTY_BRANCH_FORM);
+  };
+
+  const handleDocumentUpload = async (employeeId: string) => {
+    if (!documentForm.document_type) return;
+    setSavingDocument(true);
+    try {
+      await createEmployeeDocument({
+        employee: employeeId,
+        document_type: documentForm.document_type,
+        name: documentForm.name || optionLabel(DOCUMENT_TYPE_OPTIONS, documentForm.document_type),
+        file: documentForm.file,
+        issued_at: cleanNullable(documentForm.issued_at),
+        expires_at: cleanNullable(documentForm.expires_at),
+        status: documentForm.status,
+        observations: documentForm.observations,
+      });
+      toast.success('Documento registrado');
+      setDocumentForm(EMPTY_DOCUMENT_FORM);
+      await loadEmployeeExtras(employeeId);
+      await loadData();
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo registrar el documento');
+    } finally {
+      setSavingDocument(false);
+    }
   };
 
   const handleEmployeeSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setSavingEmployee(true);
-
-    const payload: EmployeePayload = {
-      ...(employeeForm.user ? { user: employeeForm.user } : {}),
-      ...(employeeForm.user_role ? { user_role: employeeForm.user_role } : {}),
-      ...(employeeForm.user_password ? { user_password: employeeForm.user_password } : {}),
-      employee_code: employeeForm.employee_code.trim(),
-      document_number: employeeForm.document_number.trim(),
-      first_name: employeeForm.first_name.trim(),
-      last_name: employeeForm.last_name.trim(),
-      email: employeeForm.email.trim().toLowerCase(),
-      phone: employeeForm.phone.trim(),
-      address: employeeForm.address.trim(),
-      department: employeeForm.department,
-      position: employeeForm.position,
-      ...(employeeForm.manager ? { manager: employeeForm.manager } : {}),
-      hire_date: employeeForm.hire_date,
-      ...(employeeForm.termination_date ? { termination_date: employeeForm.termination_date } : { termination_date: null }),
-      status: employeeForm.status,
-    };
-
     try {
-      if (editingEmployee) {
-        await updateEmployee(editingEmployee.id, payload);
-        toast.success(`Empleado ${getEmployeeName(editingEmployee)} actualizado`);
-      } else {
-        await createEmployee(payload);
-        toast.success(`Empleado ${payload.first_name} ${payload.last_name}`.trim() || 'Empleado creado');
+      const payload = buildEmployeePayload(employeeForm);
+      const savedEmployee = editingEmployee
+        ? await updateEmployee(editingEmployee.id, payload)
+        : await createEmployee(payload);
+
+      if (documentForm.file || documentForm.status !== 'PENDING' || documentForm.observations.trim()) {
+        await handleDocumentUpload(savedEmployee.id);
       }
 
+      toast.success(editingEmployee ? 'Empleado actualizado' : 'Empleado registrado');
       await loadData();
       resetEmployeeModal();
     } catch (error) {
       console.error(error);
-      toast.error('No se pudo guardar el empleado');
+      toast.error('No se pudo guardar el empleado. Revisa duplicados, correo y salario.');
     } finally {
       setSavingEmployee(false);
     }
   };
 
   const handleDeleteEmployee = async (employee: Employee) => {
-    if (!window.confirm(`¿Eliminar a ${getEmployeeName(employee)}?`)) {
-      return;
-    }
-
+    if (!window.confirm(`¿Eliminar a ${getEmployeeName(employee)}?`)) return;
     setDeletingEmployeeId(employee.id);
     try {
       await deleteEmployee(employee.id);
@@ -378,6 +991,55 @@ export function AdminHR() {
       toast.error('No se pudo eliminar el empleado');
     } finally {
       setDeletingEmployeeId(null);
+    }
+  };
+
+  const handleBranchSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setSavingBranch(true);
+    try {
+      const payload = {
+        code: branchForm.code.trim(),
+        name: branchForm.name.trim(),
+        address: branchForm.address.trim(),
+        city: branchForm.city.trim(),
+        department: branchForm.department.trim(),
+        country: branchForm.country.trim(),
+        phone: branchForm.phone.trim(),
+        email: branchForm.email.trim().toLowerCase(),
+        responsible: cleanNullable(branchForm.responsible),
+        status: branchForm.status,
+        is_active: branchForm.is_active,
+      };
+      if (editingBranch) {
+        await updateBranch(editingBranch.id, payload);
+        toast.success('Sede actualizada');
+      } else {
+        await createBranch(payload);
+        toast.success('Sede creada');
+      }
+      await loadData();
+      resetBranchModal();
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo guardar la sede');
+    } finally {
+      setSavingBranch(false);
+    }
+  };
+
+  const handleDeleteBranch = async (branch: Branch) => {
+    if (!window.confirm(`¿Eliminar la sede ${branch.name}?`)) return;
+    setDeletingBranchId(branch.id);
+    try {
+      await deleteBranch(branch.id);
+      toast.info('Sede eliminada');
+      await loadData();
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo eliminar la sede');
+    } finally {
+      setDeletingBranchId(null);
     }
   };
 
@@ -400,22 +1062,560 @@ export function AdminHR() {
     }
   };
 
-  const activeEmployees = employees.filter(employee => employee.status === 'ACTIVE');
-  const needsCredentialPair = !editingEmployee?.user && (employeeForm.user_role !== '' || employeeForm.user_password !== '');
+  const activeEmployees = employees.filter((employee) => employee.status === 'ACTIVE');
   const statusOptions = activeTab === 'vacations'
     ? [
         { value: 'all', label: 'Todos los estados' },
         { value: 'PENDING', label: 'Pendientes' },
+        { value: 'IN_REVIEW', label: 'En revisión' },
         { value: 'APPROVED', label: 'Aprobadas' },
         { value: 'REJECTED', label: 'Rechazadas' },
+        { value: 'EXPIRED', label: 'Vencidas' },
       ]
+    : activeTab === 'branches'
+      ? [
+          { value: 'all', label: 'Todos los estados' },
+          { value: 'ACTIVE', label: 'Activas' },
+          { value: 'INACTIVE', label: 'Inactivas' },
+        ]
     : [
         { value: 'all', label: 'Todos los estados' },
         { value: 'ACTIVE', label: 'Activos' },
-        { value: 'LEAVE', label: 'En licencia' },
+        { value: 'INACTIVE', label: 'Inactivos' },
         { value: 'SUSPENDED', label: 'Suspendidos' },
         { value: 'TERMINATED', label: 'Retirados' },
+        { value: 'DRAFT', label: 'Borradores' },
+        { value: 'INCOMPLETE', label: 'Incompletos' },
+        { value: 'DOCUMENTED', label: 'Documentados' },
       ];
+
+  const renderPersonalTab = () => (
+    <div className="space-y-4">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <SelectInput label="Tipo de documento" value={employeeForm.document_type} onChange={(value) => setFormField('document_type', value)} options={[
+          { value: 'CC', label: 'Cédula de ciudadanía' },
+          { value: 'CE', label: 'Cédula de extranjería' },
+          { value: 'PASSPORT', label: 'Pasaporte' },
+          { value: 'NIT', label: 'NIT' },
+          { value: 'OTHER', label: 'Otro' },
+        ]} />
+        <TextInput label="Número de documento" value={employeeForm.document_number} onChange={(value) => setFormField('document_number', value)} placeholder="123456789" />
+        <TextInput label="Fecha de expedición" type="date" value={employeeForm.document_issue_date} onChange={(value) => setFormField('document_issue_date', value)} />
+        <TextInput label="Lugar de expedición" value={employeeForm.document_issue_place} onChange={(value) => setFormField('document_issue_place', value)} />
+      </div>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <TextInput label="Nombres" value={employeeForm.first_name} onChange={(value) => setFormField('first_name', value)} />
+        <TextInput label="Apellidos" value={employeeForm.last_name} onChange={(value) => setFormField('last_name', value)} />
+        <TextInput label="Fecha de nacimiento" type="date" value={employeeForm.date_of_birth} onChange={(value) => setFormField('date_of_birth', value)} />
+        <TextInput label="Celular" type="tel" value={employeeForm.phone} onChange={(value) => setFormField('phone', value)} />
+        <TextInput label="Correo electrónico" type="email" value={employeeForm.email} onChange={(value) => {
+          setEmployeeForm((current) => ({ ...current, email: value, user_email: current.user_email || value, user_email_confirm: current.user_email_confirm || value }));
+        }} />
+        <TextInput label="Nacionalidad" value={employeeForm.nationality} onChange={(value) => setFormField('nationality', value)} />
+        <TextInput label="Ciudad / Municipio" value={employeeForm.city} onChange={(value) => setFormField('city', value)} />
+        <TextInput label="Departamento" value={employeeForm.residence_department} onChange={(value) => setFormField('residence_department', value)} />
+        <SelectInput label="Sexo / Género" value={employeeForm.gender} onChange={(value) => setFormField('gender', value)} options={[
+          { value: 'FEMALE', label: 'Femenino' },
+          { value: 'MALE', label: 'Masculino' },
+          { value: 'NON_BINARY', label: 'No binario' },
+          { value: 'OTHER', label: 'Otro' },
+          { value: 'NOT_SPECIFIED', label: 'Prefiere no decir' },
+        ]} />
+        <SelectInput label="Estado civil" value={employeeForm.marital_status} onChange={(value) => setFormField('marital_status', value)} options={[
+          { value: 'SINGLE', label: 'Soltero/a' },
+          { value: 'MARRIED', label: 'Casado/a' },
+          { value: 'FREE_UNION', label: 'Unión libre' },
+          { value: 'DIVORCED', label: 'Divorciado/a' },
+          { value: 'WIDOWED', label: 'Viudo/a' },
+          { value: 'OTHER', label: 'Otro' },
+        ]} />
+        <label className="block">
+          <span className="block text-xs mb-2">Foto del empleado</span>
+          <input type="file" accept="image/*" onChange={(event) => setFormField('photo', event.target.files?.[0] ?? null)} className="w-full px-4 py-2.5 border border-border bg-background text-sm" />
+        </label>
+      </div>
+      <TextareaInput label="Dirección de residencia" value={employeeForm.address} onChange={(value) => setFormField('address', value)} />
+    </div>
+  );
+
+  const renderLaborTab = () => (
+    <div className="space-y-4">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <TextInput label="Código interno" value={employeeForm.employee_code} onChange={(value) => setFormField('employee_code', value)} placeholder="Autogenerado si queda vacío" />
+        <SelectInput label="Estado del expediente" value={employeeForm.profile_status} onChange={(value) => setFormField('profile_status', value as EmployeeProfileStatus)} options={[
+          { value: 'DRAFT', label: 'Borrador' },
+          { value: 'REGISTERED', label: 'Registrado' },
+          { value: 'INCOMPLETE', label: 'Incompleto' },
+          { value: 'COMPLETE', label: 'Completo' },
+          { value: 'DOCUMENTED', label: 'Documentado' },
+          { value: 'RETIRED', label: 'Retirado' },
+        ]} emptyLabel="Estado" />
+        <SelectInput label="Área o dependencia" value={employeeForm.department} onChange={(value) => {
+          const keepPosition = positions.some((position) => position.department === value && position.id === employeeForm.position);
+          setEmployeeForm((current) => ({ ...current, department: value, position: keepPosition ? current.position : '' }));
+        }} options={departments.map((department) => ({ value: department.id, label: department.name }))} />
+        <SelectInput label="Cargo" value={employeeForm.position} onChange={(value) => setFormField('position', value)} options={positionsForSelectedDepartment.map((position) => ({ value: position.id, label: position.name }))} />
+        <SelectInput label="Tipo de vinculación" value={employeeForm.employment_type} onChange={(value) => setFormField('employment_type', value)} options={[
+          { value: 'EMPLOYEE', label: 'Empleado' },
+          { value: 'SENA_APPRENTICE', label: 'Aprendiz SENA' },
+          { value: 'INTERN', label: 'Practicante' },
+          { value: 'CONTRACTOR', label: 'Contratista' },
+        ]} emptyLabel="Tipo" />
+        <SelectInput label="Tipo de contrato" value={employeeForm.contract_type} onChange={(value) => setFormField('contract_type', value)} options={[
+          { value: 'INDEFINITE', label: 'Indefinido' },
+          { value: 'FIXED_TERM', label: 'Término fijo' },
+          { value: 'SERVICES', label: 'Prestación de servicios' },
+          { value: 'APPRENTICESHIP', label: 'Aprendizaje' },
+          { value: 'INTERNSHIP', label: 'Práctica' },
+          { value: 'OTHER', label: 'Otro' },
+        ]} emptyLabel="Contrato" />
+        <TextInput label="Fecha de ingreso" type="date" value={employeeForm.hire_date} onChange={(value) => setFormField('hire_date', value)} />
+        <TextInput label="Salario básico" type="number" value={employeeForm.base_salary} onChange={(value) => setFormField('base_salary', value)} />
+        <SelectInput label="Estado laboral" value={employeeForm.status} onChange={(value) => setFormField('status', value as EmployeeStatus)} options={[
+          { value: 'ACTIVE', label: 'Activo' },
+          { value: 'INACTIVE', label: 'Inactivo' },
+          { value: 'SUSPENDED', label: 'Suspendido' },
+          { value: 'TERMINATED', label: 'Retirado' },
+        ]} emptyLabel="Estado" />
+        <SelectInput label="Sede o sucursal" value={employeeForm.branch} onChange={(value) => setFormField('branch', value)} options={branches.map((branch) => ({ value: branch.id, label: `${branch.name} · ${branch.city || 'Sin ciudad'}` }))} />
+        <SelectInput label="Jefe inmediato" value={employeeForm.manager} onChange={(value) => setFormField('manager', value)} options={activeEmployees.filter((employee) => employee.id !== editingEmployee?.id).map((employee) => ({ value: employee.id, label: getEmployeeName(employee) }))} emptyLabel="Sin jefe asignado" />
+        <TextInput label="Centro de costos" value={employeeForm.cost_center} onChange={(value) => setFormField('cost_center', value)} />
+        <SelectInput label="Modalidad de trabajo" value={employeeForm.work_modality} onChange={(value) => setFormField('work_modality', value)} options={[
+          { value: 'ONSITE', label: 'Presencial' },
+          { value: 'REMOTE', label: 'Remoto' },
+          { value: 'HYBRID', label: 'Híbrido' },
+        ]} />
+        <TextInput label="Fecha de terminación" type="date" value={employeeForm.termination_date} onChange={(value) => setFormField('termination_date', value)} />
+      </div>
+      <TextareaInput label="Motivo de retiro" value={employeeForm.termination_reason} onChange={(value) => setFormField('termination_reason', value)} />
+      <TextareaInput label="Observaciones laborales" value={employeeForm.work_observations} onChange={(value) => setFormField('work_observations', value)} />
+    </div>
+  );
+
+  const renderSocialTab = () => (
+    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <TextInput label="EPS" value={employeeForm.eps} onChange={(value) => setFormField('eps', value)} />
+      <TextInput label="Fondo de pensiones" value={employeeForm.pension_fund} onChange={(value) => setFormField('pension_fund', value)} />
+      <TextInput label="Fondo de cesantías" value={employeeForm.severance_fund} onChange={(value) => setFormField('severance_fund', value)} />
+      <TextInput label="ARL" value={employeeForm.arl} onChange={(value) => setFormField('arl', value)} />
+      <TextInput label="Nivel de riesgo ARL" value={employeeForm.arl_risk_level} onChange={(value) => setFormField('arl_risk_level', value)} />
+      <TextInput label="Caja de compensación" value={employeeForm.compensation_fund} onChange={(value) => setFormField('compensation_fund', value)} />
+    </div>
+  );
+
+  const renderBankingTab = () => (
+    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <TextInput label="Banco" value={employeeForm.bank_name} onChange={(value) => setFormField('bank_name', value)} />
+      <SelectInput label="Tipo de cuenta" value={employeeForm.bank_account_type} onChange={(value) => setFormField('bank_account_type', value)} options={[
+        { value: 'SAVINGS', label: 'Ahorros' },
+        { value: 'CHECKING', label: 'Corriente' },
+      ]} />
+      <TextInput label="Número de cuenta" value={employeeForm.bank_account_number} onChange={(value) => setFormField('bank_account_number', value)} />
+      <TextInput label="Titular de la cuenta" value={employeeForm.bank_account_holder} onChange={(value) => setFormField('bank_account_holder', value)} />
+      <TextInput label="Documento del titular" value={employeeForm.bank_account_holder_document} onChange={(value) => setFormField('bank_account_holder_document', value)} />
+    </div>
+  );
+
+  const renderPayrollTab = () => (
+    <div className="space-y-4">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <SelectInput label="Tipo de salario" value={employeeForm.salary_type} onChange={(value) => setFormField('salary_type', value)} options={[
+          { value: 'FIXED', label: 'Fijo' },
+          { value: 'VARIABLE', label: 'Variable' },
+          { value: 'INTEGRAL', label: 'Integral' },
+        ]} emptyLabel="Tipo" />
+        <TextInput label="Salario básico" type="number" value={employeeForm.base_salary} onChange={(value) => setFormField('base_salary', value)} />
+        <TextInput label="Horas laborales semanales" type="number" value={employeeForm.weekly_working_hours} onChange={(value) => setFormField('weekly_working_hours', value)} />
+        <div className="space-y-2">
+          <ToggleInput label="Auxilio de transporte aplica" checked={employeeForm.transport_allowance_applies} onChange={(value) => setFormField('transport_allowance_applies', value)} />
+          <ToggleInput label="Salario integral" checked={employeeForm.integral_salary} onChange={(value) => setFormField('integral_salary', value)} />
+        </div>
+      </div>
+      <div>
+        <div className="text-xs mb-2">Días laborables</div>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
+          {workDays.length === 0 ? (
+            <div className="text-xs text-muted-foreground border border-border p-3">Configura días laborales desde administración.</div>
+          ) : workDays.map((day) => (
+            <label key={day.id} className="flex items-center gap-2 border border-border px-3 py-2 text-sm">
+              <input
+                type="checkbox"
+                checked={employeeForm.working_days.includes(day.id)}
+                onChange={(event) => {
+                  const next = event.target.checked
+                    ? [...employeeForm.working_days, day.id]
+                    : employeeForm.working_days.filter((id) => id !== day.id);
+                  setFormField('working_days', next);
+                }}
+              />
+              {day.name}
+            </label>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderEmergencyTab = () => (
+    <div className="space-y-4">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <TextInput label="Nombre completo" value={employeeForm.emergency_contact_name} onChange={(value) => setFormField('emergency_contact_name', value)} />
+        <TextInput label="Parentesco" value={employeeForm.emergency_contact_relationship} onChange={(value) => setFormField('emergency_contact_relationship', value)} />
+        <TextInput label="Celular" value={employeeForm.emergency_contact_mobile} onChange={(value) => setFormField('emergency_contact_mobile', value)} />
+        <TextInput label="Teléfono alternativo" value={employeeForm.emergency_contact_alternate_phone} onChange={(value) => setFormField('emergency_contact_alternate_phone', value)} />
+      </div>
+      <TextareaInput label="Dirección" value={employeeForm.emergency_contact_address} onChange={(value) => setFormField('emergency_contact_address', value)} />
+    </div>
+  );
+
+  const renderDocumentsTab = () => (
+    <div className="space-y-5">
+      <div className="grid md:grid-cols-3 gap-3">
+        {DOCUMENT_TYPE_OPTIONS.map((docType) => {
+          const docs = employeeDocuments.filter((document) => document.document_type === docType.value);
+          const latest = docs[0];
+          return (
+            <button
+              type="button"
+              key={docType.value}
+              onClick={() => setDocumentForm((current) => ({ ...current, document_type: docType.value, name: current.name || docType.label }))}
+              className="text-left border border-border p-3 hover:border-foreground transition-colors"
+            >
+              <div className="text-xs font-medium mb-1">{docType.label}</div>
+              <span className={`inline-block px-2 py-1 border text-[10px] ${statusBadge(latest?.status ?? 'PENDING')}`}>
+                {latest ? documentStatusLabel(latest.status) : 'Pendiente'}
+              </span>
+              {docs.length > 1 && <div className="text-[10px] text-muted-foreground mt-2">{docs.length} adjuntos</div>}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="border border-border p-4 space-y-4 bg-secondary/20">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <FileUp className="w-4 h-4" strokeWidth={1.5} />
+          Registrar adjunto documental
+        </div>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <SelectInput
+            label="Tipo de documento"
+            value={documentForm.document_type}
+            onChange={(value) => {
+              const docType = value as EmployeeDocumentType;
+              setDocumentForm((current) => ({
+                ...current,
+                document_type: docType,
+                name: optionLabel(DOCUMENT_TYPE_OPTIONS, docType),
+              }));
+            }}
+            options={DOCUMENT_TYPE_OPTIONS}
+            emptyLabel="Documento"
+          />
+          <TextInput label="Nombre" value={documentForm.name} onChange={(value) => setDocumentForm((current) => ({ ...current, name: value }))} />
+          <TextInput label="Fecha de expedición" type="date" value={documentForm.issued_at} onChange={(value) => setDocumentForm((current) => ({ ...current, issued_at: value }))} />
+          <TextInput label="Fecha de vencimiento" type="date" value={documentForm.expires_at} onChange={(value) => setDocumentForm((current) => ({ ...current, expires_at: value }))} />
+          <SelectInput label="Estado" value={documentForm.status} onChange={(value) => setDocumentForm((current) => ({ ...current, status: value as EmployeeDocumentStatus }))} options={[
+            { value: 'PENDING', label: 'Pendiente' },
+            { value: 'LOADED', label: 'Cargado' },
+            { value: 'REJECTED', label: 'Rechazado' },
+            { value: 'EXPIRED', label: 'Vencido' },
+            { value: 'NOT_APPLICABLE', label: 'No aplica' },
+          ]} emptyLabel="Estado" />
+          <label className="block lg:col-span-3">
+            <span className="block text-xs mb-2">Archivo</span>
+            <input type="file" onChange={(event) => setDocumentForm((current) => ({ ...current, file: event.target.files?.[0] ?? null, status: event.target.files?.[0] ? 'LOADED' : current.status }))} className="w-full px-4 py-2.5 border border-border bg-background text-sm" />
+          </label>
+        </div>
+        <TextareaInput label="Observaciones" value={documentForm.observations} onChange={(value) => setDocumentForm((current) => ({ ...current, observations: value }))} />
+        {editingEmployee && (
+          <button
+            type="button"
+            onClick={() => void handleDocumentUpload(editingEmployee.id)}
+            disabled={savingDocument}
+            className="px-4 py-2 bg-foreground text-background text-xs uppercase tracking-wider disabled:opacity-50"
+          >
+            {savingDocument ? 'Subiendo...' : 'Guardar documento'}
+          </button>
+        )}
+        {!editingEmployee && (
+          <p className="text-xs text-muted-foreground">El documento se adjuntará automáticamente después de crear el empleado.</p>
+        )}
+      </div>
+
+      <div className="border border-border overflow-hidden">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-border bg-secondary/30">
+              <th className="text-left p-3">Documento</th>
+              <th className="text-left p-3">Estado</th>
+              <th className="text-left p-3">Vence</th>
+              <th className="text-left p-3">Archivo</th>
+            </tr>
+          </thead>
+          <tbody>
+            {employeeDocuments.map((document) => (
+              <tr key={document.id} className="border-b border-border">
+                <td className="p-3">
+                  <div className="font-medium">{document.name}</div>
+                  <div className="text-muted-foreground">{optionLabel(DOCUMENT_TYPE_OPTIONS, document.document_type)}</div>
+                </td>
+                <td className="p-3">
+                  <span className={`inline-block px-2 py-1 border ${statusBadge(document.status)}`}>{documentStatusLabel(document.status)}</span>
+                </td>
+                <td className="p-3">{parseDate(document.expires_at)}</td>
+                <td className="p-3">
+                  {document.file ? (
+                    <a href={document.file} target="_blank" rel="noreferrer" className="underline underline-offset-4">Ver archivo</a>
+                  ) : 'Sin archivo'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {employeeDocuments.length === 0 && <div className="p-6 text-center text-xs text-muted-foreground">Sin documentos cargados todavía.</div>}
+      </div>
+    </div>
+  );
+
+  const renderAccessTab = () => (
+    <div className="space-y-4">
+      <div className="grid sm:grid-cols-2 gap-4">
+        <SelectInput label="Rol dentro del sistema" value={employeeForm.user_role} onChange={(value) => setFormField('user_role', value as UserRole | '')} options={INTERNAL_EMPLOYEE_ROLES.map((role) => ({ value: role, label: getRoleLabel(role) }))} emptyLabel="Sin acceso al sistema" />
+        <TextInput label="Correo" type="email" value={employeeForm.user_email} onChange={(value) => setFormField('user_email', value)} />
+        <TextInput label="Confirmar correo" type="email" value={employeeForm.user_email_confirm} onChange={(value) => setFormField('user_email_confirm', value)} />
+        <TextInput label="Contraseña" type="password" value={employeeForm.user_password} onChange={(value) => setFormField('user_password', value)} placeholder={editingEmployee?.user ? 'Dejar vacío para conservar' : 'Mínimo 8 caracteres'} />
+        <TextInput label="Confirmar contraseña" type="password" value={employeeForm.user_password_confirm} onChange={(value) => setFormField('user_password_confirm', value)} />
+      </div>
+      <div className="p-4 border border-amber-200 bg-amber-50 text-xs text-amber-800">
+        Si asignas un rol por primera vez, correo y contraseña deben coincidir. En edición, dejar contraseña vacía conserva la actual.
+      </div>
+    </div>
+  );
+
+  const renderHistoryTab = () => (
+    <div className="space-y-5">
+      <div className="grid md:grid-cols-4 gap-4">
+        <div className="border border-border p-4">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Creación</div>
+          <div className="text-sm">{parseDate(editingEmployee?.created_at)}</div>
+        </div>
+        <div className="border border-border p-4">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Última modificación</div>
+          <div className="text-sm">{parseDate(editingEmployee?.updated_at)}</div>
+        </div>
+        <div className="border border-border p-4">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Edad</div>
+          <div className="text-sm">{editingEmployee?.age ?? 'Pendiente'}</div>
+        </div>
+        <div className="border border-border p-4">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Antigüedad</div>
+          <div className="text-sm">{editingEmployee?.seniority_days ?? 0} días</div>
+        </div>
+      </div>
+      <div className="grid lg:grid-cols-3 gap-4">
+        <div className="border border-border p-4">
+          <div className="text-sm font-medium mb-3">Historial de cambios</div>
+          <div className="space-y-2 max-h-64 overflow-y-auto">
+            {changeLogs.map((log) => (
+              <div key={log.id} className="text-xs border-b border-border pb-2">
+                <div className="font-medium">{log.field_name}</div>
+                <div className="text-muted-foreground">{log.old_value || 'Vacío'} → {log.new_value || 'Vacío'}</div>
+                <div className="text-[10px] text-muted-foreground">{parseDate(log.created_at)}</div>
+              </div>
+            ))}
+            {changeLogs.length === 0 && <div className="text-xs text-muted-foreground">Sin cambios registrados.</div>}
+          </div>
+        </div>
+        <div className="border border-border p-4">
+          <div className="text-sm font-medium mb-3">Historial salarial</div>
+          <div className="space-y-2">
+            {salaryHistory.map((item) => (
+              <div key={item.id} className="text-xs border-b border-border pb-2">
+                <div>{formatCurrency(item.previous_salary)} → {formatCurrency(item.new_salary)}</div>
+                <div className="text-muted-foreground">{parseDate(item.start_date)} · {item.reason || 'Sin motivo'}</div>
+              </div>
+            ))}
+            {salaryHistory.length === 0 && <div className="text-xs text-muted-foreground">Sin historial salarial.</div>}
+          </div>
+        </div>
+        <div className="border border-border p-4">
+          <div className="text-sm font-medium mb-3">Historial de cargos</div>
+          <div className="space-y-2">
+            {positionHistory.map((item) => (
+              <div key={item.id} className="text-xs border-b border-border pb-2">
+                <div>{item.previous_position ? positionById.get(item.previous_position)?.name : 'Inicio'} → {positionById.get(item.new_position)?.name ?? item.new_position}</div>
+                <div className="text-muted-foreground">{parseDate(item.start_date)} · {item.reason || 'Sin motivo'}</div>
+              </div>
+            ))}
+            {positionHistory.length === 0 && <div className="text-xs text-muted-foreground">Sin historial de cargos.</div>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderModalTab = () => {
+    switch (employeeModalTab) {
+      case 'personal': return renderPersonalTab();
+      case 'labor': return renderLaborTab();
+      case 'social': return renderSocialTab();
+      case 'banking': return renderBankingTab();
+      case 'payroll': return renderPayrollTab();
+      case 'emergency': return renderEmergencyTab();
+      case 'documents': return renderDocumentsTab();
+      case 'access': return renderAccessTab();
+      case 'history': return renderHistoryTab();
+      default: return null;
+    }
+  };
+
+  const renderReadOnlyEmployeeTab = (employee: Employee) => {
+    const department = employee.department ? departmentById.get(employee.department)?.name : 'Sin área';
+    const position = employee.position ? positionById.get(employee.position)?.name : 'Sin cargo';
+    const branch = employee.branch ? branchById.get(employee.branch)?.name : 'Sin sede';
+    const manager = employee.manager ? employeeById.get(employee.manager) : null;
+    const rows: Array<[string, string | number | null | undefined]> =
+      employeeModalTab === 'personal'
+        ? [
+            ['Tipo de documento', employee.document_type],
+            ['Número de documento', employee.document_number],
+            ['Fecha de expedición', parseDate(employee.document_issue_date)],
+            ['Lugar de expedición', employee.document_issue_place],
+            ['Nombres', employee.first_name],
+            ['Apellidos', employee.last_name],
+            ['Fecha de nacimiento', parseDate(employee.date_of_birth)],
+            ['Celular', employee.phone],
+            ['Correo', employee.email],
+            ['Dirección', employee.address],
+            ['Ciudad/Municipio', employee.city],
+            ['Departamento', employee.residence_department],
+            ['Nacionalidad', employee.nationality],
+            ['Género', employee.gender],
+            ['Estado civil', employee.marital_status],
+          ]
+        : employeeModalTab === 'labor'
+          ? [
+              ['Código interno', employee.employee_code],
+              ['Cargo', position],
+              ['Área', department],
+              ['Tipo de vinculación', employee.employment_type],
+              ['Tipo de contrato', employee.contract_type],
+              ['Fecha de ingreso', parseDate(employee.hire_date)],
+              ['Salario básico', formatCurrency(employee.base_salary)],
+              ['Estado', statusLabel(employee.status)],
+              ['Sede', branch],
+              ['Jefe inmediato', manager ? getEmployeeName(manager) : 'Sin jefe'],
+              ['Centro de costos', employee.cost_center],
+              ['Modalidad', employee.work_modality],
+              ['Fecha de terminación', parseDate(employee.termination_date)],
+            ]
+          : employeeModalTab === 'social'
+            ? [
+                ['EPS', employee.eps],
+                ['Fondo de pensiones', employee.pension_fund],
+                ['Fondo de cesantías', employee.severance_fund],
+                ['ARL', employee.arl],
+                ['Nivel de riesgo ARL', employee.arl_risk_level],
+                ['Caja de compensación', employee.compensation_fund],
+              ]
+            : employeeModalTab === 'banking'
+              ? [
+                  ['Banco', employee.bank_name],
+                  ['Tipo de cuenta', employee.bank_account_type],
+                  ['Número de cuenta', employee.bank_account_number],
+                  ['Titular', employee.bank_account_holder],
+                  ['Documento titular', employee.bank_account_holder_document],
+                ]
+              : employeeModalTab === 'emergency'
+                ? [
+                    ['Nombre completo', employee.emergency_contact_name],
+                    ['Parentesco', employee.emergency_contact_relationship],
+                    ['Celular', employee.emergency_contact_mobile],
+                    ['Teléfono alternativo', employee.emergency_contact_alternate_phone],
+                    ['Dirección', employee.emergency_contact_address],
+                  ]
+                : [];
+
+    if (employeeModalTab === 'documents') {
+      return (
+        <div className="border border-border overflow-hidden">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-border bg-secondary/30">
+                <th className="text-left p-3">Documento</th>
+                <th className="text-left p-3">Estado</th>
+                <th className="text-left p-3">Vence</th>
+                <th className="text-left p-3">Archivo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {employeeDocuments.map((document) => (
+                <tr key={document.id} className="border-b border-border">
+                  <td className="p-3">
+                    <div className="font-medium">{document.name}</div>
+                    <div className="text-muted-foreground">{optionLabel(DOCUMENT_TYPE_OPTIONS, document.document_type)}</div>
+                  </td>
+                  <td className="p-3"><span className={`inline-block px-2 py-1 border ${statusBadge(document.status)}`}>{documentStatusLabel(document.status)}</span></td>
+                  <td className="p-3">{parseDate(document.expires_at)}</td>
+                  <td className="p-3">{document.file ? <a href={document.file} target="_blank" rel="noreferrer" className="underline underline-offset-4">Ver archivo</a> : 'Sin archivo'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {employeeDocuments.length === 0 && <div className="p-6 text-center text-xs text-muted-foreground">Sin documentos cargados.</div>}
+        </div>
+      );
+    }
+    if (employeeModalTab === 'history') {
+      return (
+        <div className="grid lg:grid-cols-3 gap-4">
+          <div className="border border-border p-4">
+            <div className="text-sm font-medium mb-3">Historial de cambios</div>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {changeLogs.map((log) => (
+                <div key={log.id} className="text-xs border-b border-border pb-2">
+                  <div className="font-medium">{log.field_name}</div>
+                  <div className="text-muted-foreground">{log.old_value || 'Vacío'} → {log.new_value || 'Vacío'}</div>
+                  <div className="text-[10px] text-muted-foreground">{parseDate(log.created_at)}</div>
+                </div>
+              ))}
+              {changeLogs.length === 0 && <div className="text-xs text-muted-foreground">Sin cambios registrados.</div>}
+            </div>
+          </div>
+          <div className="border border-border p-4">
+            <div className="text-sm font-medium mb-3">Historial salarial</div>
+            {salaryHistory.map((item) => (
+              <div key={item.id} className="text-xs border-b border-border pb-2">
+                <div>{formatCurrency(item.previous_salary)} → {formatCurrency(item.new_salary)}</div>
+                <div className="text-muted-foreground">{parseDate(item.start_date)} · {item.reason || 'Sin motivo'}</div>
+              </div>
+            ))}
+            {salaryHistory.length === 0 && <div className="text-xs text-muted-foreground">Sin historial salarial.</div>}
+          </div>
+          <div className="border border-border p-4">
+            <div className="text-sm font-medium mb-3">Historial de cargos</div>
+            {positionHistory.map((item) => (
+              <div key={item.id} className="text-xs border-b border-border pb-2">
+                <div>{item.previous_position ? positionById.get(item.previous_position)?.name : 'Inicio'} → {positionById.get(item.new_position)?.name ?? item.new_position}</div>
+                <div className="text-muted-foreground">{parseDate(item.start_date)} · {item.reason || 'Sin motivo'}</div>
+              </div>
+            ))}
+            {positionHistory.length === 0 && <div className="text-xs text-muted-foreground">Sin historial de cargos.</div>}
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {rows.map(([label, value]) => (
+          <div key={label} className="border border-border p-4 bg-secondary/10">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">{label}</div>
+            <div className="text-sm">{value || 'Sin registrar'}</div>
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -423,36 +1623,31 @@ export function AdminHR() {
         <div>
           <h2 className="text-2xl md:text-3xl mb-2">Recursos Humanos</h2>
           <p className="text-xs text-muted-foreground">
-            Empleados, departamentos, cargos y solicitudes internas conectadas al backend.
+            Expedientes empresariales con nómina, seguridad social, documentos y auditoría.
           </p>
         </div>
-
-        <div className="flex gap-2">
-          <button
-            onClick={openCreateModal}
-            className="flex items-center gap-2 px-4 py-2 bg-foreground text-background hover:bg-background hover:text-foreground border border-foreground transition-colors text-xs"
-          >
-            <UserPlus className="w-4 h-4" strokeWidth={1} />
-            Nuevo empleado
-          </button>
-        </div>
+        <button
+          onClick={activeTab === 'branches' ? openCreateBranchModal : openCreateModal}
+          className="flex items-center gap-2 px-4 py-2 bg-foreground text-background hover:bg-background hover:text-foreground border border-foreground transition-colors text-xs"
+        >
+          {activeTab === 'branches' ? <Plus className="w-4 h-4" strokeWidth={1} /> : <UserPlus className="w-4 h-4" strokeWidth={1} />}
+          {activeTab === 'branches' ? 'Nueva sede' : 'Nuevo empleado'}
+        </button>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Empleados', value: stats.totalEmployees, icon: Users },
-          { label: 'Activos', value: stats.activeEmployees, icon: BadgeCheck },
-          { label: 'En licencia', value: stats.leaveEmployees, icon: CalendarClock },
-          { label: 'Solicitudes', value: stats.pendingRequests, icon: Clock3 },
+          { label: 'Perfil completado', value: `${stats.profileCompletion}%`, icon: BadgeCheck },
+          { label: 'Pendientes', value: stats.pending, icon: Clock3 },
+          { label: 'Vencidos', value: stats.expiredDocuments, icon: AlertTriangle },
+          { label: 'Contrato restante', value: stats.contractRemaining, icon: CalendarClock },
         ].map((stat) => {
           const Icon = stat.icon;
           return (
             <div key={stat.label} className="bg-secondary/30 border border-border p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Icon className="w-4 h-4 text-muted-foreground" strokeWidth={1} />
-                <div className="text-[9px] tracking-[0.2em] uppercase text-muted-foreground">
-                  {stat.label}
-                </div>
+                <div className="text-[9px] tracking-[0.2em] uppercase text-muted-foreground">{stat.label}</div>
               </div>
               <div className="text-2xl font-light">{stat.value}</div>
             </div>
@@ -464,7 +1659,8 @@ export function AdminHR() {
         <div className="flex gap-2 border border-border p-1 overflow-x-auto">
           {[
             { id: 'employees', label: 'Empleados' },
-            { id: 'catalog', label: 'Departamentos y cargos' },
+            { id: 'branches', label: 'Sedes' },
+            { id: 'catalog', label: 'Catálogos' },
             { id: 'vacations', label: 'Solicitudes' },
           ].map((tab) => (
             <button
@@ -473,9 +1669,7 @@ export function AdminHR() {
                 setActiveTab(tab.id as HRTab);
                 setFilterStatus('all');
               }}
-              className={`px-4 py-2 text-xs uppercase tracking-wider transition-colors ${
-                activeTab === tab.id ? 'bg-foreground text-background' : 'hover:bg-secondary/50'
-              }`}
+              className={`px-4 py-2 text-xs uppercase tracking-wider transition-colors ${activeTab === tab.id ? 'bg-foreground text-background' : 'hover:bg-secondary/50'}`}
             >
               {tab.label}
             </button>
@@ -483,38 +1677,15 @@ export function AdminHR() {
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3">
-          <SearchBar
-            value={searchQuery}
-            onChange={setSearchQuery}
-            placeholder="Buscar por nombre, código, cargo o solicitud..."
-            className="flex-1 min-w-[280px]"
-          />
-
+          <SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Buscar por nombre, código, documento, sede..." className="flex-1 min-w-[280px]" />
           {(activeTab === 'employees' || activeTab === 'vacations') && (
-            <select
-              value={filterDepartment}
-              onChange={(event) => setFilterDepartment(event.target.value)}
-              className="px-4 py-2 border border-border bg-transparent text-xs focus:outline-none focus:border-foreground"
-            >
+            <select value={filterDepartment} onChange={(event) => setFilterDepartment(event.target.value)} className="px-4 py-2 border border-border bg-transparent text-xs focus:outline-none focus:border-foreground">
               <option value="all">Todos los departamentos</option>
-              {departments.map((department) => (
-                <option key={department.id} value={department.id}>
-                  {department.name}
-                </option>
-              ))}
+              {departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
             </select>
           )}
-
-          <select
-            value={filterStatus}
-            onChange={(event) => setFilterStatus(event.target.value)}
-            className="px-4 py-2 border border-border bg-transparent text-xs focus:outline-none focus:border-foreground"
-          >
-            {statusOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
+          <select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)} className="px-4 py-2 border border-border bg-transparent text-xs focus:outline-none focus:border-foreground">
+            {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
         </div>
       </div>
@@ -532,62 +1703,60 @@ export function AdminHR() {
                   <thead>
                     <tr className="border-b border-border bg-secondary/30">
                       <th className="text-left p-3 font-medium">Empleado</th>
-                      <th className="text-left p-3 font-medium">Departamento</th>
-                      <th className="text-left p-3 font-medium">Cargo</th>
-                      <th className="text-left p-3 font-medium">Ingreso</th>
+                      <th className="text-left p-3 font-medium">Cargo / Sede</th>
                       <th className="text-left p-3 font-medium">Estado</th>
-                      <th className="text-center p-3 font-medium">Acciones</th>
+                      <th className="text-left p-3 font-medium">Perfil</th>
+                      <th className="text-left p-3 font-medium">Documentos</th>
+                      <th className="text-right p-3 font-medium">Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredEmployees.map((employee) => {
-                      const department = departmentById.get(employee.department);
-                      const position = positionById.get(employee.position);
+                      const department = employee.department ? departmentById.get(employee.department) : null;
+                      const position = employee.position ? positionById.get(employee.position) : null;
+                      const branch = employee.branch ? branchById.get(employee.branch) : null;
                       return (
                         <tr key={employee.id} className="border-b border-border hover:bg-secondary/20 transition-colors">
                           <td className="p-3">
                             <div className="font-medium">{getEmployeeName(employee)}</div>
-                            <div className="mt-1 text-muted-foreground space-y-1">
-                              <div className="flex items-center gap-1">
-                                <FileText className="w-3 h-3" strokeWidth={1} />
-                                {employee.employee_code} · {employee.document_number}
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <Mail className="w-3 h-3" strokeWidth={1} />
-                                {employee.email}
-                              </div>
-                              {employee.phone && (
-                                <div className="flex items-center gap-1">
-                                  <Phone className="w-3 h-3" strokeWidth={1} />
-                                  {employee.phone}
-                                </div>
-                              )}
+                            <div className="text-muted-foreground mt-1">{employee.employee_code || 'Código autogenerado'} · {employee.document_number || 'Sin documento'}</div>
+                            <div className="text-muted-foreground">{employee.email || 'Sin correo'}</div>
+                          </td>
+                          <td className="p-3">
+                            <div>{position?.name ?? 'Sin cargo'}</div>
+                            <div className="text-muted-foreground mt-1">{department?.name ?? 'Sin área'} · {branch?.name ?? 'Sin sede'}</div>
+                          </td>
+                          <td className="p-3">
+                            <span className={`inline-block px-2 py-1 border text-[10px] ${statusBadge(employee.status)}`}>{statusLabel(employee.status)}</span>
+                            <div className="mt-2">
+                              <span className={`inline-block px-2 py-1 border text-[10px] ${statusBadge(employee.profile_status)}`}>{profileStatusLabel(employee.profile_status)}</span>
                             </div>
                           </td>
-                          <td className="p-3">{department?.name ?? 'Sin departamento'}</td>
-                          <td className="p-3">{position?.name ?? 'Sin cargo'}</td>
-                          <td className="p-3">{parseDate(employee.hire_date)}</td>
-                          <td className="p-3">
-                            <span className={`inline-block px-2 py-1 border text-[10px] ${statusBadge(employee.status)}`}>
-                              {statusLabel(employee.status)}
-                            </span>
+                          <td className="p-3 min-w-[160px]">
+                            <div className="flex items-center justify-between mb-1">
+                              <span>{employee.profile_completion_percentage}%</span>
+                              <span className="text-muted-foreground">{employee.age ? `${employee.age} años` : 'Edad N/D'}</span>
+                            </div>
+                            <div className="h-2 bg-secondary rounded-full overflow-hidden">
+                              <div className="h-full bg-foreground" style={{ width: `${employee.profile_completion_percentage}%` }} />
+                            </div>
                           </td>
                           <td className="p-3">
-                            <div className="flex items-center justify-center gap-2">
-                              <button
-                                onClick={() => openEditModal(employee)}
-                                className="p-1.5 hover:bg-secondary/50 transition-colors"
-                                title="Editar"
-                              >
-                                <Edit2 className="w-3.5 h-3.5" strokeWidth={1} />
+                            <div>Pendientes: {employee.pending_documents_count}</div>
+                            <div className={employee.expired_documents_count > 0 ? 'text-red-700' : 'text-muted-foreground'}>
+                              Vencidos: {employee.expired_documents_count}
+                            </div>
+                          </td>
+                          <td className="p-3">
+                            <div className="flex items-center justify-end gap-2">
+                              <button onClick={() => openEmployeeDetailModal(employee)} className="p-2 hover:bg-secondary/50 transition-colors" aria-label="Ver empleado">
+                                <Eye className="w-4 h-4" strokeWidth={1} />
                               </button>
-                              <button
-                                onClick={() => handleDeleteEmployee(employee)}
-                                disabled={deletingEmployeeId === employee.id}
-                                className="p-1.5 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-50"
-                                title="Eliminar"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" strokeWidth={1} />
+                              <button onClick={() => openEditModal(employee)} className="p-2 hover:bg-secondary/50 transition-colors" aria-label="Editar empleado">
+                                <Edit2 className="w-4 h-4" strokeWidth={1} />
+                              </button>
+                              <button onClick={() => handleDeleteEmployee(employee)} disabled={deletingEmployeeId === employee.id} className="p-2 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50" aria-label="Eliminar empleado">
+                                <Trash2 className="w-4 h-4" strokeWidth={1} />
                               </button>
                             </div>
                           </td>
@@ -597,7 +1766,6 @@ export function AdminHR() {
                   </tbody>
                 </table>
               </div>
-
               {filteredEmployees.length === 0 && (
                 <div className="p-12 text-center text-muted-foreground">
                   <Users className="w-12 h-12 mx-auto mb-3 opacity-20" strokeWidth={1} />
@@ -607,14 +1775,170 @@ export function AdminHR() {
             </div>
           )}
 
+          {activeTab === 'branches' && (
+            <div className="border border-border overflow-hidden">
+              <div className="p-4 border-b border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Search className="w-4 h-4" strokeWidth={1.5} />
+                  {sortedBranches.length} sedes encontradas
+                </div>
+                <select value={branchSort} onChange={(event) => setBranchSort(event.target.value as typeof branchSort)} className="px-3 py-2 border border-border bg-background text-xs">
+                  <option value="name">Ordenar por nombre</option>
+                  <option value="code">Ordenar por código</option>
+                  <option value="city">Ordenar por ciudad</option>
+                  <option value="status">Ordenar por estado</option>
+                </select>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-border bg-secondary/30">
+                      <th className="text-left p-3 font-medium">Sede</th>
+                      <th className="text-left p-3 font-medium">Ubicación</th>
+                      <th className="text-left p-3 font-medium">Responsable</th>
+                      <th className="text-left p-3 font-medium">Empleados</th>
+                      <th className="text-left p-3 font-medium">Estado</th>
+                      <th className="text-right p-3 font-medium">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedBranches.map((branch) => (
+                      <tr key={branch.id} className="border-b border-border hover:bg-secondary/20 transition-colors">
+                        <td className="p-3">
+                          <div className="font-medium">{branch.name}</div>
+                          <div className="text-muted-foreground mt-1">{branch.code}</div>
+                          <div className="text-muted-foreground">{branch.email || 'Sin correo'}</div>
+                        </td>
+                        <td className="p-3">
+                          <div>{branch.city || 'Sin ciudad'}, {branch.department || 'Sin departamento'}</div>
+                          <div className="text-muted-foreground mt-1">{branch.country || 'Colombia'}</div>
+                        </td>
+                        <td className="p-3">{branch.responsible_name || 'Sin responsable'}</td>
+                        <td className="p-3">
+                          <div>{branch.employee_count ?? 0} empleados</div>
+                          <div className="text-muted-foreground">{branch.department_names?.join(', ') || 'Sin áreas'}</div>
+                        </td>
+                        <td className="p-3">
+                          <span className={`inline-block px-2 py-1 border text-[10px] ${branch.status === 'ACTIVE' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-stone-50 text-stone-700 border-stone-200'}`}>
+                            {branch.status === 'ACTIVE' ? 'Activa' : 'Inactiva'}
+                          </span>
+                        </td>
+                        <td className="p-3">
+                          <div className="flex items-center justify-end gap-2">
+                            <button onClick={() => openBranchDetailModal(branch)} className="p-2 hover:bg-secondary/50 transition-colors" aria-label="Ver sede">
+                              <Eye className="w-4 h-4" strokeWidth={1} />
+                            </button>
+                            <button onClick={() => openEditBranchModal(branch)} className="p-2 hover:bg-secondary/50 transition-colors" aria-label="Editar sede">
+                              <Edit2 className="w-4 h-4" strokeWidth={1} />
+                            </button>
+                            <button onClick={() => handleDeleteBranch(branch)} disabled={deletingBranchId === branch.id} className="p-2 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50" aria-label="Eliminar sede">
+                              <Trash2 className="w-4 h-4" strokeWidth={1} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {sortedBranches.length > 0 && (
+                <div className="p-4 border-t border-border flex items-center justify-between text-xs">
+                  <button onClick={() => setBranchPage((page) => Math.max(1, page - 1))} disabled={branchPage === 1} className="px-3 py-2 border border-border disabled:opacity-50">Anterior</button>
+                  <span>Página {branchPage} de {branchTotalPages}</span>
+                  <button onClick={() => setBranchPage((page) => Math.min(branchTotalPages, page + 1))} disabled={branchPage === branchTotalPages} className="px-3 py-2 border border-border disabled:opacity-50">Siguiente</button>
+                </div>
+              )}
+              {sortedBranches.length === 0 && (
+                <div className="p-12 text-center text-muted-foreground">
+                  <Building2 className="w-12 h-12 mx-auto mb-3 opacity-20" strokeWidth={1} />
+                  <div className="text-sm">No se encontraron sedes</div>
+                </div>
+              )}
+            </div>
+          )}
+
           {activeTab === 'catalog' && (
-            <AdminStructure />
+            <div className="space-y-4">
+              <AdminStructure />
+              <div className="grid lg:grid-cols-2 gap-4">
+                <div className="border border-border p-4">
+                  <div className="flex items-center gap-2 mb-3 text-sm font-medium"><Building2 className="w-4 h-4" /> Sedes</div>
+                  <div className="space-y-2">
+                    {branches.map((branch) => (
+                      <div key={branch.id} className="flex justify-between border-b border-border pb-2 text-xs">
+                        <span>{branch.name}</span>
+                        <span className="text-muted-foreground">{branch.city || 'Sin ciudad'}</span>
+                      </div>
+                    ))}
+                    {branches.length === 0 && <div className="text-xs text-muted-foreground">Sin sedes configuradas.</div>}
+                  </div>
+                </div>
+                <div className="border border-border p-4">
+                  <div className="flex items-center gap-2 mb-3 text-sm font-medium"><CalendarClock className="w-4 h-4" /> Días laborables</div>
+                  <div className="flex flex-wrap gap-2">
+                    {workDays.map((day) => <span key={day.id} className="px-3 py-1 border border-border text-xs">{day.name}</span>)}
+                    {workDays.length === 0 && <div className="text-xs text-muted-foreground">Sin días configurados.</div>}
+                  </div>
+                </div>
+              </div>
+            </div>
           )}
 
           {activeTab === 'vacations' && (
-            <div className="border border-border overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
+            <div className="space-y-4">
+              {requestsDashboard && (
+                <>
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    {[
+                      { label: 'Pendientes', value: requestsDashboard.pending },
+                      { label: 'Aprobadas', value: requestsDashboard.approved },
+                      { label: 'Rechazadas', value: requestsDashboard.rejected },
+                      { label: 'En revisión', value: requestsDashboard.in_review },
+                      { label: 'Vencidas', value: requestsDashboard.expired },
+                      { label: 'Horas extras', value: requestsDashboard.overtime_hours },
+                      { label: 'Días incapacidad', value: requestsDashboard.incapacity_days },
+                      { label: 'Vacaciones pendientes', value: requestsDashboard.pending_vacation_days },
+                    ].map((item) => (
+                      <div key={item.label} className="border border-border bg-secondary/20 p-4">
+                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">{item.label}</div>
+                        <div className="text-xl">{item.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="grid lg:grid-cols-4 gap-4">
+                    {[
+                      ['Mes', requestsDashboard.charts.by_month],
+                      ['Tipo', requestsDashboard.charts.by_type],
+                      ['Área', requestsDashboard.charts.by_area],
+                      ['Sede', requestsDashboard.charts.by_branch],
+                    ].map(([label, data]) => (
+                      <div key={label as string} className="border border-border p-4">
+                        <div className="flex items-center gap-2 mb-3 text-xs font-medium">
+                          <BarChart3 className="w-4 h-4" strokeWidth={1.5} />
+                          Por {label as string}
+                        </div>
+                        <div className="space-y-2">
+                          {(data as Array<{ label: string; value: number }>).slice(0, 5).map((item) => (
+                            <div key={item.label} className="text-xs">
+                              <div className="flex justify-between mb-1">
+                                <span>{item.label}</span>
+                                <span>{item.value}</span>
+                              </div>
+                              <div className="h-1.5 bg-secondary overflow-hidden">
+                                <div className="h-full bg-foreground" style={{ width: `${Math.min(item.value * 12, 100)}%` }} />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              <div className="border border-border overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b border-border bg-secondary/30">
                       <th className="text-left p-3 font-medium">Empleado</th>
@@ -632,70 +1956,27 @@ export function AdminHR() {
                         <tr key={request.id} className="border-b border-border hover:bg-secondary/20 transition-colors">
                           <td className="p-3">
                             <div className="font-medium">{employee ? getEmployeeName(employee) : request.employee}</div>
-                            <div className="text-muted-foreground mt-1">
-                              {employee?.employee_code ?? 'Sin código'}
-                            </div>
+                            <div className="text-muted-foreground mt-1">{employee?.employee_code ?? 'Sin código'}</div>
                           </td>
                           <td className="p-3">
-                            <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-                              {getRequestTypeLabel(request.request_type)}
-                            </div>
-                            <div className="mt-1 text-xs text-muted-foreground">
-                              {request.is_full_day ? 'Jornada completa' : 'Horario parcial'}
-                            </div>
+                            <div>{getRequestTypeLabel(request.request_type)}</div>
+                            <div className="text-muted-foreground mt-1">{getRequestSubtypeLabel(request.subtype)}</div>
                           </td>
-                          <td className="p-3">
-                            <div>{getRequestScheduleLabel(request)}</div>
-                            <div className="text-muted-foreground mt-1">
-                              Registrada: {parseDate(request.created_at)}
-                            </div>
-                          </td>
-                          <td className="p-3 max-w-sm">
-                            <div className="line-clamp-3">{request.reason || 'Sin motivo'}</div>
-                          </td>
-                          <td className="p-3">
-                            <span className={`inline-block px-2 py-1 border text-[10px] ${requestStatusBadge(request.status)}`}>
-                              {requestStatusLabel(request.status)}
-                            </span>
-                          </td>
+                          <td className="p-3">{parseDate(request.start_date)} - {parseDate(request.end_date)}</td>
+                          <td className="p-3 max-w-sm">{request.reason || 'Sin motivo'}</td>
+                          <td className="p-3"><span className={`inline-block px-2 py-1 border text-[10px] ${statusBadge(request.status)}`}>{requestStatusLabel(request.status)}</span></td>
                           <td className="p-3">
                             <div className="flex flex-col items-center gap-2">
                               {request.support_document ? (
                                 <div className="flex flex-wrap items-center justify-center gap-2">
-                                  <a
-                                    href={request.support_document}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="px-3 py-1.5 border border-border text-foreground hover:bg-secondary/50 transition-colors"
-                                  >
-                                    Vista previa
-                                  </a>
-                                  <a
-                                    href={request.support_document}
-                                    download={getSupportDocumentName(request.support_document)}
-                                    className="px-3 py-1.5 border border-border text-foreground hover:bg-secondary/50 transition-colors"
-                                  >
-                                    Descargar
-                                  </a>
+                                  <a href={request.support_document} target="_blank" rel="noreferrer" className="px-3 py-1.5 border border-border text-foreground hover:bg-secondary/50 transition-colors">Vista previa</a>
+                                  <a href={request.support_document} download={getSupportDocumentName(request.support_document)} className="px-3 py-1.5 border border-border text-foreground hover:bg-secondary/50 transition-colors">Descargar</a>
                                 </div>
-                              ) : (
-                                <div className="text-[10px] text-muted-foreground">Sin soporte</div>
-                              )}
+                              ) : <div className="text-[10px] text-muted-foreground">Sin soporte</div>}
                               <div className="flex items-center justify-center gap-2">
-                                <button
-                                  onClick={() => handleVacationAction(request, 'approve')}
-                                  disabled={request.status !== 'PENDING' || vacationActionId === request.id}
-                                  className="px-3 py-1.5 border border-green-200 text-green-700 hover:bg-green-50 transition-colors disabled:opacity-50"
-                                >
-                                  Aprobar
-                                </button>
-                                <button
-                                  onClick={() => handleVacationAction(request, 'reject')}
-                                  disabled={request.status !== 'PENDING' || vacationActionId === request.id}
-                                  className="px-3 py-1.5 border border-red-200 text-red-700 hover:bg-red-50 transition-colors disabled:opacity-50"
-                                >
-                                  Rechazar
-                                </button>
+                                <button onClick={() => openRequestDetailModal(request)} className="px-3 py-1.5 border border-border hover:bg-secondary/50 transition-colors">Ver detalle</button>
+                                <button onClick={() => handleVacationAction(request, 'approve')} disabled={!['PENDING', 'IN_REVIEW'].includes(request.status) || vacationActionId === request.id} className="px-3 py-1.5 border border-green-200 text-green-700 hover:bg-green-50 transition-colors disabled:opacity-50">Aprobar</button>
+                                <button onClick={() => handleVacationAction(request, 'reject')} disabled={!['PENDING', 'IN_REVIEW'].includes(request.status) || vacationActionId === request.id} className="px-3 py-1.5 border border-red-200 text-red-700 hover:bg-red-50 transition-colors disabled:opacity-50">Rechazar</button>
                               </div>
                             </div>
                           </td>
@@ -705,283 +1986,279 @@ export function AdminHR() {
                   </tbody>
                 </table>
               </div>
-
               {filteredVacationRequests.length === 0 && (
                 <div className="p-12 text-center text-muted-foreground">
                   <CalendarClock className="w-12 h-12 mx-auto mb-3 opacity-20" strokeWidth={1} />
                   <div className="text-sm">No hay solicitudes para mostrar</div>
                 </div>
               )}
+              </div>
             </div>
           )}
         </>
       )}
 
-      {showEmployeeModal && (
+      {showEmployeeDetailModal && viewingEmployee && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-background border border-border max-w-3xl w-full max-h-[90vh] overflow-y-auto"
-          >
-            <div className="p-8">
-              <div className="flex items-start justify-between gap-4 mb-6">
-                <div>
-                  <h3 className="text-2xl">
-                    {editingEmployee ? 'Editar empleado' : 'Nuevo empleado'}
-                  </h3>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Datos consistentes con `employees.Employee` del backend.
-                  </p>
-                </div>
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-background border border-border max-w-6xl w-full max-h-[92vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-border flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-2xl">{getEmployeeName(viewingEmployee)}</h3>
+                <p className="text-xs text-muted-foreground mt-2">Vista de consulta del expediente. Solo lectura.</p>
+              </div>
+              <div className="flex items-center gap-2">
                 <button
-                  onClick={resetEmployeeModal}
-                  className="p-2 hover:bg-secondary/50 transition-colors"
+                  onClick={() => {
+                    setShowEmployeeDetailModal(false);
+                    openEditModal(viewingEmployee);
+                  }}
+                  className="px-4 py-2 border border-border hover:border-foreground text-xs uppercase tracking-wider"
                 >
+                  Editar
+                </button>
+                <button onClick={() => setShowEmployeeDetailModal(false)} className="p-2 hover:bg-secondary/50 transition-colors">
                   <X className="w-4 h-4" strokeWidth={1} />
                 </button>
               </div>
-
-              <form onSubmit={handleEmployeeSubmit} className="space-y-4">
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs mb-2">Código de empleado</label>
-                    <input
-                      type="text"
-                      required
-                      value={employeeForm.employee_code}
-                      onChange={(event) => setEmployeeForm({ ...employeeForm, employee_code: event.target.value })}
-                      className="w-full px-4 py-2.5 border border-border bg-transparent focus:outline-none focus:border-foreground text-sm"
-                      placeholder="EMP-001"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs mb-2">Número de documento</label>
-                    <input
-                      type="text"
-                      required
-                      value={employeeForm.document_number}
-                      onChange={(event) => setEmployeeForm({ ...employeeForm, document_number: event.target.value })}
-                      className="w-full px-4 py-2.5 border border-border bg-transparent focus:outline-none focus:border-foreground text-sm"
-                      placeholder="123456789"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs mb-2">Nombres</label>
-                    <input
-                      type="text"
-                      required
-                      value={employeeForm.first_name}
-                      onChange={(event) => setEmployeeForm({ ...employeeForm, first_name: event.target.value })}
-                      className="w-full px-4 py-2.5 border border-border bg-transparent focus:outline-none focus:border-foreground text-sm"
-                      placeholder="Ana María"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs mb-2">Apellidos</label>
-                    <input
-                      type="text"
-                      required
-                      value={employeeForm.last_name}
-                      onChange={(event) => setEmployeeForm({ ...employeeForm, last_name: event.target.value })}
-                      className="w-full px-4 py-2.5 border border-border bg-transparent focus:outline-none focus:border-foreground text-sm"
-                      placeholder="García"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs mb-2">Email</label>
-                    <input
-                      type="email"
-                      required
-                      value={employeeForm.email}
-                      onChange={(event) => setEmployeeForm({ ...employeeForm, email: event.target.value })}
-                      className="w-full px-4 py-2.5 border border-border bg-transparent focus:outline-none focus:border-foreground text-sm"
-                      placeholder="ana@juhniosrold.com"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs mb-2">Teléfono</label>
-                    <input
-                      type="tel"
-                      value={employeeForm.phone}
-                      onChange={(event) => setEmployeeForm({ ...employeeForm, phone: event.target.value })}
-                      className="w-full px-4 py-2.5 border border-border bg-transparent focus:outline-none focus:border-foreground text-sm"
-                      placeholder="+57 300 123 4567"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs mb-2">Rol de acceso</label>
-                    <select
-                      value={employeeForm.user_role}
-                      required={needsCredentialPair}
-                      onChange={(event) => setEmployeeForm({ ...employeeForm, user_role: event.target.value as UserRole | '' })}
-                      className="w-full px-4 py-2.5 border border-border bg-background focus:outline-none focus:border-foreground text-sm"
-                    >
-                      <option value="">Sin rol de acceso</option>
-                      {INTERNAL_EMPLOYEE_ROLES.map((role) => (
-                        <option key={role} value={role}>
-                          {getRoleLabel(role)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs mb-2">Contraseña</label>
-                    <input
-                      type="password"
-                      value={employeeForm.user_password}
-                      onChange={(event) => setEmployeeForm({ ...employeeForm, user_password: event.target.value })}
-                      className="w-full px-4 py-2.5 border border-border bg-transparent focus:outline-none focus:border-foreground text-sm"
-                      placeholder={editingEmployee?.user ? 'Dejar en blanco para conservar la contraseña actual' : 'Crear credenciales de acceso'}
-                      required={needsCredentialPair}
-                      minLength={needsCredentialPair ? 8 : undefined}
-                    />
-                    <p className="mt-1 text-[11px] text-muted-foreground">
-                      Si asignas un rol de acceso, debes definir una contraseña. En edición, dejarlo vacío conserva la actual.
-                    </p>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs mb-2">Dirección</label>
-                  <input
-                    type="text"
-                    value={employeeForm.address}
-                    onChange={(event) => setEmployeeForm({ ...employeeForm, address: event.target.value })}
-                    className="w-full px-4 py-2.5 border border-border bg-transparent focus:outline-none focus:border-foreground text-sm"
-                    placeholder="Calle 123 #45-67"
-                  />
-                </div>
-
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs mb-2">Departamento</label>
-                    <select
-                      required
-                      value={employeeForm.department}
-                      onChange={(event) => {
-                        const nextDepartment = event.target.value;
-                        const nextPosition = positions.find(position =>
-                          position.department === nextDepartment && position.id === employeeForm.position,
-                        )
-                          ? employeeForm.position
-                          : '';
-                        setEmployeeForm({ ...employeeForm, department: nextDepartment, position: nextPosition });
-                      }}
-                      className="w-full px-4 py-2.5 border border-border bg-background focus:outline-none focus:border-foreground text-sm"
-                    >
-                      <option value="">Selecciona un departamento</option>
-                      {departments.map((department) => (
-                        <option key={department.id} value={department.id}>
-                          {department.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs mb-2">Cargo</label>
-                    <select
-                      required
-                      value={employeeForm.position}
-                      onChange={(event) => setEmployeeForm({ ...employeeForm, position: event.target.value })}
-                      className="w-full px-4 py-2.5 border border-border bg-background focus:outline-none focus:border-foreground text-sm"
-                    >
-                      <option value="">Selecciona un cargo</option>
-                      {positionsForSelectedDepartment.map((position) => (
-                        <option key={position.id} value={position.id}>
-                          {position.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs mb-2">Jefe directo</label>
-                    <select
-                      value={employeeForm.manager}
-                      onChange={(event) => setEmployeeForm({ ...employeeForm, manager: event.target.value })}
-                      className="w-full px-4 py-2.5 border border-border bg-background focus:outline-none focus:border-foreground text-sm"
-                    >
-                      <option value="">Sin jefe asignado</option>
-                      {activeEmployees
-                        .filter((employee) => employee.id !== editingEmployee?.id)
-                        .map((employee) => (
-                          <option key={employee.id} value={employee.id}>
-                            {getEmployeeName(employee)}
-                          </option>
-                        ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs mb-2">Estado</label>
-                    <select
-                      required
-                      value={employeeForm.status}
-                      onChange={(event) => setEmployeeForm({ ...employeeForm, status: event.target.value as EmployeeStatus })}
-                      className="w-full px-4 py-2.5 border border-border bg-background focus:outline-none focus:border-foreground text-sm"
-                    >
-                      <option value="ACTIVE">Activo</option>
-                      <option value="LEAVE">En licencia</option>
-                      <option value="SUSPENDED">Suspendido</option>
-                      <option value="TERMINATED">Retirado</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs mb-2">Fecha de ingreso</label>
-                    <input
-                      type="date"
-                      required
-                      value={employeeForm.hire_date}
-                      onChange={(event) => setEmployeeForm({ ...employeeForm, hire_date: event.target.value })}
-                      className="w-full px-4 py-2.5 border border-border bg-background focus:outline-none focus:border-foreground text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs mb-2">Fecha de retiro</label>
-                    <input
-                      type="date"
-                      value={employeeForm.termination_date}
-                      onChange={(event) => setEmployeeForm({ ...employeeForm, termination_date: event.target.value })}
-                      className="w-full px-4 py-2.5 border border-border bg-background focus:outline-none focus:border-foreground text-sm"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={resetEmployeeModal}
-                    className="flex-1 px-6 py-3 border border-border hover:border-foreground transition-colors text-sm"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={savingEmployee}
-                    className="flex-1 px-6 py-3 bg-foreground text-background hover:bg-background hover:text-foreground border border-foreground transition-colors text-sm disabled:opacity-50"
-                  >
-                    {savingEmployee ? 'Guardando...' : editingEmployee ? 'Actualizar' : 'Guardar'}
-                  </button>
-                </div>
-              </form>
             </div>
+            <div className="px-6 pt-4 border-b border-border overflow-x-auto">
+              <div className="flex gap-2 min-w-max">
+                {MODAL_TABS.filter((tab) => !['payroll', 'access'].includes(tab.id)).map((tab) => {
+                  const Icon = tab.icon;
+                  return (
+                    <button key={tab.id} type="button" onClick={() => setEmployeeModalTab(tab.id)} className={`flex items-center gap-2 px-3 py-2 text-[10px] uppercase tracking-wider border-b-2 ${employeeModalTab === tab.id ? 'border-foreground text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
+                      <Icon className="w-3.5 h-3.5" strokeWidth={1.5} />
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="grid md:grid-cols-4 gap-4 mb-5">
+                <div className="border border-border p-4"><div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Perfil completado</div><div className="text-xl">{viewingEmployee.profile_completion_percentage}%</div></div>
+                <div className="border border-border p-4"><div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Pendientes</div><div className="text-xl">{viewingEmployee.pending_documents_count}</div></div>
+                <div className="border border-border p-4"><div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Vencidos</div><div className="text-xl">{viewingEmployee.expired_documents_count}</div></div>
+                <div className="border border-border p-4"><div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Contrato restante</div><div className="text-xl">{viewingEmployee.remaining_contract_days == null ? 'Contrato indefinido' : `${viewingEmployee.remaining_contract_days} días`}</div></div>
+              </div>
+              {renderReadOnlyEmployeeTab(viewingEmployee)}
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {showBranchDetailModal && viewingBranch && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-background border border-border max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-border flex justify-between gap-4">
+              <div>
+                <h3 className="text-2xl">{viewingBranch.name}</h3>
+                <p className="text-xs text-muted-foreground mt-2">{viewingBranch.code} · {viewingBranch.status === 'ACTIVE' ? 'Activa' : 'Inactiva'}</p>
+              </div>
+              <button onClick={() => setShowBranchDetailModal(false)} className="p-2 hover:bg-secondary/50"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="p-6 grid sm:grid-cols-2 gap-4">
+              {[
+                ['Dirección', viewingBranch.address],
+                ['Ciudad', viewingBranch.city],
+                ['Departamento', viewingBranch.department],
+                ['País', viewingBranch.country],
+                ['Teléfono', viewingBranch.phone],
+                ['Correo', viewingBranch.email],
+                ['Responsable', viewingBranch.responsible_name],
+                ['Empleados asignados', viewingBranch.employee_count],
+                ['Departamentos asociados', viewingBranch.department_names?.join(', ')],
+              ].map(([label, value]) => (
+                <div key={label} className="border border-border p-4">
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">{label}</div>
+                  <div className="text-sm">{value || 'Sin registrar'}</div>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {showRequestDetailModal && viewingRequest && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-background border border-border max-w-5xl w-full max-h-[92vh] overflow-y-auto">
+            <div className="p-6 border-b border-border flex justify-between gap-4">
+              <div>
+                <h3 className="text-2xl">Solicitud {viewingRequest.request_number ?? viewingRequest.id}</h3>
+                <p className="text-xs text-muted-foreground mt-2">{getRequestTypeLabel(viewingRequest.request_type)} · {getRequestSubtypeLabel(viewingRequest.subtype)}</p>
+              </div>
+              <button onClick={() => setShowRequestDetailModal(false)} className="p-2 hover:bg-secondary/50"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="p-6 space-y-6">
+              {(() => {
+                const employee = employeeById.get(viewingRequest.employee);
+                return (
+                  <div className="grid md:grid-cols-4 gap-4">
+                    {[
+                      ['Empleado', employee ? getEmployeeName(employee) : viewingRequest.employee],
+                      ['Cargo', employee?.position ? positionById.get(employee.position)?.name : 'Sin cargo'],
+                      ['Área', employee?.department ? departmentById.get(employee.department)?.name : 'Sin área'],
+                      ['Estado', requestStatusLabel(viewingRequest.status)],
+                      ['Fecha creación', parseDate(viewingRequest.created_at)],
+                      ['Fecha inicio', parseDate(viewingRequest.start_date)],
+                      ['Fecha fin', parseDate(viewingRequest.end_date)],
+                      ['Días / horas', `${viewingRequest.days_count ?? 0} días · ${viewingRequest.hours_count ?? 0} horas`],
+                    ].map(([label, value]) => (
+                      <div key={label} className="border border-border p-4">
+                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">{label}</div>
+                        <div className="text-sm">{value || 'Sin registrar'}</div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+              <div className="grid md:grid-cols-3 gap-4">
+                <div className="border border-border p-4"><div className="text-sm font-medium mb-2">Motivo</div><p className="text-xs text-muted-foreground">{viewingRequest.reason || 'Sin motivo'}</p></div>
+                <div className="border border-border p-4"><div className="text-sm font-medium mb-2">Descripción</div><p className="text-xs text-muted-foreground">{viewingRequest.description || 'Sin descripción'}</p></div>
+                <div className="border border-border p-4"><div className="text-sm font-medium mb-2">Observaciones</div><p className="text-xs text-muted-foreground">{viewingRequest.observations || 'Sin observaciones'}</p></div>
+              </div>
+              <div className="border border-border p-4">
+                <div className="text-sm font-medium mb-3">Flujo de aprobación</div>
+                <div className="grid md:grid-cols-4 gap-3">
+                  {viewingRequest.approval_steps.map((step) => (
+                    <div key={step.id} className="border border-border p-3 text-xs">
+                      <div className="font-medium">{approvalStepLabel(step.step)}</div>
+                      <div className={`inline-block mt-2 px-2 py-1 border ${statusBadge(step.status)}`}>{requestStatusLabel(step.status)}</div>
+                      <div className="text-muted-foreground mt-2">{parseDate(step.acted_at)}</div>
+                      <div className="text-muted-foreground">{step.comment || 'Sin comentario'}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="border border-border p-4">
+                  <div className="text-sm font-medium mb-3">Adjuntos</div>
+                  <div className="space-y-2">
+                    {viewingRequest.support_document && <a href={viewingRequest.support_document} target="_blank" rel="noreferrer" className="block text-xs underline">Soporte principal</a>}
+                    {viewingRequest.attachments.map((attachment) => <a key={attachment.id} href={attachment.file} target="_blank" rel="noreferrer" className="block text-xs underline">{attachment.name}</a>)}
+                    {!viewingRequest.support_document && viewingRequest.attachments.length === 0 && <div className="text-xs text-muted-foreground">Sin adjuntos</div>}
+                  </div>
+                </div>
+                <div className="border border-border p-4">
+                  <div className="text-sm font-medium mb-3">Historial</div>
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {viewingRequest.history.map((item) => (
+                      <div key={item.id} className="text-xs border-b border-border pb-2">
+                        <div className="font-medium">{item.action}</div>
+                        <div className="text-muted-foreground">{item.old_status || 'Inicio'} → {item.new_status || 'Sin cambio'}</div>
+                        <div className="text-muted-foreground">{item.comment || 'Sin comentario'} · {parseDate(item.created_at)}</div>
+                      </div>
+                    ))}
+                    {viewingRequest.history.length === 0 && <div className="text-xs text-muted-foreground">Sin historial</div>}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {showBranchModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-background border border-border max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-border flex justify-between gap-4">
+              <div>
+                <h3 className="text-2xl">{editingBranch ? 'Editar sede' : 'Nueva sede'}</h3>
+                <p className="text-xs text-muted-foreground mt-2">Gestión independiente de sedes y sucursales.</p>
+              </div>
+              <button onClick={resetBranchModal} className="p-2 hover:bg-secondary/50"><X className="w-4 h-4" /></button>
+            </div>
+            <form onSubmit={handleBranchSubmit} className="p-6 space-y-4">
+              <div className="grid sm:grid-cols-2 gap-4">
+                <TextInput label="Nombre" required value={branchForm.name} onChange={(value) => setBranchForm((current) => ({ ...current, name: value }))} />
+                <TextInput label="Código" required value={branchForm.code} onChange={(value) => setBranchForm((current) => ({ ...current, code: value }))} />
+                <TextInput label="Dirección" value={branchForm.address} onChange={(value) => setBranchForm((current) => ({ ...current, address: value }))} />
+                <TextInput label="Ciudad" value={branchForm.city} onChange={(value) => setBranchForm((current) => ({ ...current, city: value }))} />
+                <TextInput label="Departamento" value={branchForm.department} onChange={(value) => setBranchForm((current) => ({ ...current, department: value }))} />
+                <TextInput label="País" value={branchForm.country} onChange={(value) => setBranchForm((current) => ({ ...current, country: value }))} />
+                <TextInput label="Teléfono" value={branchForm.phone} onChange={(value) => setBranchForm((current) => ({ ...current, phone: value }))} />
+                <TextInput label="Correo" type="email" value={branchForm.email} onChange={(value) => setBranchForm((current) => ({ ...current, email: value }))} />
+                <SelectInput label="Responsable" value={branchForm.responsible} onChange={(value) => setBranchForm((current) => ({ ...current, responsible: value }))} options={activeEmployees.map((employee) => ({ value: employee.id, label: getEmployeeName(employee) }))} emptyLabel="Sin responsable" />
+                <SelectInput label="Estado" value={branchForm.status} onChange={(value) => setBranchForm((current) => ({ ...current, status: value as 'ACTIVE' | 'INACTIVE', is_active: value === 'ACTIVE' }))} options={[{ value: 'ACTIVE', label: 'Activa' }, { value: 'INACTIVE', label: 'Inactiva' }]} emptyLabel="Estado" />
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button type="button" onClick={resetBranchModal} className="flex-1 px-6 py-3 border border-border hover:border-foreground transition-colors text-sm">Cancelar</button>
+                <button type="submit" disabled={savingBranch} className="flex-1 px-6 py-3 bg-foreground text-background hover:bg-background hover:text-foreground border border-foreground transition-colors text-sm disabled:opacity-50">{savingBranch ? 'Guardando...' : 'Guardar sede'}</button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {showEmployeeModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-background border border-border max-w-6xl w-full max-h-[92vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-border flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-2xl">{editingEmployee ? 'Editar empleado' : 'Nuevo empleado'}</h3>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Guarda como borrador sin documentos y completa el expediente por secciones.
+                </p>
+              </div>
+              <button onClick={resetEmployeeModal} className="p-2 hover:bg-secondary/50 transition-colors">
+                <X className="w-4 h-4" strokeWidth={1} />
+              </button>
+            </div>
+
+            <form onSubmit={handleEmployeeSubmit} className="flex-1 overflow-hidden flex flex-col">
+              <div className="px-6 pt-4 border-b border-border overflow-x-auto">
+                <div className="flex gap-2 min-w-max">
+                  {MODAL_TABS.map((tab) => {
+                    const Icon = tab.icon;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => setEmployeeModalTab(tab.id)}
+                        className={`flex items-center gap-2 px-3 py-2 text-[10px] uppercase tracking-wider border-b-2 transition-colors ${employeeModalTab === tab.id ? 'border-foreground text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+                      >
+                        <Icon className="w-3.5 h-3.5" strokeWidth={1.5} />
+                        {tab.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6">
+                {editingEmployee && (
+                  <div className="grid md:grid-cols-4 gap-4 mb-5">
+                    <div className="border border-border p-4">
+                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Perfil completado</div>
+                      <div className="text-xl">{editingEmployee.profile_completion_percentage}%</div>
+                    </div>
+                    <div className="border border-border p-4">
+                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Pendientes</div>
+                      <div className="text-xl">{editingEmployee.pending_documents_count}</div>
+                    </div>
+                    <div className="border border-border p-4">
+                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Vencidos</div>
+                      <div className="text-xl">{editingEmployee.expired_documents_count}</div>
+                    </div>
+                    <div className="border border-border p-4">
+                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Contrato restante</div>
+                      <div className="text-xl">{editingEmployee.remaining_contract_days == null ? 'Contrato indefinido' : `${editingEmployee.remaining_contract_days} días`}</div>
+                    </div>
+                  </div>
+                )}
+                {renderModalTab()}
+              </div>
+
+              <div className="p-6 border-t border-border flex flex-col sm:flex-row gap-3">
+                <button type="button" onClick={resetEmployeeModal} className="flex-1 px-6 py-3 border border-border hover:border-foreground transition-colors text-sm">
+                  Cancelar
+                </button>
+                <button type="submit" disabled={savingEmployee || savingDocument} className="flex-1 px-6 py-3 bg-foreground text-background hover:bg-background hover:text-foreground border border-foreground transition-colors text-sm disabled:opacity-50 flex items-center justify-center gap-2">
+                  <Save className="w-4 h-4" strokeWidth={1.5} />
+                  {savingEmployee ? 'Guardando...' : editingEmployee ? 'Actualizar empleado' : 'Crear empleado'}
+                </button>
+              </div>
+            </form>
           </motion.div>
         </div>
       )}

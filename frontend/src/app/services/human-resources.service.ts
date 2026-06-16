@@ -1,16 +1,19 @@
 // ============================================================
 // Human Resources Service — Juhnios Rold Frontend
-// Wraps attendance, vacation, payroll and HR document endpoints.
+// Wraps attendance, request, payroll, document and notification APIs.
 // ============================================================
 
 import { api } from './api';
 
 const HR_PATH = '/hr';
 const ATTENDANCE_PATH = `${HR_PATH}/attendance/`;
+const REQUESTS_PATH = `${HR_PATH}/requests/`;
 const VACATIONS_PATH = `${HR_PATH}/vacations/`;
+const REQUEST_ATTACHMENTS_PATH = `${HR_PATH}/request-attachments/`;
 const PAYROLL_PATH = `${HR_PATH}/payroll/`;
 const PERFORMANCE_REVIEWS_PATH = `${HR_PATH}/performance-reviews/`;
 const DOCUMENTS_PATH = `${HR_PATH}/documents/`;
+const NOTIFICATIONS_PATH = `${HR_PATH}/notifications/`;
 
 interface PaginatedResponse<T> {
   count: number;
@@ -36,14 +39,8 @@ function normalizeListResponse<T>(payload: T[] | PaginatedResponse<T> | undefine
   next: string | null;
   previous: string | null;
 } {
-  if (!payload) {
-    return { data: [], total: 0, next: null, previous: null };
-  }
-
-  if (Array.isArray(payload)) {
-    return { data: payload, total: payload.length, next: null, previous: null };
-  }
-
+  if (!payload) return { data: [], total: 0, next: null, previous: null };
+  if (Array.isArray(payload)) return { data: payload, total: payload.length, next: null, previous: null };
   return {
     data: payload.results ?? [],
     total: payload.count ?? (payload.results?.length ?? 0),
@@ -54,16 +51,13 @@ function normalizeListResponse<T>(payload: T[] | PaginatedResponse<T> | undefine
 
 function buildVacationRequestBody(
   payload: Omit<VacationRequestPayload, 'employee'>,
-): FormData | Record<string, string | boolean> {
+): FormData | Record<string, string | boolean | number> {
   if (payload.support_document instanceof Blob) {
     const formData = new FormData();
     Object.entries(payload).forEach(([key, value]) => {
       if (value === null || value === undefined || value === '') return;
-      if (value instanceof Blob) {
-        formData.append(key, value);
-      } else {
-        formData.append(key, String(value));
-      }
+      if (value instanceof Blob) formData.append(key, value);
+      else formData.append(key, String(value));
     });
     return formData;
   }
@@ -71,12 +65,64 @@ function buildVacationRequestBody(
   const { support_document: _supportDocument, ...rest } = payload;
   return Object.fromEntries(
     Object.entries(rest).filter(([, value]) => value !== null && value !== undefined && value !== ''),
-  ) as Record<string, string | boolean>;
+  ) as Record<string, string | boolean | number>;
 }
 
-export type VacationRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
-export type VacationRequestType = 'VACATION' | 'PERMISSION';
+function buildEmployeeDocumentBody(payload: Partial<EmployeeDocumentPayload>): FormData {
+  const formData = new FormData();
+  Object.entries(payload).forEach(([key, value]) => {
+    if (value === null || value === undefined || value === '') return;
+    if (value instanceof File) formData.append(key, value);
+    else formData.append(key, String(value));
+  });
+  return formData;
+}
+
+export type HRRequestStatus = 'PENDING' | 'IN_REVIEW' | 'APPROVED' | 'REJECTED' | 'EXPIRED';
+export type VacationRequestStatus = HRRequestStatus;
+export type VacationRequestType = 'PERMISSION' | 'OVERTIME' | 'LEAVE' | 'INCAPACITY' | 'VACATION' | 'OTHER';
+export type HRRequestSubtype =
+  | 'PERSONAL'
+  | 'MEDICAL'
+  | 'ACADEMIC'
+  | 'FAMILY'
+  | 'DAYTIME'
+  | 'NIGHT'
+  | 'SUNDAY'
+  | 'HOLIDAY'
+  | 'MATERNITY'
+  | 'PATERNITY'
+  | 'BEREAVEMENT'
+  | 'MARRIAGE'
+  | 'DOMESTIC_CALAMITY'
+  | 'UNPAID'
+  | 'GENERAL_ILLNESS'
+  | 'WORK_ACCIDENT'
+  | 'COMMON_ACCIDENT'
+  | 'OCCUPATIONAL_DISEASE'
+  | 'INDIVIDUAL'
+  | 'COLLECTIVE'
+  | 'SHIFT_CHANGE'
+  | 'SCHEDULE_CHANGE'
+  | 'ADMINISTRATIVE'
+  | 'OTHER'
+  | '';
 export type PayrollStatus = 'DRAFT' | 'APPROVED' | 'PAID';
+export type EmployeeDocumentType =
+  | 'ID_COPY'
+  | 'RESUME'
+  | 'SIGNED_CONTRACT'
+  | 'BANK_CERTIFICATE'
+  | 'EPS_CERTIFICATE'
+  | 'PENSION_CERTIFICATE'
+  | 'SEVERANCE_CERTIFICATE'
+  | 'ARL_CERTIFICATE'
+  | 'COMPENSATION_CERTIFICATE'
+  | 'WORK_CERTIFICATE'
+  | 'OTHER';
+export type EmployeeDocumentStatus = 'PENDING' | 'LOADED' | 'REJECTED' | 'EXPIRED' | 'NOT_APPLICABLE';
+export type HRNotificationStatus = 'UNREAD' | 'READ' | 'DISMISSED';
+export type HRNotificationType = 'DOCUMENT_EXPIRED' | 'DOCUMENT_EXPIRING' | 'MISSING_DOCUMENT' | 'GENERAL';
 
 export interface Attendance {
   id: string;
@@ -90,23 +136,89 @@ export interface Attendance {
   deleted_at: string | null;
 }
 
+export interface VacationRequestAttachment {
+  id: string;
+  request: string;
+  attachment_type: 'CERTIFICATE' | 'INCAPACITY' | 'MEDICAL_SUPPORT' | 'ADDITIONAL';
+  name: string;
+  file: string;
+  uploaded_by: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface VacationRequestApprovalStep {
+  id: string;
+  request: string;
+  step: 'REQUESTER' | 'MANAGER' | 'HR' | 'FINAL';
+  sequence: number;
+  status: HRRequestStatus;
+  user: string | null;
+  acted_at: string | null;
+  comment: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface VacationRequestHistory {
+  id: string;
+  request: string;
+  action: 'CREATED' | 'UPDATED' | 'APPROVED' | 'REJECTED' | 'COMMENTED';
+  user: string | null;
+  old_status: string;
+  new_status: string;
+  comment: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
 export interface VacationRequest {
   id: string;
   employee: string;
+  request_number: string | null;
   request_type: VacationRequestType;
+  subtype: HRRequestSubtype;
   start_date: string;
   end_date: string;
   is_full_day: boolean;
   start_time: string | null;
   end_time: string | null;
+  days_count: string | null;
+  hours_count: string | null;
   reason: string;
+  description: string;
+  observations: string;
+  due_date: string | null;
   support_document: string | null;
-  status: VacationRequestStatus;
+  status: HRRequestStatus;
   reviewed_by: string | null;
   reviewed_at: string | null;
+  attachments: VacationRequestAttachment[];
+  approval_steps: VacationRequestApprovalStep[];
+  history: VacationRequestHistory[];
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
+}
+
+export interface RequestsDashboard {
+  pending: number;
+  approved: number;
+  rejected: number;
+  in_review: number;
+  expired: number;
+  overtime_hours: number | string;
+  incapacity_days: number | string;
+  pending_vacation_days: number | string;
+  charts: {
+    by_month: Array<{ label: string; value: number }>;
+    by_type: Array<{ label: string; value: number }>;
+    by_area: Array<{ label: string; value: number }>;
+    by_branch: Array<{ label: string; value: number }>;
+  };
 }
 
 export interface PayrollItem {
@@ -151,10 +263,30 @@ export interface PerformanceReview {
 export interface EmployeeDocument {
   id: string;
   employee: string;
-  document_type: string;
+  document_type: EmployeeDocumentType;
   name: string;
-  file: string;
+  file: string | null;
+  issued_at: string | null;
   expires_at: string | null;
+  uploaded_at: string;
+  status: EmployeeDocumentStatus;
+  observations: string;
+  uploaded_by: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface HRNotification {
+  id: string;
+  employee: string | null;
+  document: string | null;
+  notification_type: HRNotificationType;
+  title: string;
+  message: string;
+  due_date: string | null;
+  status: HRNotificationStatus;
+  created_by: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -171,12 +303,18 @@ export interface AttendancePayload {
 export interface VacationRequestPayload {
   employee: string;
   request_type: VacationRequestType;
+  subtype?: HRRequestSubtype;
   start_date: string;
   end_date: string;
   is_full_day: boolean;
   start_time?: string | null;
   end_time?: string | null;
+  days_count?: string | number | null;
+  hours_count?: string | number | null;
   reason?: string;
+  description?: string;
+  observations?: string;
+  due_date?: string | null;
   support_document?: File | null;
 }
 
@@ -201,10 +339,13 @@ export interface PerformanceReviewPayload {
 
 export interface EmployeeDocumentPayload {
   employee: string;
-  document_type: string;
+  document_type: EmployeeDocumentType;
   name: string;
-  file: string;
+  file?: File | null;
+  issued_at?: string | null;
   expires_at?: string | null;
+  status?: EmployeeDocumentStatus;
+  observations?: string;
 }
 
 export interface ListAttendanceParams {
@@ -218,7 +359,12 @@ export interface ListVacationParams {
   page?: number;
   limit?: number;
   employee?: string;
-  status?: VacationRequestStatus;
+  status?: HRRequestStatus;
+  request_type?: VacationRequestType;
+  subtype?: HRRequestSubtype;
+  department?: string;
+  branch?: string;
+  search?: string;
 }
 
 export interface ListPayrollParams {
@@ -239,7 +385,17 @@ export interface ListDocumentParams {
   page?: number;
   limit?: number;
   employee?: string;
-  document_type?: string;
+  document_type?: EmployeeDocumentType;
+  status?: EmployeeDocumentStatus;
+}
+
+export interface ListNotificationParams {
+  page?: number;
+  limit?: number;
+  employee?: string;
+  document?: string;
+  notification_type?: HRNotificationType;
+  status?: HRNotificationStatus;
 }
 
 // ---- Attendance ----
@@ -249,12 +405,7 @@ export async function getAttendance(params?: ListAttendanceParams): Promise<{
   next: string | null;
   previous: string | null;
 }> {
-  const query = buildQuery({
-    page: params?.page,
-    page_size: params?.limit,
-    employee: params?.employee,
-    date: params?.date,
-  });
+  const query = buildQuery({ page: params?.page, page_size: params?.limit, employee: params?.employee, date: params?.date });
   const res = await api.get<Attendance[] | PaginatedResponse<Attendance>>(`${ATTENDANCE_PATH}${query}`);
   return normalizeListResponse(res.data);
 }
@@ -271,7 +422,7 @@ export async function registerCheckOut(employeeId: string): Promise<Attendance> 
   throw new Error(res.message);
 }
 
-// ---- Vacation requests ----
+// ---- Requests ----
 export async function getVacationRequests(params?: ListVacationParams): Promise<{
   data: VacationRequest[];
   total: number;
@@ -283,22 +434,54 @@ export async function getVacationRequests(params?: ListVacationParams): Promise<
     page_size: params?.limit,
     employee: params?.employee,
     status: params?.status,
+    request_type: params?.request_type,
+    subtype: params?.subtype,
+    employee__department: params?.department,
+    employee__branch: params?.branch,
+    search: params?.search,
   });
-  const res = await api.get<VacationRequest[] | PaginatedResponse<VacationRequest>>(`${VACATIONS_PATH}${query}`);
+  const res = await api.get<VacationRequest[] | PaginatedResponse<VacationRequest>>(`${REQUESTS_PATH}${query}`);
   return normalizeListResponse(res.data);
+}
+
+export async function getVacationRequestById(id: string): Promise<VacationRequest> {
+  const res = await api.get<VacationRequest>(`${REQUESTS_PATH}${id}/`);
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
+export async function getRequestsDashboard(params?: ListVacationParams): Promise<RequestsDashboard> {
+  const query = buildQuery({
+    employee: params?.employee,
+    status: params?.status,
+    request_type: params?.request_type,
+    subtype: params?.subtype,
+    employee__department: params?.department,
+    employee__branch: params?.branch,
+    search: params?.search,
+  });
+  const res = await api.get<RequestsDashboard>(`${REQUESTS_PATH}dashboard/${query}`);
+  if (res.data) return res.data;
+  throw new Error(res.message);
 }
 
 export async function createVacationRequest(payload: VacationRequestPayload): Promise<VacationRequest> {
   const res = await api.post<VacationRequest>(
-    VACATIONS_PATH,
+    REQUESTS_PATH,
     buildVacationRequestBody({
       request_type: payload.request_type,
+      subtype: payload.subtype,
       start_date: payload.start_date,
       end_date: payload.end_date,
       is_full_day: payload.is_full_day,
       start_time: payload.start_time,
       end_time: payload.end_time,
+      days_count: payload.days_count,
+      hours_count: payload.hours_count,
       reason: payload.reason,
+      description: payload.description,
+      observations: payload.observations,
+      due_date: payload.due_date,
       support_document: payload.support_document,
     }),
   );
@@ -312,10 +495,7 @@ export async function getMyVacationRequests(params?: { page?: number; limit?: nu
   next: string | null;
   previous: string | null;
 }> {
-  const query = buildQuery({
-    page: params?.page,
-    page_size: params?.limit,
-  });
+  const query = buildQuery({ page: params?.page, page_size: params?.limit });
   const res = await api.get<VacationRequest[] | PaginatedResponse<VacationRequest>>(`${VACATIONS_PATH}me/${query}`);
   return normalizeListResponse(res.data);
 }
@@ -326,14 +506,30 @@ export async function createMyVacationRequest(payload: Omit<VacationRequestPaylo
   throw new Error(res.message);
 }
 
-export async function approveVacationRequest(id: string): Promise<VacationRequest> {
-  const res = await api.post<VacationRequest>(`${VACATIONS_PATH}${id}/approve/`, {});
+export async function approveVacationRequest(id: string, comment = ''): Promise<VacationRequest> {
+  const res = await api.post<VacationRequest>(`${REQUESTS_PATH}${id}/approve/`, { comment });
   if (res.data) return res.data;
   throw new Error(res.message);
 }
 
-export async function rejectVacationRequest(id: string): Promise<VacationRequest> {
-  const res = await api.post<VacationRequest>(`${VACATIONS_PATH}${id}/reject/`, {});
+export async function rejectVacationRequest(id: string, comment = ''): Promise<VacationRequest> {
+  const res = await api.post<VacationRequest>(`${REQUESTS_PATH}${id}/reject/`, { comment });
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
+export async function createVacationRequestAttachment(payload: {
+  request: string;
+  attachment_type: VacationRequestAttachment['attachment_type'];
+  name: string;
+  file: File;
+}): Promise<VacationRequestAttachment> {
+  const formData = new FormData();
+  formData.append('request', payload.request);
+  formData.append('attachment_type', payload.attachment_type);
+  formData.append('name', payload.name);
+  formData.append('file', payload.file);
+  const res = await api.post<VacationRequestAttachment>(REQUEST_ATTACHMENTS_PATH, formData);
   if (res.data) return res.data;
   throw new Error(res.message);
 }
@@ -345,12 +541,7 @@ export async function getPayrolls(params?: ListPayrollParams): Promise<{
   next: string | null;
   previous: string | null;
 }> {
-  const query = buildQuery({
-    page: params?.page,
-    page_size: params?.limit,
-    employee: params?.employee,
-    status: params?.status,
-  });
+  const query = buildQuery({ page: params?.page, page_size: params?.limit, employee: params?.employee, status: params?.status });
   const res = await api.get<Payroll[] | PaginatedResponse<Payroll>>(`${PAYROLL_PATH}${query}`);
   return normalizeListResponse(res.data);
 }
@@ -374,12 +565,7 @@ export async function getPerformanceReviews(params?: ListPerformanceReviewParams
   next: string | null;
   previous: string | null;
 }> {
-  const query = buildQuery({
-    page: params?.page,
-    page_size: params?.limit,
-    employee: params?.employee,
-    reviewer: params?.reviewer,
-  });
+  const query = buildQuery({ page: params?.page, page_size: params?.limit, employee: params?.employee, reviewer: params?.reviewer });
   const res = await api.get<PerformanceReview[] | PaginatedResponse<PerformanceReview>>(`${PERFORMANCE_REVIEWS_PATH}${query}`);
   return normalizeListResponse(res.data);
 }
@@ -402,13 +588,45 @@ export async function getEmployeeDocuments(params?: ListDocumentParams): Promise
     page_size: params?.limit,
     employee: params?.employee,
     document_type: params?.document_type,
+    status: params?.status,
   });
   const res = await api.get<EmployeeDocument[] | PaginatedResponse<EmployeeDocument>>(`${DOCUMENTS_PATH}${query}`);
   return normalizeListResponse(res.data);
 }
 
 export async function createEmployeeDocument(payload: EmployeeDocumentPayload): Promise<EmployeeDocument> {
-  const res = await api.post<EmployeeDocument>(DOCUMENTS_PATH, payload);
+  const res = await api.post<EmployeeDocument>(DOCUMENTS_PATH, buildEmployeeDocumentBody(payload));
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
+export async function updateEmployeeDocument(id: string, payload: Partial<EmployeeDocumentPayload>): Promise<EmployeeDocument> {
+  const res = await api.patch<EmployeeDocument>(`${DOCUMENTS_PATH}${id}/`, buildEmployeeDocumentBody(payload));
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
+// ---- Notifications ----
+export async function getHRNotifications(params?: ListNotificationParams): Promise<{
+  data: HRNotification[];
+  total: number;
+  next: string | null;
+  previous: string | null;
+}> {
+  const query = buildQuery({
+    page: params?.page,
+    page_size: params?.limit,
+    employee: params?.employee,
+    document: params?.document,
+    notification_type: params?.notification_type,
+    status: params?.status,
+  });
+  const res = await api.get<HRNotification[] | PaginatedResponse<HRNotification>>(`${NOTIFICATIONS_PATH}${query}`);
+  return normalizeListResponse(res.data);
+}
+
+export async function markHRNotificationRead(id: string): Promise<HRNotification> {
+  const res = await api.post<HRNotification>(`${NOTIFICATIONS_PATH}${id}/mark-read/`, {});
   if (res.data) return res.data;
   throw new Error(res.message);
 }
