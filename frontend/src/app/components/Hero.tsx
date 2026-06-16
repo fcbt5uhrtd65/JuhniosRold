@@ -329,7 +329,7 @@ export function Hero({ onLoginClick }: HeroProps = {}) {
               </div>
 
               {/* Carrito */}
-              <div className="rounded-full overflow-hidden border border-white/20 bg-white/10 backdrop-blur-sm">
+              <div className="rounded-full border border-white/20 bg-white/10 backdrop-blur-sm">
                 <ShoppingCart onLoginRequired={onLoginClick} />
               </div>
 

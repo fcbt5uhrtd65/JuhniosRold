@@ -328,7 +328,7 @@ export function Navbar({ onLoginClick }: NavbarProps = {}) {
                 </div>
 
                 {/* Carrito */}
-                <div className="border border-stone-200 rounded-full overflow-hidden">
+                <div className="border border-stone-200 rounded-full">
                   <ShoppingCart onLoginRequired={onLoginClick} />
                 </div>
 
