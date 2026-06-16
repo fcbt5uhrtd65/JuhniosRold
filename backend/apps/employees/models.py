@@ -1,3 +1,25 @@
-from .infrastructure.models import Department, Employee, EmploymentContract, Position
+from .infrastructure.models import (
+    Branch,
+    Department,
+    Employee,
+    EmployeeChangeLog,
+    EmployeePositionHistory,
+    EmployeeSalaryHistory,
+    EmploymentContract,
+    HRFieldConfiguration,
+    Position,
+    WorkDay,
+)
 
-__all__ = ("Department", "Position", "Employee", "EmploymentContract")
+__all__ = (
+    "Branch",
+    "Department",
+    "Employee",
+    "EmployeeChangeLog",
+    "EmployeePositionHistory",
+    "EmployeeSalaryHistory",
+    "EmploymentContract",
+    "HRFieldConfiguration",
+    "Position",
+    "WorkDay",
+)

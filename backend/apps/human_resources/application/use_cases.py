@@ -4,7 +4,7 @@ from django.utils import timezone
 from shared.domain.exceptions import BusinessRuleViolation
 
 from ..domain.entities import PayrollCalculation
-from ..infrastructure.models import Attendance, Payroll, VacationRequest
+from ..infrastructure.models import Attendance, Payroll, VacationRequest, VacationRequestApprovalStep, VacationRequestHistory
 
 
 class RegisterCheckIn:
@@ -29,13 +29,40 @@ class RegisterCheckOut:
 
 
 class ResolveVacationRequest:
-    def execute(self, vacation, status, reviewer):
-        if vacation.status != VacationRequest.Status.PENDING:
+    def execute(self, vacation, status, reviewer, comment=""):
+        if vacation.status not in {VacationRequest.Status.PENDING, VacationRequest.Status.IN_REVIEW}:
             raise BusinessRuleViolation("La solicitud ya fue resuelta.")
+        old_status = vacation.status
         vacation.status = status
         vacation.reviewed_by = reviewer
         vacation.reviewed_at = timezone.now()
         vacation.save(update_fields=("status", "reviewed_by", "reviewed_at", "updated_at"))
+        step_code = (
+            VacationRequestApprovalStep.Step.FINAL
+            if status == VacationRequest.Status.APPROVED
+            else VacationRequestApprovalStep.Step.HR
+        )
+        VacationRequestApprovalStep.objects.update_or_create(
+            request=vacation,
+            step=step_code,
+            defaults={
+                "sequence": 4 if step_code == VacationRequestApprovalStep.Step.FINAL else 3,
+                "status": status,
+                "user": reviewer,
+                "acted_at": timezone.now(),
+                "comment": comment,
+            },
+        )
+        VacationRequestHistory.objects.create(
+            request=vacation,
+            action=VacationRequestHistory.Action.APPROVED
+            if status == VacationRequest.Status.APPROVED
+            else VacationRequestHistory.Action.REJECTED,
+            user=reviewer,
+            old_status=old_status,
+            new_status=status,
+            comment=comment,
+        )
         return vacation
 
 

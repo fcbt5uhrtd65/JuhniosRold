@@ -3,9 +3,13 @@ from django.contrib import admin
 from .models import (
     Attendance,
     EmployeeDocument,
+    HRNotification,
     Payroll,
     PayrollItem,
     PerformanceReview,
+    VacationRequestApprovalStep,
+    VacationRequestAttachment,
+    VacationRequestHistory,
     VacationRequest,
 )
 
@@ -27,11 +31,35 @@ class AttendanceAdmin(admin.ModelAdmin):
 
 @admin.register(VacationRequest)
 class VacationRequestAdmin(admin.ModelAdmin):
-    list_display = ("employee", "start_date", "end_date", "status", "reviewed_by", "reviewed_at")
-    list_filter = ("status", "start_date")
-    search_fields = ("employee__employee_code", "employee__first_name", "employee__last_name", "reason")
+    list_display = ("request_number", "employee", "request_type", "subtype", "start_date", "end_date", "status", "reviewed_by", "reviewed_at")
+    list_filter = ("status", "request_type", "subtype", "start_date")
+    search_fields = ("request_number", "employee__employee_code", "employee__first_name", "employee__last_name", "reason", "description")
     list_select_related = ("employee", "reviewed_by")
     date_hierarchy = "start_date"
+
+
+@admin.register(VacationRequestAttachment)
+class VacationRequestAttachmentAdmin(admin.ModelAdmin):
+    list_display = ("name", "request", "attachment_type", "uploaded_by", "created_at")
+    list_filter = ("attachment_type", "created_at")
+    search_fields = ("name", "request__request_number")
+    list_select_related = ("request", "uploaded_by")
+
+
+@admin.register(VacationRequestApprovalStep)
+class VacationRequestApprovalStepAdmin(admin.ModelAdmin):
+    list_display = ("request", "step", "sequence", "status", "user", "acted_at")
+    list_filter = ("step", "status")
+    search_fields = ("request__request_number", "comment")
+    list_select_related = ("request", "user")
+
+
+@admin.register(VacationRequestHistory)
+class VacationRequestHistoryAdmin(admin.ModelAdmin):
+    list_display = ("request", "action", "user", "old_status", "new_status", "created_at")
+    list_filter = ("action", "created_at")
+    search_fields = ("request__request_number", "comment")
+    list_select_related = ("request", "user")
 
 
 @admin.register(Payroll)
@@ -78,7 +106,15 @@ class PerformanceReviewAdmin(admin.ModelAdmin):
 
 @admin.register(EmployeeDocument)
 class EmployeeDocumentAdmin(admin.ModelAdmin):
-    list_display = ("name", "employee", "document_type", "expires_at", "updated_at")
-    list_filter = ("document_type", "expires_at")
-    search_fields = ("name", "document_type", "employee__employee_code", "employee__first_name")
-    list_select_related = ("employee",)
+    list_display = ("name", "employee", "document_type", "status", "issued_at", "expires_at", "uploaded_by", "uploaded_at")
+    list_filter = ("document_type", "status", "expires_at")
+    search_fields = ("name", "document_type", "employee__employee_code", "employee__first_name", "observations")
+    list_select_related = ("employee", "uploaded_by")
+
+
+@admin.register(HRNotification)
+class HRNotificationAdmin(admin.ModelAdmin):
+    list_display = ("title", "employee", "notification_type", "status", "due_date", "created_at")
+    list_filter = ("notification_type", "status", "due_date")
+    search_fields = ("title", "message", "employee__employee_code", "employee__first_name")
+    list_select_related = ("employee", "document", "created_by")

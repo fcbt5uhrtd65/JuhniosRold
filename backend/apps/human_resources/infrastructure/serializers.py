@@ -2,7 +2,18 @@ from pathlib import Path
 
 from rest_framework import serializers
 
-from .models import Attendance, EmployeeDocument, Payroll, PayrollItem, PerformanceReview, VacationRequest
+from .models import (
+    Attendance,
+    EmployeeDocument,
+    HRNotification,
+    Payroll,
+    PayrollItem,
+    PerformanceReview,
+    VacationRequest,
+    VacationRequestApprovalStep,
+    VacationRequestAttachment,
+    VacationRequestHistory,
+)
 
 ALLOWED_SUPPORT_CONTENT_TYPES = {
     "application/pdf",
@@ -18,13 +29,54 @@ class AttendanceSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
+class VacationRequestAttachmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VacationRequestAttachment
+        fields = "__all__"
+        read_only_fields = ("uploaded_by",)
+
+    def validate_file(self, file):
+        if not file:
+            return file
+        extension = Path(file.name).suffix.lower().lstrip(".")
+        if extension not in {"pdf", "png", "jpg", "jpeg", "doc", "docx"}:
+            raise serializers.ValidationError(
+                "El adjunto solo puede ser PDF, Word o una imagen PNG/JPG."
+            )
+        return file
+
+
+class VacationRequestApprovalStepSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VacationRequestApprovalStep
+        fields = "__all__"
+
+
+class VacationRequestHistorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VacationRequestHistory
+        fields = "__all__"
+
+
 class VacationRequestSerializer(serializers.ModelSerializer):
     employee = serializers.PrimaryKeyRelatedField(read_only=True)
+    attachments = VacationRequestAttachmentSerializer(many=True, read_only=True)
+    approval_steps = VacationRequestApprovalStepSerializer(many=True, read_only=True)
+    history = VacationRequestHistorySerializer(many=True, read_only=True)
 
     class Meta:
         model = VacationRequest
         fields = "__all__"
-        read_only_fields = ("status", "reviewed_by", "reviewed_at", "employee")
+        read_only_fields = (
+            "request_number",
+            "status",
+            "reviewed_by",
+            "reviewed_at",
+            "employee",
+            "attachments",
+            "approval_steps",
+            "history",
+        )
 
     def validate(self, attrs):
         instance = self.instance
@@ -97,4 +149,33 @@ class PerformanceReviewSerializer(serializers.ModelSerializer):
 class EmployeeDocumentSerializer(serializers.ModelSerializer):
     class Meta:
         model = EmployeeDocument
+        fields = "__all__"
+        read_only_fields = ("uploaded_at", "uploaded_by")
+
+    def validate_file(self, file):
+        if not file:
+            return file
+
+        extension = Path(file.name).suffix.lower().lstrip(".")
+        if extension not in {"pdf", "png", "jpg", "jpeg", "doc", "docx"}:
+            raise serializers.ValidationError(
+                "El documento solo puede ser PDF, Word o una imagen PNG/JPG."
+            )
+
+        content_type = getattr(file, "content_type", None)
+        if content_type and content_type.lower() not in {
+            *ALLOWED_SUPPORT_CONTENT_TYPES,
+            "application/msword",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        }:
+            raise serializers.ValidationError(
+                "El documento solo puede ser PDF, Word o una imagen PNG/JPG."
+            )
+
+        return file
+
+
+class HRNotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HRNotification
         fields = "__all__"

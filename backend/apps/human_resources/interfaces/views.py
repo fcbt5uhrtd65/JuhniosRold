@@ -1,7 +1,11 @@
+from collections import defaultdict
+
+from django.db.models import Sum
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from django.utils import timezone
 
 from shared.interfaces.viewsets import SoftDeleteModelViewSet
 
@@ -9,12 +13,24 @@ from apps.employees.infrastructure.models import Employee
 from apps.identity.interfaces.permissions import HasComponentAccess
 
 from ..application.use_cases import RegisterCheckIn, RegisterCheckOut, ResolveVacationRequest
-from ..infrastructure.models import Attendance, EmployeeDocument, Payroll, PerformanceReview, VacationRequest
+from ..infrastructure.models import (
+    Attendance,
+    EmployeeDocument,
+    HRNotification,
+    Payroll,
+    PerformanceReview,
+    VacationRequest,
+    VacationRequestApprovalStep,
+    VacationRequestAttachment,
+    VacationRequestHistory,
+)
 from ..infrastructure.serializers import (
     AttendanceSerializer,
     EmployeeDocumentSerializer,
+    HRNotificationSerializer,
     PayrollSerializer,
     PerformanceReviewSerializer,
+    VacationRequestAttachmentSerializer,
     VacationRequestSerializer,
 )
 
@@ -42,17 +58,62 @@ class AttendanceViewSet(SoftDeleteModelViewSet):
 
 
 class VacationRequestViewSet(SoftDeleteModelViewSet):
-    queryset = VacationRequest.objects.select_related("employee", "reviewed_by")
+    queryset = (
+        VacationRequest.objects.select_related(
+            "employee",
+            "employee__department",
+            "employee__position",
+            "employee__branch",
+            "reviewed_by",
+        )
+        .prefetch_related("attachments", "approval_steps", "history")
+    )
     serializer_class = VacationRequestSerializer
     permission_classes = (HasComponentAccess,)
     required_component = "human_resources.management"
-    filterset_fields = ("employee", "status")
+    filterset_fields = ("employee", "status", "request_type", "subtype", "employee__department", "employee__branch")
+    search_fields = ("request_number", "reason", "description", "employee__employee_code", "employee__first_name", "employee__last_name")
+    ordering_fields = ("created_at", "start_date", "end_date", "status", "request_type")
 
     def get_permissions(self):
         if self.action == "me":
             return (IsAuthenticated(),)
-        self.required_component_action = "view" if self.action in {"list", "retrieve"} else "edit"
+        self.required_component_action = "view" if self.action in {"list", "retrieve", "dashboard"} else "edit"
         return super().get_permissions()
+
+    def _ensure_approval_flow(self, vacation, requester=None):
+        manager_user = getattr(getattr(vacation.employee, "manager", None), "user", None)
+        flow = (
+            (VacationRequestApprovalStep.Step.REQUESTER, 1, requester or vacation.employee.user, VacationRequest.Status.APPROVED, "Solicitud creada"),
+            (VacationRequestApprovalStep.Step.MANAGER, 2, manager_user, VacationRequest.Status.PENDING, ""),
+            (VacationRequestApprovalStep.Step.HR, 3, None, VacationRequest.Status.PENDING, ""),
+            (VacationRequestApprovalStep.Step.FINAL, 4, None, VacationRequest.Status.PENDING, ""),
+        )
+        for step, sequence, user, step_status, comment in flow:
+            VacationRequestApprovalStep.objects.get_or_create(
+                request=vacation,
+                step=step,
+                defaults={
+                    "sequence": sequence,
+                    "user": user,
+                    "status": step_status,
+                    "acted_at": timezone.now() if step == VacationRequestApprovalStep.Step.REQUESTER else None,
+                    "comment": comment,
+                },
+            )
+
+    def perform_create(self, serializer):
+        employee_id = self.request.data.get("employee") or self.request.data.get("employee_id")
+        employee = Employee.objects.get(id=employee_id) if employee_id else getattr(self.request.user, "employee_profile", None)
+        vacation = serializer.save(employee=employee)
+        self._ensure_approval_flow(vacation, self.request.user)
+        VacationRequestHistory.objects.create(
+            request=vacation,
+            action=VacationRequestHistory.Action.CREATED,
+            user=self.request.user,
+            new_status=vacation.status,
+            comment="Solicitud creada",
+        )
 
     @action(detail=False, methods=("get", "post"), permission_classes=(IsAuthenticated,), url_path="me")
     def me(self, request):
@@ -67,6 +128,14 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             vacation = serializer.save(employee=employee)
+            self._ensure_approval_flow(vacation, request.user)
+            VacationRequestHistory.objects.create(
+                request=vacation,
+                action=VacationRequestHistory.Action.CREATED,
+                user=request.user,
+                new_status=vacation.status,
+                comment="Solicitud creada por empleado",
+            )
             return Response(self.get_serializer(vacation).data, status=status.HTTP_201_CREATED)
 
         queryset = self.get_queryset().filter(employee=employee).order_by("-created_at")
@@ -80,16 +149,82 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
     @action(detail=True, methods=("post",))
     def approve(self, request, pk=None):
         vacation = ResolveVacationRequest().execute(
-            self.get_object(), VacationRequest.Status.APPROVED, request.user
+            self.get_object(),
+            VacationRequest.Status.APPROVED,
+            request.user,
+            request.data.get("comment", ""),
         )
         return Response(self.get_serializer(vacation).data)
 
     @action(detail=True, methods=("post",))
     def reject(self, request, pk=None):
         vacation = ResolveVacationRequest().execute(
-            self.get_object(), VacationRequest.Status.REJECTED, request.user
+            self.get_object(),
+            VacationRequest.Status.REJECTED,
+            request.user,
+            request.data.get("comment", ""),
         )
         return Response(self.get_serializer(vacation).data)
+
+    @action(detail=False, methods=("get",), url_path="dashboard")
+    def dashboard(self, request):
+        queryset = self.filter_queryset(self.get_queryset())
+        today = timezone.localdate()
+        expired = queryset.filter(due_date__lt=today).exclude(
+            status__in=(VacationRequest.Status.APPROVED, VacationRequest.Status.REJECTED)
+        )
+        by_month = defaultdict(int)
+        by_type = defaultdict(int)
+        by_area = defaultdict(int)
+        by_branch = defaultdict(int)
+        for item in queryset:
+            by_month[item.created_at.strftime("%Y-%m")] += 1
+            by_type[item.request_type] += 1
+            by_area[item.employee.department.name if item.employee.department_id else "Sin área"] += 1
+            by_branch[item.employee.branch.name if item.employee.branch_id else "Sin sede"] += 1
+
+        return Response(
+            {
+                "pending": queryset.filter(status=VacationRequest.Status.PENDING).count(),
+                "approved": queryset.filter(status=VacationRequest.Status.APPROVED).count(),
+                "rejected": queryset.filter(status=VacationRequest.Status.REJECTED).count(),
+                "in_review": queryset.filter(status=VacationRequest.Status.IN_REVIEW).count(),
+                "expired": expired.count(),
+                "overtime_hours": queryset.filter(request_type=VacationRequest.RequestType.OVERTIME).aggregate(total=Sum("hours_count"))["total"] or 0,
+                "incapacity_days": queryset.filter(request_type=VacationRequest.RequestType.INCAPACITY).aggregate(total=Sum("days_count"))["total"] or 0,
+                "pending_vacation_days": queryset.filter(
+                    request_type=VacationRequest.RequestType.VACATION,
+                    status__in=(VacationRequest.Status.PENDING, VacationRequest.Status.IN_REVIEW),
+                ).aggregate(total=Sum("days_count"))["total"] or 0,
+                "charts": {
+                    "by_month": [{"label": key, "value": value} for key, value in sorted(by_month.items())],
+                    "by_type": [{"label": key, "value": value} for key, value in sorted(by_type.items())],
+                    "by_area": [{"label": key, "value": value} for key, value in sorted(by_area.items())],
+                    "by_branch": [{"label": key, "value": value} for key, value in sorted(by_branch.items())],
+                },
+            }
+        )
+
+
+class VacationRequestAttachmentViewSet(SoftDeleteModelViewSet):
+    queryset = VacationRequestAttachment.objects.select_related("request", "uploaded_by")
+    serializer_class = VacationRequestAttachmentSerializer
+    permission_classes = (HasComponentAccess,)
+    required_component = "human_resources.management"
+    filterset_fields = ("request", "attachment_type", "uploaded_by")
+
+    def get_permissions(self):
+        self.required_component_action = "view" if self.action in {"list", "retrieve"} else "edit"
+        return super().get_permissions()
+
+    def perform_create(self, serializer):
+        attachment = serializer.save(uploaded_by=self.request.user)
+        VacationRequestHistory.objects.create(
+            request=attachment.request,
+            action=VacationRequestHistory.Action.UPDATED,
+            user=self.request.user,
+            comment=f"Adjunto agregado: {attachment.name}",
+        )
 
 
 class PayrollViewSet(SoftDeleteModelViewSet):
@@ -117,12 +252,56 @@ class PerformanceReviewViewSet(SoftDeleteModelViewSet):
 
 
 class EmployeeDocumentViewSet(SoftDeleteModelViewSet):
-    queryset = EmployeeDocument.objects.select_related("employee")
+    queryset = EmployeeDocument.objects.select_related("employee", "uploaded_by")
     serializer_class = EmployeeDocumentSerializer
     permission_classes = (HasComponentAccess,)
     required_component = "human_resources.management"
-    filterset_fields = ("employee", "document_type")
+    filterset_fields = ("employee", "document_type", "status", "uploaded_by")
 
     def get_permissions(self):
         self.required_component_action = "view" if self.action in {"list", "retrieve"} else "edit"
         return super().get_permissions()
+
+    def _create_document_alert(self, document):
+        if document.status != EmployeeDocument.Status.EXPIRED:
+            return
+        HRNotification.objects.update_or_create(
+            document=document,
+            notification_type=HRNotification.NotificationType.DOCUMENT_EXPIRED,
+            defaults={
+                "employee": document.employee,
+                "title": "Documento vencido",
+                "message": f"{document.get_document_type_display()} de {document.employee} está vencido.",
+                "due_date": document.expires_at or timezone.localdate(),
+                "status": HRNotification.Status.UNREAD,
+                "created_by": self.request.user,
+            },
+        )
+
+    def perform_create(self, serializer):
+        document = serializer.save(uploaded_by=self.request.user)
+        self._create_document_alert(document)
+
+    def perform_update(self, serializer):
+        document = serializer.save()
+        self._create_document_alert(document)
+
+
+class HRNotificationViewSet(SoftDeleteModelViewSet):
+    queryset = HRNotification.objects.select_related("employee", "document", "created_by")
+    serializer_class = HRNotificationSerializer
+    permission_classes = (HasComponentAccess,)
+    required_component = "human_resources.management"
+    filterset_fields = ("employee", "document", "notification_type", "status")
+    search_fields = ("title", "message", "employee__employee_code")
+
+    def get_permissions(self):
+        self.required_component_action = "view" if self.action in {"list", "retrieve"} else "edit"
+        return super().get_permissions()
+
+    @action(detail=True, methods=("post",), url_path="mark-read")
+    def mark_read(self, request, pk=None):
+        notification = self.get_object()
+        notification.status = HRNotification.Status.READ
+        notification.save(update_fields=("status", "updated_at"))
+        return Response(self.get_serializer(notification).data)

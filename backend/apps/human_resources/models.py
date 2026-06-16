@@ -1,9 +1,13 @@
 from .infrastructure.models import (
     Attendance,
     EmployeeDocument,
+    HRNotification,
     Payroll,
     PayrollItem,
     PerformanceReview,
+    VacationRequestApprovalStep,
+    VacationRequestAttachment,
+    VacationRequestHistory,
     VacationRequest,
 )
 
@@ -14,4 +18,8 @@ __all__ = (
     "PayrollItem",
     "PerformanceReview",
     "EmployeeDocument",
+    "HRNotification",
+    "VacationRequestAttachment",
+    "VacationRequestApprovalStep",
+    "VacationRequestHistory",
 )
