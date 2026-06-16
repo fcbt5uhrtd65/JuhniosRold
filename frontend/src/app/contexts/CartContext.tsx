@@ -73,6 +73,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const reloadCart = useCallback(async () => {
     if (!canUseApiCart) {
+      setIsLoading(false);
       setItems([]);
       return;
     }

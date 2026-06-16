@@ -32,11 +32,9 @@ const PaymentIcons = () => (
       <text x="8" y="16" fontSize="9" fill="white" fontFamily="Arial" fontWeight="bold">nequi</text>
     </svg>
     {/* Daviplata */}
-    <svg viewBox="0 0 64" className="h-5 w-auto" aria-label="Daviplata">
-      <svg viewBox="0 0 64 24">
-        <rect width="64" height="24" rx="3" fill="#ED1C24"/>
-        <text x="5" y="16" fontSize="8.5" fill="white" fontFamily="Arial" fontWeight="bold">daviplata</text>
-      </svg>
+    <svg viewBox="0 0 64 24" className="h-5 w-auto" aria-label="Daviplata">
+      <rect width="64" height="24" rx="3" fill="#ED1C24"/>
+      <text x="5" y="16" fontSize="8.5" fill="white" fontFamily="Arial" fontWeight="bold">daviplata</text>
     </svg>
     {/* Efecty */}
     <svg viewBox="0 0 54 24" className="h-5 w-auto" aria-label="Efecty">

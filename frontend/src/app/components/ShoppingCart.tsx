@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Minus, Plus, ShoppingBag, Package, ArrowRight, Sparkles } from 'lucide-react';
+import { X, Minus, Plus, ShoppingBag, Package, ArrowRight, Sparkles, Loader2 } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
 import { Checkout } from './Checkout';
 
@@ -38,7 +39,7 @@ const suggestedProducts = [
 export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
   const [isOpen, setIsOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
-  const { items, updateQuantity, removeItem, total, itemCount } = useCart();
+  const { items, updateQuantity, removeItem, total, itemCount, reloadCart, isLoading } = useCart();
 
   const shippingProgress = Math.min((total / SHIPPING_THRESHOLD) * 100, 100);
   const remaining = SHIPPING_THRESHOLD - total;
@@ -49,7 +50,10 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
       {/* Trigger button */}
       <motion.button
         whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-        onClick={() => setIsOpen(true)}
+        onClick={() => {
+          setIsOpen(true);
+          void reloadCart();
+        }}
         className="relative flex items-center gap-2 px-3 py-1.5 rounded-full hover:bg-stone-100 text-muted-foreground hover:text-foreground transition-all duration-200"
       >
         <ShoppingBag className="w-4 h-4" strokeWidth={1.5} />
@@ -65,6 +69,7 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
         )}
       </motion.button>
 
+      {createPortal(
       <AnimatePresence>
         {isOpen && (
           <>
@@ -135,7 +140,17 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
 
               {/* Items */}
               <div className="flex-1 overflow-y-auto px-7 py-5">
-                {items.length === 0 ? (
+                {isLoading ? (
+                  <div className="flex flex-col items-center justify-center h-full gap-4 text-center">
+                    <div className="w-16 h-16 rounded-2xl bg-stone-50 flex items-center justify-center">
+                      <Loader2 className="w-7 h-7 text-stone-300 animate-spin" strokeWidth={1.5} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-stone-700 mb-1">Cargando carrito</p>
+                      <p className="text-xs text-muted-foreground">Estamos trayendo tus productos</p>
+                    </div>
+                  </div>
+                ) : items.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full gap-4 text-center">
                     <div className="w-16 h-16 rounded-2xl bg-stone-50 flex items-center justify-center">
                       <ShoppingBag className="w-7 h-7 text-stone-300" strokeWidth={1} />
@@ -277,7 +292,9 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
             </motion.div>
           </>
         )}
-      </AnimatePresence>
+      </AnimatePresence>,
+      document.body,
+      )}
 
       <Checkout
         isOpen={checkoutOpen}
