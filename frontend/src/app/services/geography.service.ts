@@ -39,18 +39,18 @@ export const geographyService = {
   async getCountries(search?: string): Promise<Country[]> {
     const qs = buildQuery({ search: search ?? '', page_size: 50 });
     const res = await api.get<PaginatedResponse<Country>>(`/geography/countries/${qs}`);
-    return res.results ?? [];
+    return res.data?.results ?? [];
   },
 
   async getStates(countryId: number, search?: string): Promise<State[]> {
     const qs = buildQuery({ country: countryId, search: search ?? '', page_size: 100 });
     const res = await api.get<PaginatedResponse<State>>(`/geography/states/${qs}`);
-    return res.results ?? [];
+    return res.data?.results ?? [];
   },
 
   async getCities(stateId: number, search?: string): Promise<City[]> {
     const qs = buildQuery({ state: stateId, search: search ?? '', page_size: 50 });
     const res = await api.get<PaginatedResponse<City>>(`/geography/cities/${qs}`);
-    return res.results ?? [];
+    return res.data?.results ?? [];
   },
 };
