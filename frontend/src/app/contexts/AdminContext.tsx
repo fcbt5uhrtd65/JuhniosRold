@@ -198,7 +198,13 @@ const INITIAL_PAYMENTS: Payment[] = [
 // ---- Map API product → admin Product ----
 function mapApiProduct(p: ApiProduct): Product {
   const primaryVariant = p.variants.find(variant => variant.is_active) ?? p.variants[0];
-  const productType = primaryVariant?.attributes?.type;
+  const attrs = primaryVariant?.attributes ?? {};
+  const productType = attrs.type;
+  const marca = attrs.brand ?? attrs.marca;
+  const codigo = attrs.sku ?? primaryVariant?.sku;
+  const beneficios = attrs.benefits ?? attrs.beneficios;
+  const modoDeUso = attrs.how_to_use ?? attrs.modoDeUso;
+  const ingredientes = attrs.ingredients ?? attrs.ingredientes;
 
   return {
     id: p.id,
@@ -207,9 +213,17 @@ function mapApiProduct(p: ApiProduct): Product {
     tipo: typeof productType === 'string' ? productType : p.category_name,
     presentacion: p.sizes[0] ?? '',
     precio: p.price ?? 0,
+    precioCosto: primaryVariant?.cost ?? undefined,
     descripcion: p.description,
     imagen: p.primary_image ?? '',
     estado: p.is_active ? 'activo' : 'inactivo',
+    codigo: typeof codigo === 'string' ? codigo : undefined,
+    marca: typeof marca === 'string' ? marca : undefined,
+    beneficios: typeof beneficios === 'string' ? beneficios : undefined,
+    modoDeUso: typeof modoDeUso === 'string' ? modoDeUso : undefined,
+    ingredientes: typeof ingredientes === 'string' ? ingredientes : undefined,
+    controlarInventario: true,
+    fechaCreacion: p.created_at,
   };
 }
 
@@ -533,9 +547,17 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         description: product.descripcion,
         category: product.categoria,
         price: product.precio,
+        cost: product.precioCosto,
         image_url: product.imagen,
         variant_name: product.presentacion,
-        variant_attributes: { type: product.tipo },
+        sku: product.codigo,
+        variant_attributes: {
+          type: product.tipo,
+          ...(product.marca ? { brand: product.marca } : {}),
+          ...(product.beneficios ? { benefits: product.beneficios } : {}),
+          ...(product.modoDeUso ? { how_to_use: product.modoDeUso } : {}),
+          ...(product.ingredientes ? { ingredients: product.ingredientes } : {}),
+        },
         is_active: product.estado === 'activo',
       });
       const variant = created.variants.find(item => item.is_active) ?? created.variants[0];
@@ -546,24 +568,45 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const newProduct: Product = { ...product, id: Date.now().toString() };
+    const newProduct: Product = {
+      ...product,
+      id: Date.now().toString(),
+      fechaCreacion: new Date().toISOString(),
+    };
     setProducts(prev => [...prev, newProduct]);
     setInventory(prev => [
       ...prev,
-      { id: Date.now().toString(), productoId: newProduct.id, stockActual: 0, stockMinimo: 10, ubicacion: 'Bodega Principal' },
+      {
+        id: Date.now().toString(),
+        productoId: newProduct.id,
+        stockActual: 0,
+        stockMinimo: newProduct.stockMinimo ?? 10,
+        ubicacion: 'Bodega Principal',
+      },
     ]);
   }, [backendOnline, refreshData]);
 
   const updateProduct = useCallback(async (id: string, updates: Partial<Product>) => {
     if (backendOnline && getAccessToken()) {
+      const hasAttrUpdate = updates.tipo !== undefined || updates.marca !== undefined
+        || updates.beneficios !== undefined || updates.modoDeUso !== undefined
+        || updates.ingredientes !== undefined;
       await apiUpdateProduct(id, {
         name: updates.nombre,
         description: updates.descripcion,
         category: updates.categoria,
         price: updates.precio,
+        cost: updates.precioCosto,
         image_url: updates.imagen,
         variant_name: updates.presentacion,
-        variant_attributes: updates.tipo !== undefined ? { type: updates.tipo } : undefined,
+        sku: updates.codigo,
+        variant_attributes: hasAttrUpdate ? {
+          ...(updates.tipo !== undefined ? { type: updates.tipo } : {}),
+          ...(updates.marca !== undefined ? { brand: updates.marca } : {}),
+          ...(updates.beneficios !== undefined ? { benefits: updates.beneficios } : {}),
+          ...(updates.modoDeUso !== undefined ? { how_to_use: updates.modoDeUso } : {}),
+          ...(updates.ingredientes !== undefined ? { ingredients: updates.ingredientes } : {}),
+        } : undefined,
         is_active: updates.estado !== undefined ? updates.estado === 'activo' : undefined,
       });
       await refreshData();

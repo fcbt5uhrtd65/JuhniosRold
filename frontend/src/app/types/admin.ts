@@ -16,9 +16,20 @@ export interface Product {
   tipo: string;
   presentacion: string;
   precio: number;
+  precioCosto?: number;
   descripcion: string;
   imagen: string;
-  estado: 'activo' | 'inactivo';
+  estado: 'activo' | 'inactivo' | 'agotado';
+  // optional fields
+  codigo?: string;
+  marca?: string;
+  beneficios?: string;
+  modoDeUso?: string;
+  ingredientes?: string;
+  // inventory control
+  controlarInventario?: boolean;
+  stockMinimo?: number;
+  fechaCreacion?: string;
 }
 
 export interface Inventory {
