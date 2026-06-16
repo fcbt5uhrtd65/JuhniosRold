@@ -120,6 +120,8 @@ const STORAGE_KEYS = {
   USERS_DB: 'customer_users_db',
 };
 
+const CUSTOMER_ROLES = new Set<AuthUser['role']>(['CLIENT', 'PRO']);
+
 interface AuthActionResult {
   ok: boolean;
   message?: string;
@@ -143,6 +145,10 @@ function mapAuthUser(u: AuthUser): CustomerUser {
     role: u.role,
     fromApi: true,
   };
+}
+
+function isCustomerUser(user: AuthUser): boolean {
+  return CUSTOMER_ROLES.has(user.role);
 }
 
 // ---- Map backend Order → CustomerOrder ----
@@ -189,6 +195,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
         try {
           const user = await getCurrentUser();
           setBackendOnline(true);
+          if (!isCustomerUser(user)) {
+            setCurrentUser(null);
+            setOrders([]);
+            loadLocalSaved();
+            setIsLoadingAuth(false);
+            return;
+          }
           setCurrentUser(mapAuthUser(user));
           loadLocalSaved();
           await fetchOrdersFromApi();
@@ -265,6 +278,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
         password,
       });
       setBackendOnline(true);
+      if (!isCustomerUser(user)) {
+        setCurrentUser(null);
+        return {
+          ok: false,
+          message: 'Esta cuenta pertenece al panel interno. Usa el acceso administrativo.',
+        };
+      }
       const mapped = mapAuthUser(user);
       setCurrentUser(mapped);
       await fetchOrdersFromApi();

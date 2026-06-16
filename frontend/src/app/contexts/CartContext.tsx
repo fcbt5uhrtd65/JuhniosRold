@@ -67,9 +67,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const toast = useToast();
   const [items, setItems] = useState<CartItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const canUseApiCart =
+    currentUser?.fromApi === true &&
+    (currentUser.role === 'CLIENT' || currentUser.role === 'PRO');
 
   const reloadCart = useCallback(async () => {
-    if (!currentUser?.fromApi) {
+    if (!canUseApiCart) {
       setItems([]);
       return;
     }
@@ -84,7 +87,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [currentUser?.fromApi, toast]);
+  }, [canUseApiCart, toast]);
 
   useEffect(() => {
     void reloadCart();
@@ -97,7 +100,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         quantity?: number;
       },
     ) => {
-      if (!currentUser?.fromApi) {
+      if (!canUseApiCart) {
         toast.info('Inicia sesión para guardar productos en tu carrito.');
         return false;
       }
@@ -117,7 +120,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         return false;
       }
     },
-    [currentUser?.fromApi, toast],
+    [canUseApiCart, toast],
   );
 
   const updateQuantity = useCallback(
@@ -159,7 +162,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   );
 
   const clearCart = useCallback(async () => {
-    if (!currentUser?.fromApi) {
+    if (!canUseApiCart) {
       setItems([]);
       return;
     }
@@ -170,7 +173,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         error instanceof Error ? error.message : 'No fue posible vaciar el carrito.',
       );
     }
-  }, [currentUser?.fromApi, toast]);
+  }, [canUseApiCart, toast]);
 
   const total = useMemo(
     () => items.reduce((sum, item) => sum + item.price * item.quantity, 0),

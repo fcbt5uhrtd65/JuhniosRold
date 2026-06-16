@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useCallback, useContext, useMemo, useRef, useState, ReactNode } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { CheckCircle, XCircle, Info, AlertTriangle, X } from 'lucide-react';
 
@@ -22,8 +22,17 @@ const ToastContext = createContext<ToastContextValue | undefined>(undefined);
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const recentToastsRef = useRef<Map<string, number>>(new Map());
 
-  const showToast = (message: string, type: ToastType = 'info') => {
+  const showToast = useCallback((message: string, type: ToastType = 'info') => {
+    const dedupeKey = `${type}:${message}`;
+    const now = Date.now();
+    const lastShown = recentToastsRef.current.get(dedupeKey);
+    if (lastShown && now - lastShown < 1500) {
+      return;
+    }
+    recentToastsRef.current.set(dedupeKey, now);
+
     const id = Math.random().toString(36).substring(2, 9);
     const newToast: Toast = { id, message, type };
 
@@ -32,12 +41,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setTimeout(() => {
       setToasts(prev => prev.filter(toast => toast.id !== id));
     }, 4000);
-  };
+  }, []);
 
-  const success = (message: string) => showToast(message, 'success');
-  const error = (message: string) => showToast(message, 'error');
-  const info = (message: string) => showToast(message, 'info');
-  const warning = (message: string) => showToast(message, 'warning');
+  const success = useCallback((message: string) => showToast(message, 'success'), [showToast]);
+  const error = useCallback((message: string) => showToast(message, 'error'), [showToast]);
+  const info = useCallback((message: string) => showToast(message, 'info'), [showToast]);
+  const warning = useCallback((message: string) => showToast(message, 'warning'), [showToast]);
 
   const removeToast = (id: string) => {
     setToasts(prev => prev.filter(toast => toast.id !== id));
@@ -69,8 +78,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const value = useMemo(
+    () => ({ showToast, success, error, info, warning }),
+    [showToast, success, error, info, warning],
+  );
+
   return (
-    <ToastContext.Provider value={{ showToast, success, error, info, warning }}>
+    <ToastContext.Provider value={value}>
       {children}
 
       {/* Toast Container */}
