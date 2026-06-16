@@ -4,6 +4,7 @@ import { useAdmin } from '../../contexts/AdminContext';
 import { Users, TrendingUp, DollarSign, Plus } from 'lucide-react';
 import { format } from 'date-fns';
 import { LocationPicker } from '../ui/LocationPicker';
+import { AddressMap } from '../ui/AddressMap';
 import { EMPTY_LOCATION, type LocationValue } from '../../services/geography.types';
 
 export function AdminCustomers() {
@@ -263,6 +264,16 @@ export function AdminCustomers() {
                   required
                 />
               </div>
+
+              {/* Mapa de vista previa */}
+              {(formData.direccion || customerLocation.cityName) && (
+                <AddressMap
+                  address={formData.direccion}
+                  city={customerLocation.cityName}
+                  country={customerLocation.countryName || 'Colombia'}
+                  className="h-56 border border-border"
+                />
+              )}
 
               <div className="flex gap-3 pt-4">
                 <button

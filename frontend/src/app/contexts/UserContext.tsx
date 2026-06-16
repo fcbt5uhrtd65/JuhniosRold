@@ -96,6 +96,7 @@ interface UserContextType {
     nombre: string,
     email: string,
     password: string,
+    extra?: { phone?: string; address?: string; city?: string; document_number?: string },
   ) => Promise<AuthActionResult>;
   logout: () => Promise<void>;
   toggleSaveProduct: (productoId: string) => void;
@@ -287,6 +288,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     nombre: string,
     email: string,
     password: string,
+    extra?: { phone?: string; address?: string; city?: string; document_number?: string },
   ): Promise<AuthActionResult> => {
     try {
       const parts = nombre.trim().split(/\s+/);
@@ -297,7 +299,21 @@ export function UserProvider({ children }: { children: ReactNode }) {
         last_name,
         email: email.trim().toLowerCase(),
         password,
+        phone: extra?.phone,
       });
+      // Persist extra profile fields locally (API doesn't accept them at register time)
+      if (extra?.address || extra?.city || extra?.document_number) {
+        const mapped = mapAuthUser(user);
+        const enriched: typeof mapped = {
+          ...mapped,
+          telefono: extra.phone ?? mapped.telefono,
+          direccion: extra.address,
+          ciudad: extra.city,
+        };
+        setCurrentUser(enriched);
+        setBackendOnline(true);
+        return { ok: true };
+      }
       setBackendOnline(true);
       setCurrentUser(mapAuthUser(user));
       return { ok: true };
@@ -312,6 +328,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
           : 'No hay conexión con el servidor. No se creó ninguna cuenta.',
       };
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ---- LOGOUT ----

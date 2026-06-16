@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Lock, Mail, User as UserIcon, Eye, EyeOff, Shield } from 'lucide-react';
+import { X, Lock, Mail, User as UserIcon, Eye, EyeOff, Shield, Phone, CreditCard, MapPin } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
+import { LocationPicker } from './ui/LocationPicker';
+import { AddressMap } from './ui/AddressMap';
+import { EMPTY_LOCATION, type LocationValue } from '../services/geography.types';
 
 const OLIVE = '#2D3A1F';
 
@@ -111,6 +114,7 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
 
   const [tab, setTab] = useState<'login' | 'register'>('login');
   const [isForgot, setIsForgot] = useState(false);
+  // common
   const [nombre, setNombre] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -118,6 +122,11 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
   const [showPass, setShowPass] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [terms, setTerms] = useState(false);
+  // extra registro
+  const [documento, setDocumento] = useState('');
+  const [telefono, setTelefono] = useState('');
+  const [direccion, setDireccion] = useState('');
+  const [regLocation, setRegLocation] = useState<LocationValue>(EMPTY_LOCATION);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -126,6 +135,8 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
     setError(''); setSuccess('');
     setNombre(''); setEmail(''); setPassword(''); setConfirm('');
     setShowPass(false); setShowConfirm(false); setTerms(false);
+    setDocumento(''); setTelefono(''); setDireccion('');
+    setRegLocation(EMPTY_LOCATION);
     setIsForgot(false);
   };
 
@@ -159,7 +170,12 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
         if (password.length < 8) { setError('La contraseña debe tener al menos 8 caracteres.'); return; }
         if (password !== confirm) { setError('Las contraseñas no coinciden.'); return; }
         if (!terms) { setError('Debes aceptar los términos y condiciones.'); return; }
-        const result = await customerRegister(nombre, email, password);
+        const result = await customerRegister(nombre, email, password, {
+          phone: telefono || undefined,
+          address: direccion || undefined,
+          city: regLocation.cityName || undefined,
+          document_number: documento || undefined,
+        });
         if (result.ok) { reset(); onClose(); }
         else setError(result.message || 'No fue posible crear la cuenta.');
       }
@@ -321,15 +337,32 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
                     transition={{ duration: 0.25 }}
                     className="space-y-4"
                   >
-                    {/* Nombre (solo registro) */}
+                    {/* Campos solo registro */}
                     {tab === 'register' && !isForgot && (
-                      <Field
-                        label="Nombre completo"
-                        value={nombre} onChange={setNombre}
-                        placeholder="Ej: María González"
-                        icon={UserIcon}
-                        required
-                      />
+                      <>
+                        <Field
+                          label="Nombre completo"
+                          value={nombre} onChange={setNombre}
+                          placeholder="Ej: María González"
+                          icon={UserIcon}
+                          required
+                        />
+                        <div className="grid grid-cols-2 gap-3">
+                          <Field
+                            label="Documento"
+                            value={documento} onChange={setDocumento}
+                            placeholder="Cédula / NIT"
+                            icon={CreditCard}
+                          />
+                          <Field
+                            label="Teléfono"
+                            type="tel"
+                            value={telefono} onChange={setTelefono}
+                            placeholder="3001234567"
+                            icon={Phone}
+                          />
+                        </div>
+                      </>
                     )}
 
                     {/* Email */}
@@ -403,6 +436,59 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
                     >
                       ¿Olvidaste tu contraseña?
                     </button>
+                  </div>
+                )}
+
+                {/* Ubicación y dirección (solo registro) */}
+                {tab === 'register' && !isForgot && (
+                  <div className="space-y-3">
+                    <div className="rounded-xl border border-stone-200 overflow-hidden p-4 space-y-3">
+                      <div className="flex items-center gap-1.5">
+                        <MapPin className="w-3.5 h-3.5" style={{ color: OLIVE }} strokeWidth={1.5} />
+                        <span className="text-[10px] tracking-[0.22em] uppercase font-semibold" style={{ color: OLIVE }}>
+                          Ubicación
+                        </span>
+                      </div>
+
+                      {/* LocationPicker adapts to the LoginModal style */}
+                      <div className="[&_span]:text-[9px] [&_span]:tracking-[0.2em] [&_span]:uppercase [&_span]:text-stone-400 [&_input]:text-sm [&_input]:rounded-xl [&_input]:border-stone-200 [&_input]:py-3 [&_input]:pl-4 [&_input]:bg-white [&_.hover\\:bg-secondary\\/60]:hover:bg-stone-50">
+                        <LocationPicker
+                          value={regLocation}
+                          onChange={setRegLocation}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[9px] tracking-[0.28em] uppercase text-stone-400 font-medium mb-1.5">
+                          Dirección
+                        </label>
+                        <div
+                          className="relative flex items-center rounded-xl border border-stone-200 bg-white"
+                        >
+                          <MapPin
+                            className="absolute left-3.5 w-4 h-4 text-stone-300"
+                            strokeWidth={1.3}
+                          />
+                          <input
+                            type="text"
+                            value={direccion}
+                            onChange={e => setDireccion(e.target.value)}
+                            placeholder="Calle 123 #45-67, Apto 8"
+                            className="w-full pl-10 pr-4 py-3 bg-transparent text-sm text-stone-800 placeholder:text-stone-300 focus:outline-none rounded-xl"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Map preview */}
+                      {(direccion || regLocation.cityName) && (
+                        <AddressMap
+                          address={direccion}
+                          city={regLocation.cityName}
+                          country={regLocation.countryName || 'Colombia'}
+                          className="h-48 rounded-xl overflow-hidden border border-stone-200"
+                        />
+                      )}
+                    </div>
                   </div>
                 )}
 
