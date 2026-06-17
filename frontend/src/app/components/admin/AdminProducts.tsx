@@ -524,9 +524,9 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
                   <div className="flex items-center justify-between pt-3 border-t border-border">
                     <div>
                       <div className="text-sm">${product.precio.toLocaleString()}</div>
-                      {product.precioCosto && product.precioCosto > 0 && (
+                      {Boolean(product.precioCosto) && product.precioCosto! > 0 && (
                         <div className="text-[10px] text-muted-foreground">
-                          Costo: ${product.precioCosto.toLocaleString()}
+                          Costo: ${product.precioCosto!.toLocaleString()}
                           {margenGanancia(product.precio, product.precioCosto) && (
                             <span className="ml-1 text-green-700">
                               ({margenGanancia(product.precio, product.precioCosto)})
@@ -632,9 +632,9 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
                       </td>
                       <td className="px-4 py-3">
                         <div className="text-xs">${product.precio.toLocaleString()}</div>
-                        {product.precioCosto && product.precioCosto > 0 && (
+                        {Boolean(product.precioCosto) && product.precioCosto! > 0 && (
                           <div className="text-[10px] text-muted-foreground">
-                            Costo: ${product.precioCosto.toLocaleString()}
+                            Costo: ${product.precioCosto!.toLocaleString()}
                           </div>
                         )}
                       </td>
@@ -771,9 +771,9 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
                             <span className="text-2xl">${selectedProduct.precio.toLocaleString()}</span>
                             <span className="text-[10px] text-muted-foreground">COP</span>
                           </div>
-                          {selectedProduct.precioCosto && selectedProduct.precioCosto > 0 && (
+                          {Boolean(selectedProduct.precioCosto) && selectedProduct.precioCosto! > 0 && (
                             <div className="text-xs text-muted-foreground">
-                              Costo: ${selectedProduct.precioCosto.toLocaleString()}
+                              Costo: ${selectedProduct.precioCosto!.toLocaleString()}
                               {margenGanancia(selectedProduct.precio, selectedProduct.precioCosto) && (
                                 <span className="ml-2 text-green-700 font-medium">
                                   Margen: {margenGanancia(selectedProduct.precio, selectedProduct.precioCosto)}
@@ -1031,8 +1031,9 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
                                 <input
                                   type="number"
                                   min="0"
-                                  value={formData.stockMinimo ?? 10}
-                                  onChange={e => set({ stockMinimo: Number(e.target.value) })}
+                                  value={formData.stockMinimo ?? ''}
+                                  onChange={e => set({ stockMinimo: e.target.value === '' ? undefined : Number(e.target.value) })}
+                                  onBlur={e => { if (e.target.value === '') set({ stockMinimo: 10 }); }}
                                   className="w-full px-3 py-2 bg-transparent border border-border text-xs focus:outline-none focus:border-foreground"
                                 />
                                 <p className="text-[10px] text-muted-foreground mt-1">
@@ -1075,8 +1076,9 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
                                 <input
                                   type="number"
                                   min="0"
-                                  value={formData.stockInicial ?? 0}
-                                  onChange={e => set({ stockInicial: Number(e.target.value) })}
+                                  value={formData.stockInicial ?? ''}
+                                  onChange={e => set({ stockInicial: e.target.value === '' ? undefined : Number(e.target.value) })}
+                                  onBlur={e => { if (e.target.value === '') set({ stockInicial: 0 }); }}
                                   className="w-full px-3 py-2 bg-transparent border border-border text-xs focus:outline-none focus:border-foreground"
                                 />
                                 <p className="text-[10px] text-muted-foreground mt-1">
