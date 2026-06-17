@@ -29,6 +29,8 @@ export interface Product {
   // inventory control
   controlarInventario?: boolean;
   stockMinimo?: number;
+  /** Only used when creating a product to seed its first stock movement. */
+  stockInicial?: number;
   fechaCreacion?: string;
 }
 

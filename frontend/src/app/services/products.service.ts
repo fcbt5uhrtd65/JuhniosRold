@@ -536,8 +536,8 @@ export async function createProduct(payload: CreateProductPayload): Promise<Prod
   ) {
     const variantResponse = await api.post<BackendVariant>(VARIANTS_PATH, {
       product: res.data.id,
-      sku: payload.sku ?? `JR-${Date.now()}`,
-      name: payload.variant_name ??
+      sku: payload.sku || `JR-${Date.now()}`,
+      name: payload.variant_name ||
         (payload.weight_ml ? `${payload.weight_ml} ml` : 'Presentación única'),
       attributes: payload.variant_attributes ??
         (payload.weight_ml ? { weight_ml: payload.weight_ml } : {}),

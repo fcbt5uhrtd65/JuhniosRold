@@ -37,6 +37,7 @@ const EMPTY_FORM: Omit<Product, 'id'> = {
   ingredientes: '',
   controlarInventario: true,
   stockMinimo: 10,
+  stockInicial: 0,
   fechaCreacion: '',
 };
 
@@ -530,11 +531,6 @@ export function AdminProducts() {
                         </div>
                       )}
                     </div>
-                    {stockActual !== undefined && (
-                      <div className={`text-xs ${stockActual === 0 ? 'text-red-600' : stockActual < (stockMinimo ?? 0) ? 'text-orange-600' : 'text-muted-foreground'}`}>
-                        Stock: {stockActual}
-                      </div>
-                    )}
                   </div>
 
                   <div className="flex items-center gap-2 mt-3">
@@ -1058,8 +1054,18 @@ export function AdminProducts() {
                             })()}
 
                             {modalMode === 'create' && (
-                              <div className="text-[10px] text-muted-foreground border border-border p-3">
-                                El stock inicial se puede configurar desde el módulo de Inventario después de crear el producto.
+                              <div>
+                                <FormLabel>Stock inicial</FormLabel>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={formData.stockInicial ?? 0}
+                                  onChange={e => set({ stockInicial: Number(e.target.value) })}
+                                  className="w-full px-3 py-2 bg-transparent border border-border text-xs focus:outline-none focus:border-foreground"
+                                />
+                                <p className="text-[10px] text-muted-foreground mt-1">
+                                  Cantidad disponible al publicar el producto. Podrás ajustarla luego desde el módulo de Inventario.
+                                </p>
                               </div>
                             )}
                           </div>

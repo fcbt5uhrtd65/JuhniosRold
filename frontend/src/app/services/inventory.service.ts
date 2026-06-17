@@ -113,12 +113,12 @@ export async function getInventoryStock(): Promise<InventoryStock[]> {
 export async function createInitialStock(
   variantId: string,
   minimumQuantity = 10,
-): Promise<void> {
+): Promise<{ locationId: string } | null> {
   const locations = await getPage<BackendLocation>(LOCATIONS_PATH);
   const location = locations.find((item) => item.is_active) ?? locations[0];
 
   if (!location) {
-    return;
+    return null;
   }
 
   await api.post<BackendStock>(STOCK_PATH, {
@@ -126,6 +126,8 @@ export async function createInitialStock(
     location: location.id,
     minimum_quantity: String(minimumQuantity),
   });
+
+  return { locationId: location.id };
 }
 
 export async function setInventoryQuantity(

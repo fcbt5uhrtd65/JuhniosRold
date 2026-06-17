@@ -565,7 +565,14 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       });
       const variant = created.variants.find(item => item.is_active) ?? created.variants[0];
       if (variant) {
-        await createInitialStock(variant.id);
+        const stock = await createInitialStock(variant.id, product.stockMinimo ?? 10);
+        if (stock && product.stockInicial && product.stockInicial > 0) {
+          await setInventoryQuantity(
+            { variantId: variant.id, locationId: stock.locationId, quantity: 0 },
+            product.stockInicial,
+            'Stock inicial al crear el producto',
+          );
+        }
       }
       await refreshData();
       return;
@@ -582,7 +589,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       {
         id: Date.now().toString(),
         productoId: newProduct.id,
-        stockActual: 0,
+        stockActual: newProduct.stockInicial ?? 0,
         stockMinimo: newProduct.stockMinimo ?? 10,
         ubicacion: 'Bodega Principal',
       },

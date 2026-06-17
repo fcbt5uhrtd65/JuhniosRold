@@ -30,6 +30,7 @@ import {
 
 import { SearchBar } from './SearchBar';
 import { useToast } from '../../contexts/ToastContext';
+import { ApiError } from '../../services/api';
 import { getRoleLabel } from '../../utils/permissions';
 import {
   deleteEmployee,
@@ -1002,7 +1003,11 @@ export function AdminHR() {
       resetEmployeeModal();
     } catch (error) {
       console.error(error);
-      toast.error('No se pudo guardar el empleado. Revisa duplicados, correo y salario.');
+      const message =
+        error instanceof ApiError
+          ? error.errors?.join(' ') || error.message
+          : 'No se pudo guardar el empleado. Revisa duplicados, correo y salario.';
+      toast.error(message);
     } finally {
       setSavingEmployee(false);
     }
