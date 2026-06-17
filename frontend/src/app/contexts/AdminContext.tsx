@@ -128,9 +128,9 @@ const INITIAL_PRODUCTS: Product[] = [
 ];
 
 const INITIAL_INVENTORY: Inventory[] = [
-  { id: '1', productoId: '1', stockActual: 8, stockMinimo: 10, lote: 'L001', ubicacion: 'Bodega Principal' },
-  { id: '2', productoId: '2', stockActual: 25, stockMinimo: 15, lote: 'L002', ubicacion: 'Bodega Principal' },
-  { id: '3', productoId: '3', stockActual: 3, stockMinimo: 5, lote: 'L003', ubicacion: 'Tienda' },
+  { id: '1', productoId: '1', stockActual: 8, stockMinimo: 10, ubicacion: 'Bodega Principal' },
+  { id: '2', productoId: '2', stockActual: 25, stockMinimo: 15, ubicacion: 'Bodega Principal' },
+  { id: '3', productoId: '3', stockActual: 3, stockMinimo: 5, ubicacion: 'Tienda' },
 ];
 
 const INITIAL_CUSTOMERS: Customer[] = [

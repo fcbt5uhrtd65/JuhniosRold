@@ -35,6 +35,7 @@ function getDefaultViewForRole(role?: string) {
 export function Admin() {
   const { currentUser } = useAdmin();
   const [currentView, setCurrentView] = useState(getDefaultViewForRole(currentUser?.rol));
+  const [inventorySearch, setInventorySearch] = useState('');
 
   useEffect(() => {
     setCurrentView(getDefaultViewForRole(currentUser?.rol));
@@ -44,14 +45,19 @@ export function Admin() {
     return <AdminLogin />;
   }
 
+  const goToInventory = (search: string) => {
+    setInventorySearch(search);
+    setCurrentView('inventory');
+  };
+
   const renderView = () => {
     switch (currentView) {
       case 'dashboard':
         return <AdminDashboard />;
       case 'products':
-        return <AdminProducts />;
+        return <AdminProducts onViewInInventory={goToInventory} />;
       case 'inventory':
-        return <AdminInventory />;
+        return <AdminInventory initialSearch={inventorySearch} />;
       case 'orders':
         return <AdminOrders />;
       case 'customers':

@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useAdmin } from '../../contexts/AdminContext';
 import {
   Plus, Edit2, Trash2, Eye, EyeOff, Grid3x3, List, ArrowUpDown,
-  X, Upload, AlertTriangle, ChevronDown, Package,
+  X, Upload, AlertTriangle, ChevronDown, Package, Warehouse,
 } from 'lucide-react';
 import type { Product } from '../../types/admin';
 import { SearchBar } from './SearchBar';
@@ -199,7 +199,11 @@ function ImageUploader({ value, onChange }: ImageUploaderProps) {
   );
 }
 
-export function AdminProducts() {
+interface AdminProductsProps {
+  onViewInInventory?: (search: string) => void;
+}
+
+export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
   const { products, inventory, addProduct, updateProduct, deleteProduct } = useAdmin();
   const toast = useToast();
   const [modalMode, setModalMode] = useState<ModalMode>(null);
@@ -548,6 +552,15 @@ export function AdminProducts() {
                     >
                       <Edit2 className="w-3 h-3" strokeWidth={1} />
                     </button>
+                    {onViewInInventory && (
+                      <button
+                        onClick={() => onViewInInventory(product.nombre)}
+                        className="flex-1 py-2 border border-border text-[10px] tracking-wider uppercase hover:bg-background transition-colors flex items-center justify-center gap-1"
+                        title="Ver en Inventario"
+                      >
+                        <Warehouse className="w-3 h-3" strokeWidth={1} />
+                      </button>
+                    )}
                     <button
                       onClick={() => { if (confirm('¿Eliminar este producto?')) void handleDelete(product.id); }}
                       className="flex-1 py-2 border border-border text-[10px] tracking-wider uppercase hover:bg-background transition-colors flex items-center justify-center gap-1"
@@ -647,6 +660,9 @@ export function AdminProducts() {
                         <div className="flex items-center justify-center gap-1">
                           <button onClick={() => openView(product)} className="p-1.5 border border-border hover:bg-background transition-colors" title="Ver"><Eye className="w-3 h-3" strokeWidth={1} /></button>
                           <button onClick={() => openEdit(product)} className="p-1.5 border border-border hover:bg-background transition-colors" title="Editar"><Edit2 className="w-3 h-3" strokeWidth={1} /></button>
+                          {onViewInInventory && (
+                            <button onClick={() => onViewInInventory(product.nombre)} className="p-1.5 border border-border hover:bg-background transition-colors" title="Ver en Inventario"><Warehouse className="w-3 h-3" strokeWidth={1} /></button>
+                          )}
                           <button onClick={() => { if (confirm('¿Eliminar este producto?')) void handleDelete(product.id); }} className="p-1.5 border border-border hover:bg-background transition-colors" title="Eliminar"><Trash2 className="w-3 h-3" strokeWidth={1} /></button>
                         </div>
                       </td>

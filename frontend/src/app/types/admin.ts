@@ -41,7 +41,6 @@ export interface Inventory {
   ubicacionId?: string;
   stockActual: number;
   stockMinimo: number;
-  lote?: string;
   ubicacion: string;
 }
 

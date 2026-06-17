@@ -10,7 +10,11 @@ import { useToast } from '../../contexts/ToastContext';
 type SortField = 'nombre' | 'categoria' | 'stockActual' | 'stockMinimo' | 'ubicacion';
 type SortOrder = 'asc' | 'desc';
 
-export function AdminInventory() {
+interface AdminInventoryProps {
+  initialSearch?: string;
+}
+
+export function AdminInventory({ initialSearch = '' }: AdminInventoryProps) {
   const { products, inventory, updateInventory } = useAdmin();
   const toast = useToast();
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -18,7 +22,7 @@ export function AdminInventory() {
   const [isUpdating, setIsUpdating] = useState(false);
 
   // Search & Filters
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(initialSearch);
   const [activeFilters, setActiveFilters] = useState<Record<string, string[]>>({});
   const [sortField, setSortField] = useState<SortField>('nombre');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
@@ -87,8 +91,7 @@ export function AdminInventory() {
         inv =>
           inv.product?.nombre.toLowerCase().includes(query) ||
           inv.product?.categoria.toLowerCase().includes(query) ||
-          inv.ubicacion.toLowerCase().includes(query) ||
-          inv.lote?.toLowerCase().includes(query)
+          inv.ubicacion.toLowerCase().includes(query)
       );
     }
 
@@ -257,7 +260,7 @@ export function AdminInventory() {
         <SearchBar
           value={searchQuery}
           onChange={setSearchQuery}
-          placeholder="Buscar por producto, categoría, ubicación, lote..."
+          placeholder="Buscar por producto, categoría, ubicación..."
           className="flex-1"
         />
         <FilterPanel
@@ -352,9 +355,6 @@ export function AdminInventory() {
                     )}
                   </button>
                 </th>
-                <th className="px-4 py-3 text-left text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-                  Lote
-                </th>
                 <th className="px-4 py-3 text-center text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
                   Estado
                 </th>
@@ -410,9 +410,6 @@ export function AdminInventory() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="text-xs">{inv.ubicacion}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="text-xs text-muted-foreground">{inv.lote || '-'}</div>
                     </td>
                     <td className="px-4 py-3 text-center">
                       {inv.stockActual === 0 ? (
