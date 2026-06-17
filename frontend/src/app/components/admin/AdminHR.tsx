@@ -2054,8 +2054,8 @@ export function AdminHR() {
                 </button>
               </div>
             </div>
-            <div className="px-6 pt-4 border-b border-border overflow-x-auto">
-              <div className="flex gap-2 min-w-max">
+            <div className="px-6 pt-4 border-b border-border">
+              <div className="flex flex-wrap gap-2">
                 {MODAL_TABS.filter((tab) => !['payroll', 'access'].includes(tab.id)).map((tab) => {
                   const Icon = tab.icon;
                   return (
@@ -2239,8 +2239,8 @@ export function AdminHR() {
             </div>
 
             <form onSubmit={handleEmployeeSubmit} className="flex-1 overflow-hidden flex flex-col">
-              <div className="px-6 pt-4 border-b border-border overflow-x-auto">
-                <div className="flex gap-2 min-w-max">
+              <div className="px-6 pt-4 border-b border-border">
+                <div className="flex flex-wrap gap-2">
                   {MODAL_TABS.map((tab) => {
                     const Icon = tab.icon;
                     return (

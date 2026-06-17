@@ -28,10 +28,7 @@ services:
       dockerfile: backend.Dockerfile
     restart: unless-stopped
     command: >
-      sh -c "python manage.py migrate &&
-             python manage.py seed_catalog &&
-             python manage.py seed_admin_users &&
-             python manage.py runserver 0.0.0.0:8000"
+      python manage.py runserver 0.0.0.0:8000 --noreload
     ports:
       - "8001:8000"
     volumes:
@@ -87,6 +84,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+      start_period: 30s
 
   frontend:
     container_name: juhnios-frontend
