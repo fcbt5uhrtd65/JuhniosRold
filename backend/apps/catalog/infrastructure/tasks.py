@@ -1,5 +1,8 @@
+import base64
+import binascii
 import io
 import logging
+import re
 import socket
 import urllib.request
 from pathlib import Path
@@ -9,9 +12,7 @@ from uuid import uuid4
 from celery import shared_task
 from django.conf import settings
 from openpyxl import Workbook
-from openpyxl.drawing.image import Image as XlsxImage
 from openpyxl.styles import Font
-from openpyxl.utils import get_column_letter
 from PIL import Image as PILImage
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import landscape, letter
@@ -48,6 +49,7 @@ COLUMNS = (
 MAX_EXPORT_PRODUCT_IDS = 1000
 IMAGE_DOWNLOAD_TIMEOUT = 5
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
+DATA_URL_RE = re.compile(r"^data:image/[a-zA-Z0-9.+-]+;base64,(?P<data>.+)$")
 
 
 def _is_safe_public_url(url):
@@ -71,22 +73,56 @@ def _is_safe_public_url(url):
         return False
 
 
-def _download_image(url):
-    if not url or not _is_safe_public_url(url):
+def _load_image_bytes(image_ref):
+    if not image_ref:
+        return None
+
+    data_url_match = DATA_URL_RE.match(image_ref)
+    if data_url_match:
+        try:
+            return base64.b64decode(data_url_match.group("data"), validate=True)
+        except (binascii.Error, ValueError):
+            return None
+
+    media_url = settings.MEDIA_URL
+    if image_ref.startswith(media_url):
+        relative_path = image_ref[len(media_url):]
+        local_path = (Path(settings.MEDIA_ROOT) / relative_path).resolve()
+        media_root = Path(settings.MEDIA_ROOT).resolve()
+        if media_root not in local_path.parents and local_path != media_root:
+            return None
+        try:
+            data = local_path.read_bytes()
+        except OSError:
+            return None
+        return data if len(data) <= MAX_IMAGE_BYTES else None
+
+    if image_ref.startswith(("http://", "https://")):
+        if not _is_safe_public_url(image_ref):
+            return None
+        try:
+            request = urllib.request.Request(image_ref, headers={"User-Agent": "JuhniosRold-Export/1.0"})
+            with urllib.request.urlopen(request, timeout=IMAGE_DOWNLOAD_TIMEOUT) as response:
+                data = response.read(MAX_IMAGE_BYTES + 1)
+        except Exception:
+            return None
+        return data if len(data) <= MAX_IMAGE_BYTES else None
+
+    return None
+
+
+def _resolve_image(image_ref):
+    data = _load_image_bytes(image_ref)
+    if not data:
         return None
     try:
-        request = urllib.request.Request(url, headers={"User-Agent": "JuhniosRold-Export/1.0"})
-        with urllib.request.urlopen(request, timeout=IMAGE_DOWNLOAD_TIMEOUT) as response:
-            data = response.read(MAX_IMAGE_BYTES + 1)
-        if len(data) > MAX_IMAGE_BYTES:
-            return None
         image = PILImage.open(io.BytesIO(data))
         image.load()
         if image.mode not in ("RGB", "L"):
             image = image.convert("RGB")
         return image
     except Exception:
-        logger.warning("No se pudo descargar la imagen de producto: %s", url, exc_info=True)
+        logger.warning("No se pudo procesar la imagen de producto: %s", image_ref, exc_info=True)
         return None
 
 
@@ -195,7 +231,7 @@ def _write_pdf_table(path, rows):
     header = ["Imagen"] + [label for _, label in COLUMNS]
     data = [header]
     for row in rows:
-        image = _download_image(row["image_url"])
+        image = _resolve_image(row["image_url"])
         cell = _pil_to_rlimage(image) if image else ""
         data.append([cell] + [str(row[key]) for key, _ in COLUMNS])
 
@@ -224,7 +260,7 @@ def _write_pdf_catalog(path, rows):
 
     cards = []
     for row in rows:
-        image = _download_image(row["image_url"])
+        image = _resolve_image(row["image_url"])
         image_cell = _pil_to_rlimage(image, max_size_cm=3.5) if image else Paragraph("Sin imagen", label_style)
         details = Paragraph(
             f"<b>{row['nombre']}</b><br/>"
