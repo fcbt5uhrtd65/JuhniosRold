@@ -624,6 +624,13 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         const stock = inventory.find(item => item.productoId === id);
         if (stock) {
           await updateStockMinimum(stock.id, updates.stockMinimo);
+        } else {
+          const apiProducts = await getAllProducts();
+          const apiProduct = apiProducts.find(item => item.id === id);
+          const variant = apiProduct?.variants.find(item => item.is_active) ?? apiProduct?.variants[0];
+          if (variant) {
+            await createInitialStock(variant.id, updates.stockMinimo);
+          }
         }
       }
       await refreshData();
