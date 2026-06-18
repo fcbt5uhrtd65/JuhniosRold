@@ -58,6 +58,7 @@ class ProductExportView(generics.GenericAPIView):
         task = export_products.delay(
             [str(pid) for pid in serializer.validated_data["product_ids"]],
             serializer.validated_data["format"],
+            serializer.validated_data["pdf_layout"],
         )
         return Response({"task_id": task.id, "status": "queued"}, status=202)
 

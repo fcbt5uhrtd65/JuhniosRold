@@ -1,16 +1,34 @@
+import io
+import logging
+import socket
+import urllib.request
 from pathlib import Path
+from urllib.parse import urlparse
 from uuid import uuid4
 
 from celery import shared_task
 from django.conf import settings
 from openpyxl import Workbook
+from openpyxl.drawing.image import Image as XlsxImage
 from openpyxl.styles import Font
+from openpyxl.utils import get_column_letter
+from PIL import Image as PILImage
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import landscape, letter
 from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.lib.units import cm
+from reportlab.platypus import (
+    Image as RLImage,
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    Table,
+    TableStyle,
+)
 
 from .models import Product
+
+logger = logging.getLogger(__name__)
 
 COLUMNS = (
     ("nombre", "Nombre"),
@@ -28,6 +46,48 @@ COLUMNS = (
 )
 
 MAX_EXPORT_PRODUCT_IDS = 1000
+IMAGE_DOWNLOAD_TIMEOUT = 5
+MAX_IMAGE_BYTES = 5 * 1024 * 1024
+
+
+def _is_safe_public_url(url):
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
+            return False
+        for info in socket.getaddrinfo(parsed.hostname, None):
+            ip = info[4][0]
+            if (
+                ip.startswith("127.")
+                or ip.startswith("10.")
+                or ip.startswith("169.254.")
+                or ip == "::1"
+                or ip.startswith("192.168.")
+                or any(ip.startswith(f"172.{n}.") for n in range(16, 32))
+            ):
+                return False
+        return True
+    except (ValueError, socket.gaierror):
+        return False
+
+
+def _download_image(url):
+    if not url or not _is_safe_public_url(url):
+        return None
+    try:
+        request = urllib.request.Request(url, headers={"User-Agent": "JuhniosRold-Export/1.0"})
+        with urllib.request.urlopen(request, timeout=IMAGE_DOWNLOAD_TIMEOUT) as response:
+            data = response.read(MAX_IMAGE_BYTES + 1)
+        if len(data) > MAX_IMAGE_BYTES:
+            return None
+        image = PILImage.open(io.BytesIO(data))
+        image.load()
+        if image.mode not in ("RGB", "L"):
+            image = image.convert("RGB")
+        return image
+    except Exception:
+        logger.warning("No se pudo descargar la imagen de producto: %s", url, exc_info=True)
+        return None
 
 
 def _collect_rows(product_ids):
@@ -61,6 +121,7 @@ def _collect_rows(product_ids):
 
         attrs = variant.attributes if variant and isinstance(variant.attributes, dict) else {}
         rows.append({
+            "image_url": product.image_url,
             "nombre": product.name,
             "categoria": product.category.name if product.category else "",
             "tipo": attrs.get("type", ""),
@@ -78,7 +139,7 @@ def _collect_rows(product_ids):
 
 
 @shared_task
-def export_products(product_ids, output_format="xlsx"):
+def export_products(product_ids, output_format="xlsx", pdf_layout="table"):
     rows = _collect_rows(product_ids[:MAX_EXPORT_PRODUCT_IDS])
 
     export_dir = Path(settings.MEDIA_ROOT) / "exports" / "products"
@@ -87,7 +148,10 @@ def export_products(product_ids, output_format="xlsx"):
     output_path = export_dir / filename
 
     if output_format == "pdf":
-        _write_pdf(output_path, rows)
+        if pdf_layout == "catalog":
+            _write_pdf_catalog(output_path, rows)
+        else:
+            _write_pdf_table(output_path, rows)
     else:
         _write_xlsx(output_path, rows)
 
@@ -113,13 +177,28 @@ def _write_xlsx(path, rows):
     workbook.save(path)
 
 
-def _write_pdf(path, rows):
+def _pil_to_rlimage(image, max_size_cm=1.6):
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    buffer.seek(0)
+    width, height = image.size
+    max_size = max_size_cm * cm
+    scale = min(max_size / width, max_size / height)
+    return RLImage(buffer, width=width * scale, height=height * scale)
+
+
+def _write_pdf_table(path, rows):
     document = SimpleDocTemplate(str(path), pagesize=landscape(letter))
     styles = getSampleStyleSheet()
     elements = [Paragraph("Juhnios Rold - Exportación de productos", styles["Title"]), Spacer(1, 12)]
 
-    header = [label for _, label in COLUMNS]
-    data = [header] + [[str(row[key]) for key, _ in COLUMNS] for row in rows]
+    header = ["Imagen"] + [label for _, label in COLUMNS]
+    data = [header]
+    for row in rows:
+        image = _download_image(row["image_url"])
+        cell = _pil_to_rlimage(image) if image else ""
+        data.append([cell] + [str(row[key]) for key, _ in COLUMNS])
+
     table = Table(data, repeatRows=1)
     table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#222222")),
@@ -130,4 +209,46 @@ def _write_pdf(path, rows):
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
     ]))
     elements.append(table)
+    document.build(elements)
+
+
+def _write_pdf_catalog(path, rows):
+    document = SimpleDocTemplate(str(path), pagesize=letter, topMargin=36, bottomMargin=36)
+    styles = getSampleStyleSheet()
+    elements = [Paragraph("Juhnios Rold - Catálogo de productos", styles["Title"]), Spacer(1, 16)]
+
+    label_style = styles["Normal"].clone("CardLabel")
+    label_style.fontSize = 8
+    name_style = styles["Heading4"].clone("CardName")
+    name_style.fontSize = 10
+
+    cards = []
+    for row in rows:
+        image = _download_image(row["image_url"])
+        image_cell = _pil_to_rlimage(image, max_size_cm=3.5) if image else Paragraph("Sin imagen", label_style)
+        details = Paragraph(
+            f"<b>{row['nombre']}</b><br/>"
+            f"SKU: {row['sku']}<br/>"
+            f"Categoría: {row['categoria']}<br/>"
+            f"Precio: {row['precio']}<br/>"
+            f"Estado: {row['estado']}<br/>"
+            f"Stock actual: {row['stock_actual']} (mín. {row['stock_minimo']})",
+            label_style,
+        )
+        cards.append([image_cell, details])
+
+    rows_per_table = 4
+    for i in range(0, len(cards), rows_per_table):
+        chunk = cards[i:i + rows_per_table]
+        card_table = Table(chunk, colWidths=[4 * cm, 12 * cm])
+        card_table.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("BOX", (0, 0), (-1, -1), 0.5, colors.grey),
+            ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.lightgrey),
+            ("TOPPADDING", (0, 0), (-1, -1), 8),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+        ]))
+        elements.append(card_table)
+        elements.append(Spacer(1, 12))
+
     document.build(elements)

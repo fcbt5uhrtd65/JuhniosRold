@@ -618,6 +618,7 @@ export async function deleteProduct(id: string): Promise<void> {
 }
 
 export type ExportFormat = 'xlsx' | 'pdf';
+export type PdfLayout = 'table' | 'catalog';
 
 interface ExportQueuedResponse {
   task_id: string;
@@ -634,10 +635,12 @@ export interface ExportStatusResponse {
 export async function requestProductsExport(
   format: ExportFormat,
   productIds: string[],
+  pdfLayout: PdfLayout = 'table',
 ): Promise<string> {
   const res = await api.post<ExportQueuedResponse>(EXPORTS_PATH, {
     product_ids: productIds,
     format,
+    pdf_layout: pdfLayout,
   });
   if (!res.data?.task_id) {
     throw new Error('No se pudo iniciar la exportación.');

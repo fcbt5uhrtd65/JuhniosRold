@@ -10,3 +10,4 @@ class ProductExportRequestSerializer(serializers.Serializer):
         max_length=MAX_EXPORT_PRODUCT_IDS,
     )
     format = serializers.ChoiceField(choices=("xlsx", "pdf"), default="xlsx")
+    pdf_layout = serializers.ChoiceField(choices=("table", "catalog"), default="table")

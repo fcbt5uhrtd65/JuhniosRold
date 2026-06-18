@@ -13,8 +13,9 @@ import { Pagination } from './Pagination';
 import { useToast } from '../../contexts/ToastContext';
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent,
 } from '../ui/dropdown-menu';
-import { requestProductsExport, type ExportFormat } from '../../services/products.service';
+import { requestProductsExport, type ExportFormat, type PdfLayout } from '../../services/products.service';
 import { pollExportStatus } from '../../utils/pollExportStatus';
 import { resolveBackendUrl } from '../../services/api';
 
@@ -394,7 +395,7 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
     currentPage * itemsPerPage,
   );
 
-  const handleExport = async (format: ExportFormat) => {
+  const handleExport = async (format: ExportFormat, pdfLayout: PdfLayout = 'table') => {
     if (processedProducts.length === 0) {
       toast.warning('No hay productos para exportar.');
       return;
@@ -403,7 +404,7 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
     toast.info('Generando exportación, esto puede tardar unos segundos...');
     try {
       const ids = processedProducts.map(p => p.id);
-      const taskId = await requestProductsExport(format, ids);
+      const taskId = await requestProductsExport(format, ids, pdfLayout);
       const relativeUrl = await pollExportStatus(taskId);
       window.open(resolveBackendUrl(relativeUrl), '_blank');
       toast.success('Exportación lista.');
@@ -499,10 +500,20 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => handleExport('pdf')}>
-                <FileText className="w-4 h-4 mr-2" strokeWidth={1} />
-                Exportar a PDF
-              </DropdownMenuItem>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <FileText className="w-4 h-4 mr-2" strokeWidth={1} />
+                  Exportar a PDF
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  <DropdownMenuItem onSelect={() => handleExport('pdf', 'table')}>
+                    Tipo tabla
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => handleExport('pdf', 'catalog')}>
+                    Tipo catálogo
+                  </DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
               <DropdownMenuItem onSelect={() => handleExport('xlsx')}>
                 <FileSpreadsheet className="w-4 h-4 mr-2" strokeWidth={1} />
                 Exportar a Excel
