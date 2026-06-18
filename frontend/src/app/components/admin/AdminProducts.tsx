@@ -4,12 +4,19 @@ import { useAdmin } from '../../contexts/AdminContext';
 import {
   Plus, Edit2, Trash2, Eye, EyeOff, Grid3x3, List, ArrowUpDown,
   X, Upload, AlertTriangle, ChevronDown, Package, Warehouse,
+  Download, FileSpreadsheet, FileText,
 } from 'lucide-react';
 import type { Product } from '../../types/admin';
 import { SearchBar } from './SearchBar';
 import { FilterPanel, type FilterGroup } from './FilterPanel';
 import { Pagination } from './Pagination';
 import { useToast } from '../../contexts/ToastContext';
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
+} from '../ui/dropdown-menu';
+import { requestProductsExport, type ExportFormat } from '../../services/products.service';
+import { pollExportStatus } from '../../utils/pollExportStatus';
+import { resolveBackendUrl } from '../../services/api';
 
 type ViewMode = 'grid' | 'table';
 type SortField = 'nombre' | 'precio' | 'categoria' | 'estado' | 'stock';
@@ -209,6 +216,7 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
   const [modalMode, setModalMode] = useState<ModalMode>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [activeSection, setActiveSection] = useState<'general' | 'precios' | 'inventario' | 'adicional'>('general');
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -386,6 +394,26 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
     currentPage * itemsPerPage,
   );
 
+  const handleExport = async (format: ExportFormat) => {
+    if (processedProducts.length === 0) {
+      toast.warning('No hay productos para exportar.');
+      return;
+    }
+    setIsExporting(true);
+    toast.info('Generando exportación, esto puede tardar unos segundos...');
+    try {
+      const ids = processedProducts.map(p => p.id);
+      const taskId = await requestProductsExport(format, ids);
+      const relativeUrl = await pollExportStatus(taskId);
+      window.open(resolveBackendUrl(relativeUrl), '_blank');
+      toast.success('Exportación lista.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo exportar los productos');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const handleSort = (field: SortField) => {
     if (sortField === field) setSortOrder(o => o === 'asc' ? 'desc' : 'asc');
     else { setSortField(field); setSortOrder('asc'); }
@@ -459,6 +487,28 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
           >
             <List className="w-4 h-4" strokeWidth={1} />
           </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                disabled={isExporting || processedProducts.length === 0}
+                className="flex items-center gap-2 px-3 py-2 border border-border text-xs tracking-wider uppercase hover:bg-secondary disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Exportar productos filtrados"
+              >
+                <Download className="w-4 h-4" strokeWidth={1} />
+                Exportar
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => handleExport('pdf')}>
+                <FileText className="w-4 h-4 mr-2" strokeWidth={1} />
+                Exportar a PDF
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => handleExport('xlsx')}>
+                <FileSpreadsheet className="w-4 h-4 mr-2" strokeWidth={1} />
+                Exportar a Excel
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 

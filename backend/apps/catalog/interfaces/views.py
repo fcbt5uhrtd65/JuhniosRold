@@ -1,6 +1,10 @@
+from celery.result import AsyncResult
 from django.db.models import Prefetch
-from rest_framework import permissions
+from rest_framework import generics, permissions
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
+from apps.identity.interfaces.permissions import HasComponentAccess
 from shared.interfaces.viewsets import SoftDeleteModelViewSet
 
 from ..infrastructure.models import Category, Price, Product, ProductImage, ProductVariant
@@ -11,6 +15,8 @@ from ..infrastructure.serializers import (
     ProductSerializer,
     ProductVariantSerializer,
 )
+from ..infrastructure.tasks import export_products
+from .export_serializers import ProductExportRequestSerializer
 from .filters import ProductFilter
 
 
@@ -38,6 +44,37 @@ class ProductViewSet(SoftDeleteModelViewSet):
             Prefetch("variants", queryset=active_variants),
             "images",
         )
+
+
+class ProductExportView(generics.GenericAPIView):
+    serializer_class = ProductExportRequestSerializer
+    permission_classes = (HasComponentAccess,)
+    required_component = "catalog.management"
+    required_component_action = "view"
+
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        task = export_products.delay(
+            [str(pid) for pid in serializer.validated_data["product_ids"]],
+            serializer.validated_data["format"],
+        )
+        return Response({"task_id": task.id, "status": "queued"}, status=202)
+
+
+class ProductExportStatusView(APIView):
+    permission_classes = (HasComponentAccess,)
+    required_component = "catalog.management"
+    required_component_action = "view"
+
+    def get(self, request, task_id):
+        result = AsyncResult(task_id)
+        if result.successful():
+            payload = result.result or {}
+            return Response({"status": "success", "url": payload.get("url"), "count": payload.get("count")})
+        if result.failed():
+            return Response({"status": "failure", "error": str(result.result)})
+        return Response({"status": "pending"})
 
 
 class CategoryViewSet(SoftDeleteModelViewSet):

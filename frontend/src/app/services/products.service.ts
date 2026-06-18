@@ -10,6 +10,7 @@ const PRODUCTS_PATH = `${CATALOG_BASE_PATH}/products/`;
 const CATEGORIES_PATH = `${CATALOG_BASE_PATH}/categories/`;
 const VARIANTS_PATH = `${CATALOG_BASE_PATH}/variants/`;
 const PRICES_PATH = `${CATALOG_BASE_PATH}/prices/`;
+const EXPORTS_PATH = `${CATALOG_BASE_PATH}/exports/`;
 
 type UUID = string;
 
@@ -614,4 +615,40 @@ export async function updateProductStock(_id: string, _stock: number, _reason?: 
 
 export async function deleteProduct(id: string): Promise<void> {
   await api.delete(`${PRODUCTS_PATH}${id}/`);
+}
+
+export type ExportFormat = 'xlsx' | 'pdf';
+
+interface ExportQueuedResponse {
+  task_id: string;
+  status: 'queued';
+}
+
+export interface ExportStatusResponse {
+  status: 'pending' | 'success' | 'failure';
+  url?: string;
+  count?: number;
+  error?: string;
+}
+
+export async function requestProductsExport(
+  format: ExportFormat,
+  productIds: string[],
+): Promise<string> {
+  const res = await api.post<ExportQueuedResponse>(EXPORTS_PATH, {
+    product_ids: productIds,
+    format,
+  });
+  if (!res.data?.task_id) {
+    throw new Error('No se pudo iniciar la exportación.');
+  }
+  return res.data.task_id;
+}
+
+export async function getExportStatus(taskId: string): Promise<ExportStatusResponse> {
+  const res = await api.get<ExportStatusResponse>(`${EXPORTS_PATH}${taskId}/`);
+  if (!res.data) {
+    throw new Error('No se pudo consultar el estado de la exportación.');
+  }
+  return res.data;
 }

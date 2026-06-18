@@ -162,9 +162,17 @@ export class ApiError extends Error {
 let _backendAvailable: boolean | null = null;
 let _checkPromise: Promise<boolean> | null = null;
 
+function getBackendOrigin(): string {
+  return new URL(API_BASE_URL, window.location.origin).origin;
+}
+
 function getBackendHealthUrl(): string {
-  const apiUrl = new URL(API_BASE_URL, window.location.origin);
-  return `${apiUrl.origin}/health/`;
+  return `${getBackendOrigin()}/health/`;
+}
+
+export function resolveBackendUrl(path: string): string {
+  if (/^https?:\/\//.test(path)) return path;
+  return `${getBackendOrigin()}${path}`;
 }
 
 export async function isBackendAvailable(): Promise<boolean> {
