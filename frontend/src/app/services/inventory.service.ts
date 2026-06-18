@@ -130,6 +130,15 @@ export async function createInitialStock(
   return { locationId: location.id };
 }
 
+export async function updateStockMinimum(
+  stockId: string,
+  minimumQuantity: number,
+): Promise<void> {
+  await api.patch<BackendStock>(`${STOCK_PATH}${stockId}/`, {
+    minimum_quantity: String(minimumQuantity),
+  });
+}
+
 export async function setInventoryQuantity(
   stock: Pick<InventoryStock, 'variantId' | 'locationId' | 'quantity'>,
   targetQuantity: number,

@@ -22,6 +22,7 @@ import {
   createInitialStock,
   getInventoryStock,
   setInventoryQuantity,
+  updateStockMinimum,
   type InventoryStock,
 } from '../services/inventory.service';
 import {
@@ -619,11 +620,22 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         } : undefined,
         is_active: updates.estado !== undefined ? updates.estado === 'activo' : undefined,
       });
+      if (updates.stockMinimo !== undefined) {
+        const stock = inventory.find(item => item.productoId === id);
+        if (stock) {
+          await updateStockMinimum(stock.id, updates.stockMinimo);
+        }
+      }
       await refreshData();
       return;
     }
     setProducts(prev => prev.map(p => (p.id === id ? { ...p, ...updates } : p)));
-  }, [backendOnline, refreshData]);
+    if (updates.stockMinimo !== undefined) {
+      setInventory(prev => prev.map(item => (
+        item.productoId === id ? { ...item, stockMinimo: updates.stockMinimo! } : item
+      )));
+    }
+  }, [backendOnline, refreshData, inventory]);
 
   const deleteProduct = useCallback(async (id: string) => {
     if (backendOnline && getAccessToken()) {
