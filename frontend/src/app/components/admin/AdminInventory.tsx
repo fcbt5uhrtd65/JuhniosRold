@@ -1,11 +1,21 @@
 import { useState, useMemo } from 'react';
 import { motion } from 'motion/react';
 import { useAdmin } from '../../contexts/AdminContext';
-import { AlertTriangle, TrendingUp, TrendingDown, Package, ArrowUpDown } from 'lucide-react';
+import {
+  AlertTriangle, TrendingUp, TrendingDown, Package, ArrowUpDown,
+  Download, FileSpreadsheet, FileText,
+} from 'lucide-react';
 import { SearchBar } from './SearchBar';
 import { FilterPanel, type FilterGroup } from './FilterPanel';
 import { Pagination } from './Pagination';
 import { useToast } from '../../contexts/ToastContext';
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent,
+} from '../ui/dropdown-menu';
+import { requestProductsExport, type ExportFormat, type PdfLayout } from '../../services/products.service';
+import { pollExportStatus } from '../../utils/pollExportStatus';
+import { resolveBackendUrl } from '../../services/api';
 
 type SortField = 'nombre' | 'categoria' | 'stockActual' | 'stockMinimo' | 'ubicacion';
 type SortOrder = 'asc' | 'desc';
@@ -20,6 +30,7 @@ export function AdminInventory({ initialSearch = '' }: AdminInventoryProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newStock, setNewStock] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Search & Filters
   const [searchQuery, setSearchQuery] = useState(initialSearch);
@@ -157,6 +168,26 @@ export function AdminInventory({ initialSearch = '' }: AdminInventoryProps) {
     setCurrentPage(1);
   };
 
+  const handleExport = async (format: ExportFormat, pdfLayout: PdfLayout = 'table') => {
+    const ids = Array.from(new Set(processedInventory.map(inv => inv.productoId)));
+    if (ids.length === 0) {
+      toast.warning('No hay productos para exportar.');
+      return;
+    }
+    setIsExporting(true);
+    toast.info('Generando exportación, esto puede tardar unos segundos...');
+    try {
+      const taskId = await requestProductsExport(format, ids, pdfLayout);
+      const relativeUrl = await pollExportStatus(taskId);
+      window.open(resolveBackendUrl(relativeUrl), '_blank');
+      toast.success('Exportación lista.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo exportar el inventario');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const handleClearFilters = () => {
     setActiveFilters({});
     setCurrentPage(1);
@@ -269,6 +300,38 @@ export function AdminInventory({ initialSearch = '' }: AdminInventoryProps) {
           onFilterChange={handleFilterChange}
           onClearAll={handleClearFilters}
         />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              disabled={isExporting || processedInventory.length === 0}
+              className="flex items-center gap-2 px-3 py-2 border border-border text-xs tracking-wider uppercase hover:bg-secondary disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Exportar inventario filtrado"
+            >
+              <Download className="w-4 h-4" strokeWidth={1} />
+              Exportar
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <FileText className="w-4 h-4 mr-2" strokeWidth={1} />
+                Exportar a PDF
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                <DropdownMenuItem onSelect={() => handleExport('pdf', 'table')}>
+                  Tipo tabla
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => handleExport('pdf', 'catalog')}>
+                  Tipo catálogo
+                </DropdownMenuItem>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+            <DropdownMenuItem onSelect={() => handleExport('xlsx')}>
+              <FileSpreadsheet className="w-4 h-4 mr-2" strokeWidth={1} />
+              Exportar a Excel
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* Low Stock Alert */}
