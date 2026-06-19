@@ -2,16 +2,38 @@ import os
 from datetime import timedelta
 from decimal import Decimal
 from pathlib import Path
+from urllib.parse import urlparse
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "unsafe-development-key")
 DEBUG = os.getenv("DJANGO_DEBUG", "false").lower() == "true"
-ALLOWED_HOSTS = [
-    host.strip()
-    for host in os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,backend").split(",")
-    if host.strip()
-]
+
+
+def _normalize_allowed_host(value):
+    value = value.strip()
+    if not value:
+        return ""
+    if value == "*":
+        return value
+
+    parsed = urlparse(value if "://" in value else f"//{value}")
+    host = parsed.hostname or value.split("/", 1)[0].split(":", 1)[0]
+    return host.strip("[]")
+
+
+def _allowed_hosts_from_env(value):
+    hosts = []
+    for raw_host in value.split(","):
+        host = _normalize_allowed_host(raw_host)
+        if host:
+            hosts.append(host)
+    return hosts
+
+
+ALLOWED_HOSTS = _allowed_hosts_from_env(
+    os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,backend")
+)
 
 DJANGO_APPS = [
     "django.contrib.admin",

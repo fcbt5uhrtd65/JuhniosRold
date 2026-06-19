@@ -186,7 +186,7 @@ class OrderViewSet(SoftDeleteModelViewSet):
 
 
 class PaymentListView(generics.ListAPIView):
-    queryset = Payment.objects.select_related("order", "order__customer").order_by("-created_at")
+    queryset = Payment.objects.select_related("order", "order__customer", "invoice").order_by("-created_at")
     serializer_class = PaymentAdminSerializer
     permission_classes = (HasComponentAccess,)
     required_component = "commerce.orders"

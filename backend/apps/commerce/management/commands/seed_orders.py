@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from apps.catalog.infrastructure.models import Price, ProductVariant
 from apps.customers.infrastructure.models import Customer
+from apps.finance.application.invoicing import GenerateSalesInvoice
 
 from ...infrastructure.models import Order, OrderItem, OrderStatusHistory, Payment
 
@@ -133,7 +134,7 @@ def seed_orders(customer_count=20):
                 if status in (Order.Status.CANCELLED, Order.Status.RETURNED)
                 else Payment.Status.APPROVED
             )
-            Payment.objects.create(
+            payment = Payment.objects.create(
                 order=order,
                 provider=Payment.Provider.MOCK,
                 reference=f"SEED-{order.number}",
@@ -141,6 +142,10 @@ def seed_orders(customer_count=20):
                 status=payment_status,
             )
             Payment.objects.filter(order=order).update(created_at=fake_dt, updated_at=fake_dt)
+
+            if payment_status == Payment.Status.APPROVED:
+                invoice = GenerateSalesInvoice().execute(order=order, payment=payment)
+                type(invoice).objects.filter(pk=invoice.pk).update(issued_at=fake_dt, created_at=fake_dt, updated_at=fake_dt)
 
         OrderStatusHistory.objects.create(order=order, status=status, notes="Generado por seed_orders")
         OrderStatusHistory.objects.filter(order=order).update(created_at=fake_dt, updated_at=fake_dt)

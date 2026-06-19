@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
-import { Check, CreditCard, Lock, Truck, X, XCircle } from 'lucide-react';
+import {
+  Check, CheckCircle2, Clock3, CreditCard, ExternalLink, Lock, Truck, X, XCircle,
+} from 'lucide-react';
 
 import { useCart } from '../contexts/CartContext';
 import { useUser } from '../contexts/UserContext';
@@ -10,6 +12,7 @@ import {
   initiatePayment,
   resolveMockPayment,
 } from '../services/payments.service';
+import { usePaymentStatusPolling } from '../hooks/usePaymentStatusPolling';
 import { LocationPicker } from './ui/LocationPicker';
 import { EMPTY_LOCATION, type LocationValue } from '../services/geography.types';
 
@@ -30,6 +33,10 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [mockPayment, setMockPayment] = useState<MockPayment | null>(null);
+  const [wompiOrderId, setWompiOrderId] = useState<string | null>(null);
+  const [wompiCheckoutUrl, setWompiCheckoutUrl] = useState<string | null>(null);
+  const [wompiPopupBlocked, setWompiPopupBlocked] = useState(false);
+  const { state: wompiState, errorMessage: wompiErrorMessage } = usePaymentStatusPolling(wompiOrderId);
   const [formData, setFormData] = useState({
     fullName: currentUser?.nombre ?? '',
     email: currentUser?.email ?? '',
@@ -55,6 +62,9 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
     if (!isSubmitting) {
       setError('');
       setMockPayment(null);
+      setWompiOrderId(null);
+      setWompiCheckoutUrl(null);
+      setWompiPopupBlocked(false);
       onClose();
     }
   };
@@ -93,17 +103,32 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
 
     setIsSubmitting(true);
     setError('');
+
+    // Abrir la pestaña sincrónicamente (dentro del gesto del usuario) para evitar
+    // que el navegador bloquee el popup; se le asigna la URL real más adelante.
+    const wompiTab = window.open('about:blank', '_blank');
+
     try {
       const order = await checkoutActiveCart(shippingAddress());
       const payment = await initiatePayment(order.id);
       await reloadCart();
       if (payment.requires_redirect) {
-        window.location.assign(payment.checkout_url);
+        setWompiCheckoutUrl(payment.checkout_url);
+        if (wompiTab && !wompiTab.closed) {
+          wompiTab.location.href = payment.checkout_url;
+          setWompiPopupBlocked(false);
+        } else {
+          setWompiPopupBlocked(true);
+        }
+        setWompiOrderId(order.id);
+        setIsSubmitting(false);
         return;
       }
+      wompiTab?.close();
       setMockPayment({ paymentId: payment.payment_id, orderId: order.id });
       setIsSubmitting(false);
     } catch (paymentError) {
+      wompiTab?.close();
       setError(
         paymentError instanceof Error
           ? paymentError.message
@@ -159,7 +184,11 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
                   Pago seguro
                 </div>
                 <h2 className="text-2xl">
-                  {mockPayment ? 'Proveedor simulado' : 'Finaliza tu compra'}
+                  {wompiOrderId
+                    ? 'Pago con Wompi'
+                    : mockPayment
+                      ? 'Proveedor simulado'
+                      : 'Finaliza tu compra'}
                 </h2>
               </div>
               <button onClick={close} disabled={isSubmitting}>
@@ -168,7 +197,75 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
             </div>
 
             <div className="flex-1 overflow-y-auto p-8 space-y-8">
-              {mockPayment ? (
+              {wompiOrderId ? (
+                <div className="space-y-6 text-center py-6">
+                  {wompiState === 'approved' ? (
+                    <>
+                      <CheckCircle2 className="w-14 h-14 text-green-600 mx-auto" />
+                      <h3 className="text-xl">¡Pago exitoso!</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Tu pago fue aprobado. Puedes rastrear el estado de tu pedido
+                        en la opción <strong>Mis pedidos</strong> de tu perfil.
+                      </p>
+                    </>
+                  ) : wompiState === 'failed' ? (
+                    <>
+                      <XCircle className="w-14 h-14 text-red-600 mx-auto" />
+                      <h3 className="text-xl">No pudimos procesar tu pago</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Parece que hubo un inconveniente con tu pago. Verifica tus datos
+                        e intenta de nuevo más tarde.
+                      </p>
+                    </>
+                  ) : wompiState === 'timeout' || wompiState === 'error' ? (
+                    <>
+                      <Clock3 className="w-14 h-14 text-amber-600 mx-auto" />
+                      <h3 className="text-xl">Aún no hay confirmación</h3>
+                      <p className="text-sm text-muted-foreground">
+                        {wompiErrorMessage ||
+                          'No detectamos una respuesta a tiempo. Si ya pagaste, revisa el estado en Mis pedidos en unos minutos.'}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <Clock3 className="w-14 h-14 text-amber-600 mx-auto animate-pulse" />
+                      <h3 className="text-xl">Esperando respuesta de Wompi</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Completa tu pago en la pestaña que se abrió. No cierres esta
+                        ventana, aquí verás el resultado automáticamente.
+                      </p>
+                    </>
+                  )}
+
+                  {wompiPopupBlocked && wompiState === 'polling' && wompiCheckoutUrl && (
+                    <div className="p-4 border border-amber-300 bg-amber-50 text-left">
+                      <p className="text-xs text-amber-800 mb-3">
+                        Tu navegador bloqueó la ventana de pago.
+                      </p>
+                      <a
+                        href={wompiCheckoutUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-foreground text-background text-xs uppercase"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                        Abrir pago de Wompi
+                      </a>
+                    </div>
+                  )}
+
+                  {(wompiState === 'approved' || wompiState === 'failed' ||
+                    wompiState === 'timeout' || wompiState === 'error') && (
+                    <button
+                      type="button"
+                      onClick={close}
+                      className="inline-block px-8 py-4 bg-foreground text-background text-xs tracking-wider uppercase"
+                    >
+                      Volver a la tienda
+                    </button>
+                  )}
+                </div>
+              ) : mockPayment ? (
                 <div className="space-y-6">
                   <div className="p-5 border border-amber-300 bg-amber-50">
                     <div className="text-sm font-medium mb-2">Modo de pruebas</div>
@@ -256,7 +353,7 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
               )}
             </div>
 
-            {!mockPayment && (
+            {!mockPayment && !wompiOrderId && (
               <div className="p-8 border-t border-border">
                 <div className="space-y-2 mb-6">
                   <div className="flex justify-between text-sm">

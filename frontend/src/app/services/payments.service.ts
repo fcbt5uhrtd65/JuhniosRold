@@ -1,4 +1,4 @@
-import { api } from './api';
+import { api, API_BASE_URL, getAccessToken } from './api';
 
 interface PaginatedResponse<T> {
   count: number;
@@ -22,6 +22,8 @@ interface BackendAdminPayment {
   status: AdminPaymentStatus;
   payment_method: string;
   provider_transaction_id: string | null;
+  invoice_id: string | null;
+  invoice_number: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -37,6 +39,8 @@ export interface AdminPayment {
   currency: string;
   status: AdminPaymentStatus;
   paymentMethod: string;
+  invoiceId: string | null;
+  invoiceNumber: string | null;
   createdAt: string;
 }
 
@@ -52,8 +56,27 @@ function normalizeAdminPayment(payment: BackendAdminPayment): AdminPayment {
     currency: payment.currency,
     status: payment.status,
     paymentMethod: payment.payment_method,
+    invoiceId: payment.invoice_id,
+    invoiceNumber: payment.invoice_number,
     createdAt: payment.created_at,
   };
+}
+
+export async function openInvoicePdf(invoiceId: string): Promise<void> {
+  const token = getAccessToken();
+  if (!token) {
+    throw new Error('Tu sesión expiró. Inicia sesión de nuevo.');
+  }
+  const response = await fetch(`${API_BASE_URL}/finance/invoices/${invoiceId}/pdf/`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error('No se pudo obtener la factura.');
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank');
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 export async function getAdminPayments(params?: {

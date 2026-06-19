@@ -1,13 +1,14 @@
 import { useEffect, useState, useCallback } from 'react';
 import { motion } from 'motion/react';
-import { CreditCard, Check, X, Clock, AlertTriangle } from 'lucide-react';
+import { CreditCard, Check, X, Clock, AlertTriangle, FileText } from 'lucide-react';
 import { format } from 'date-fns';
 import { SearchBar } from './SearchBar';
 import { FilterPanel, type FilterGroup } from './FilterPanel';
 import { Pagination } from './Pagination';
 import {
-  getAdminPayments, type AdminPayment, type AdminPaymentStatus,
+  getAdminPayments, openInvoicePdf, type AdminPayment, type AdminPaymentStatus,
 } from '../../services/payments.service';
+import { useToast } from '../../contexts/ToastContext';
 
 const STATUS_LABELS: Record<AdminPaymentStatus, string> = {
   PENDING: 'Pendiente',
@@ -45,6 +46,7 @@ const FILTER_GROUPS: FilterGroup[] = [
 const PAGE_SIZE = 20;
 
 export function AdminPayments() {
+  const toast = useToast();
   const [payments, setPayments] = useState<AdminPayment[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -53,6 +55,18 @@ export function AdminPayments() {
   const [activeFilters, setActiveFilters] = useState<Record<string, string[]>>({});
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [errorMessage, setErrorMessage] = useState('');
+  const [loadingInvoiceId, setLoadingInvoiceId] = useState<string | null>(null);
+
+  const handleViewInvoice = async (invoiceId: string) => {
+    setLoadingInvoiceId(invoiceId);
+    try {
+      await openInvoicePdf(invoiceId);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo abrir la factura');
+    } finally {
+      setLoadingInvoiceId(null);
+    }
+  };
 
   const statusFilter = activeFilters.status?.[0] as AdminPaymentStatus | undefined;
 
@@ -204,6 +218,9 @@ export function AdminPayments() {
                 <th className="px-4 py-3 text-left text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
                   Fecha
                 </th>
+                <th className="px-4 py-3 text-center text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
+                  Factura
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -242,6 +259,21 @@ export function AdminPayments() {
                     <div className="text-[10px] text-muted-foreground">
                       {format(new Date(payment.createdAt), 'HH:mm')}
                     </div>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    {payment.invoiceId ? (
+                      <button
+                        onClick={() => handleViewInvoice(payment.invoiceId!)}
+                        disabled={loadingInvoiceId === payment.invoiceId}
+                        className="inline-flex items-center gap-1 text-[10px] px-2 py-1 border border-border hover:bg-background disabled:opacity-40 disabled:cursor-not-allowed"
+                        title={payment.invoiceNumber ?? undefined}
+                      >
+                        <FileText className="w-3.5 h-3.5" strokeWidth={1} />
+                        Ver factura
+                      </button>
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground">—</span>
+                    )}
                   </td>
                 </tr>
               ))}

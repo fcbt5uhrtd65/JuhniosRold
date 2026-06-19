@@ -120,6 +120,8 @@ class PaymentAdminSerializer(serializers.ModelSerializer):
     order_id = serializers.UUIDField(source="order.id", read_only=True)
     order_number = serializers.CharField(source="order.number", read_only=True)
     customer_name = serializers.SerializerMethodField()
+    invoice_id = serializers.SerializerMethodField()
+    invoice_number = serializers.SerializerMethodField()
 
     class Meta:
         model = Payment
@@ -135,9 +137,19 @@ class PaymentAdminSerializer(serializers.ModelSerializer):
             "status",
             "payment_method",
             "provider_transaction_id",
+            "invoice_id",
+            "invoice_number",
             "created_at",
             "updated_at",
         )
+
+    def get_invoice_id(self, payment):
+        invoice = getattr(payment, "invoice", None)
+        return invoice.id if invoice else None
+
+    def get_invoice_number(self, payment):
+        invoice = getattr(payment, "invoice", None)
+        return invoice.number if invoice else None
 
     def get_customer_name(self, payment):
         customer = payment.order.customer

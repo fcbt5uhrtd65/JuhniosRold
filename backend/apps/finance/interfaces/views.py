@@ -1,8 +1,12 @@
+from django.http import FileResponse
+from django.shortcuts import get_object_or_404
 from rest_framework import viewsets
+from rest_framework.views import APIView
 
 from apps.identity.interfaces.permissions import HasComponentAccess
 from shared.interfaces.viewsets import SoftDeleteModelViewSet
 
+from ..infrastructure.invoice_pdf import render_invoice_pdf
 from ..infrastructure.models import FinancialTransaction, SalesInvoice
 from ..infrastructure.serializers import (
     FinancialTransactionSerializer,
@@ -42,3 +46,20 @@ class SalesInvoiceViewSet(viewsets.ReadOnlyModelViewSet):
         if has_access("finance.management", "view"):
             return queryset
         return queryset.filter(order__customer__user=self.request.user)
+
+
+class SalesInvoicePdfView(APIView):
+    def get(self, request, pk):
+        queryset = SalesInvoice.objects.select_related("order__customer", "payment").prefetch_related("lines")
+        has_access = getattr(request.user, "has_component_access", lambda *_args, **_kwargs: False)
+        if not has_access("finance.management", "view"):
+            queryset = queryset.filter(order__customer__user=request.user)
+        invoice = get_object_or_404(queryset, pk=pk)
+
+        pdf_buffer = render_invoice_pdf(invoice)
+        return FileResponse(
+            pdf_buffer,
+            as_attachment=False,
+            filename=f"{invoice.number}.pdf",
+            content_type="application/pdf",
+        )
