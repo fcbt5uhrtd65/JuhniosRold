@@ -4,9 +4,18 @@ const MAX_ATTEMPTS = 20;
 const BASE_DELAY_MS = 1000;
 const MAX_DELAY_MS = 5000;
 
-export async function pollExportStatus(taskId: string): Promise<string> {
+interface ExportStatusResult {
+  status: 'pending' | 'success' | 'failure';
+  url?: string;
+  error?: string;
+}
+
+export async function pollExportStatus(
+  taskId: string,
+  fetchStatus: (taskId: string) => Promise<ExportStatusResult> = getExportStatus,
+): Promise<string> {
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    const result = await getExportStatus(taskId);
+    const result = await fetchStatus(taskId);
     if (result.status === 'success') {
       if (!result.url) throw new Error('La exportación no devolvió una URL.');
       return result.url;

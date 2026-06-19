@@ -1,10 +1,12 @@
+from celery.result import AsyncResult
 from rest_framework import generics, serializers
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from apps.identity.interfaces.permissions import HasComponentAccess
 
 from ..application.queries import DashboardQuery, SalesReportQuery
-from ..infrastructure.tasks import generate_report
+from ..infrastructure.tasks import export_sales_report, generate_report
 
 
 class DashboardResponseSerializer(serializers.Serializer):
@@ -48,6 +50,36 @@ class SalesReportView(generics.GenericAPIView):
 
     def get(self, request):
         return Response(SalesReportQuery().execute())
+
+
+class SalesReportExportSerializer(serializers.Serializer):
+    format = serializers.ChoiceField(choices=("xlsx", "pdf"), default="xlsx")
+
+
+class SalesReportExportView(generics.GenericAPIView):
+    serializer_class = SalesReportExportSerializer
+    permission_classes = (HasComponentAccess,)
+    required_component = "analytics.management"
+
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        task = export_sales_report.delay(serializer.validated_data["format"])
+        return Response({"task_id": task.id, "status": "queued"}, status=202)
+
+
+class SalesReportExportStatusView(APIView):
+    permission_classes = (HasComponentAccess,)
+    required_component = "analytics.management"
+
+    def get(self, request, task_id):
+        result = AsyncResult(task_id)
+        if result.successful():
+            payload = result.result or {}
+            return Response({"status": "success", "url": payload.get("url")})
+        if result.failed():
+            return Response({"status": "failure", "error": str(result.result)})
+        return Response({"status": "pending"})
 
 
 class ReportExportView(generics.GenericAPIView):

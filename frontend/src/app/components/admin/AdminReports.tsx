@@ -1,9 +1,21 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { useAdmin } from '../../contexts/AdminContext';
-import { Download, TrendingUp, DollarSign, ShoppingCart, Users, AlertTriangle } from 'lucide-react';
+import {
+  Download, TrendingUp, DollarSign, ShoppingCart, Users, AlertTriangle,
+  FileSpreadsheet, FileText,
+} from 'lucide-react';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { getSalesReport, type SalesReport } from '../../services/reports.service';
+import {
+  getSalesReport, requestSalesReportExport, getSalesReportExportStatus,
+  type SalesReport, type SalesReportExportFormat,
+} from '../../services/reports.service';
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
+} from '../ui/dropdown-menu';
+import { pollExportStatus } from '../../utils/pollExportStatus';
+import { resolveBackendUrl } from '../../services/api';
+import { useToast } from '../../contexts/ToastContext';
 
 const MONTH_LABELS: Record<string, string> = {
   '01': 'Ene', '02': 'Feb', '03': 'Mar', '04': 'Abr', '05': 'May', '06': 'Jun',
@@ -39,9 +51,11 @@ function ChartSkeleton() {
 
 export function AdminReports() {
   const { orders } = useAdmin();
+  const toast = useToast();
   const [report, setReport] = useState<SalesReport | null>(null);
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [errorMessage, setErrorMessage] = useState('');
+  const [isExporting, setIsExporting] = useState(false);
 
   const loadReport = () => {
     setStatus('loading');
@@ -60,8 +74,19 @@ export function AdminReports() {
     loadReport();
   }, []);
 
-  const handleExportExcel = () => {
-    alert('Exportando reporte a Excel... (Funcionalidad de demostración)');
+  const handleExport = async (format: SalesReportExportFormat) => {
+    setIsExporting(true);
+    toast.info('Generando exportación, esto puede tardar unos segundos...');
+    try {
+      const taskId = await requestSalesReportExport(format);
+      const relativeUrl = await pollExportStatus(taskId, getSalesReportExportStatus);
+      window.open(resolveBackendUrl(relativeUrl), '_blank');
+      toast.success('Exportación lista.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo exportar el reporte');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const totalVentas = orders.reduce((sum, o) => o.estado !== 'cancelado' ? sum + o.total : sum, 0);
@@ -106,13 +131,27 @@ export function AdminReports() {
             Análisis y métricas de negocio
           </div>
         </div>
-        <button
-          onClick={handleExportExcel}
-          className="flex items-center gap-2 px-4 py-2 bg-foreground text-background text-xs tracking-wider uppercase hover:opacity-90"
-        >
-          <Download className="w-4 h-4" strokeWidth={1} />
-          Exportar Excel
-        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              disabled={isExporting}
+              className="flex items-center gap-2 px-4 py-2 bg-foreground text-background text-xs tracking-wider uppercase hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Download className="w-4 h-4" strokeWidth={1} />
+              Exportar
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={() => handleExport('pdf')}>
+              <FileText className="w-4 h-4 mr-2" strokeWidth={1} />
+              Exportar a PDF
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => handleExport('xlsx')}>
+              <FileSpreadsheet className="w-4 h-4 mr-2" strokeWidth={1} />
+              Exportar a Excel
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* KPIs */}
