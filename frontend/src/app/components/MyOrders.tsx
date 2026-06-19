@@ -147,17 +147,35 @@ export function MyOrders({ isOpen, onClose }: MyOrdersProps) {
     status === 'payment_pending' ||
     status === 'failed';
 
+  const goToPaymentResult = (orderId: string) => {
+    onClose();
+    window.history.pushState({}, '', `/pago/resultado?pedido_id=${orderId}`);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  };
+
   const handleResumePayment = async (orderId: string) => {
     setPayingOrderId(orderId);
+
+    const wompiTab = window.open('about:blank', '_blank');
+
     try {
       const payment = await initiatePayment(orderId);
       if (payment.requires_redirect && payment.checkout_url) {
-        window.location.assign(payment.checkout_url);
+        if (wompiTab && !wompiTab.closed) {
+          wompiTab.location.href = payment.checkout_url;
+          goToPaymentResult(orderId);
+        } else {
+          toast.warning(
+            'Tu navegador bloqueó la pestaña de Wompi. Permite ventanas emergentes e intenta de nuevo.',
+          );
+        }
         return;
       }
+      wompiTab?.close();
       setMockPayment({ orderId, paymentId: payment.payment_id });
       toast.info('Pago simulado listo. Elige aprobar o rechazar.');
     } catch (error) {
+      wompiTab?.close();
       toast.error(error instanceof Error ? error.message : 'No fue posible iniciar el pago.');
     } finally {
       setPayingOrderId(null);

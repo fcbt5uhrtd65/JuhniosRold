@@ -24,16 +24,21 @@ export function PaymentResult({ onReturnToStore }: PaymentResultProps) {
         )}
         <h1 className="text-2xl mb-3">
           {approved
-            ? 'Pago confirmado'
+            ? 'Pago exitoso'
             : state === 'failed'
-              ? 'El pago no fue aprobado'
+              ? 'Hubo un inconveniente con el pago'
               : state === 'timeout'
                 ? 'Aún no hay confirmación'
-                : 'Estamos confirmando tu pago'}
+                : 'Esperando confirmación de pago'}
         </h1>
         <p className="text-sm text-muted-foreground mb-6">
-          El estado definitivo se obtiene desde el proveedor configurado.
-          Puedes cerrar esta pantalla y consultar el pedido más tarde en Mis Pedidos.
+          {approved
+            ? 'El pago fue exitoso y el estado cambió de pago rechazado a pago aprobado.'
+            : state === 'failed'
+              ? 'Hubo un inconveniente con el pago, intente de nuevo más tarde.'
+              : state === 'timeout'
+                ? 'No detectamos una respuesta a tiempo. Si ya pagaste, revisa el estado en Mis pedidos en unos minutos.'
+                : 'Completa el pago en la pestaña de Wompi. En esta pantalla verás el resultado automáticamente.'}
         </p>
         {payment && (
           <div className="bg-secondary p-4 text-sm text-left space-y-2 mb-6">

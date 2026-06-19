@@ -202,19 +202,18 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
                   {wompiState === 'approved' ? (
                     <>
                       <CheckCircle2 className="w-14 h-14 text-green-600 mx-auto" />
-                      <h3 className="text-xl">¡Pago exitoso!</h3>
+                      <h3 className="text-xl">Pago exitoso</h3>
                       <p className="text-sm text-muted-foreground">
-                        Tu pago fue aprobado. Puedes rastrear el estado de tu pedido
-                        en la opción <strong>Mis pedidos</strong> de tu perfil.
+                        El pago fue exitoso y el estado cambió de pago rechazado
+                        a pago aprobado.
                       </p>
                     </>
                   ) : wompiState === 'failed' ? (
                     <>
                       <XCircle className="w-14 h-14 text-red-600 mx-auto" />
-                      <h3 className="text-xl">No pudimos procesar tu pago</h3>
+                      <h3 className="text-xl">Hubo un inconveniente con el pago</h3>
                       <p className="text-sm text-muted-foreground">
-                        Parece que hubo un inconveniente con tu pago. Verifica tus datos
-                        e intenta de nuevo más tarde.
+                        Hubo un inconveniente con el pago, intente de nuevo más tarde.
                       </p>
                     </>
                   ) : wompiState === 'timeout' || wompiState === 'error' ? (
@@ -229,7 +228,7 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
                   ) : (
                     <>
                       <Clock3 className="w-14 h-14 text-amber-600 mx-auto animate-pulse" />
-                      <h3 className="text-xl">Esperando respuesta de Wompi</h3>
+                      <h3 className="text-xl">Esperando confirmación de pago</h3>
                       <p className="text-sm text-muted-foreground">
                         Completa tu pago en la pestaña que se abrió. No cierres esta
                         ventana, aquí verás el resultado automáticamente.
