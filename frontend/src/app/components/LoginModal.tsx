@@ -110,7 +110,13 @@ interface LoginModalProps {
 }
 
 export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) {
-  const { login: customerLogin, register: customerRegister, resetPassword } = useUser();
+  const {
+    login: customerLogin,
+    register: customerRegister,
+    verifyRegistration,
+    resendRegistrationCode,
+    resetPassword,
+  } = useUser();
 
   const [tab, setTab] = useState<'login' | 'register'>('login');
   const [isForgot, setIsForgot] = useState(false);
@@ -122,6 +128,10 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
   const [showPass, setShowPass] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [terms, setTerms] = useState(false);
+  const [verificationId, setVerificationId] = useState('');
+  const [verificationEmail, setVerificationEmail] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
+  const [debugCode, setDebugCode] = useState('');
   // extra registro
   const [tipoDocumento, setTipoDocumento] = useState('CC');
   const [documento, setDocumento] = useState('');
@@ -138,12 +148,22 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
     setShowPass(false); setShowConfirm(false); setTerms(false);
     setTipoDocumento('CC'); setDocumento(''); setTelefono(''); setDireccion('');
     setRegLocation(EMPTY_LOCATION);
+    setVerificationId(''); setVerificationEmail(''); setVerificationCode(''); setDebugCode('');
     setIsForgot(false);
   };
 
   const handleClose = () => { reset(); onClose(); };
 
-  const switchTab = (t: 'login' | 'register') => { setTab(t); setIsForgot(false); setError(''); setSuccess(''); };
+  const switchTab = (t: 'login' | 'register') => {
+    setTab(t);
+    setIsForgot(false);
+    setError('');
+    setSuccess('');
+    setVerificationId('');
+    setVerificationEmail('');
+    setVerificationCode('');
+    setDebugCode('');
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -158,6 +178,13 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
         } else {
           setError(result.message || 'No fue posible solicitar la recuperación.');
         }
+        return;
+      }
+      if (verificationId) {
+        if (!verificationCode.trim()) { setError('Ingresa el codigo de verificacion.'); return; }
+        const result = await verifyRegistration(verificationId, verificationCode.trim());
+        if (result.ok) { reset(); onClose(); }
+        else setError(result.message || 'No fue posible verificar el codigo. Usa el codigo mas reciente que recibiste por correo.');
         return;
       }
       if (tab === 'login') {
@@ -178,8 +205,35 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
           document_type: tipoDocumento || undefined,
           document_number: documento || undefined,
         });
-        if (result.ok) { reset(); onClose(); }
+        if (result.ok && result.verificationId) {
+          setVerificationId(result.verificationId);
+          setVerificationEmail(result.email || email.trim().toLowerCase());
+          setVerificationCode('');
+          setDebugCode(result.debugCode || '');
+          setSuccess(result.message || 'Enviamos un codigo de verificacion a tu correo.');
+        }
         else setError(result.message || 'No fue posible crear la cuenta.');
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleResendCode = async () => {
+    if (!verificationId) return;
+    setError('');
+    setSuccess('');
+    setSubmitting(true);
+    try {
+      const result = await resendRegistrationCode(verificationId);
+      if (result.ok) {
+        setVerificationId(result.verificationId || verificationId);
+        setVerificationEmail(result.email || verificationEmail);
+        setVerificationCode('');
+        setDebugCode(result.debugCode || '');
+        setSuccess(result.message || 'Enviamos un nuevo codigo de verificacion.');
+      } else {
+        setError(result.message || 'No fue posible reenviar el codigo.');
       }
     } finally {
       setSubmitting(false);
@@ -223,14 +277,31 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
               {/* ── TÍTULO ── */}
               <AnimatePresence mode="wait">
                 <motion.div
-                  key={isForgot ? 'forgot' : tab}
+                  key={verificationId ? 'verify' : isForgot ? 'forgot' : tab}
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}
                   transition={{ duration: 0.22 }}
                   className="text-center mb-6"
                 >
-                  {isForgot ? (
+                  {verificationId ? (
+                    <>
+                      <p className="text-xs text-stone-400 mb-1">Verifica tu correo</p>
+                      <h2
+                        className="text-3xl font-light text-stone-900"
+                        style={{ fontFamily: "'Playfair Display', serif" }}
+                      >
+                        Codigo de{' '}
+                        <em className="not-italic font-semibold" style={{ fontStyle: 'italic', color: OLIVE }}>
+                          seguridad
+                        </em>
+                      </h2>
+                      <p className="text-xs text-stone-400 mt-2 leading-relaxed">
+                        Enviamos un codigo de 6 digitos a {verificationEmail || email}.
+                        Si pediste reenviarlo, usa el correo mas reciente.
+                      </p>
+                    </>
+                  ) : isForgot ? (
                     <>
                       <p className="text-xs text-stone-400 mb-1">Recuperar acceso</p>
                       <h2
@@ -281,7 +352,7 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
               </AnimatePresence>
 
               {/* ── TABS ── */}
-              {!isForgot && (
+              {!isForgot && !verificationId && (
                 <div className="flex border-b border-stone-100 mb-6">
                   {(['login', 'register'] as const).map(t => (
                     <button
@@ -332,13 +403,39 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
 
                 <AnimatePresence mode="wait">
                   <motion.div
-                    key={isForgot ? 'forgot' : tab}
+                    key={verificationId ? 'verify' : isForgot ? 'forgot' : tab}
                     initial={{ opacity: 0, x: tab === 'login' || isForgot ? -12 : 12 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.25 }}
                     className="space-y-4"
                   >
+                    {verificationId ? (
+                      <div className="space-y-3">
+                        <Field
+                          label="Codigo de verificacion"
+                          value={verificationCode}
+                          onChange={(value) => setVerificationCode(value.replace(/\D/g, '').slice(0, 6))}
+                          placeholder="000000"
+                          icon={Shield}
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={handleResendCode}
+                          disabled={submitting}
+                          className="w-full text-[11px] text-stone-400 hover:text-stone-700 transition-colors"
+                        >
+                          Reenviar codigo
+                        </button>
+                        {debugCode && (
+                          <div className="px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-600 text-center">
+                            Codigo de desarrollo: <span className="font-mono text-stone-900">{debugCode}</span>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <>
                     {/* Campos solo registro */}
                     {tab === 'register' && !isForgot && (
                       <>
@@ -446,11 +543,13 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
                         }
                       />
                     )}
+                      </>
+                    )}
                   </motion.div>
                 </AnimatePresence>
 
                 {/* ¿Olvidaste? */}
-                {tab === 'login' && !isForgot && (
+                {tab === 'login' && !isForgot && !verificationId && (
                   <div className="text-right">
                     <button
                       type="button"
@@ -463,7 +562,7 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
                 )}
 
                 {/* Ubicación y dirección (solo registro) */}
-                {tab === 'register' && !isForgot && (
+                {tab === 'register' && !isForgot && !verificationId && (
                   <div className="space-y-3">
                     <div className="rounded-xl border border-stone-200 overflow-hidden p-4 space-y-3">
                       <div className="flex items-center gap-1.5">
@@ -516,7 +615,7 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
                 )}
 
                 {/* Términos (solo registro) */}
-                {tab === 'register' && !isForgot && (
+                {tab === 'register' && !isForgot && !verificationId && (
                   <label className="flex items-start gap-2.5 cursor-pointer">
                     <div className="relative flex-shrink-0 mt-0.5">
                       <input
@@ -563,6 +662,8 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
                 >
                   {submitting
                     ? 'Procesando...'
+                    : verificationId
+                      ? 'Verificar codigo'
                     : isForgot
                       ? 'Enviar instrucciones'
                       : tab === 'login'
@@ -581,10 +682,26 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
                     ← Volver a iniciar sesión
                   </button>
                 )}
+                {verificationId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setVerificationId('');
+                      setVerificationEmail('');
+                      setVerificationCode('');
+                      setDebugCode('');
+                      setError('');
+                      setSuccess('');
+                    }}
+                    className="w-full text-[11px] text-stone-400 hover:text-stone-700 transition-colors pt-1"
+                  >
+                    Cambiar datos de registro
+                  </button>
+                )}
               </form>
 
               {/* ── SOCIALES ── */}
-              {!isForgot && (
+              {!isForgot && !verificationId && (
                 <div className="mt-6">
                   <div className="flex items-center gap-3 mb-4">
                     <div className="flex-1 h-px bg-stone-100" />
@@ -605,14 +722,14 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
               )}
 
               {/* Pie */}
-              {tab === 'login' && !isForgot && (
+              {tab === 'login' && !isForgot && !verificationId && (
                 <div className="mt-6 flex items-center justify-center gap-1 text-[11px] text-stone-400">
                   <Shield className="w-3 h-3 text-stone-300" strokeWidth={1.5} />
                   Tu información está protegida y encriptada
                 </div>
               )}
 
-              {tab === 'register' && !isForgot && (
+              {tab === 'register' && !isForgot && !verificationId && (
                 <p className="mt-5 text-center text-[11px] text-stone-400">
                   ¿Ya tienes una cuenta?{' '}
                   <button
@@ -627,7 +744,7 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
               )}
 
               {/* Acceso admin demo (login) */}
-              {tab === 'login' && !isForgot && (
+              {tab === 'login' && !isForgot && !verificationId && (
                 <div className="mt-6 pt-5 border-t border-stone-100">
                   <div className="text-[9px] tracking-[0.22em] uppercase text-stone-300 mb-2 text-center">
                     Demo Admin

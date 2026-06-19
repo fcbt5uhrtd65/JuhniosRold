@@ -1,3 +1,4 @@
+from django.conf import settings
 from rest_framework import generics, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -7,7 +8,9 @@ from apps.identity.infrastructure.serializers import (
     ComponentSerializer,
     PasswordResetConfirmSerializer,
     PasswordResetRequestSerializer,
+    RegisterResendCodeSerializer,
     RegisterSerializer,
+    RegisterVerifySerializer,
     RoleComponentPermissionSerializer,
     RoleSerializer,
     UserSerializer,
@@ -16,15 +19,68 @@ from apps.identity.infrastructure.serializers import (
 from .permissions import HasComponentAccess
 
 
-class RegisterView(generics.CreateAPIView):
+def _verification_response_data(verification, message):
+    data = {
+        "message": message,
+        "verification_id": verification.id,
+        "email": verification.email,
+        "expires_at": verification.expires_at,
+    }
+    if settings.DEBUG and hasattr(verification, "debug_code"):
+        data["debug_code"] = verification.debug_code
+    return data
+
+
+class RegisterView(generics.GenericAPIView):
     serializer_class = RegisterSerializer
     permission_classes = (permissions.AllowAny,)
 
-    def create(self, request, *args, **kwargs):
+    def post(self, request):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = serializer.save()
-        return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
+        verification = serializer.save()
+        return Response(
+            _verification_response_data(
+                verification,
+                "Enviamos un codigo de verificacion a tu correo.",
+            ),
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+
+class RegisterVerifyView(generics.GenericAPIView):
+    serializer_class = RegisterVerifySerializer
+    permission_classes = (permissions.AllowAny,)
+
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        result = serializer.save()
+        return Response(
+            {
+                "user": UserSerializer(result["user"]).data,
+                "access": result["access"],
+                "refresh": result["refresh"],
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class RegisterResendCodeView(generics.GenericAPIView):
+    serializer_class = RegisterResendCodeSerializer
+    permission_classes = (permissions.AllowAny,)
+
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        verification = serializer.save()
+        return Response(
+            _verification_response_data(
+                verification,
+                "Enviamos un nuevo codigo de verificacion.",
+            ),
+            status=status.HTTP_202_ACCEPTED,
+        )
 
 
 class PasswordResetRequestView(generics.GenericAPIView):

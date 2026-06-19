@@ -1,5 +1,6 @@
 from django.test import TestCase
 from rest_framework.test import APIClient
+from unittest.mock import patch
 
 from apps.customers.infrastructure.models import Customer
 
@@ -9,20 +10,44 @@ class IdentityApiTests(TestCase):
         self.client = APIClient()
 
     def test_register_login_and_profile_contract(self):
-        register_response = self.client.post(
-            "/api/v1/auth/register/",
+        with (
+            patch(
+                "apps.identity.infrastructure.serializers.EmailVerificationCode.generate_code",
+                return_value="123456",
+            ),
+            patch(
+                "apps.identity.infrastructure.serializers.send_registration_verification_email.delay"
+            ) as send_code,
+        ):
+            register_response = self.client.post(
+                "/api/v1/auth/register/",
+                {
+                    "email": "cliente@example.com",
+                    "password": "password-seguro",
+                    "first_name": "Cliente",
+                    "last_name": "Prueba",
+                    "phone": "3001234567",
+                },
+                format="json",
+            )
+        self.assertEqual(register_response.status_code, 202)
+        self.assertIn("verification_id", register_response.data)
+        send_code.assert_called_once_with("cliente@example.com", "123456")
+        self.assertFalse(Customer.objects.filter(email="cliente@example.com").exists())
+
+        verify_response = self.client.post(
+            "/api/v1/auth/register/verify/",
             {
-                "email": "cliente@example.com",
-                "password": "password-seguro",
-                "first_name": "Cliente",
-                "last_name": "Prueba",
-                "phone": "3001234567",
+                "verification_id": register_response.data["verification_id"],
+                "code": "123456",
             },
             format="json",
         )
-        self.assertEqual(register_response.status_code, 201)
-        self.assertEqual(register_response.data["email"], "cliente@example.com")
-        self.assertEqual(register_response.data["role"], "CLIENT")
+        self.assertEqual(verify_response.status_code, 201)
+        self.assertEqual(verify_response.data["user"]["email"], "cliente@example.com")
+        self.assertEqual(verify_response.data["user"]["role"], "CLIENT")
+        self.assertIn("access", verify_response.data)
+        self.assertIn("refresh", verify_response.data)
 
         login_response = self.client.post(
             "/api/v1/auth/login/",

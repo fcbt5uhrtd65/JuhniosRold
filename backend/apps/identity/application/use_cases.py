@@ -30,3 +30,27 @@ class RegisterUser:
             phone=data.phone,
         )
         return user
+
+    @transaction.atomic
+    def execute_verified(self, data: RegisterUserDTO, password_hash: str):
+        user_model = get_user_model()
+        if user_model.objects.filter(email__iexact=data.email).exists():
+            raise EmailAlreadyRegistered("El correo ya se encuentra registrado.")
+        user = user_model(
+            email=data.email.lower(),
+            first_name=data.first_name,
+            last_name=data.last_name,
+            phone=data.phone,
+        )
+        user.password = password_hash
+        user.save()
+        Customer.objects.create(
+            user=user,
+            document_type=data.document_type or "PENDING",
+            document_number=data.document_number or f"USR-{user.id.hex}",
+            first_name=data.first_name or data.email.split("@")[0],
+            last_name=data.last_name,
+            email=user.email,
+            phone=data.phone,
+        )
+        return user

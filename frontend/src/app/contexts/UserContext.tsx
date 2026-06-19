@@ -13,7 +13,9 @@ import {
 } from 'react';
 import {
   loginUser,
-  registerUser,
+  startRegistration,
+  verifyRegistrationCode,
+  resendRegistrationCode,
   getCurrentUser,
   logoutUser,
   requestPasswordReset,
@@ -103,7 +105,14 @@ interface UserContextType {
       document_type?: string;
       document_number?: string;
     },
+  ) => Promise<RegistrationActionResult>;
+  verifyRegistration: (
+    verificationId: string,
+    code: string,
   ) => Promise<AuthActionResult>;
+  resendRegistrationCode: (
+    verificationId: string,
+  ) => Promise<RegistrationActionResult>;
   logout: () => Promise<void>;
   toggleSaveProduct: (productoId: string) => void;
   isProductSaved: (productoId: string) => boolean;
@@ -131,6 +140,13 @@ const CUSTOMER_ROLES = new Set<AuthUser['role']>(['CLIENT', 'PRO']);
 interface AuthActionResult {
   ok: boolean;
   message?: string;
+}
+
+interface RegistrationActionResult extends AuthActionResult {
+  verificationId?: string;
+  email?: string;
+  expiresAt?: string;
+  debugCode?: string;
 }
 
 function authErrorMessage(error: unknown, fallback: string): string {
@@ -326,7 +342,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       const parts = nombre.trim().split(/\s+/);
       const first_name = parts[0] ?? nombre;
       const last_name = parts.slice(1).join(' ');
-      const user = await registerUser({
+      const verification = await startRegistration({
         first_name,
         last_name,
         email: email.trim().toLowerCase(),
@@ -335,22 +351,15 @@ export function UserProvider({ children }: { children: ReactNode }) {
         document_type: extra?.document_type,
         document_number: extra?.document_number,
       });
-      // Persist extra profile fields locally (API doesn't accept them at register time)
-      if (extra?.address || extra?.city || extra?.document_number) {
-        const mapped = mapAuthUser(user);
-        const enriched: typeof mapped = {
-          ...mapped,
-          telefono: extra.phone ?? mapped.telefono,
-          direccion: extra.address,
-          ciudad: extra.city,
-        };
-        setCurrentUser(enriched);
-        setBackendOnline(true);
-        return { ok: true };
-      }
       setBackendOnline(true);
-      setCurrentUser(mapAuthUser(user));
-      return { ok: true };
+      return {
+        ok: true,
+        message: verification.message,
+        verificationId: verification.verification_id,
+        email: verification.email,
+        expiresAt: verification.expires_at,
+        debugCode: verification.debug_code,
+      };
     } catch (error) {
       clearTokens();
       const serverResponded = error instanceof ApiError;
@@ -363,6 +372,63 @@ export function UserProvider({ children }: { children: ReactNode }) {
       };
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const verifyRegistration = useCallback(async (
+    verificationId: string,
+    code: string,
+  ): Promise<AuthActionResult> => {
+    try {
+      const user = await verifyRegistrationCode(verificationId, code);
+      setBackendOnline(true);
+      if (!isCustomerUser(user)) {
+        setCurrentUser(null);
+        return {
+          ok: false,
+          message: 'Esta cuenta pertenece al panel interno. Usa el acceso administrativo.',
+        };
+      }
+      setCurrentUser(mapAuthUser(user));
+      await fetchOrdersFromApi();
+      return { ok: true };
+    } catch (error) {
+      clearTokens();
+      const serverResponded = error instanceof ApiError;
+      setBackendOnline(serverResponded);
+      return {
+        ok: false,
+        message: serverResponded
+          ? authErrorMessage(error, 'No fue posible verificar el codigo.')
+          : 'No hay conexión con el servidor. Intenta nuevamente.',
+      };
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const resendRegistration = useCallback(async (
+    verificationId: string,
+  ): Promise<RegistrationActionResult> => {
+    try {
+      const verification = await resendRegistrationCode(verificationId);
+      setBackendOnline(true);
+      return {
+        ok: true,
+        message: verification.message,
+        verificationId: verification.verification_id,
+        email: verification.email,
+        expiresAt: verification.expires_at,
+        debugCode: verification.debug_code,
+      };
+    } catch (error) {
+      const serverResponded = error instanceof ApiError;
+      setBackendOnline(serverResponded);
+      return {
+        ok: false,
+        message: serverResponded
+          ? authErrorMessage(error, 'No fue posible reenviar el codigo.')
+          : 'No hay conexión con el servidor. Intenta nuevamente.',
+      };
+    }
   }, []);
 
   // ---- LOGOUT ----
@@ -467,6 +533,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
         backendOnline,
         login,
         register,
+        verifyRegistration,
+        resendRegistrationCode: resendRegistration,
         logout,
         toggleSaveProduct,
         isProductSaved,

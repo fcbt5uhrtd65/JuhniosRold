@@ -2,9 +2,11 @@ import secrets
 import uuid
 from datetime import timedelta
 
+from django.conf import settings
 from django.contrib.auth.base_user import BaseUserManager
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from django.utils.crypto import constant_time_compare, get_random_string, salted_hmac
 from django.utils import timezone
 
 from apps.identity.access_control import ADMIN_ROLE_CODE, DEFAULT_ROLE_CODE
@@ -197,3 +199,42 @@ class PasswordResetToken(BaseModel):
     @property
     def is_valid(self):
         return self.used_at is None and self.expires_at > timezone.now()
+
+
+class EmailVerificationCode(BaseModel):
+    email = models.EmailField(db_index=True)
+    registration_data = models.JSONField(default=dict)
+    password_hash = models.CharField(max_length=128)
+    code_hash = models.CharField(max_length=128)
+    previous_code_hashes = models.JSONField(default=list)
+    expires_at = models.DateTimeField()
+    attempts = models.PositiveSmallIntegerField(default=0)
+    used_at = models.DateTimeField(null=True, blank=True)
+    sent_count = models.PositiveSmallIntegerField(default=1)
+
+    @classmethod
+    def generate_code(cls):
+        return get_random_string(length=6, allowed_chars="0123456789")
+
+    @classmethod
+    def hash_code(cls, code):
+        return salted_hmac("identity.email_verification", str(code)).hexdigest()
+
+    @property
+    def is_valid(self):
+        return self.used_at is None and self.expires_at > timezone.now()
+
+    @property
+    def attempts_remaining(self):
+        return max(0, settings.REGISTRATION_CODE_MAX_ATTEMPTS - self.attempts)
+
+    def matches(self, code):
+        incoming_hash = self.hash_code(code)
+        return constant_time_compare(self.code_hash, incoming_hash) or any(
+            constant_time_compare(previous_hash, incoming_hash)
+            for previous_hash in self.previous_code_hashes
+        )
+
+    def mark_used(self):
+        self.used_at = timezone.now()
+        self.save(update_fields=("used_at", "updated_at"))

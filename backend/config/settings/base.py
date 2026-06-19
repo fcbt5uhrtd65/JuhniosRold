@@ -140,6 +140,11 @@ CORS_ALLOW_CREDENTIALS = True
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5174")
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8001")
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "no-reply@juhniosrold.com")
+EMAIL_PROVIDER = os.getenv("EMAIL_PROVIDER", "django").lower()
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
+RESEND_FROM_EMAIL = os.getenv("RESEND_FROM_EMAIL", DEFAULT_FROM_EMAIL)
+REGISTRATION_CODE_TTL_MINUTES = int(os.getenv("REGISTRATION_CODE_TTL_MINUTES", "10"))
+REGISTRATION_CODE_MAX_ATTEMPTS = int(os.getenv("REGISTRATION_CODE_MAX_ATTEMPTS", "5"))
 
 PAYMENT_PROVIDER = os.getenv("PAYMENT_PROVIDER", "mock").lower()
 if PAYMENT_PROVIDER not in {"mock", "wompi"}:

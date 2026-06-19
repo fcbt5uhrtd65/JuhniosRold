@@ -41,11 +41,15 @@ services:
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.development
       DJANGO_SECRET_KEY: development-only-change-me
-      DJANGO_DEBUG: "true"
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-true}
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,backend}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5174,http://localhost}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5174}
       BACKEND_URL: ${BACKEND_URL:-http://localhost:8001}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-no-reply@juhniosrold.com}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-django}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-Juhnios Rold <onboarding@resend.dev>}
       DB_HOST: db
       DB_PORT: "5432"
       DB_USER: postgres
@@ -144,6 +148,11 @@ services:
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.development
       DJANGO_SECRET_KEY: development-only-change-me
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-true}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-no-reply@juhniosrold.com}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-django}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-Juhnios Rold <no-reply@juhniosrold.com>}
       DB_HOST: db
       DB_PORT: "5432"
       DB_USER: postgres
@@ -185,6 +194,11 @@ services:
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.development
       DJANGO_SECRET_KEY: development-only-change-me
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-true}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-no-reply@juhniosrold.com}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-django}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-Juhnios Rold <no-reply@juhniosrold.com>}
       DB_HOST: db
       DB_PORT: "5432"
       DB_USER: postgres

@@ -59,10 +59,50 @@ interface BackendTokenPair {
   refresh: string;
 }
 
+export interface RegistrationVerification {
+  verification_id: string;
+  email: string;
+  expires_at: string;
+  debug_code?: string;
+  message?: string;
+}
+
+interface RegisterVerifyResponse extends BackendTokenPair {
+  user: AuthUser;
+}
+
 // ---- Register ----
-export async function registerUser(payload: RegisterPayload): Promise<AuthUser> {
-  await api.post('/auth/register/', payload);
-  return loginUser({ email: payload.email, password: payload.password });
+export async function startRegistration(
+  payload: RegisterPayload,
+): Promise<RegistrationVerification> {
+  const res = await api.post<RegistrationVerification>('/auth/register/', payload);
+  if (!res.data) throw new Error(res.message);
+  return res.data;
+}
+
+export async function verifyRegistrationCode(
+  verificationId: string,
+  code: string,
+): Promise<AuthUser> {
+  const res = await api.post<RegisterVerifyResponse>('/auth/register/verify/', {
+    verification_id: verificationId,
+    code,
+  });
+  if (!res.data?.access || !res.data.refresh || !res.data.user) {
+    throw new Error('El servidor no devolvio una sesion valida.');
+  }
+  setTokens(res.data.access, res.data.refresh);
+  return res.data.user;
+}
+
+export async function resendRegistrationCode(
+  verificationId: string,
+): Promise<RegistrationVerification> {
+  const res = await api.post<RegistrationVerification>('/auth/register/resend-code/', {
+    verification_id: verificationId,
+  });
+  if (!res.data) throw new Error(res.message);
+  return res.data;
 }
 
 // ---- Login ----

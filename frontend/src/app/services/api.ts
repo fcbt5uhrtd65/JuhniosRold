@@ -285,6 +285,7 @@ export async function apiRequest<T>(
   const isAuthenticationRequest =
     endpoint === '/auth/login/' ||
     endpoint === '/auth/register/' ||
+    endpoint.startsWith('/auth/register/') ||
     endpoint.startsWith('/auth/token/');
   let token = getAccessToken();
   if (!token && !isAuthenticationRequest) {

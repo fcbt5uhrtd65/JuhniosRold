@@ -1,8 +1,14 @@
+from datetime import timedelta
+
+from django.conf import settings
+from django.contrib.auth.hashers import make_password
 from django.utils import timezone
 from rest_framework import serializers
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.identity.infrastructure.models import (
     Component,
+    EmailVerificationCode,
     PasswordResetToken,
     Role,
     RoleComponentPermission,
@@ -11,7 +17,7 @@ from apps.identity.infrastructure.models import (
 
 from ..application.dtos import RegisterUserDTO
 from ..application.use_cases import RegisterUser
-from .tasks import send_password_reset_email
+from .tasks import send_password_reset_email, send_registration_verification_email
 
 
 class ComponentSerializer(serializers.ModelSerializer):
@@ -123,7 +129,126 @@ class RegisterSerializer(serializers.Serializer):
     document_number = serializers.CharField(required=False, allow_blank=True)
 
     def create(self, validated_data):
-        return RegisterUser().execute(RegisterUserDTO(**validated_data))
+        if User.objects.filter(email__iexact=validated_data["email"]).exists():
+            raise serializers.ValidationError(
+                {"email": "El correo ya se encuentra registrado."}
+            )
+
+        code = EmailVerificationCode.generate_code()
+        expires_at = timezone.now() + timedelta(
+            minutes=settings.REGISTRATION_CODE_TTL_MINUTES
+        )
+        email = validated_data["email"].strip().lower()
+        registration_data = {
+            "email": email,
+            "first_name": validated_data.get("first_name", ""),
+            "last_name": validated_data.get("last_name", ""),
+            "phone": validated_data.get("phone", ""),
+            "document_type": validated_data.get("document_type", ""),
+            "document_number": validated_data.get("document_number", ""),
+        }
+
+        EmailVerificationCode.objects.filter(
+            email__iexact=email,
+            used_at__isnull=True,
+        ).update(deleted_at=timezone.now())
+        verification = EmailVerificationCode.objects.create(
+            email=email,
+            registration_data=registration_data,
+            password_hash=make_password(validated_data["password"]),
+            code_hash=EmailVerificationCode.hash_code(code),
+            expires_at=expires_at,
+        )
+        send_registration_verification_email.delay(email, code)
+        verification.debug_code = code
+        return verification
+
+
+class RegisterVerifySerializer(serializers.Serializer):
+    verification_id = serializers.UUIDField()
+    code = serializers.CharField(min_length=6, max_length=6)
+
+    def validate(self, attrs):
+        verification = EmailVerificationCode.objects.filter(
+            pk=attrs["verification_id"],
+            deleted_at__isnull=True,
+        ).first()
+        if not verification:
+            raise serializers.ValidationError(
+                {"verification_id": "La verificacion no existe."}
+            )
+        if not verification.is_valid:
+            raise serializers.ValidationError(
+                {"code": "El codigo expiro. Solicita uno nuevo."}
+            )
+        if verification.attempts_remaining <= 0:
+            raise serializers.ValidationError(
+                {"code": "Se agotaron los intentos. Solicita un nuevo codigo."}
+            )
+
+        verification.attempts += 1
+        verification.save(update_fields=("attempts", "updated_at"))
+        if not verification.matches(attrs["code"]):
+            raise serializers.ValidationError({"code": "El codigo no es valido."})
+
+        attrs["verification"] = verification
+        return attrs
+
+    def save(self):
+        verification = self.validated_data["verification"]
+        dto = RegisterUserDTO(
+            password="",
+            **verification.registration_data,
+        )
+        user = RegisterUser().execute_verified(dto, verification.password_hash)
+        verification.mark_used()
+        refresh = RefreshToken.for_user(user)
+        return {
+            "user": user,
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+        }
+
+
+class RegisterResendCodeSerializer(serializers.Serializer):
+    verification_id = serializers.UUIDField()
+
+    def validate_verification_id(self, value):
+        verification = EmailVerificationCode.objects.filter(
+            pk=value,
+            deleted_at__isnull=True,
+        ).first()
+        if not verification or verification.used_at is not None:
+            raise serializers.ValidationError("La verificacion no existe.")
+        if verification.sent_count >= 3:
+            raise serializers.ValidationError("Ya solicitaste demasiados codigos.")
+        return verification
+
+    def save(self):
+        verification = self.validated_data["verification_id"]
+        code = EmailVerificationCode.generate_code()
+        previous_hashes = list(verification.previous_code_hashes or [])
+        previous_hashes.append(verification.code_hash)
+        verification.code_hash = EmailVerificationCode.hash_code(code)
+        verification.previous_code_hashes = previous_hashes[-3:]
+        verification.expires_at = timezone.now() + timedelta(
+            minutes=settings.REGISTRATION_CODE_TTL_MINUTES
+        )
+        verification.attempts = 0
+        verification.sent_count += 1
+        verification.save(
+            update_fields=(
+                "code_hash",
+                "previous_code_hashes",
+                "expires_at",
+                "attempts",
+                "sent_count",
+                "updated_at",
+            )
+        )
+        send_registration_verification_email.delay(verification.email, code)
+        verification.debug_code = code
+        return verification
 
 
 class PasswordResetRequestSerializer(serializers.Serializer):

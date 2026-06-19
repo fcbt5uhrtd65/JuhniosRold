@@ -6,7 +6,9 @@ from .views import (
     ComponentViewSet,
     PasswordResetConfirmView,
     PasswordResetRequestView,
+    RegisterResendCodeView,
     RegisterView,
+    RegisterVerifyView,
     RoleComponentPermissionViewSet,
     RoleViewSet,
     UserViewSet,
@@ -20,6 +22,8 @@ router.register("role-permissions", RoleComponentPermissionViewSet, basename="ro
 
 urlpatterns = [
     path("register/", RegisterView.as_view(), name="register"),
+    path("register/verify/", RegisterVerifyView.as_view(), name="register-verify"),
+    path("register/resend-code/", RegisterResendCodeView.as_view(), name="register-resend-code"),
     path("login/", TokenObtainPairView.as_view(), name="login"),
     path("token/refresh/", TokenRefreshView.as_view(), name="token-refresh"),
     path("token/verify/", TokenVerifyView.as_view(), name="token-verify"),
