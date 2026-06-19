@@ -8,6 +8,7 @@ from apps.identity.infrastructure.serializers import (
     ComponentSerializer,
     PasswordResetConfirmSerializer,
     PasswordResetRequestSerializer,
+    PasswordResetVerifyCodeSerializer,
     RegisterResendCodeSerializer,
     RegisterSerializer,
     RegisterVerifySerializer,
@@ -20,10 +21,13 @@ from .permissions import HasComponentAccess
 
 
 def _verification_response_data(verification, message):
+    email = getattr(verification, "email", "")
+    if not email and hasattr(verification, "user"):
+        email = verification.user.email
     data = {
         "message": message,
         "verification_id": verification.id,
-        "email": verification.email,
+        "email": email,
         "expires_at": verification.expires_at,
     }
     if settings.DEBUG and hasattr(verification, "debug_code"):
@@ -90,10 +94,34 @@ class PasswordResetRequestView(generics.GenericAPIView):
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        verification = serializer.save()
+        if verification is None:
+            return Response(
+                {"message": "Si el correo existe, se enviara un codigo de recuperacion."},
+                status=status.HTTP_202_ACCEPTED,
+            )
         return Response(
-            {"message": "Si el correo existe, se enviarán instrucciones de recuperación."},
+            _verification_response_data(
+                verification,
+                "Enviamos un codigo de recuperacion a tu correo.",
+            ),
             status=status.HTTP_202_ACCEPTED,
+        )
+
+
+class PasswordResetVerifyCodeView(generics.GenericAPIView):
+    permission_classes = (permissions.AllowAny,)
+    serializer_class = PasswordResetVerifyCodeSerializer
+
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        token = serializer.save()
+        return Response(
+            {
+                "message": "Codigo verificado. Ya puedes restablecer tu contraseña.",
+                "reset_token": token.token,
+            }
         )
 
 

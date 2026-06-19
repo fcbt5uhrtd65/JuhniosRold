@@ -1,3 +1,8 @@
-from .infrastructure.models import EmailVerificationCode, PasswordResetToken, User
+from .infrastructure.models import (
+    EmailVerificationCode,
+    PasswordResetCode,
+    PasswordResetToken,
+    User,
+)
 
-__all__ = ("User", "PasswordResetToken", "EmailVerificationCode")
+__all__ = ("User", "PasswordResetToken", "EmailVerificationCode", "PasswordResetCode")

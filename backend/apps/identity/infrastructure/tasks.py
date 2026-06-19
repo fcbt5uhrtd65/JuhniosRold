@@ -63,6 +63,20 @@ def send_password_reset_email(email, token):
 
 
 @shared_task
+def send_password_reset_code_email(email, code):
+    ttl = settings.PASSWORD_RESET_CODE_TTL_MINUTES
+    return _send_email(
+        subject="Codigo para restablecer tu contraseña - Juhnios Rold",
+        message=(
+            "Tu codigo para restablecer la contraseña en Juhnios Rold es: "
+            f"{code}\n\nEste codigo vence en {ttl} minutos. Si no solicitaste "
+            "este cambio, puedes ignorar este correo."
+        ),
+        recipient=email,
+    )
+
+
+@shared_task
 def send_registration_verification_email(email, code):
     ttl = settings.REGISTRATION_CODE_TTL_MINUTES
     return _send_email(

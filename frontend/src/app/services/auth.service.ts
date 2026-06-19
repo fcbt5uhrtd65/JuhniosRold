@@ -129,6 +129,51 @@ export async function requestPasswordReset(email: string): Promise<void> {
   });
 }
 
+export interface PasswordResetRequestResult {
+  verification_id?: string;
+  email?: string;
+  expires_at?: string;
+  debug_code?: string;
+  message?: string;
+}
+
+export interface PasswordResetVerifyResult {
+  reset_token: string;
+  message?: string;
+}
+
+export async function requestPasswordResetCode(
+  email: string,
+): Promise<PasswordResetRequestResult> {
+  const res = await api.post<PasswordResetRequestResult>('/auth/password-reset/', {
+    email: email.trim().toLowerCase(),
+  });
+  if (!res.data) throw new Error(res.message);
+  return res.data;
+}
+
+export async function verifyPasswordResetCode(
+  verificationId: string,
+  code: string,
+): Promise<PasswordResetVerifyResult> {
+  const res = await api.post<PasswordResetVerifyResult>('/auth/password-reset/verify/', {
+    verification_id: verificationId,
+    code,
+  });
+  if (!res.data?.reset_token) throw new Error(res.message);
+  return res.data;
+}
+
+export async function confirmPasswordReset(
+  resetToken: string,
+  newPassword: string,
+): Promise<void> {
+  await api.post('/auth/password-reset/confirm/', {
+    token: resetToken,
+    new_password: newPassword,
+  });
+}
+
 // ---- Logout ----
 export async function logoutUser(): Promise<void> {
   clearTokens();

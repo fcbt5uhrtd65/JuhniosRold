@@ -6,6 +6,7 @@ from .views import (
     ComponentViewSet,
     PasswordResetConfirmView,
     PasswordResetRequestView,
+    PasswordResetVerifyCodeView,
     RegisterResendCodeView,
     RegisterView,
     RegisterVerifyView,
@@ -28,6 +29,7 @@ urlpatterns = [
     path("token/refresh/", TokenRefreshView.as_view(), name="token-refresh"),
     path("token/verify/", TokenVerifyView.as_view(), name="token-verify"),
     path("password-reset/", PasswordResetRequestView.as_view(), name="password-reset"),
+    path("password-reset/verify/", PasswordResetVerifyCodeView.as_view(), name="password-reset-verify"),
     path("password-reset/confirm/", PasswordResetConfirmView.as_view(), name="password-reset-confirm"),
     path("", include(router.urls)),
 ]

@@ -116,6 +116,8 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
     verifyRegistration,
     resendRegistrationCode,
     resetPassword,
+    verifyPasswordReset,
+    confirmPasswordReset,
   } = useUser();
 
   const [tab, setTab] = useState<'login' | 'register'>('login');
@@ -132,6 +134,12 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
   const [verificationEmail, setVerificationEmail] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
   const [debugCode, setDebugCode] = useState('');
+  const [resetVerificationId, setResetVerificationId] = useState('');
+  const [resetCode, setResetCode] = useState('');
+  const [resetDebugCode, setResetDebugCode] = useState('');
+  const [resetToken, setResetToken] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
   // extra registro
   const [tipoDocumento, setTipoDocumento] = useState('CC');
   const [documento, setDocumento] = useState('');
@@ -149,6 +157,8 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
     setTipoDocumento('CC'); setDocumento(''); setTelefono(''); setDireccion('');
     setRegLocation(EMPTY_LOCATION);
     setVerificationId(''); setVerificationEmail(''); setVerificationCode(''); setDebugCode('');
+    setResetVerificationId(''); setResetCode(''); setResetDebugCode('');
+    setResetToken(''); setNewPassword(''); setConfirmNewPassword('');
     setIsForgot(false);
   };
 
@@ -163,6 +173,12 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
     setVerificationEmail('');
     setVerificationCode('');
     setDebugCode('');
+    setResetVerificationId('');
+    setResetCode('');
+    setResetDebugCode('');
+    setResetToken('');
+    setNewPassword('');
+    setConfirmNewPassword('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -171,10 +187,51 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
     setSubmitting(true);
     try {
       if (isForgot) {
+        if (resetToken) {
+          if (newPassword.length < 8) { setError('La nueva contraseña debe tener al menos 8 caracteres.'); return; }
+          if (newPassword !== confirmNewPassword) { setError('Las contraseñas no coinciden.'); return; }
+          const result = await confirmPasswordReset(resetToken, newPassword);
+          if (result.ok) {
+            setSuccess('La contraseña fue actualizada. Ya puedes iniciar sesión.');
+            setTimeout(() => {
+              setIsForgot(false);
+              setResetVerificationId('');
+              setResetCode('');
+              setResetDebugCode('');
+              setResetToken('');
+              setPassword('');
+              setNewPassword('');
+              setConfirmNewPassword('');
+              setSuccess('');
+            }, 2000);
+          } else {
+            setError(result.message || 'No fue posible restablecer la contraseña.');
+          }
+          return;
+        }
+        if (resetVerificationId) {
+          if (!resetCode.trim()) { setError('Ingresa el codigo de verificacion.'); return; }
+          const result = await verifyPasswordReset(resetVerificationId, resetCode.trim());
+          if (result.ok && result.resetToken) {
+            setResetToken(result.resetToken);
+            setResetCode('');
+            setResetDebugCode('');
+            setSuccess(result.message || 'Codigo verificado. Ingresa tu nueva contraseña.');
+          } else {
+            setError(result.message || 'No fue posible verificar el codigo.');
+          }
+          return;
+        }
+        if (!email.trim()) { setError('Ingresa tu email.'); return; }
         const result = await resetPassword(email);
         if (result.ok) {
-          setSuccess('Si el correo existe, recibirás instrucciones para cambiar tu contraseña.');
-          setTimeout(() => { setIsForgot(false); setEmail(''); setSuccess(''); }, 3000);
+          if (result.verificationId) {
+            setResetVerificationId(result.verificationId);
+            setResetDebugCode(result.debugCode || '');
+            setSuccess(result.message || 'Enviamos un codigo de recuperacion a tu correo.');
+          } else {
+            setSuccess(result.message || 'Si el correo existe, recibiras un codigo de recuperacion.');
+          }
         } else {
           setError(result.message || 'No fue posible solicitar la recuperación.');
         }
@@ -303,18 +360,28 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
                     </>
                   ) : isForgot ? (
                     <>
-                      <p className="text-xs text-stone-400 mb-1">Recuperar acceso</p>
+                      <p className="text-xs text-stone-400 mb-1">
+                        {resetToken
+                          ? 'Nueva contraseña'
+                          : resetVerificationId
+                            ? 'Verifica tu correo'
+                            : 'Recuperar acceso'}
+                      </p>
                       <h2
                         className="text-3xl font-light text-stone-900"
                         style={{ fontFamily: "'Playfair Display', serif" }}
                       >
-                        ¿Olvidaste tu{' '}
+                        {resetToken ? 'Restablecer ' : resetVerificationId ? 'Codigo de ' : '¿Olvidaste tu '}
                         <em className="not-italic font-semibold" style={{ fontStyle: 'italic', color: OLIVE }}>
-                          contraseña?
+                          {resetToken ? 'contraseña' : resetVerificationId ? 'seguridad' : 'contraseña?'}
                         </em>
                       </h2>
                       <p className="text-xs text-stone-400 mt-2 leading-relaxed">
-                        Ingresa tu email y te enviaremos las instrucciones.
+                        {resetToken
+                          ? 'El codigo fue verificado. Crea una nueva contraseña segura.'
+                          : resetVerificationId
+                            ? `Enviamos un codigo de 6 digitos a ${email}.`
+                            : 'Ingresa tu email y te enviaremos un codigo de verificacion.'}
                       </p>
                     </>
                   ) : tab === 'login' ? (
@@ -432,6 +499,83 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
                           <div className="px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-600 text-center">
                             Codigo de desarrollo: <span className="font-mono text-stone-900">{debugCode}</span>
                           </div>
+                        )}
+                      </div>
+                    ) : isForgot ? (
+                      <div className="space-y-3">
+                        {resetToken ? (
+                          <>
+                            <Field
+                              label="Nueva contraseña"
+                              type={showPass ? 'text' : 'password'}
+                              value={newPassword}
+                              onChange={setNewPassword}
+                              placeholder="Mínimo 8 caracteres"
+                              icon={Lock}
+                              required
+                              minLength={8}
+                              extra={
+                                <button
+                                  type="button"
+                                  onClick={() => setShowPass(p => !p)}
+                                  className="absolute right-3.5 text-stone-300 hover:text-stone-500 transition-colors"
+                                >
+                                  {showPass
+                                    ? <EyeOff className="w-4 h-4" strokeWidth={1.3} />
+                                    : <Eye className="w-4 h-4" strokeWidth={1.3} />
+                                  }
+                                </button>
+                              }
+                            />
+                            <Field
+                              label="Confirmar contraseña"
+                              type={showConfirm ? 'text' : 'password'}
+                              value={confirmNewPassword}
+                              onChange={setConfirmNewPassword}
+                              placeholder="Repite tu nueva contraseña"
+                              icon={Lock}
+                              required
+                              minLength={8}
+                              extra={
+                                <button
+                                  type="button"
+                                  onClick={() => setShowConfirm(p => !p)}
+                                  className="absolute right-3.5 text-stone-300 hover:text-stone-500 transition-colors"
+                                >
+                                  {showConfirm
+                                    ? <EyeOff className="w-4 h-4" strokeWidth={1.3} />
+                                    : <Eye className="w-4 h-4" strokeWidth={1.3} />
+                                  }
+                                </button>
+                              }
+                            />
+                          </>
+                        ) : resetVerificationId ? (
+                          <>
+                            <Field
+                              label="Codigo de verificacion"
+                              value={resetCode}
+                              onChange={(value) => setResetCode(value.replace(/\D/g, '').slice(0, 6))}
+                              placeholder="000000"
+                              icon={Shield}
+                              required
+                            />
+                            {resetDebugCode && (
+                              <div className="px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-600 text-center">
+                                Codigo de desarrollo: <span className="font-mono text-stone-900">{resetDebugCode}</span>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <Field
+                            label="Email"
+                            type="email"
+                            value={email}
+                            onChange={setEmail}
+                            placeholder="tu@email.com"
+                            icon={Mail}
+                            required
+                          />
                         )}
                       </div>
                     ) : (
@@ -665,7 +809,11 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
                     : verificationId
                       ? 'Verificar codigo'
                     : isForgot
-                      ? 'Enviar instrucciones'
+                      ? resetToken
+                        ? 'Restablecer contraseña'
+                        : resetVerificationId
+                          ? 'Verificar codigo'
+                          : 'Enviar codigo'
                       : tab === 'login'
                         ? 'Iniciar sesión'
                         : 'Crear cuenta'
@@ -676,7 +824,17 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
                 {isForgot && (
                   <button
                     type="button"
-                    onClick={() => { setIsForgot(false); setError(''); setSuccess(''); }}
+                    onClick={() => {
+                      setIsForgot(false);
+                      setError('');
+                      setSuccess('');
+                      setResetVerificationId('');
+                      setResetCode('');
+                      setResetDebugCode('');
+                      setResetToken('');
+                      setNewPassword('');
+                      setConfirmNewPassword('');
+                    }}
                     className="w-full text-[11px] text-stone-400 hover:text-stone-700 transition-colors pt-1"
                   >
                     ← Volver a iniciar sesión

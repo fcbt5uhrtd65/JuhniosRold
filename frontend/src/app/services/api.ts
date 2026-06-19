@@ -286,6 +286,7 @@ export async function apiRequest<T>(
     endpoint === '/auth/login/' ||
     endpoint === '/auth/register/' ||
     endpoint.startsWith('/auth/register/') ||
+    endpoint.startsWith('/auth/password-reset/') ||
     endpoint.startsWith('/auth/token/');
   let token = getAccessToken();
   if (!token && !isAuthenticationRequest) {

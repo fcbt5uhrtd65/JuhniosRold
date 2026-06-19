@@ -18,7 +18,9 @@ import {
   resendRegistrationCode,
   getCurrentUser,
   logoutUser,
-  requestPasswordReset,
+  requestPasswordResetCode,
+  verifyPasswordResetCode,
+  confirmPasswordReset,
   type AuthUser,
 } from '../services/auth.service';
 import {
@@ -122,7 +124,15 @@ interface UserContextType {
     },
   ) => Promise<void>;
   loadOrders: () => Promise<void>;
-  resetPassword: (email: string) => Promise<AuthActionResult>;
+  resetPassword: (email: string) => Promise<RegistrationActionResult>;
+  verifyPasswordReset: (
+    verificationId: string,
+    code: string,
+  ) => Promise<PasswordResetVerifyActionResult>;
+  confirmPasswordReset: (
+    resetToken: string,
+    newPassword: string,
+  ) => Promise<AuthActionResult>;
   updateProfile: (updates: Partial<CustomerUser>) => void;
 }
 
@@ -147,6 +157,10 @@ interface RegistrationActionResult extends AuthActionResult {
   email?: string;
   expiresAt?: string;
   debugCode?: string;
+}
+
+interface PasswordResetVerifyActionResult extends AuthActionResult {
+  resetToken?: string;
 }
 
 function authErrorMessage(error: unknown, fallback: string): string {
@@ -496,11 +510,18 @@ export function UserProvider({ children }: { children: ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [backendOnline]);
 
-  const resetPassword = async (email: string): Promise<AuthActionResult> => {
+  const resetPassword = async (email: string): Promise<RegistrationActionResult> => {
     try {
-      await requestPasswordReset(email);
+      const result = await requestPasswordResetCode(email);
       setBackendOnline(true);
-      return { ok: true };
+      return {
+        ok: true,
+        message: result.message,
+        verificationId: result.verification_id,
+        email: result.email,
+        expiresAt: result.expires_at,
+        debugCode: result.debug_code,
+      };
     } catch (error) {
       const serverResponded = error instanceof ApiError;
       setBackendOnline(serverResponded);
@@ -511,6 +532,50 @@ export function UserProvider({ children }: { children: ReactNode }) {
               error,
               'No fue posible solicitar la recuperación de contraseña.',
             )
+          : 'No hay conexión con el servidor.',
+      };
+    }
+  };
+
+  const verifyPasswordReset = async (
+    verificationId: string,
+    code: string,
+  ): Promise<PasswordResetVerifyActionResult> => {
+    try {
+      const result = await verifyPasswordResetCode(verificationId, code);
+      setBackendOnline(true);
+      return {
+        ok: true,
+        message: result.message,
+        resetToken: result.reset_token,
+      };
+    } catch (error) {
+      const serverResponded = error instanceof ApiError;
+      setBackendOnline(serverResponded);
+      return {
+        ok: false,
+        message: serverResponded
+          ? authErrorMessage(error, 'No fue posible verificar el codigo.')
+          : 'No hay conexión con el servidor.',
+      };
+    }
+  };
+
+  const confirmResetPassword = async (
+    resetToken: string,
+    newPassword: string,
+  ): Promise<AuthActionResult> => {
+    try {
+      await confirmPasswordReset(resetToken, newPassword);
+      setBackendOnline(true);
+      return { ok: true };
+    } catch (error) {
+      const serverResponded = error instanceof ApiError;
+      setBackendOnline(serverResponded);
+      return {
+        ok: false,
+        message: serverResponded
+          ? authErrorMessage(error, 'No fue posible restablecer la contraseña.')
           : 'No hay conexión con el servidor.',
       };
     }
@@ -541,6 +606,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
         addOrder,
         loadOrders,
         resetPassword,
+        verifyPasswordReset,
+        confirmPasswordReset: confirmResetPassword,
         updateProfile,
       }}
     >

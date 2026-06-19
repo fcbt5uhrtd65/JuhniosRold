@@ -9,6 +9,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from apps.identity.infrastructure.models import (
     Component,
     EmailVerificationCode,
+    PasswordResetCode,
     PasswordResetToken,
     Role,
     RoleComponentPermission,
@@ -17,7 +18,10 @@ from apps.identity.infrastructure.models import (
 
 from ..application.dtos import RegisterUserDTO
 from ..application.use_cases import RegisterUser
-from .tasks import send_password_reset_email, send_registration_verification_email
+from .tasks import (
+    send_password_reset_code_email,
+    send_registration_verification_email,
+)
 
 
 class ComponentSerializer(serializers.ModelSerializer):
@@ -258,8 +262,60 @@ class PasswordResetRequestSerializer(serializers.Serializer):
         user = User.objects.filter(email__iexact=self.validated_data["email"]).first()
         if not user:
             return None
-        token = PasswordResetToken.objects.create(user=user)
-        send_password_reset_email.delay(user.email, token.token)
+        code = PasswordResetCode.generate_code()
+        PasswordResetCode.objects.filter(
+            user=user,
+            used_at__isnull=True,
+        ).update(deleted_at=timezone.now())
+        verification = PasswordResetCode.objects.create(
+            user=user,
+            code_hash=PasswordResetCode.hash_code(code),
+            expires_at=timezone.now() + timedelta(
+                minutes=settings.PASSWORD_RESET_CODE_TTL_MINUTES
+            ),
+        )
+        send_password_reset_code_email.delay(user.email, code)
+        verification.debug_code = code
+        return verification
+
+
+class PasswordResetVerifyCodeSerializer(serializers.Serializer):
+    verification_id = serializers.UUIDField()
+    code = serializers.CharField(min_length=6, max_length=6)
+
+    def validate(self, attrs):
+        verification = PasswordResetCode.objects.select_related("user").filter(
+            pk=attrs["verification_id"],
+            deleted_at__isnull=True,
+        ).first()
+        if not verification:
+            raise serializers.ValidationError(
+                {"verification_id": "La verificacion no existe."}
+            )
+        if not verification.is_valid:
+            raise serializers.ValidationError(
+                {"code": "El codigo expiro. Solicita uno nuevo."}
+            )
+        if verification.attempts_remaining <= 0:
+            raise serializers.ValidationError(
+                {"code": "Se agotaron los intentos. Solicita un nuevo codigo."}
+            )
+
+        verification.attempts += 1
+        verification.save(update_fields=("attempts", "updated_at"))
+        if not verification.matches(attrs["code"]):
+            raise serializers.ValidationError({"code": "El codigo no es valido."})
+
+        attrs["verification"] = verification
+        return attrs
+
+    def save(self):
+        verification = self.validated_data["verification"]
+        verification.mark_verified()
+        token = PasswordResetToken.objects.create(
+            user=verification.user,
+            expires_at=timezone.now() + timedelta(minutes=15),
+        )
         return token
 
 
@@ -279,4 +335,9 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
         token.user.save(update_fields=("password",))
         token.used_at = timezone.now()
         token.save(update_fields=("used_at", "updated_at"))
+        PasswordResetCode.objects.filter(
+            user=token.user,
+            used_at__isnull=True,
+            verified_at__isnull=False,
+        ).update(used_at=timezone.now())
         return token.user
