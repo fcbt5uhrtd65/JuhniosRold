@@ -7,6 +7,7 @@ from .views import (
     ActiveCartItemDetailView,
     ActiveCartView,
     OrderViewSet,
+    PaymentListView,
 )
 from .webhooks import (
     InitiatePaymentView,
@@ -28,6 +29,7 @@ urlpatterns = router.urls + [
         name="cart-item-detail",
     ),
     path("cart/checkout/", ActiveCartCheckoutView.as_view(), name="cart-checkout"),
+    path("payments/", PaymentListView.as_view(), name="payments-list"),
     path("payments/start/", InitiatePaymentView.as_view(), name="payment-start"),
     path(
         "payments/mock/<uuid:payment_id>/resolve/",

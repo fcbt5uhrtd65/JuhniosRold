@@ -1,23 +1,25 @@
 from django.conf import settings
 from django.db import transaction
 from django.shortcuts import get_object_or_404
-from rest_framework import permissions, status
+from rest_framework import generics, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from shared.interfaces.viewsets import SoftDeleteModelViewSet
 
+from apps.identity.interfaces.permissions import HasComponentAccess
 from apps.inventory.infrastructure.models import Location
 
 from ..application.services import OrderStatusService
 from ..application.use_cases import ActiveCartService, CancelOrder, CheckoutCart
-from ..infrastructure.models import Cart, Order
+from ..infrastructure.models import Cart, Order, Payment
 from ..infrastructure.serializers import (
     AddCartItemSerializer,
     CartSerializer,
     CheckoutSerializer,
     OrderSerializer,
+    PaymentAdminSerializer,
     UpdateCartItemSerializer,
 )
 
@@ -181,3 +183,13 @@ class OrderViewSet(SoftDeleteModelViewSet):
     def cancel(self, request, pk=None):
         order = CancelOrder().execute(self.get_object(), actor=request.user)
         return Response(self.get_serializer(order).data)
+
+
+class PaymentListView(generics.ListAPIView):
+    queryset = Payment.objects.select_related("order", "order__customer").order_by("-created_at")
+    serializer_class = PaymentAdminSerializer
+    permission_classes = (HasComponentAccess,)
+    required_component = "commerce.orders"
+    filterset_fields = ("status", "provider")
+    search_fields = ("reference", "order__number", "order__customer__first_name", "order__customer__last_name")
+    ordering_fields = ("created_at", "amount_in_cents")

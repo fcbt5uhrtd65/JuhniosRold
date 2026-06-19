@@ -116,6 +116,34 @@ class PaymentSerializer(serializers.ModelSerializer):
         )
 
 
+class PaymentAdminSerializer(serializers.ModelSerializer):
+    order_id = serializers.UUIDField(source="order.id", read_only=True)
+    order_number = serializers.CharField(source="order.number", read_only=True)
+    customer_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Payment
+        fields = (
+            "id",
+            "order_id",
+            "order_number",
+            "customer_name",
+            "provider",
+            "reference",
+            "amount_in_cents",
+            "currency",
+            "status",
+            "payment_method",
+            "provider_transaction_id",
+            "created_at",
+            "updated_at",
+        )
+
+    def get_customer_name(self, payment):
+        customer = payment.order.customer
+        return f"{customer.first_name} {customer.last_name}".strip()
+
+
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
     status_history = OrderStatusHistorySerializer(many=True, read_only=True)
