@@ -1,64 +1,101 @@
-import { useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { useAdmin } from '../../contexts/AdminContext';
-import { Download, TrendingUp, DollarSign, ShoppingCart, Users } from 'lucide-react';
+import { Download, TrendingUp, DollarSign, ShoppingCart, Users, AlertTriangle } from 'lucide-react';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { getSalesReport, type SalesReport } from '../../services/reports.service';
+
+const MONTH_LABELS: Record<string, string> = {
+  '01': 'Ene', '02': 'Feb', '03': 'Mar', '04': 'Abr', '05': 'May', '06': 'Jun',
+  '07': 'Jul', '08': 'Ago', '09': 'Sep', '10': 'Oct', '11': 'Nov', '12': 'Dic',
+};
+
+function formatMonth(month: string): string {
+  const [, monthNumber] = month.split('-');
+  return MONTH_LABELS[monthNumber] ?? month;
+}
+
+const COLORS = ['#0a0a0a', '#4a4a4a', '#6a6a6a', '#8a8a8a', '#aaaaaa', '#cacaca', '#dadada'];
+
+function ChartCard({ title, children, delay }: { title: string; children: React.ReactNode; delay: number }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay }}
+      className="bg-secondary p-6 border border-border"
+    >
+      <div className="text-xs tracking-[0.2em] uppercase text-muted-foreground mb-4">
+        {title}
+      </div>
+      {children}
+    </motion.div>
+  );
+}
+
+function ChartSkeleton() {
+  return <div className="h-[250px] animate-pulse bg-background/60" />;
+}
 
 export function AdminReports() {
-  const { orders, products, customers } = useAdmin();
+  const { orders } = useAdmin();
+  const [report, setReport] = useState<SalesReport | null>(null);
+  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
+  const [errorMessage, setErrorMessage] = useState('');
 
-  // Sales data by category — unique keys guaranteed by reduce
-  const categoryData = useMemo(() => {
-    const salesByCategory = products.reduce((acc, product, index) => {
-      const category = product.categoria;
-      if (!acc[category]) {
-        acc[category] = { nombre: category, ventas: 0 };
-      }
-      acc[category].ventas += Math.floor(Math.random() * 100000) + 50000 + index;
-      return acc;
-    }, {} as Record<string, { nombre: string; ventas: number }>);
-    return Object.values(salesByCategory);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [products.length]);
+  const loadReport = () => {
+    setStatus('loading');
+    getSalesReport()
+      .then(data => {
+        setReport(data);
+        setStatus('success');
+      })
+      .catch(error => {
+        setErrorMessage(error instanceof Error ? error.message : 'No se pudo cargar el reporte.');
+        setStatus('error');
+      });
+  };
 
-  const COLORS = ['#0a0a0a', '#4a4a4a', '#8a8a8a', '#cacaca'];
-
-  // Monthly sales
-  const monthlySales = [
-    { mes: 'Ene', ventas: 2450000, pedidos: 45 },
-    { mes: 'Feb', ventas: 2890000, pedidos: 52 },
-    { mes: 'Mar', ventas: 3120000, pedidos: 58 },
-    { mes: 'Abr', ventas: 2980000, pedidos: 54 },
-    { mes: 'May', ventas: 3450000, pedidos: 63 },
-  ];
-
-  // Top products — index prefix ensures unique nombres
-  const topProducts = useMemo(() =>
-    products
-      .slice(0, 5)
-      .map((p, index) => ({
-        nombre: `${index + 1}. ${p.nombre.substring(0, 10)}`,
-        unidades: Math.floor(Math.random() * 100) + 20 + index,
-        ingresos: Math.floor(Math.random() * 500000) + 100000 + (index * 1000),
-      })),
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  [products.length]);
-
-  // Customer segments
-  const customerSegments = [
-    { segment: 'Nuevos', cantidad: 12, porcentaje: 20 },
-    { segment: 'Recurrentes', cantidad: 28, porcentaje: 47 },
-    { segment: 'VIP', cantidad: 8, porcentaje: 13 },
-    { segment: 'Inactivos', cantidad: 12, porcentaje: 20 },
-  ];
+  useEffect(() => {
+    loadReport();
+  }, []);
 
   const handleExportExcel = () => {
     alert('Exportando reporte a Excel... (Funcionalidad de demostración)');
   };
 
   const totalVentas = orders.reduce((sum, o) => o.estado !== 'cancelado' ? sum + o.total : sum, 0);
-  const promedioVenta = totalVentas / orders.filter(o => o.estado !== 'cancelado').length;
-  const tasaConversion = ((orders.filter(o => o.estado !== 'cancelado').length / customers.length) * 100).toFixed(1);
+  const ordenesValidas = orders.filter(o => o.estado !== 'cancelado').length;
+  const promedioVenta = ordenesValidas > 0 ? totalVentas / ordenesValidas : 0;
+  const tasaConversion = (report?.conversion_rate ?? 0).toFixed(1);
+
+  const monthlySales = report?.monthly_sales ?? [];
+  const lastMonth = monthlySales[monthlySales.length - 1];
+  const prevMonth = monthlySales[monthlySales.length - 2];
+  const salesDelta = prevMonth && prevMonth.total > 0
+    ? ((lastMonth.total - prevMonth.total) / prevMonth.total) * 100
+    : null;
+  const ordersDelta = prevMonth && prevMonth.orders > 0
+    ? ((lastMonth.orders - prevMonth.orders) / prevMonth.orders) * 100
+    : null;
+
+  const monthlySalesChartData = monthlySales.map(item => ({
+    mes: formatMonth(item.month),
+    ventas: item.total,
+    pedidos: item.orders,
+  }));
+
+  const categoryChartData = (report?.sales_by_category ?? []).map(item => ({
+    nombre: item.category,
+    ventas: item.total,
+  }));
+
+  const topProductsChartData = (report?.top_products ?? []).map((item, index) => ({
+    nombre: `${index + 1}. ${item.name.substring(0, 18)}`,
+    unidades: item.units,
+  }));
+
+  const customerSegments = report?.customer_segments ?? [];
 
   return (
     <div className="space-y-6">
@@ -92,7 +129,11 @@ export function AdminReports() {
             </div>
           </div>
           <div className="text-xl mb-1">${(totalVentas / 1000).toFixed(0)}k</div>
-          <div className="text-[10px] text-green-600">+12% vs mes anterior</div>
+          {salesDelta !== null && (
+            <div className={`text-[10px] ${salesDelta >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {salesDelta >= 0 ? '+' : ''}{salesDelta.toFixed(0)}% vs mes anterior
+            </div>
+          )}
         </motion.div>
 
         <motion.div
@@ -108,7 +149,11 @@ export function AdminReports() {
             </div>
           </div>
           <div className="text-xl mb-1">{orders.length}</div>
-          <div className="text-[10px] text-green-600">+8% vs mes anterior</div>
+          {ordersDelta !== null && (
+            <div className={`text-[10px] ${ordersDelta >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {ordersDelta >= 0 ? '+' : ''}{ordersDelta.toFixed(0)}% vs mes anterior
+            </div>
+          )}
         </motion.div>
 
         <motion.div
@@ -124,7 +169,6 @@ export function AdminReports() {
             </div>
           </div>
           <div className="text-xl mb-1">${(promedioVenta / 1000).toFixed(1)}k</div>
-          <div className="text-[10px] text-green-600">+5% vs mes anterior</div>
         </motion.div>
 
         <motion.div
@@ -140,114 +184,104 @@ export function AdminReports() {
             </div>
           </div>
           <div className="text-xl mb-1">{tasaConversion}%</div>
-          <div className="text-[10px] text-green-600">+3% vs mes anterior</div>
         </motion.div>
       </div>
 
+      {status === 'error' && (
+        <div className="bg-red-50 border border-red-200 p-4 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-red-700 text-sm">
+            <AlertTriangle className="w-4 h-4" strokeWidth={1} />
+            {errorMessage}
+          </div>
+          <button
+            onClick={loadReport}
+            className="px-3 py-1.5 border border-red-300 text-red-700 text-xs uppercase tracking-wider hover:bg-red-100"
+          >
+            Reintentar
+          </button>
+        </div>
+      )}
+
       {/* Charts */}
       <div className="grid md:grid-cols-2 gap-6">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-          className="bg-secondary p-6 border border-border"
-        >
-          <div className="text-xs tracking-[0.2em] uppercase text-muted-foreground mb-4">
-            Ventas Mensuales (2026)
-          </div>
-          <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={monthlySales}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="mes" tick={{ fontSize: 10 }} stroke="#999" />
-              <YAxis tick={{ fontSize: 10 }} stroke="#999" />
-              <Tooltip />
-              <Legend wrapperStyle={{ fontSize: 10 }} />
-              <Line type="monotone" dataKey="ventas" stroke="#0a0a0a" strokeWidth={2} name="Ventas ($)" dot={false} />
-              <Line type="monotone" dataKey="pedidos" stroke="#8a8a8a" strokeWidth={2} name="Pedidos" dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </motion.div>
+        <ChartCard title={`Ventas Mensuales (últimos ${monthlySales.length || 6} meses)`} delay={0.4}>
+          {status === 'loading' ? <ChartSkeleton /> : (
+            <ResponsiveContainer width="100%" height={250}>
+              <LineChart data={monthlySalesChartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis dataKey="mes" tick={{ fontSize: 10 }} stroke="#999" />
+                <YAxis tick={{ fontSize: 10 }} stroke="#999" />
+                <Tooltip />
+                <Legend wrapperStyle={{ fontSize: 10 }} />
+                <Line type="monotone" dataKey="ventas" stroke="#0a0a0a" strokeWidth={2} name="Ventas ($)" dot={false} />
+                <Line type="monotone" dataKey="pedidos" stroke="#8a8a8a" strokeWidth={2} name="Pedidos" dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 }}
-          className="bg-secondary p-6 border border-border"
-        >
-          <div className="text-xs tracking-[0.2em] uppercase text-muted-foreground mb-4">
-            Ventas por Categoría
-          </div>
-          <ResponsiveContainer width="100%" height={250}>
-            <PieChart>
-              <Pie
-                data={categoryData}
-                cx="50%"
-                cy="50%"
-                labelLine={false}
-                label={({ nombre, percent }: any) => `${nombre} ${(percent * 100).toFixed(0)}%`}
-                outerRadius={80}
-                fill="#8884d8"
-                dataKey="ventas"
-                nameKey="nombre"
-              >
-                {categoryData.map((entry, index) => (
-                  <Cell key={`pie-cell-${index}-${entry.nombre}`} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-        </motion.div>
+        <ChartCard title="Ventas por Categoría" delay={0.5}>
+          {status === 'loading' ? <ChartSkeleton /> : (
+            <ResponsiveContainer width="100%" height={250}>
+              <PieChart>
+                <Pie
+                  data={categoryChartData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ nombre, percent }: any) => `${nombre} ${(percent * 100).toFixed(0)}%`}
+                  outerRadius={80}
+                  fill="#8884d8"
+                  dataKey="ventas"
+                  nameKey="nombre"
+                >
+                  {categoryChartData.map((entry, index) => (
+                    <Cell key={`pie-cell-${index}-${entry.nombre}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.6 }}
-          className="bg-secondary p-6 border border-border"
-        >
-          <div className="text-xs tracking-[0.2em] uppercase text-muted-foreground mb-4">
-            Top 5 Productos
-          </div>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={topProducts} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis type="number" tick={{ fontSize: 10 }} stroke="#999" />
-              <YAxis dataKey="nombre" type="category" tick={{ fontSize: 9 }} width={100} stroke="#999" />
-              <Tooltip />
-              <Legend wrapperStyle={{ fontSize: 10 }} />
-              <Bar dataKey="unidades" fill="#0a0a0a" name="Unidades" radius={[0, 4, 4, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </motion.div>
+        <ChartCard title="Top 5 Productos" delay={0.6}>
+          {status === 'loading' ? <ChartSkeleton /> : (
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={topProductsChartData} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis type="number" tick={{ fontSize: 10 }} stroke="#999" />
+                <YAxis dataKey="nombre" type="category" tick={{ fontSize: 9 }} width={120} stroke="#999" />
+                <Tooltip />
+                <Legend wrapperStyle={{ fontSize: 10 }} />
+                <Bar dataKey="unidades" fill="#0a0a0a" name="Unidades" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.7 }}
-          className="bg-secondary p-6 border border-border"
-        >
-          <div className="text-xs tracking-[0.2em] uppercase text-muted-foreground mb-4">
-            Segmentación de Clientes
-          </div>
-          <div className="space-y-4">
-            {customerSegments.map((segment, index) => (
-              <div key={`segment-${index}-${segment.segment}`}>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="text-xs">{segment.segment}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {segment.cantidad} ({segment.porcentaje}%)
+        <ChartCard title="Segmentación de Clientes" delay={0.7}>
+          {status === 'loading' ? <ChartSkeleton /> : (
+            <div className="space-y-4">
+              {customerSegments.map(segment => (
+                <div key={segment.segment}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-xs">{segment.segment}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {segment.count} ({segment.percentage}%)
+                    </div>
+                  </div>
+                  <div className="h-2 bg-background overflow-hidden">
+                    <div
+                      className="h-full bg-foreground transition-all"
+                      style={{ width: `${segment.percentage}%` }}
+                    />
                   </div>
                 </div>
-                <div className="h-2 bg-background overflow-hidden">
-                  <div
-                    className="h-full bg-foreground transition-all"
-                    style={{ width: `${segment.porcentaje}%` }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </motion.div>
+              ))}
+            </div>
+          )}
+        </ChartCard>
       </div>
     </div>
   );

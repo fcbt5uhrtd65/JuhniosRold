@@ -3,7 +3,7 @@ from rest_framework.response import Response
 
 from apps.identity.interfaces.permissions import HasComponentAccess
 
-from ..application.queries import DashboardQuery
+from ..application.queries import DashboardQuery, SalesReportQuery
 from ..infrastructure.tasks import generate_report
 
 
@@ -31,6 +31,23 @@ class DashboardView(generics.GenericAPIView):
 
     def get(self, request):
         return Response(DashboardQuery().execute())
+
+
+class SalesReportSerializer(serializers.Serializer):
+    monthly_sales = serializers.ListField()
+    sales_by_category = serializers.ListField()
+    top_products = serializers.ListField()
+    customer_segments = serializers.ListField()
+    conversion_rate = serializers.FloatField()
+
+
+class SalesReportView(generics.GenericAPIView):
+    serializer_class = SalesReportSerializer
+    permission_classes = (HasComponentAccess,)
+    required_component = "analytics.management"
+
+    def get(self, request):
+        return Response(SalesReportQuery().execute())
 
 
 class ReportExportView(generics.GenericAPIView):
