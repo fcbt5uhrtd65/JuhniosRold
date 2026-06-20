@@ -14,11 +14,13 @@ interface DeliveryLocationSectionProps {
   onChange: (value: DeliveryLocationValue) => void;
   /** Department/state and country selected in the LocationPicker above, used to scope the address search. */
   searchScope?: { state?: string; country?: string };
+  /** Valid municipality names for the selected department, used to ignore neighbourhoods/corregimientos returned by the geocoder. */
+  cityOptions?: string[];
   /** Called when the resolved address points to a different city than the one picked manually, so the city selector can stay in sync. */
   onCityResolved?: (city: string) => void;
 }
 
-export function DeliveryLocationSection({ value, onChange, searchScope, onCityResolved }: DeliveryLocationSectionProps) {
+export function DeliveryLocationSection({ value, onChange, searchScope, cityOptions, onCityResolved }: DeliveryLocationSectionProps) {
   const geolocation = useGeolocation();
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<NominatimResult[]>([]);
@@ -49,7 +51,7 @@ export function DeliveryLocationSection({ value, onChange, searchScope, onCityRe
     reverseGeocode(lat, lng).then(result => {
       if (cancelled) return;
       setReverseLoading(false);
-      const fields = result ? mapNominatimAddressToFields(result) : { city: '', state: '', country: '' };
+      const fields = result ? mapNominatimAddressToFields(result, { validCities: cityOptions }) : { city: '', state: '', country: '' };
       onChange({
         ...value,
         lat,
@@ -64,7 +66,7 @@ export function DeliveryLocationSection({ value, onChange, searchScope, onCityRe
     });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [geolocation.status, geolocation.coords]);
+  }, [geolocation.status, geolocation.coords, cityOptions]);
 
   // Debounced address search
   useEffect(() => {
@@ -86,7 +88,7 @@ export function DeliveryLocationSection({ value, onChange, searchScope, onCityRe
   }, [query, searchScope?.state, searchScope?.country]);
 
   function handleSelectSuggestion(result: NominatimResult) {
-    const fields = mapNominatimAddressToFields(result);
+    const fields = mapNominatimAddressToFields(result, { validCities: cityOptions });
     onChange({
       ...value,
       address: result.display_name,
@@ -109,7 +111,7 @@ export function DeliveryLocationSection({ value, onChange, searchScope, onCityRe
     reverseGeocode(lat, lng).then(result => {
       setReverseLoading(false);
       if (!result) return;
-      const fields = mapNominatimAddressToFields(result);
+      const fields = mapNominatimAddressToFields(result, { validCities: cityOptions });
       onChange({
         ...value,
         lat,
@@ -260,4 +262,3 @@ export function DeliveryLocationSection({ value, onChange, searchScope, onCityRe
     </div>
   );
 }
-

@@ -4,8 +4,15 @@ export interface NominatimAddress {
   suburb?: string;
   neighbourhood?: string;
   city?: string;
+  city_district?: string;
+  municipality?: string;
+  county?: string;
+  district?: string;
+  borough?: string;
   town?: string;
   village?: string;
+  hamlet?: string;
+  locality?: string;
   state?: string;
   country?: string;
   country_code?: string;

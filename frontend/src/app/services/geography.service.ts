@@ -49,7 +49,7 @@ export const geographyService = {
   },
 
   async getCities(stateId: number, search?: string): Promise<City[]> {
-    const qs = buildQuery({ state: stateId, search: search ?? '', page_size: 50 });
+    const qs = buildQuery({ state: stateId, search: search ?? '', page_size: 300 });
     const res = await publicApi.get<PaginatedResponse<City>>(`/geography/cities/${qs}`);
     return res.data?.results ?? [];
   },

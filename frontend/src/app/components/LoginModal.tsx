@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Lock, Mail, User as UserIcon, Eye, EyeOff, Shield, Phone, CreditCard, MapPin } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
 import { LocationPicker } from './ui/LocationPicker';
 import { DeliveryLocationSection } from './ui/DeliveryLocationSection';
+import { geographyService, type City } from '../services/geography.service';
 import { EMPTY_LOCATION, type LocationValue } from '../services/geography.types';
 import { EMPTY_DELIVERY_LOCATION, type DeliveryLocationValue } from '../services/delivery-location.types';
 
@@ -147,6 +148,8 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
   const [telefono, setTelefono] = useState('');
   const [regLocation, setRegLocation] = useState<LocationValue>(EMPTY_LOCATION);
   const [deliveryLocation, setDeliveryLocation] = useState<DeliveryLocationValue>(EMPTY_DELIVERY_LOCATION);
+  const [regCities, setRegCities] = useState<City[]>([]);
+  const regCityNames = useMemo(() => regCities.map(city => city.name), [regCities]);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -158,6 +161,7 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
     setTipoDocumento('CC'); setDocumento(''); setTelefono('');
     setRegLocation(EMPTY_LOCATION);
     setDeliveryLocation(EMPTY_DELIVERY_LOCATION);
+    setRegCities([]);
     setVerificationId(''); setVerificationEmail(''); setVerificationCode(''); setDebugCode('');
     setResetVerificationId(''); setResetCode(''); setResetDebugCode('');
     setResetToken(''); setNewPassword(''); setConfirmNewPassword('');
@@ -165,6 +169,24 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
   };
 
   const handleClose = () => { reset(); onClose(); };
+
+  useEffect(() => {
+    if (!regLocation.stateId) {
+      setRegCities([]);
+      return;
+    }
+
+    let cancelled = false;
+    geographyService.getCities(regLocation.stateId)
+      .then(cities => {
+        if (!cancelled) setRegCities(cities);
+      })
+      .catch(() => {
+        if (!cancelled) setRegCities([]);
+      });
+
+    return () => { cancelled = true; };
+  }, [regLocation.stateId]);
 
   const switchTab = (t: 'login' | 'register') => {
     setTab(t);
@@ -740,6 +762,7 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
                         value={deliveryLocation}
                         onChange={setDeliveryLocation}
                         searchScope={{ state: regLocation.stateName, country: regLocation.countryName }}
+                        cityOptions={regCityNames}
                         onCityResolved={cityName => setRegLocation(prev => ({ ...prev, cityId: null, cityName }))}
                       />
                     </div>
