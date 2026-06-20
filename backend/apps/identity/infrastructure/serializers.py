@@ -2,10 +2,12 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.contrib.auth.hashers import make_password
+from django.db import IntegrityError
 from django.utils import timezone
 from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from apps.customers.infrastructure.models import Customer
 from apps.identity.infrastructure.models import (
     Component,
     EmailVerificationCode,
@@ -17,6 +19,7 @@ from apps.identity.infrastructure.models import (
 )
 
 from ..application.dtos import RegisterUserDTO
+from ..domain.exceptions import EmailAlreadyRegistered
 from ..application.use_cases import RegisterUser
 from .tasks import (
     send_password_reset_code_email,
@@ -126,8 +129,8 @@ class UserSerializer(serializers.ModelSerializer):
 class RegisterSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True, min_length=8)
-    first_name = serializers.CharField(required=False, allow_blank=True)
-    last_name = serializers.CharField(required=False, allow_blank=True)
+    first_name = serializers.CharField(required=True, allow_blank=False)
+    last_name = serializers.CharField(required=True, allow_blank=False)
     phone = serializers.CharField(required=False, allow_blank=True)
     document_type = serializers.CharField(required=False, allow_blank=True)
     document_number = serializers.CharField(required=False, allow_blank=True)
@@ -152,6 +155,11 @@ class RegisterSerializer(serializers.Serializer):
         if User.objects.filter(email__iexact=validated_data["email"]).exists():
             raise serializers.ValidationError(
                 {"email": "El correo ya se encuentra registrado."}
+            )
+        document_number = validated_data.get("document_number", "").strip()
+        if document_number and Customer.objects.filter(document_number=document_number).exists():
+            raise serializers.ValidationError(
+                {"document_number": "El numero de documento ya se encuentra registrado."}
             )
 
         code = EmailVerificationCode.generate_code()
@@ -223,11 +231,22 @@ class RegisterVerifySerializer(serializers.Serializer):
 
     def save(self):
         verification = self.validated_data["verification"]
+        if not verification.registration_data.get("first_name", "").strip():
+            raise serializers.ValidationError({"first_name": "El nombre es obligatorio."})
+        if not verification.registration_data.get("last_name", "").strip():
+            raise serializers.ValidationError({"last_name": "El apellido es obligatorio."})
         dto = RegisterUserDTO(
             password="",
             **verification.registration_data,
         )
-        user = RegisterUser().execute_verified(dto, verification.password_hash)
+        try:
+            user = RegisterUser().execute_verified(dto, verification.password_hash)
+        except EmailAlreadyRegistered as exc:
+            raise serializers.ValidationError({"email": str(exc)}) from exc
+        except IntegrityError as exc:
+            raise serializers.ValidationError(
+                {"document_number": "El numero de documento ya se encuentra registrado."}
+            ) from exc
         verification.mark_used()
         refresh = RefreshToken.for_user(user)
         return {

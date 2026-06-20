@@ -1,10 +1,14 @@
 from decimal import Decimal
+from datetime import timedelta
 
+from django.contrib.auth.hashers import make_password
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 from unittest.mock import patch
 
 from apps.customers.infrastructure.models import Customer, CustomerAddress
+from apps.identity.infrastructure.models import EmailVerificationCode
 
 
 class IdentityApiTests(TestCase):
@@ -135,12 +139,100 @@ class IdentityApiTests(TestCase):
                 "email": "coordenadasincompletas@example.com",
                 "password": "password-seguro",
                 "first_name": "Cliente",
+                "last_name": "Prueba",
                 "latitude": 4.711,
             },
             format="json",
         )
         self.assertEqual(response.status_code, 400)
         self.assertIn("latitude", response.data)
+
+    def test_registration_rejects_existing_customer_document_number(self):
+        Customer.objects.create(
+            document_type="CC",
+            document_number="1041771426",
+            first_name="Armando",
+            last_name="Perez",
+            email="armando@example.com",
+        )
+
+        with patch(
+            "apps.identity.infrastructure.serializers.send_registration_verification_email.delay"
+        ) as send_code:
+            response = self.client.post(
+                "/api/v1/auth/register/",
+                {
+                    "email": "nuevo@example.com",
+                    "password": "password-seguro",
+                    "first_name": "Nuevo",
+                    "last_name": "Cliente",
+                    "document_type": "CC",
+                    "document_number": "1041771426",
+                },
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("document_number", response.data)
+        send_code.assert_not_called()
+
+    def test_verify_pending_registration_with_duplicate_document_returns_400(self):
+        Customer.objects.create(
+            document_type="CC",
+            document_number="1041771426",
+            first_name="Armando",
+            last_name="Perez",
+            email="armando@example.com",
+        )
+        code = "123456"
+        registration = EmailVerificationCode.objects.create(
+            email="nuevo@example.com",
+            registration_data={
+                "email": "nuevo@example.com",
+                "first_name": "Nuevo",
+                "last_name": "Cliente",
+                "document_type": "CC",
+                "document_number": "1041771426",
+            },
+            password_hash=make_password("password-seguro"),
+            code_hash=EmailVerificationCode.hash_code(code),
+            expires_at=timezone.now() + timedelta(minutes=10),
+        )
+
+        response = self.client.post(
+            "/api/v1/auth/register/verify/",
+            {"verification_id": registration.id, "code": code},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("document_number", response.data)
+        registration.refresh_from_db()
+        self.assertIsNone(registration.used_at)
+
+    def test_verify_pending_registration_without_names_returns_400(self):
+        code = "123456"
+        registration = EmailVerificationCode.objects.create(
+            email="sinnombre@example.com",
+            registration_data={
+                "email": "sinnombre@example.com",
+                "first_name": "",
+                "last_name": "",
+            },
+            password_hash=make_password("password-seguro"),
+            code_hash=EmailVerificationCode.hash_code(code),
+            expires_at=timezone.now() + timedelta(minutes=10),
+        )
+
+        response = self.client.post(
+            "/api/v1/auth/register/verify/",
+            {"verification_id": registration.id, "code": code},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("first_name", response.data)
+        self.assertFalse(Customer.objects.filter(email="sinnombre@example.com").exists())
 
     def test_invalid_registration_does_not_create_local_or_database_customer(self):
         response = self.client.post(
@@ -169,6 +261,7 @@ class IdentityApiTests(TestCase):
                     "email": "reset@example.com",
                     "password": "password-viejo",
                     "first_name": "Reset",
+                    "last_name": "Cliente",
                 },
                 format="json",
             )

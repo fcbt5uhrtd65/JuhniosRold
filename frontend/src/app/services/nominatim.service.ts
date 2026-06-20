@@ -1,10 +1,5 @@
+import { publicApi } from './api';
 import type { NominatimResult } from './nominatim.types';
-
-// Nominatim (OpenStreetMap) no requiere API key. Si en el futuro se migra a un
-// proveedor con clave (Google/Mapbox), inyectarla aquí (ej. import.meta.env.VITE_GEOCODING_API_KEY)
-// sin tocar a los consumidores de este servicio.
-const NOMINATIM_BASE_URL = 'https://nominatim.openstreetmap.org';
-const REQUEST_HEADERS = { 'Accept-Language': 'es', 'User-Agent': 'JuhniosRoldApp/1.0' };
 
 export async function searchAddress(
   query: string,
@@ -12,22 +7,18 @@ export async function searchAddress(
 ): Promise<NominatimResult[]> {
   if (!query.trim()) return [];
   try {
-    // Appending the department/state and country to the free-text query biases
-    // Nominatim's results toward that region without forcing the user to type
-    // the city — the actual city is read back from the chosen result instead.
-    const contextualQuery = [query, opts?.state, opts?.country].filter(Boolean).join(', ');
     const params = new URLSearchParams({
-      format: 'json',
-      addressdetails: '1',
       limit: '5',
-      q: contextualQuery,
+      q: query,
     });
+    if (opts?.state) params.set('state', opts.state);
+    if (opts?.country) params.set('country', opts.country);
     if (opts?.countryCodes) params.set('countrycodes', opts.countryCodes);
-    const res = await fetch(`${NOMINATIM_BASE_URL}/search?${params.toString()}`, {
-      headers: REQUEST_HEADERS,
-    });
-    if (!res.ok) return [];
-    return (await res.json()) as NominatimResult[];
+
+    const res = await publicApi.get<NominatimResult[]>(
+      `/geography/geocoding/search/?${params.toString()}`,
+    );
+    return res.data ?? [];
   } catch {
     return [];
   }
@@ -36,16 +27,13 @@ export async function searchAddress(
 export async function reverseGeocode(lat: number, lng: number): Promise<NominatimResult | null> {
   try {
     const params = new URLSearchParams({
-      format: 'json',
-      addressdetails: '1',
       lat: String(lat),
       lon: String(lng),
     });
-    const res = await fetch(`${NOMINATIM_BASE_URL}/reverse?${params.toString()}`, {
-      headers: REQUEST_HEADERS,
-    });
-    if (!res.ok) return null;
-    const data = (await res.json()) as NominatimResult & { error?: string };
+    const res = await publicApi.get<NominatimResult & { error?: string }>(
+      `/geography/geocoding/reverse/?${params.toString()}`,
+    );
+    const data = res.data;
     if (!data || data.error) return null;
     return data;
   } catch {

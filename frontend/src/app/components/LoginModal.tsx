@@ -126,6 +126,7 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
   const [isForgot, setIsForgot] = useState(false);
   // common
   const [nombre, setNombre] = useState('');
+  const [apellidos, setApellidos] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -156,7 +157,7 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
 
   const reset = () => {
     setError(''); setSuccess('');
-    setNombre(''); setEmail(''); setPassword(''); setConfirm('');
+    setNombre(''); setApellidos(''); setEmail(''); setPassword(''); setConfirm('');
     setShowPass(false); setShowConfirm(false); setTerms(false);
     setTipoDocumento('CC'); setDocumento(''); setTelefono('');
     setRegLocation(EMPTY_LOCATION);
@@ -275,7 +276,8 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
         if (result.ok) { reset(); onClose(); }
         else setError(result.message || 'Email o contraseña incorrectos.');
       } else {
-        if (!nombre.trim()) { setError('Por favor ingresa tu nombre completo.'); return; }
+        if (!nombre.trim()) { setError('Por favor ingresa tus nombres.'); return; }
+        if (!apellidos.trim()) { setError('Por favor ingresa tus apellidos.'); return; }
         if (password.length < 8) { setError('La contraseña debe tener al menos 8 caracteres.'); return; }
         if (password !== confirm) { setError('Las contraseñas no coinciden.'); return; }
         if (!terms) { setError('Debes aceptar los términos y condiciones.'); return; }
@@ -283,7 +285,7 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
           setError('Debes confirmar tu ubicación de entrega antes de continuar.');
           return;
         }
-        const result = await customerRegister(nombre, email, password, {
+        const result = await customerRegister(nombre, apellidos, email, password, {
           phone: telefono || undefined,
           address: deliveryLocation.address || undefined,
           city: regLocation.cityName || deliveryLocation.city || undefined,
@@ -340,7 +342,6 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
           transition={{ duration: 0.22 }}
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ backgroundColor: 'rgba(30,28,24,0.75)', backdropFilter: 'blur(8px)' }}
-          onClick={handleClose}
         >
           <motion.div
             initial={{ opacity: 0, scale: 0.96, y: 16 }}
@@ -618,9 +619,16 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
                     {tab === 'register' && !isForgot && (
                       <>
                         <Field
-                          label="Nombre completo"
+                          label="Nombres"
                           value={nombre} onChange={setNombre}
-                          placeholder="Ej: María González"
+                          placeholder="Ej: Maria Alejandra"
+                          icon={UserIcon}
+                          required
+                        />
+                        <Field
+                          label="Apellidos"
+                          value={apellidos} onChange={setApellidos}
+                          placeholder="Ej: Gonzalez Perez"
                           icon={UserIcon}
                           required
                         />

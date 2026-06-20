@@ -97,13 +97,19 @@ interface UserContextType {
   backendOnline: boolean;
   login: (email: string, password: string) => Promise<AuthActionResult>;
   register: (
-    nombre: string,
+    firstName: string,
+    lastName: string,
     email: string,
     password: string,
     extra?: {
       phone?: string;
       address?: string;
       city?: string;
+      state?: string;
+      country?: string;
+      latitude?: number | null;
+      longitude?: number | null;
+      reference?: string;
       document_type?: string;
       document_number?: string;
     },
@@ -341,7 +347,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   // ---- REGISTER ----
   const register = useCallback(async (
-    nombre: string,
+    firstName: string,
+    lastName: string,
     email: string,
     password: string,
     extra?: {
@@ -358,9 +365,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
     },
   ): Promise<AuthActionResult> => {
     try {
-      const parts = nombre.trim().split(/\s+/);
-      const first_name = parts[0] ?? nombre;
-      const last_name = parts.slice(1).join(' ');
+      const first_name = firstName.trim();
+      const last_name = lastName.trim();
       const verification = await startRegistration({
         first_name,
         last_name,
