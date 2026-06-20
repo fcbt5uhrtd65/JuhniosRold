@@ -36,6 +36,12 @@ import {
   onAuthSessionInvalidated,
   isBackendAvailable,
 } from '../services/api';
+import {
+  getMyCustomerProfile,
+  updateMyCustomerProfile,
+  type MyCustomerProfile,
+  type UpdateMyCustomerProfilePayload,
+} from '../services/customer.service';
 
 // ---- Normalised customer profile (compatible with legacy mock) ----
 export interface CustomerUser {
@@ -45,6 +51,13 @@ export interface CustomerUser {
   telefono?: string;
   direccion?: string;
   ciudad?: string;
+  departamento?: string;
+  pais?: string;
+  referencia?: string;
+  latitud?: number | null;
+  longitud?: number | null;
+  tipoDocumento?: string;
+  numeroDocumento?: string;
   role?: AuthUser['role'];
   /** true when session comes from real backend JWT */
   fromApi?: boolean;
@@ -139,7 +152,7 @@ interface UserContextType {
     resetToken: string,
     newPassword: string,
   ) => Promise<AuthActionResult>;
-  updateProfile: (updates: Partial<CustomerUser>) => void;
+  updateProfile: (updates: Partial<CustomerUser>) => Promise<AuthActionResult>;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -186,6 +199,24 @@ function mapAuthUser(u: AuthUser): CustomerUser {
     telefono: u.phone,
     role: u.role,
     fromApi: true,
+  };
+}
+
+// ---- Map backend MyCustomerProfile → CustomerUser fields ----
+function mapCustomerProfile(p: MyCustomerProfile): Partial<CustomerUser> {
+  const parts = `${p.first_name} ${p.last_name}`.trim();
+  return {
+    nombre: parts || undefined,
+    telefono: p.phone || undefined,
+    direccion: p.address || undefined,
+    ciudad: p.city || undefined,
+    departamento: p.state || undefined,
+    pais: p.country || undefined,
+    referencia: p.reference || undefined,
+    latitud: p.latitude,
+    longitud: p.longitude,
+    tipoDocumento: p.document_type || undefined,
+    numeroDocumento: p.document_number || undefined,
   };
 }
 
@@ -247,6 +278,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
           setCurrentUser(mapAuthUser(user));
           loadLocalSaved();
           await fetchOrdersFromApi();
+          await enrichWithCustomerProfile();
           setIsLoadingAuth(false);
           return;
         } catch (error) {
@@ -302,6 +334,18 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Trae los datos completos del perfil de cliente (documento, dirección, ubicación)
+  // y los fusiona sobre el usuario ya autenticado. Si el endpoint falla (p. ej. el
+  // usuario aún no tiene un perfil de Customer asociado) no rompe la sesión.
+  const enrichWithCustomerProfile = async () => {
+    try {
+      const profile = await getMyCustomerProfile();
+      setCurrentUser(prev => (prev ? { ...prev, ...mapCustomerProfile(profile) } : prev));
+    } catch {
+      /* el usuario sigue autenticado aunque no haya perfil de cliente */
+    }
+  };
+
   // Persist saved products
   useEffect(() => {
     if (savedProducts.length > 0) {
@@ -330,6 +374,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       const mapped = mapAuthUser(user);
       setCurrentUser(mapped);
       await fetchOrdersFromApi();
+      await enrichWithCustomerProfile();
       return { ok: true };
     } catch (error) {
       clearTokens();
@@ -422,6 +467,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       }
       setCurrentUser(mapAuthUser(user));
       await fetchOrdersFromApi();
+      await enrichWithCustomerProfile();
       return { ok: true };
     } catch (error) {
       clearTokens();
@@ -600,10 +646,38 @@ export function UserProvider({ children }: { children: ReactNode }) {
   };
 
   // ---- UPDATE PROFILE ----
-  const updateProfile = (updates: Partial<CustomerUser>) => {
-    if (!currentUser) return;
-    const updated = { ...currentUser, ...updates };
-    setCurrentUser(updated);
+  const updateProfile = async (updates: Partial<CustomerUser>): Promise<AuthActionResult> => {
+    if (!currentUser) return { ok: false, message: 'No hay una sesión activa.' };
+
+    if (!currentUser.fromApi || !backendOnline) {
+      setCurrentUser({ ...currentUser, ...updates });
+      return { ok: true };
+    }
+
+    const [firstName, ...rest] = (updates.nombre ?? currentUser.nombre ?? '').trim().split(/\s+/);
+    const payload: UpdateMyCustomerProfilePayload = {
+      first_name: firstName || undefined,
+      last_name: rest.join(' ') || undefined,
+      phone: updates.telefono,
+      address: updates.direccion,
+      city: updates.ciudad,
+      state: updates.departamento,
+      country: updates.pais,
+      reference: updates.referencia,
+      latitude: updates.latitud,
+      longitude: updates.longitud,
+    };
+
+    try {
+      const profile = await updateMyCustomerProfile(payload);
+      setCurrentUser(prev => (prev ? { ...prev, ...updates, ...mapCustomerProfile(profile) } : prev));
+      return { ok: true };
+    } catch (error) {
+      return {
+        ok: false,
+        message: authErrorMessage(error, 'No fue posible actualizar tu perfil.'),
+      };
+    }
   };
 
   return (
