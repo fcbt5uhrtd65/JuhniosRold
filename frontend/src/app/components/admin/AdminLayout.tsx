@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   Package,
   Warehouse,
+  Boxes,
   ShoppingCart,
   Users,
   CreditCard,
@@ -31,7 +32,8 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['ADMIN', 'SELLER'] },
     { id: 'products', label: 'Productos', icon: Package, roles: ['ADMIN', 'SELLER'] },
-    { id: 'inventory', label: 'Inventario', icon: Warehouse, roles: ['ADMIN', 'SELLER'] },
+    { id: 'inventory', label: 'Stock Rápido', icon: Warehouse, roles: ['ADMIN', 'SELLER'] },
+    { id: 'inventory-production', label: 'Inventario', icon: Boxes, roles: ['ADMIN', 'SELLER'] },
     { id: 'orders', label: 'Pedidos', icon: ShoppingCart, roles: ['ADMIN', 'SELLER', 'DISTRIBUTOR', 'PEDIDOS'] },
     { id: 'customers', label: 'Clientes', icon: Users, roles: ['ADMIN', 'SELLER'] },
     { id: 'payments', label: 'Pagos', icon: CreditCard, roles: ['ADMIN', 'SELLER'] },
@@ -67,14 +69,14 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
   }, [currentUser?.rol]);
 
   const Sidebar = () => (
-    <div className="bg-secondary border-r border-border h-full flex flex-col">
-      <div className="p-6 border-b border-border">
-        <div className="text-xs tracking-[0.3em] uppercase mb-2">JUHNIOS ROLD</div>
-        <div className="text-[10px] text-muted-foreground">Panel Admin</div>
+    <div className="bg-gray-50 border-r border-gray-100 h-full flex flex-col">
+      <div className="px-5 pt-6 pb-4 border-b border-gray-100">
+        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400 mb-0.5">Juhnios Rold</p>
+        <p className="text-[11px] text-gray-500">Panel Admin</p>
       </div>
 
-      <nav className="flex-1 overflow-y-auto p-4">
-        <div className="space-y-1">
+      <nav className="flex-1 overflow-y-auto p-3">
+        <div className="space-y-0.5">
           {allowedNavItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentView === item.id;
@@ -86,13 +88,13 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
                   onViewChange(item.id);
                   setSidebarOpen(false);
                 }}
-                className={`w-full flex items-center gap-3 px-4 py-3 text-xs tracking-wider uppercase transition-colors ${
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-xs font-medium transition-all ${
                   isActive
-                    ? 'bg-foreground text-background'
-                    : 'hover:bg-background'
+                    ? 'bg-[#2a4038] text-white shadow-sm'
+                    : 'text-gray-600 hover:bg-white hover:shadow-sm'
                 }`}
               >
-                <Icon className="w-4 h-4" strokeWidth={1} />
+                <Icon size={15} className={isActive ? 'text-white' : 'text-gray-400'} strokeWidth={1.75} />
                 {item.label}
               </button>
             );
@@ -100,19 +102,17 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
         </div>
       </nav>
 
-      <div className="p-4 border-t border-border">
-        <div className="mb-4 p-3 bg-background border border-border">
-          <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-1">
-            Usuario
-          </div>
-          <div className="text-xs mb-1">{currentUser?.nombre}</div>
-          <div className="text-[10px] text-muted-foreground">{roleLabel}</div>
+      <div className="p-3 border-t border-gray-100">
+        <div className="mb-3 p-3 bg-white border border-gray-100 rounded-xl">
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400 mb-1">Usuario</p>
+          <p className="text-xs font-semibold text-gray-800 mb-0.5">{currentUser?.nombre}</p>
+          <p className="text-[11px] text-gray-400">{roleLabel}</p>
         </div>
         <button
           onClick={logout}
-          className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-border text-xs tracking-wider uppercase hover:bg-background transition-colors"
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 hover:bg-white transition-colors"
         >
-          <LogOut className="w-4 h-4" strokeWidth={1} />
+          <LogOut size={14} strokeWidth={1.75} />
           Cerrar Sesión
         </button>
       </div>
@@ -120,7 +120,7 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
   );
 
   return (
-    <div className="min-h-screen bg-background flex">
+    <div className="min-h-screen bg-gray-50/40 flex">
       {/* Desktop Sidebar */}
       <div className="hidden md:block w-64 fixed left-0 top-0 bottom-0">
         <Sidebar />
@@ -130,14 +130,14 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
       {sidebarOpen && (
         <div className="fixed inset-0 z-50 md:hidden">
           <div
-            className="absolute inset-0 bg-foreground/90"
+            className="absolute inset-0 bg-black/40"
             onClick={() => setSidebarOpen(false)}
           />
           <motion.div
             initial={{ x: -300 }}
             animate={{ x: 0 }}
             exit={{ x: -300 }}
-            className="absolute left-0 top-0 bottom-0 w-64 bg-background"
+            className="absolute left-0 top-0 bottom-0 w-64 bg-gray-50"
           >
             <Sidebar />
           </motion.div>
@@ -146,12 +146,12 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
 
       {/* Main Content */}
       <div className="flex-1 md:ml-64">
-        <div className="sticky top-0 z-40 bg-background border-b border-border p-4 md:hidden">
+        <div className="sticky top-0 z-40 bg-white border-b border-gray-100 p-4 md:hidden">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="p-2 hover:bg-secondary transition-colors"
+            className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
           >
-            <Menu className="w-5 h-5" strokeWidth={1} />
+            <Menu className="w-5 h-5" strokeWidth={1.75} />
           </button>
         </div>
 

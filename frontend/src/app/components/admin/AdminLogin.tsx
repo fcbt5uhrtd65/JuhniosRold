@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { motion } from 'motion/react';
 import { Lock, Mail } from 'lucide-react';
 import { useAdmin } from '../../contexts/AdminContext';
+import { inputCls } from './AdminUI';
 
 export function AdminLogin() {
   const { login } = useAdmin();
@@ -22,49 +23,43 @@ export function AdminLogin() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-4">
+    <div className="min-h-screen bg-gray-50/40 flex items-center justify-center px-4">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="w-full max-w-md"
       >
         <div className="mb-8 text-center">
-          <div className="text-xs tracking-[0.3em] uppercase mb-4">
-            JUHNIOS ROLD
-          </div>
-          <h1 className="text-3xl mb-2">Panel interno</h1>
-          <div className="w-12 h-px bg-foreground mx-auto"></div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-gray-400 mb-4">Juhnios Rold</p>
+          <h1 className="text-2xl font-semibold text-gray-900 mb-2">Panel interno</h1>
+          <div className="w-12 h-0.5 bg-[#2a4038] mx-auto rounded-full" />
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="bg-white border border-gray-100 rounded-2xl shadow-sm p-6 space-y-4">
           <div>
-            <label className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-2 block">
-              Email
-            </label>
+            <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Email</label>
             <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" strokeWidth={1} />
+              <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 bg-transparent border border-border text-xs focus:outline-none focus:border-foreground transition-colors"
-              placeholder="usuario@juhnios.com"
-              required
-            />
-          </div>
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className={inputCls + ' pl-9'}
+                placeholder="usuario@juhnios.com"
+                required
+              />
+            </div>
           </div>
 
           <div>
-            <label className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-2 block">
-              Contraseña
-            </label>
+            <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Contraseña</label>
             <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" strokeWidth={1} />
+              <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 bg-transparent border border-border text-xs focus:outline-none focus:border-foreground transition-colors"
+                className={inputCls + ' pl-9'}
                 placeholder="••••••••"
                 required
               />
@@ -72,38 +67,26 @@ export function AdminLogin() {
           </div>
 
           {error && (
-            <div className="text-xs text-red-500 text-center">{error}</div>
+            <p className="text-xs text-red-500 text-center">{error}</p>
           )}
 
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full py-3 bg-foreground text-background text-xs tracking-wider uppercase hover:opacity-90 transition-opacity disabled:opacity-50"
+            className="w-full py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold hover:bg-[#3d5c4e] transition-colors disabled:opacity-50"
           >
             {isSubmitting ? 'Validando...' : 'Iniciar sesión'}
           </button>
         </form>
 
-        <div className="mt-6 p-4 bg-secondary border border-border">
-          <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-3">
-            Demo - Usuarios internos:
-          </div>
-          <div className="space-y-2 text-xs">
-            <div>
-              <strong>Admin:</strong> admin@juhnios.com
-            </div>
-            <div>
-              <strong>RRHH:</strong> rrhh@juhnios.com
-            </div>
-            <div>
-              <strong>Pedidos:</strong> pedidos@juhnios.com
-            </div>
-            <div>
-              <strong>Empleado:</strong> empleado@juhnios.com
-            </div>
-            <div className="text-[10px] text-muted-foreground mt-2">
-              Contraseña demo: Admin123!
-            </div>
+        <div className="mt-6 p-4 bg-white border border-gray-100 rounded-2xl shadow-sm">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">Demo - Usuarios internos:</p>
+          <div className="space-y-2 text-xs text-gray-600">
+            <p><strong className="text-gray-900">Admin:</strong> admin@juhnios.com</p>
+            <p><strong className="text-gray-900">RRHH:</strong> rrhh@juhnios.com</p>
+            <p><strong className="text-gray-900">Pedidos:</strong> pedidos@juhnios.com</p>
+            <p><strong className="text-gray-900">Empleado:</strong> empleado@juhnios.com</p>
+            <p className="text-[11px] text-gray-400 mt-2">Contraseña demo: Admin123!</p>
           </div>
         </div>
       </motion.div>

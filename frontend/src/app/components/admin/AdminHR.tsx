@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { motion } from 'motion/react';
 import {
   AlertTriangle,
   BarChart3,
@@ -18,7 +17,6 @@ import {
   Plus,
   Search,
   Save,
-  Settings2,
   ShieldCheck,
   Eye,
   Trash2,
@@ -29,6 +27,7 @@ import {
 } from 'lucide-react';
 
 import { SearchBar } from './SearchBar';
+import { Badge, type BadgeColor, Card, Table, Th, Td, Modal, EmptyState, LoadingState, inputCls, selectCls } from './AdminUI';
 import { useToast } from '../../contexts/ToastContext';
 import { ApiError } from '../../services/api';
 import { getRoleLabel } from '../../utils/permissions';
@@ -337,28 +336,28 @@ function profileStatusLabel(status: EmployeeProfileStatus): string {
   return labels[status];
 }
 
-function statusBadge(status: EmployeeStatus | EmployeeProfileStatus | EmployeeDocumentStatus | VacationRequestStatus): string {
-  const styles: Record<string, string> = {
-    ACTIVE: 'bg-green-50 text-green-700 border-green-200',
-    COMPLETE: 'bg-green-50 text-green-700 border-green-200',
-    DOCUMENTED: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    LOADED: 'bg-green-50 text-green-700 border-green-200',
-    APPROVED: 'bg-green-50 text-green-700 border-green-200',
-    REGISTERED: 'bg-blue-50 text-blue-700 border-blue-200',
-    LEAVE: 'bg-blue-50 text-blue-700 border-blue-200',
-    DRAFT: 'bg-stone-50 text-stone-700 border-stone-200',
-    INCOMPLETE: 'bg-amber-50 text-amber-700 border-amber-200',
-    PENDING: 'bg-amber-50 text-amber-700 border-amber-200',
-    IN_REVIEW: 'bg-purple-50 text-purple-700 border-purple-200',
-    INACTIVE: 'bg-stone-50 text-stone-700 border-stone-200',
-    NOT_APPLICABLE: 'bg-stone-50 text-stone-700 border-stone-200',
-    SUSPENDED: 'bg-orange-50 text-orange-700 border-orange-200',
-    TERMINATED: 'bg-red-50 text-red-700 border-red-200',
-    RETIRED: 'bg-red-50 text-red-700 border-red-200',
-    EXPIRED: 'bg-red-50 text-red-700 border-red-200',
-    REJECTED: 'bg-red-50 text-red-700 border-red-200',
+function statusBadge(status: EmployeeStatus | EmployeeProfileStatus | EmployeeDocumentStatus | VacationRequestStatus): BadgeColor {
+  const styles: Record<string, BadgeColor> = {
+    ACTIVE: 'green',
+    COMPLETE: 'green',
+    DOCUMENTED: 'green',
+    LOADED: 'green',
+    APPROVED: 'green',
+    REGISTERED: 'blue',
+    LEAVE: 'blue',
+    DRAFT: 'gray',
+    INCOMPLETE: 'yellow',
+    PENDING: 'yellow',
+    IN_REVIEW: 'purple',
+    INACTIVE: 'gray',
+    NOT_APPLICABLE: 'gray',
+    SUSPENDED: 'yellow',
+    TERMINATED: 'red',
+    RETIRED: 'red',
+    EXPIRED: 'red',
+    REJECTED: 'red',
   };
-  return styles[status] ?? 'bg-secondary text-muted-foreground border-border';
+  return styles[status] ?? 'gray';
 }
 
 function requestStatusLabel(status: VacationRequestStatus): string {
@@ -592,13 +591,13 @@ function TextInput({
 }) {
   return (
     <label className="block">
-      <span className="block text-xs mb-2">{label}{required ? ' *' : ''}</span>
+      <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">{label}{required && <span className="text-red-500 ml-1">*</span>}</span>
       <input
         type={type}
         required={required}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="w-full px-4 py-2.5 border border-border bg-background focus:outline-none focus:border-foreground text-sm"
+        className={inputCls}
         placeholder={placeholder}
       />
     </label>
@@ -622,12 +621,12 @@ function SelectInput({
 }) {
   return (
     <label className="block">
-      <span className="block text-xs mb-2">{label}{required ? ' *' : ''}</span>
+      <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">{label}{required && <span className="text-red-500 ml-1">*</span>}</span>
       <select
         required={required}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="w-full px-4 py-2.5 border border-border bg-background focus:outline-none focus:border-foreground text-sm"
+        className={selectCls}
       >
         <option value="">{emptyLabel}</option>
         {options.map((option) => (
@@ -651,12 +650,12 @@ function TextareaInput({
 }) {
   return (
     <label className="block">
-      <span className="block text-xs mb-2">{label}</span>
+      <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">{label}</span>
       <textarea
         value={value}
         onChange={(event) => onChange(event.target.value)}
         rows={3}
-        className="w-full px-4 py-2.5 border border-border bg-background focus:outline-none focus:border-foreground text-sm"
+        className={`${inputCls} resize-none`}
       />
     </label>
   );
@@ -664,8 +663,8 @@ function TextareaInput({
 
 function ToggleInput({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) {
   return (
-    <label className="flex items-center gap-3 px-4 py-3 border border-border bg-secondary/20 text-sm">
-      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+    <label className="flex items-center gap-3 px-4 py-3 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-700">
+      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="accent-[#2a4038]" />
       {label}
     </label>
   );
@@ -1168,8 +1167,8 @@ export function AdminHR() {
           { value: 'OTHER', label: 'Otro' },
         ]} />
         <label className="block">
-          <span className="block text-xs mb-2">Foto del empleado</span>
-          <input type="file" accept="image/*" onChange={(event) => setFormField('photo', event.target.files?.[0] ?? null)} className="w-full px-4 py-2.5 border border-border bg-background text-sm" />
+          <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Foto del empleado</span>
+          <input type="file" accept="image/*" onChange={(event) => setFormField('photo', event.target.files?.[0] ?? null)} className={inputCls} />
         </label>
       </div>
       <TextareaInput label="Dirección de residencia" value={employeeForm.address} onChange={(value) => setFormField('address', value)} />
@@ -1270,12 +1269,12 @@ export function AdminHR() {
         </div>
       </div>
       <div>
-        <div className="text-xs mb-2">Días laborables</div>
+        <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-2">Días laborables</div>
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
           {workDays.length === 0 ? (
-            <div className="text-xs text-muted-foreground border border-border p-3">Configura días laborales desde administración.</div>
+            <div className="text-xs text-gray-400 border border-gray-200 rounded-lg p-3">Configura días laborales desde administración.</div>
           ) : workDays.map((day) => (
-            <label key={day.id} className="flex items-center gap-2 border border-border px-3 py-2 text-sm">
+            <label key={day.id} className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700">
               <input
                 type="checkbox"
                 checked={employeeForm.working_days.includes(day.id)}
@@ -1285,6 +1284,7 @@ export function AdminHR() {
                     : employeeForm.working_days.filter((id) => id !== day.id);
                   setFormField('working_days', next);
                 }}
+                className="accent-[#2a4038]"
               />
               {day.name}
             </label>
@@ -1317,21 +1317,19 @@ export function AdminHR() {
               type="button"
               key={docType.value}
               onClick={() => setDocumentForm((current) => ({ ...current, document_type: docType.value, name: current.name || docType.label }))}
-              className="text-left border border-border p-3 hover:border-foreground transition-colors"
+              className="text-left border border-gray-200 rounded-xl p-3 hover:border-[#2a4038] transition-colors"
             >
-              <div className="text-xs font-medium mb-1">{docType.label}</div>
-              <span className={`inline-block px-2 py-1 border text-[10px] ${statusBadge(latest?.status ?? 'PENDING')}`}>
-                {latest ? documentStatusLabel(latest.status) : 'Pendiente'}
-              </span>
-              {docs.length > 1 && <div className="text-[10px] text-muted-foreground mt-2">{docs.length} adjuntos</div>}
+              <div className="text-xs font-medium text-gray-900 mb-1.5">{docType.label}</div>
+              <Badge label={latest ? documentStatusLabel(latest.status) : 'Pendiente'} color={statusBadge(latest?.status ?? 'PENDING')} />
+              {docs.length > 1 && <div className="text-[10px] text-gray-400 mt-2">{docs.length} adjuntos</div>}
             </button>
           );
         })}
       </div>
 
-      <div className="border border-border p-4 space-y-4 bg-secondary/20">
-        <div className="flex items-center gap-2 text-sm font-medium">
-          <FileUp className="w-4 h-4" strokeWidth={1.5} />
+      <Card className="p-4 space-y-4">
+        <div className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+          <FileUp size={16} />
           Registrar adjunto documental
         </div>
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1360,8 +1358,8 @@ export function AdminHR() {
             { value: 'NOT_APPLICABLE', label: 'No aplica' },
           ]} emptyLabel="Estado" />
           <label className="block lg:col-span-3">
-            <span className="block text-xs mb-2">Archivo</span>
-            <input type="file" onChange={(event) => setDocumentForm((current) => ({ ...current, file: event.target.files?.[0] ?? null, status: event.target.files?.[0] ? 'LOADED' : current.status }))} className="w-full px-4 py-2.5 border border-border bg-background text-sm" />
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Archivo</span>
+            <input type="file" onChange={(event) => setDocumentForm((current) => ({ ...current, file: event.target.files?.[0] ?? null, status: event.target.files?.[0] ? 'LOADED' : current.status }))} className={inputCls} />
           </label>
         </div>
         <TextareaInput label="Observaciones" value={documentForm.observations} onChange={(value) => setDocumentForm((current) => ({ ...current, observations: value }))} />
@@ -1370,48 +1368,46 @@ export function AdminHR() {
             type="button"
             onClick={() => void handleDocumentUpload(editingEmployee.id)}
             disabled={savingDocument}
-            className="px-4 py-2 bg-foreground text-background text-xs uppercase tracking-wider disabled:opacity-50"
+            className="px-4 py-2.5 bg-[#2a4038] text-white text-xs font-semibold rounded-xl hover:bg-[#3d5c4e] transition-colors disabled:opacity-50"
           >
             {savingDocument ? 'Subiendo...' : 'Guardar documento'}
           </button>
         )}
         {!editingEmployee && (
-          <p className="text-xs text-muted-foreground">El documento se adjuntará automáticamente después de crear el empleado.</p>
+          <p className="text-xs text-gray-400">El documento se adjuntará automáticamente después de crear el empleado.</p>
         )}
-      </div>
+      </Card>
 
-      <div className="border border-border overflow-hidden">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="border-b border-border bg-secondary/30">
-              <th className="text-left p-3">Documento</th>
-              <th className="text-left p-3">Estado</th>
-              <th className="text-left p-3">Vence</th>
-              <th className="text-left p-3">Archivo</th>
+      <Table>
+        <thead>
+          <tr>
+            <Th>Documento</Th>
+            <Th>Estado</Th>
+            <Th>Vence</Th>
+            <Th>Archivo</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {employeeDocuments.map((document) => (
+            <tr key={document.id} className="hover:bg-gray-50/50">
+              <Td>
+                <div className="font-medium text-gray-900">{document.name}</div>
+                <div className="text-gray-400 text-[11px]">{optionLabel(DOCUMENT_TYPE_OPTIONS, document.document_type)}</div>
+              </Td>
+              <Td>
+                <Badge label={documentStatusLabel(document.status)} color={statusBadge(document.status)} />
+              </Td>
+              <Td>{parseDate(document.expires_at)}</Td>
+              <Td>
+                {document.file ? (
+                  <a href={document.file} target="_blank" rel="noreferrer" className="text-[#2a4038] underline underline-offset-4">Ver archivo</a>
+                ) : 'Sin archivo'}
+              </Td>
             </tr>
-          </thead>
-          <tbody>
-            {employeeDocuments.map((document) => (
-              <tr key={document.id} className="border-b border-border">
-                <td className="p-3">
-                  <div className="font-medium">{document.name}</div>
-                  <div className="text-muted-foreground">{optionLabel(DOCUMENT_TYPE_OPTIONS, document.document_type)}</div>
-                </td>
-                <td className="p-3">
-                  <span className={`inline-block px-2 py-1 border ${statusBadge(document.status)}`}>{documentStatusLabel(document.status)}</span>
-                </td>
-                <td className="p-3">{parseDate(document.expires_at)}</td>
-                <td className="p-3">
-                  {document.file ? (
-                    <a href={document.file} target="_blank" rel="noreferrer" className="underline underline-offset-4">Ver archivo</a>
-                  ) : 'Sin archivo'}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {employeeDocuments.length === 0 && <div className="p-6 text-center text-xs text-muted-foreground">Sin documentos cargados todavía.</div>}
-      </div>
+          ))}
+        </tbody>
+      </Table>
+      {employeeDocuments.length === 0 && <EmptyState title="Sin documentos cargados todavía." />}
     </div>
   );
 
@@ -1424,7 +1420,7 @@ export function AdminHR() {
         <TextInput label="Contraseña" type="password" value={employeeForm.user_password} onChange={(value) => setFormField('user_password', value)} placeholder={editingEmployee?.user ? 'Dejar vacío para conservar' : 'Mínimo 8 caracteres'} />
         <TextInput label="Confirmar contraseña" type="password" value={employeeForm.user_password_confirm} onChange={(value) => setFormField('user_password_confirm', value)} />
       </div>
-      <div className="p-4 border border-amber-200 bg-amber-50 text-xs text-amber-800">
+      <div className="p-4 border border-amber-200 bg-amber-50 rounded-xl text-xs text-amber-800">
         Si asignas un rol por primera vez, correo y contraseña deben coincidir. En edición, dejar contraseña vacía conserva la actual.
       </div>
     </div>
@@ -1433,61 +1429,61 @@ export function AdminHR() {
   const renderHistoryTab = () => (
     <div className="space-y-5">
       <div className="grid md:grid-cols-4 gap-4">
-        <div className="border border-border p-4">
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Creación</div>
-          <div className="text-sm">{parseDate(editingEmployee?.created_at)}</div>
-        </div>
-        <div className="border border-border p-4">
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Última modificación</div>
-          <div className="text-sm">{parseDate(editingEmployee?.updated_at)}</div>
-        </div>
-        <div className="border border-border p-4">
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Edad</div>
-          <div className="text-sm">{editingEmployee?.age ?? 'Pendiente'}</div>
-        </div>
-        <div className="border border-border p-4">
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Antigüedad</div>
-          <div className="text-sm">{editingEmployee?.seniority_days ?? 0} días</div>
-        </div>
+        <Card className="p-4">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Creación</div>
+          <div className="text-sm text-gray-700">{parseDate(editingEmployee?.created_at)}</div>
+        </Card>
+        <Card className="p-4">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Última modificación</div>
+          <div className="text-sm text-gray-700">{parseDate(editingEmployee?.updated_at)}</div>
+        </Card>
+        <Card className="p-4">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Edad</div>
+          <div className="text-sm text-gray-700">{editingEmployee?.age ?? 'Pendiente'}</div>
+        </Card>
+        <Card className="p-4">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Antigüedad</div>
+          <div className="text-sm text-gray-700">{editingEmployee?.seniority_days ?? 0} días</div>
+        </Card>
       </div>
       <div className="grid lg:grid-cols-3 gap-4">
-        <div className="border border-border p-4">
-          <div className="text-sm font-medium mb-3">Historial de cambios</div>
+        <Card className="p-4">
+          <div className="text-sm font-semibold text-gray-900 mb-3">Historial de cambios</div>
           <div className="space-y-2 max-h-64 overflow-y-auto">
             {changeLogs.map((log) => (
-              <div key={log.id} className="text-xs border-b border-border pb-2">
-                <div className="font-medium">{log.field_name}</div>
-                <div className="text-muted-foreground">{log.old_value || 'Vacío'} → {log.new_value || 'Vacío'}</div>
-                <div className="text-[10px] text-muted-foreground">{parseDate(log.created_at)}</div>
+              <div key={log.id} className="text-xs border-b border-gray-100 pb-2">
+                <div className="font-medium text-gray-900">{log.field_name}</div>
+                <div className="text-gray-400">{log.old_value || 'Vacío'} → {log.new_value || 'Vacío'}</div>
+                <div className="text-[10px] text-gray-400">{parseDate(log.created_at)}</div>
               </div>
             ))}
-            {changeLogs.length === 0 && <div className="text-xs text-muted-foreground">Sin cambios registrados.</div>}
+            {changeLogs.length === 0 && <div className="text-xs text-gray-400">Sin cambios registrados.</div>}
           </div>
-        </div>
-        <div className="border border-border p-4">
-          <div className="text-sm font-medium mb-3">Historial salarial</div>
+        </Card>
+        <Card className="p-4">
+          <div className="text-sm font-semibold text-gray-900 mb-3">Historial salarial</div>
           <div className="space-y-2">
             {salaryHistory.map((item) => (
-              <div key={item.id} className="text-xs border-b border-border pb-2">
-                <div>{formatCurrency(item.previous_salary)} → {formatCurrency(item.new_salary)}</div>
-                <div className="text-muted-foreground">{parseDate(item.start_date)} · {item.reason || 'Sin motivo'}</div>
+              <div key={item.id} className="text-xs border-b border-gray-100 pb-2">
+                <div className="text-gray-700">{formatCurrency(item.previous_salary)} → {formatCurrency(item.new_salary)}</div>
+                <div className="text-gray-400">{parseDate(item.start_date)} · {item.reason || 'Sin motivo'}</div>
               </div>
             ))}
-            {salaryHistory.length === 0 && <div className="text-xs text-muted-foreground">Sin historial salarial.</div>}
+            {salaryHistory.length === 0 && <div className="text-xs text-gray-400">Sin historial salarial.</div>}
           </div>
-        </div>
-        <div className="border border-border p-4">
-          <div className="text-sm font-medium mb-3">Historial de cargos</div>
+        </Card>
+        <Card className="p-4">
+          <div className="text-sm font-semibold text-gray-900 mb-3">Historial de cargos</div>
           <div className="space-y-2">
             {positionHistory.map((item) => (
-              <div key={item.id} className="text-xs border-b border-border pb-2">
-                <div>{item.previous_position ? positionById.get(item.previous_position)?.name : 'Inicio'} → {positionById.get(item.new_position)?.name ?? item.new_position}</div>
-                <div className="text-muted-foreground">{parseDate(item.start_date)} · {item.reason || 'Sin motivo'}</div>
+              <div key={item.id} className="text-xs border-b border-gray-100 pb-2">
+                <div className="text-gray-700">{item.previous_position ? positionById.get(item.previous_position)?.name : 'Inicio'} → {positionById.get(item.new_position)?.name ?? item.new_position}</div>
+                <div className="text-gray-400">{parseDate(item.start_date)} · {item.reason || 'Sin motivo'}</div>
               </div>
             ))}
-            {positionHistory.length === 0 && <div className="text-xs text-muted-foreground">Sin historial de cargos.</div>}
+            {positionHistory.length === 0 && <div className="text-xs text-gray-400">Sin historial de cargos.</div>}
           </div>
-        </div>
+        </Card>
       </div>
     </div>
   );
@@ -1576,79 +1572,79 @@ export function AdminHR() {
 
     if (employeeModalTab === 'documents') {
       return (
-        <div className="border border-border overflow-hidden">
-          <table className="w-full text-xs">
+        <div>
+          <Table>
             <thead>
-              <tr className="border-b border-border bg-secondary/30">
-                <th className="text-left p-3">Documento</th>
-                <th className="text-left p-3">Estado</th>
-                <th className="text-left p-3">Vence</th>
-                <th className="text-left p-3">Archivo</th>
+              <tr>
+                <Th>Documento</Th>
+                <Th>Estado</Th>
+                <Th>Vence</Th>
+                <Th>Archivo</Th>
               </tr>
             </thead>
             <tbody>
               {employeeDocuments.map((document) => (
-                <tr key={document.id} className="border-b border-border">
-                  <td className="p-3">
-                    <div className="font-medium">{document.name}</div>
-                    <div className="text-muted-foreground">{optionLabel(DOCUMENT_TYPE_OPTIONS, document.document_type)}</div>
-                  </td>
-                  <td className="p-3"><span className={`inline-block px-2 py-1 border ${statusBadge(document.status)}`}>{documentStatusLabel(document.status)}</span></td>
-                  <td className="p-3">{parseDate(document.expires_at)}</td>
-                  <td className="p-3">{document.file ? <a href={document.file} target="_blank" rel="noreferrer" className="underline underline-offset-4">Ver archivo</a> : 'Sin archivo'}</td>
+                <tr key={document.id} className="hover:bg-gray-50/50">
+                  <Td>
+                    <div className="font-medium text-gray-900">{document.name}</div>
+                    <div className="text-gray-400 text-[11px]">{optionLabel(DOCUMENT_TYPE_OPTIONS, document.document_type)}</div>
+                  </Td>
+                  <Td><Badge label={documentStatusLabel(document.status)} color={statusBadge(document.status)} /></Td>
+                  <Td>{parseDate(document.expires_at)}</Td>
+                  <Td>{document.file ? <a href={document.file} target="_blank" rel="noreferrer" className="text-[#2a4038] underline underline-offset-4">Ver archivo</a> : 'Sin archivo'}</Td>
                 </tr>
               ))}
             </tbody>
-          </table>
-          {employeeDocuments.length === 0 && <div className="p-6 text-center text-xs text-muted-foreground">Sin documentos cargados.</div>}
+          </Table>
+          {employeeDocuments.length === 0 && <EmptyState title="Sin documentos cargados." />}
         </div>
       );
     }
     if (employeeModalTab === 'history') {
       return (
         <div className="grid lg:grid-cols-3 gap-4">
-          <div className="border border-border p-4">
-            <div className="text-sm font-medium mb-3">Historial de cambios</div>
+          <Card className="p-4">
+            <div className="text-sm font-semibold text-gray-900 mb-3">Historial de cambios</div>
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {changeLogs.map((log) => (
-                <div key={log.id} className="text-xs border-b border-border pb-2">
-                  <div className="font-medium">{log.field_name}</div>
-                  <div className="text-muted-foreground">{log.old_value || 'Vacío'} → {log.new_value || 'Vacío'}</div>
-                  <div className="text-[10px] text-muted-foreground">{parseDate(log.created_at)}</div>
+                <div key={log.id} className="text-xs border-b border-gray-100 pb-2">
+                  <div className="font-medium text-gray-900">{log.field_name}</div>
+                  <div className="text-gray-400">{log.old_value || 'Vacío'} → {log.new_value || 'Vacío'}</div>
+                  <div className="text-[10px] text-gray-400">{parseDate(log.created_at)}</div>
                 </div>
               ))}
-              {changeLogs.length === 0 && <div className="text-xs text-muted-foreground">Sin cambios registrados.</div>}
+              {changeLogs.length === 0 && <div className="text-xs text-gray-400">Sin cambios registrados.</div>}
             </div>
-          </div>
-          <div className="border border-border p-4">
-            <div className="text-sm font-medium mb-3">Historial salarial</div>
+          </Card>
+          <Card className="p-4">
+            <div className="text-sm font-semibold text-gray-900 mb-3">Historial salarial</div>
             {salaryHistory.map((item) => (
-              <div key={item.id} className="text-xs border-b border-border pb-2">
-                <div>{formatCurrency(item.previous_salary)} → {formatCurrency(item.new_salary)}</div>
-                <div className="text-muted-foreground">{parseDate(item.start_date)} · {item.reason || 'Sin motivo'}</div>
+              <div key={item.id} className="text-xs border-b border-gray-100 pb-2">
+                <div className="text-gray-700">{formatCurrency(item.previous_salary)} → {formatCurrency(item.new_salary)}</div>
+                <div className="text-gray-400">{parseDate(item.start_date)} · {item.reason || 'Sin motivo'}</div>
               </div>
             ))}
-            {salaryHistory.length === 0 && <div className="text-xs text-muted-foreground">Sin historial salarial.</div>}
-          </div>
-          <div className="border border-border p-4">
-            <div className="text-sm font-medium mb-3">Historial de cargos</div>
+            {salaryHistory.length === 0 && <div className="text-xs text-gray-400">Sin historial salarial.</div>}
+          </Card>
+          <Card className="p-4">
+            <div className="text-sm font-semibold text-gray-900 mb-3">Historial de cargos</div>
             {positionHistory.map((item) => (
-              <div key={item.id} className="text-xs border-b border-border pb-2">
-                <div>{item.previous_position ? positionById.get(item.previous_position)?.name : 'Inicio'} → {positionById.get(item.new_position)?.name ?? item.new_position}</div>
-                <div className="text-muted-foreground">{parseDate(item.start_date)} · {item.reason || 'Sin motivo'}</div>
+              <div key={item.id} className="text-xs border-b border-gray-100 pb-2">
+                <div className="text-gray-700">{item.previous_position ? positionById.get(item.previous_position)?.name : 'Inicio'} → {positionById.get(item.new_position)?.name ?? item.new_position}</div>
+                <div className="text-gray-400">{parseDate(item.start_date)} · {item.reason || 'Sin motivo'}</div>
               </div>
             ))}
-            {positionHistory.length === 0 && <div className="text-xs text-muted-foreground">Sin historial de cargos.</div>}
-          </div>
+            {positionHistory.length === 0 && <div className="text-xs text-gray-400">Sin historial de cargos.</div>}
+          </Card>
         </div>
       );
     }
     return (
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {rows.map(([label, value]) => (
-          <div key={label} className="border border-border p-4 bg-secondary/10">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">{label}</div>
-            <div className="text-sm">{value || 'Sin registrar'}</div>
+          <div key={label} className="border border-gray-100 rounded-xl p-4 bg-gray-50/60">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1">{label}</div>
+            <div className="text-sm text-gray-700">{value || 'Sin registrar'}</div>
           </div>
         ))}
       </div>
@@ -1659,16 +1655,16 @@ export function AdminHR() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <h2 className="text-2xl md:text-3xl mb-2">Recursos Humanos</h2>
-          <p className="text-xs text-muted-foreground">
+          <h2 className="text-lg font-semibold text-gray-900">Recursos Humanos</h2>
+          <p className="text-xs text-gray-500 mt-0.5">
             Expedientes empresariales con nómina, seguridad social, documentos y auditoría.
           </p>
         </div>
         <button
           onClick={activeTab === 'branches' ? openCreateBranchModal : openCreateModal}
-          className="flex items-center gap-2 px-4 py-2 bg-foreground text-background hover:bg-background hover:text-foreground border border-foreground transition-colors text-xs"
+          className="flex items-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white text-xs font-semibold rounded-xl hover:bg-[#3d5c4e] transition-colors"
         >
-          {activeTab === 'branches' ? <Plus className="w-4 h-4" strokeWidth={1} /> : <UserPlus className="w-4 h-4" strokeWidth={1} />}
+          {activeTab === 'branches' ? <Plus size={14} /> : <UserPlus size={14} />}
           {activeTab === 'branches' ? 'Nueva sede' : 'Nuevo empleado'}
         </button>
       </div>
@@ -1682,19 +1678,19 @@ export function AdminHR() {
         ].map((stat) => {
           const Icon = stat.icon;
           return (
-            <div key={stat.label} className="bg-secondary/30 border border-border p-4">
+            <div key={stat.label} className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
               <div className="flex items-center gap-2 mb-2">
-                <Icon className="w-4 h-4 text-muted-foreground" strokeWidth={1} />
-                <div className="text-[9px] tracking-[0.2em] uppercase text-muted-foreground">{stat.label}</div>
+                <Icon size={16} className="text-gray-400" />
+                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{stat.label}</div>
               </div>
-              <div className="text-2xl font-light">{stat.value}</div>
+              <div className="text-2xl font-bold text-gray-900">{stat.value}</div>
             </div>
           );
         })}
       </div>
 
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-        <div className="flex gap-2 border border-border p-1 overflow-x-auto">
+        <div className="flex gap-1 bg-gray-100 rounded-xl p-1 overflow-x-auto">
           {[
             { id: 'employees', label: 'Empleados' },
             { id: 'branches', label: 'Sedes' },
@@ -1707,7 +1703,7 @@ export function AdminHR() {
                 setActiveTab(tab.id as HRTab);
                 setFilterStatus('all');
               }}
-              className={`px-4 py-2 text-xs uppercase tracking-wider transition-colors ${activeTab === tab.id ? 'bg-foreground text-background' : 'hover:bg-secondary/50'}`}
+              className={`px-3 py-2 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${activeTab === tab.id ? 'bg-white text-[#2a4038] shadow-sm font-semibold' : 'text-gray-500 hover:text-gray-700'}`}
             >
               {tab.label}
             </button>
@@ -1717,35 +1713,31 @@ export function AdminHR() {
         <div className="flex flex-col sm:flex-row gap-3">
           <SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Buscar por nombre, código, documento, sede..." className="flex-1 min-w-[280px]" />
           {(activeTab === 'employees' || activeTab === 'vacations') && (
-            <select value={filterDepartment} onChange={(event) => setFilterDepartment(event.target.value)} className="px-4 py-2 border border-border bg-transparent text-xs focus:outline-none focus:border-foreground">
+            <select value={filterDepartment} onChange={(event) => setFilterDepartment(event.target.value)} className={selectCls}>
               <option value="all">Todos los departamentos</option>
               {departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
             </select>
           )}
-          <select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)} className="px-4 py-2 border border-border bg-transparent text-xs focus:outline-none focus:border-foreground">
+          <select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)} className={selectCls}>
             {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
         </div>
       </div>
 
       {isLoading ? (
-        <div className="border border-border p-12 text-center text-muted-foreground">
-          <div className="text-sm">Cargando información de RRHH...</div>
-        </div>
+        <LoadingState label="Cargando información de RRHH..." />
       ) : (
         <>
           {activeTab === 'employees' && (
-            <div className="border border-border overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
+            <Table>
                   <thead>
-                    <tr className="border-b border-border bg-secondary/30">
-                      <th className="text-left p-3 font-medium">Empleado</th>
-                      <th className="text-left p-3 font-medium">Cargo / Sede</th>
-                      <th className="text-left p-3 font-medium">Estado</th>
-                      <th className="text-left p-3 font-medium">Perfil</th>
-                      <th className="text-left p-3 font-medium">Documentos</th>
-                      <th className="text-right p-3 font-medium">Acciones</th>
+                    <tr>
+                      <Th>Empleado</Th>
+                      <Th>Cargo / Sede</Th>
+                      <Th>Estado</Th>
+                      <Th>Perfil</Th>
+                      <Th>Documentos</Th>
+                      <Th>Acciones</Th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1754,143 +1746,131 @@ export function AdminHR() {
                       const position = employee.position ? positionById.get(employee.position) : null;
                       const branch = employee.branch ? branchById.get(employee.branch) : null;
                       return (
-                        <tr key={employee.id} className="border-b border-border hover:bg-secondary/20 transition-colors">
-                          <td className="p-3">
-                            <div className="font-medium">{getEmployeeName(employee)}</div>
-                            <div className="text-muted-foreground mt-1">{employee.employee_code || 'Código autogenerado'} · {employee.document_number || 'Sin documento'}</div>
-                            <div className="text-muted-foreground">{employee.email || 'Sin correo'}</div>
-                          </td>
-                          <td className="p-3">
+                        <tr key={employee.id} className="hover:bg-gray-50/50">
+                          <Td>
+                            <div className="font-medium text-gray-900">{getEmployeeName(employee)}</div>
+                            <div className="text-gray-400 text-[11px] mt-1">{employee.employee_code || 'Código autogenerado'} · {employee.document_number || 'Sin documento'}</div>
+                            <div className="text-gray-400 text-[11px]">{employee.email || 'Sin correo'}</div>
+                          </Td>
+                          <Td>
                             <div>{position?.name ?? 'Sin cargo'}</div>
-                            <div className="text-muted-foreground mt-1">{department?.name ?? 'Sin área'} · {branch?.name ?? 'Sin sede'}</div>
-                          </td>
-                          <td className="p-3">
-                            <span className={`inline-block px-2 py-1 border text-[10px] ${statusBadge(employee.status)}`}>{statusLabel(employee.status)}</span>
-                            <div className="mt-2">
-                              <span className={`inline-block px-2 py-1 border text-[10px] ${statusBadge(employee.profile_status)}`}>{profileStatusLabel(employee.profile_status)}</span>
+                            <div className="text-gray-400 text-[11px] mt-1">{department?.name ?? 'Sin área'} · {branch?.name ?? 'Sin sede'}</div>
+                          </Td>
+                          <Td>
+                            <Badge label={statusLabel(employee.status)} color={statusBadge(employee.status)} />
+                            <div className="mt-1.5">
+                              <Badge label={profileStatusLabel(employee.profile_status)} color={statusBadge(employee.profile_status)} />
                             </div>
-                          </td>
-                          <td className="p-3 min-w-[160px]">
+                          </Td>
+                          <Td className="min-w-[160px]">
                             <div className="flex items-center justify-between mb-1">
                               <span>{employee.profile_completion_percentage}%</span>
-                              <span className="text-muted-foreground">{employee.age ? `${employee.age} años` : 'Edad N/D'}</span>
+                              <span className="text-gray-400 text-[11px]">{employee.age ? `${employee.age} años` : 'Edad N/D'}</span>
                             </div>
-                            <div className="h-2 bg-secondary rounded-full overflow-hidden">
-                              <div className="h-full bg-foreground" style={{ width: `${employee.profile_completion_percentage}%` }} />
+                            <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                              <div className="h-full bg-[#2a4038]" style={{ width: `${employee.profile_completion_percentage}%` }} />
                             </div>
-                          </td>
-                          <td className="p-3">
+                          </Td>
+                          <Td>
                             <div>Pendientes: {employee.pending_documents_count}</div>
-                            <div className={employee.expired_documents_count > 0 ? 'text-red-700' : 'text-muted-foreground'}>
+                            <div className={employee.expired_documents_count > 0 ? 'text-red-600' : 'text-gray-400'}>
                               Vencidos: {employee.expired_documents_count}
                             </div>
-                          </td>
-                          <td className="p-3">
-                            <div className="flex items-center justify-end gap-2">
-                              <button onClick={() => openEmployeeDetailModal(employee)} className="p-2 hover:bg-secondary/50 transition-colors" aria-label="Ver empleado">
-                                <Eye className="w-4 h-4" strokeWidth={1} />
+                          </Td>
+                          <Td>
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => openEmployeeDetailModal(employee)} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors" title="Ver empleado">
+                                <Eye size={13} />
                               </button>
-                              <button onClick={() => openEditModal(employee)} className="p-2 hover:bg-secondary/50 transition-colors" aria-label="Editar empleado">
-                                <Edit2 className="w-4 h-4" strokeWidth={1} />
+                              <button onClick={() => openEditModal(employee)} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-amber-50 hover:text-amber-600 transition-colors" title="Editar empleado">
+                                <Edit2 size={13} />
                               </button>
-                              <button onClick={() => handleDeleteEmployee(employee)} disabled={deletingEmployeeId === employee.id} className="p-2 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50" aria-label="Eliminar empleado">
-                                <Trash2 className="w-4 h-4" strokeWidth={1} />
+                              <button onClick={() => handleDeleteEmployee(employee)} disabled={deletingEmployeeId === employee.id} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors disabled:opacity-50" title="Eliminar empleado">
+                                <Trash2 size={13} />
                               </button>
                             </div>
-                          </td>
+                          </Td>
                         </tr>
                       );
                     })}
                   </tbody>
-                </table>
-              </div>
-              {filteredEmployees.length === 0 && (
-                <div className="p-12 text-center text-muted-foreground">
-                  <Users className="w-12 h-12 mx-auto mb-3 opacity-20" strokeWidth={1} />
-                  <div className="text-sm">No se encontraron empleados</div>
-                </div>
-              )}
-            </div>
+            </Table>
+          )}
+          {activeTab === 'employees' && filteredEmployees.length === 0 && (
+            <EmptyState title="No se encontraron empleados" />
           )}
 
           {activeTab === 'branches' && (
-            <div className="border border-border overflow-hidden">
-              <div className="p-4 border-b border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Search className="w-4 h-4" strokeWidth={1.5} />
+            <div className="space-y-3">
+              <Card className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex items-center gap-2 text-xs text-gray-500">
+                  <Search size={14} />
                   {sortedBranches.length} sedes encontradas
                 </div>
-                <select value={branchSort} onChange={(event) => setBranchSort(event.target.value as typeof branchSort)} className="px-3 py-2 border border-border bg-background text-xs">
+                <select value={branchSort} onChange={(event) => setBranchSort(event.target.value as typeof branchSort)} className={`${selectCls} w-auto`}>
                   <option value="name">Ordenar por nombre</option>
                   <option value="code">Ordenar por código</option>
                   <option value="city">Ordenar por ciudad</option>
                   <option value="status">Ordenar por estado</option>
                 </select>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
+              </Card>
+              <Table>
                   <thead>
-                    <tr className="border-b border-border bg-secondary/30">
-                      <th className="text-left p-3 font-medium">Sede</th>
-                      <th className="text-left p-3 font-medium">Ubicación</th>
-                      <th className="text-left p-3 font-medium">Responsable</th>
-                      <th className="text-left p-3 font-medium">Empleados</th>
-                      <th className="text-left p-3 font-medium">Estado</th>
-                      <th className="text-right p-3 font-medium">Acciones</th>
+                    <tr>
+                      <Th>Sede</Th>
+                      <Th>Ubicación</Th>
+                      <Th>Responsable</Th>
+                      <Th>Empleados</Th>
+                      <Th>Estado</Th>
+                      <Th>Acciones</Th>
                     </tr>
                   </thead>
                   <tbody>
                     {paginatedBranches.map((branch) => (
-                      <tr key={branch.id} className="border-b border-border hover:bg-secondary/20 transition-colors">
-                        <td className="p-3">
-                          <div className="font-medium">{branch.name}</div>
-                          <div className="text-muted-foreground mt-1">{branch.code}</div>
-                          <div className="text-muted-foreground">{branch.email || 'Sin correo'}</div>
-                        </td>
-                        <td className="p-3">
+                      <tr key={branch.id} className="hover:bg-gray-50/50">
+                        <Td>
+                          <div className="font-medium text-gray-900">{branch.name}</div>
+                          <div className="text-gray-400 text-[11px] mt-1">{branch.code}</div>
+                          <div className="text-gray-400 text-[11px]">{branch.email || 'Sin correo'}</div>
+                        </Td>
+                        <Td>
                           <div>{branch.city || 'Sin ciudad'}, {branch.department || 'Sin departamento'}</div>
-                          <div className="text-muted-foreground mt-1">{branch.country || 'Colombia'}</div>
-                        </td>
-                        <td className="p-3">{branch.responsible_name || 'Sin responsable'}</td>
-                        <td className="p-3">
+                          <div className="text-gray-400 text-[11px] mt-1">{branch.country || 'Colombia'}</div>
+                        </Td>
+                        <Td>{branch.responsible_name || 'Sin responsable'}</Td>
+                        <Td>
                           <div>{branch.employee_count ?? 0} empleados</div>
-                          <div className="text-muted-foreground">{branch.department_names?.join(', ') || 'Sin áreas'}</div>
-                        </td>
-                        <td className="p-3">
-                          <span className={`inline-block px-2 py-1 border text-[10px] ${branch.status === 'ACTIVE' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-stone-50 text-stone-700 border-stone-200'}`}>
-                            {branch.status === 'ACTIVE' ? 'Activa' : 'Inactiva'}
-                          </span>
-                        </td>
-                        <td className="p-3">
-                          <div className="flex items-center justify-end gap-2">
-                            <button onClick={() => openBranchDetailModal(branch)} className="p-2 hover:bg-secondary/50 transition-colors" aria-label="Ver sede">
-                              <Eye className="w-4 h-4" strokeWidth={1} />
+                          <div className="text-gray-400 text-[11px]">{branch.department_names?.join(', ') || 'Sin áreas'}</div>
+                        </Td>
+                        <Td>
+                          <Badge label={branch.status === 'ACTIVE' ? 'Activa' : 'Inactiva'} color={branch.status === 'ACTIVE' ? 'green' : 'gray'} />
+                        </Td>
+                        <Td>
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => openBranchDetailModal(branch)} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors" title="Ver sede">
+                              <Eye size={13} />
                             </button>
-                            <button onClick={() => openEditBranchModal(branch)} className="p-2 hover:bg-secondary/50 transition-colors" aria-label="Editar sede">
-                              <Edit2 className="w-4 h-4" strokeWidth={1} />
+                            <button onClick={() => openEditBranchModal(branch)} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-amber-50 hover:text-amber-600 transition-colors" title="Editar sede">
+                              <Edit2 size={13} />
                             </button>
-                            <button onClick={() => handleDeleteBranch(branch)} disabled={deletingBranchId === branch.id} className="p-2 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50" aria-label="Eliminar sede">
-                              <Trash2 className="w-4 h-4" strokeWidth={1} />
+                            <button onClick={() => handleDeleteBranch(branch)} disabled={deletingBranchId === branch.id} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors disabled:opacity-50" title="Eliminar sede">
+                              <Trash2 size={13} />
                             </button>
                           </div>
-                        </td>
+                        </Td>
                       </tr>
                     ))}
                   </tbody>
-                </table>
-              </div>
+            </Table>
               {sortedBranches.length > 0 && (
-                <div className="p-4 border-t border-border flex items-center justify-between text-xs">
-                  <button onClick={() => setBranchPage((page) => Math.max(1, page - 1))} disabled={branchPage === 1} className="px-3 py-2 border border-border disabled:opacity-50">Anterior</button>
+                <div className="flex items-center justify-between text-xs text-gray-500 px-1">
+                  <button onClick={() => setBranchPage((page) => Math.max(1, page - 1))} disabled={branchPage === 1} className="px-3 py-2 border border-gray-200 rounded-lg disabled:opacity-50 hover:bg-gray-50">Anterior</button>
                   <span>Página {branchPage} de {branchTotalPages}</span>
-                  <button onClick={() => setBranchPage((page) => Math.min(branchTotalPages, page + 1))} disabled={branchPage === branchTotalPages} className="px-3 py-2 border border-border disabled:opacity-50">Siguiente</button>
+                  <button onClick={() => setBranchPage((page) => Math.min(branchTotalPages, page + 1))} disabled={branchPage === branchTotalPages} className="px-3 py-2 border border-gray-200 rounded-lg disabled:opacity-50 hover:bg-gray-50">Siguiente</button>
                 </div>
               )}
               {sortedBranches.length === 0 && (
-                <div className="p-12 text-center text-muted-foreground">
-                  <Building2 className="w-12 h-12 mx-auto mb-3 opacity-20" strokeWidth={1} />
-                  <div className="text-sm">No se encontraron sedes</div>
-                </div>
+                <EmptyState title="No se encontraron sedes" />
               )}
             </div>
           )}
@@ -1899,25 +1879,25 @@ export function AdminHR() {
             <div className="space-y-4">
               <AdminStructure />
               <div className="grid lg:grid-cols-2 gap-4">
-                <div className="border border-border p-4">
-                  <div className="flex items-center gap-2 mb-3 text-sm font-medium"><Building2 className="w-4 h-4" /> Sedes</div>
+                <Card className="p-4">
+                  <div className="flex items-center gap-2 mb-3 text-sm font-semibold text-gray-900"><Building2 size={16} /> Sedes</div>
                   <div className="space-y-2">
                     {branches.map((branch) => (
-                      <div key={branch.id} className="flex justify-between border-b border-border pb-2 text-xs">
-                        <span>{branch.name}</span>
-                        <span className="text-muted-foreground">{branch.city || 'Sin ciudad'}</span>
+                      <div key={branch.id} className="flex justify-between border-b border-gray-100 pb-2 text-xs">
+                        <span className="text-gray-700">{branch.name}</span>
+                        <span className="text-gray-400">{branch.city || 'Sin ciudad'}</span>
                       </div>
                     ))}
-                    {branches.length === 0 && <div className="text-xs text-muted-foreground">Sin sedes configuradas.</div>}
+                    {branches.length === 0 && <div className="text-xs text-gray-400">Sin sedes configuradas.</div>}
                   </div>
-                </div>
-                <div className="border border-border p-4">
-                  <div className="flex items-center gap-2 mb-3 text-sm font-medium"><CalendarClock className="w-4 h-4" /> Días laborables</div>
+                </Card>
+                <Card className="p-4">
+                  <div className="flex items-center gap-2 mb-3 text-sm font-semibold text-gray-900"><CalendarClock size={16} /> Días laborables</div>
                   <div className="flex flex-wrap gap-2">
-                    {workDays.map((day) => <span key={day.id} className="px-3 py-1 border border-border text-xs">{day.name}</span>)}
-                    {workDays.length === 0 && <div className="text-xs text-muted-foreground">Sin días configurados.</div>}
+                    {workDays.map((day) => <span key={day.id} className="px-3 py-1 border border-gray-200 rounded-lg text-xs text-gray-700">{day.name}</span>)}
+                    {workDays.length === 0 && <div className="text-xs text-gray-400">Sin días configurados.</div>}
                   </div>
-                </div>
+                </Card>
               </div>
             </div>
           )}
@@ -1937,10 +1917,10 @@ export function AdminHR() {
                       { label: 'Días incapacidad', value: requestsDashboard.incapacity_days },
                       { label: 'Vacaciones pendientes', value: requestsDashboard.pending_vacation_days },
                     ].map((item) => (
-                      <div key={item.label} className="border border-border bg-secondary/20 p-4">
-                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">{item.label}</div>
-                        <div className="text-xl">{item.value}</div>
-                      </div>
+                      <Card key={item.label} className="p-4">
+                        <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1">{item.label}</div>
+                        <div className="text-xl font-bold text-gray-900">{item.value}</div>
+                      </Card>
                     ))}
                   </div>
                   <div className="grid lg:grid-cols-4 gap-4">
@@ -1950,99 +1930,93 @@ export function AdminHR() {
                       ['Área', requestsDashboard.charts.by_area],
                       ['Sede', requestsDashboard.charts.by_branch],
                     ].map(([label, data]) => (
-                      <div key={label as string} className="border border-border p-4">
-                        <div className="flex items-center gap-2 mb-3 text-xs font-medium">
-                          <BarChart3 className="w-4 h-4" strokeWidth={1.5} />
+                      <Card key={label as string} className="p-4">
+                        <div className="flex items-center gap-2 mb-3 text-xs font-semibold text-gray-900">
+                          <BarChart3 size={14} />
                           Por {label as string}
                         </div>
                         <div className="space-y-2">
                           {(data as Array<{ label: string; value: number }>).slice(0, 5).map((item) => (
                             <div key={item.label} className="text-xs">
-                              <div className="flex justify-between mb-1">
+                              <div className="flex justify-between mb-1 text-gray-600">
                                 <span>{item.label}</span>
                                 <span>{item.value}</span>
                               </div>
-                              <div className="h-1.5 bg-secondary overflow-hidden">
-                                <div className="h-full bg-foreground" style={{ width: `${Math.min(item.value * 12, 100)}%` }} />
+                              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                <div className="h-full bg-[#2a4038]" style={{ width: `${Math.min(item.value * 12, 100)}%` }} />
                               </div>
                             </div>
                           ))}
                         </div>
-                      </div>
+                      </Card>
                     ))}
                   </div>
                 </>
               )}
 
-              <div className="border border-border overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
+              <Table>
                   <thead>
-                    <tr className="border-b border-border bg-secondary/30">
-                      <th className="text-left p-3 font-medium">Empleado</th>
-                      <th className="text-left p-3 font-medium">Tipo</th>
-                      <th className="text-left p-3 font-medium">Fechas</th>
-                      <th className="text-left p-3 font-medium">Motivo</th>
-                      <th className="text-left p-3 font-medium">Estado</th>
-                      <th className="text-center p-3 font-medium">Acciones</th>
+                    <tr>
+                      <Th>Empleado</Th>
+                      <Th>Tipo</Th>
+                      <Th>Fechas</Th>
+                      <Th>Motivo</Th>
+                      <Th>Estado</Th>
+                      <Th>Acciones</Th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredVacationRequests.map((request) => {
                       const employee = employeeById.get(request.employee);
                       return (
-                        <tr key={request.id} className="border-b border-border hover:bg-secondary/20 transition-colors">
-                          <td className="p-3">
-                            <div className="font-medium">{employee ? getEmployeeName(employee) : request.employee}</div>
-                            <div className="text-muted-foreground mt-1">{employee?.employee_code ?? 'Sin código'}</div>
-                          </td>
-                          <td className="p-3">
+                        <tr key={request.id} className="hover:bg-gray-50/50">
+                          <Td>
+                            <div className="font-medium text-gray-900">{employee ? getEmployeeName(employee) : request.employee}</div>
+                            <div className="text-gray-400 text-[11px] mt-1">{employee?.employee_code ?? 'Sin código'}</div>
+                          </Td>
+                          <Td>
                             <div>{getRequestTypeLabel(request.request_type)}</div>
-                            <div className="text-muted-foreground mt-1">{getRequestSubtypeLabel(request.subtype)}</div>
-                          </td>
-                          <td className="p-3">{parseDate(request.start_date)} - {parseDate(request.end_date)}</td>
-                          <td className="p-3 max-w-sm">{request.reason || 'Sin motivo'}</td>
-                          <td className="p-3"><span className={`inline-block px-2 py-1 border text-[10px] ${statusBadge(request.status)}`}>{requestStatusLabel(request.status)}</span></td>
-                          <td className="p-3">
+                            <div className="text-gray-400 text-[11px] mt-1">{getRequestSubtypeLabel(request.subtype)}</div>
+                          </Td>
+                          <Td>{parseDate(request.start_date)} - {parseDate(request.end_date)}</Td>
+                          <Td className="max-w-sm">{request.reason || 'Sin motivo'}</Td>
+                          <Td><Badge label={requestStatusLabel(request.status)} color={statusBadge(request.status)} /></Td>
+                          <Td>
                             <div className="flex flex-col items-center gap-2">
                               {request.support_document ? (
                                 <div className="flex flex-wrap items-center justify-center gap-2">
-                                  <a href={request.support_document} target="_blank" rel="noreferrer" className="px-3 py-1.5 border border-border text-foreground hover:bg-secondary/50 transition-colors">Vista previa</a>
-                                  <a href={request.support_document} download={getSupportDocumentName(request.support_document)} className="px-3 py-1.5 border border-border text-foreground hover:bg-secondary/50 transition-colors">Descargar</a>
+                                  <a href={request.support_document} target="_blank" rel="noreferrer" className="px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors">Vista previa</a>
+                                  <a href={request.support_document} download={getSupportDocumentName(request.support_document)} className="px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors">Descargar</a>
                                 </div>
-                              ) : <div className="text-[10px] text-muted-foreground">Sin soporte</div>}
+                              ) : <div className="text-[10px] text-gray-400">Sin soporte</div>}
                               <div className="flex items-center justify-center gap-2">
-                                <button onClick={() => openRequestDetailModal(request)} className="px-3 py-1.5 border border-border hover:bg-secondary/50 transition-colors">Ver detalle</button>
-                                <button onClick={() => handleVacationAction(request, 'approve')} disabled={!['PENDING', 'IN_REVIEW'].includes(request.status) || vacationActionId === request.id} className="px-3 py-1.5 border border-green-200 text-green-700 hover:bg-green-50 transition-colors disabled:opacity-50">Aprobar</button>
-                                <button onClick={() => handleVacationAction(request, 'reject')} disabled={!['PENDING', 'IN_REVIEW'].includes(request.status) || vacationActionId === request.id} className="px-3 py-1.5 border border-red-200 text-red-700 hover:bg-red-50 transition-colors disabled:opacity-50">Rechazar</button>
+                                <button onClick={() => openRequestDetailModal(request)} className="px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors">Ver detalle</button>
+                                <button onClick={() => handleVacationAction(request, 'approve')} disabled={!['PENDING', 'IN_REVIEW'].includes(request.status) || vacationActionId === request.id} className="px-3 py-1.5 border border-emerald-200 rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors disabled:opacity-50">Aprobar</button>
+                                <button onClick={() => handleVacationAction(request, 'reject')} disabled={!['PENDING', 'IN_REVIEW'].includes(request.status) || vacationActionId === request.id} className="px-3 py-1.5 border border-red-200 rounded-lg text-red-700 hover:bg-red-50 transition-colors disabled:opacity-50">Rechazar</button>
                               </div>
                             </div>
-                          </td>
+                          </Td>
                         </tr>
                       );
                     })}
                   </tbody>
-                </table>
-              </div>
+            </Table>
               {filteredVacationRequests.length === 0 && (
-                <div className="p-12 text-center text-muted-foreground">
-                  <CalendarClock className="w-12 h-12 mx-auto mb-3 opacity-20" strokeWidth={1} />
-                  <div className="text-sm">No hay solicitudes para mostrar</div>
-                </div>
+                <EmptyState title="No hay solicitudes para mostrar" />
               )}
-              </div>
             </div>
           )}
         </>
       )}
 
       {showEmployeeDetailModal && viewingEmployee && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-background border border-border max-w-6xl w-full max-h-[92vh] overflow-hidden flex flex-col">
-            <div className="p-6 border-b border-border flex items-start justify-between gap-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setShowEmployeeDetailModal(false)} />
+          <div className="relative bg-white max-w-6xl w-full max-h-[92vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+            <div className="px-6 py-4 border-b border-gray-100 bg-gray-50 flex items-start justify-between gap-4">
               <div>
-                <h3 className="text-2xl">{getEmployeeName(viewingEmployee)}</h3>
-                <p className="text-xs text-muted-foreground mt-2">Vista de consulta del expediente. Solo lectura.</p>
+                <h3 className="font-semibold text-gray-900">{getEmployeeName(viewingEmployee)}</h3>
+                <p className="text-xs text-gray-500 mt-0.5">Vista de consulta del expediente. Solo lectura.</p>
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -2050,52 +2024,47 @@ export function AdminHR() {
                     setShowEmployeeDetailModal(false);
                     openEditModal(viewingEmployee);
                   }}
-                  className="px-4 py-2 border border-border hover:border-foreground text-xs uppercase tracking-wider"
+                  className="px-4 py-2.5 border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
                 >
                   Editar
                 </button>
-                <button onClick={() => setShowEmployeeDetailModal(false)} className="p-2 hover:bg-secondary/50 transition-colors">
-                  <X className="w-4 h-4" strokeWidth={1} />
+                <button onClick={() => setShowEmployeeDetailModal(false)} className="p-2 rounded-lg hover:bg-gray-200">
+                  <X size={16} />
                 </button>
               </div>
             </div>
-            <div className="px-6 pt-4 border-b border-border">
-              <div className="flex flex-wrap gap-2">
+            <div className="px-6 pt-4 border-b border-gray-100">
+              <div className="flex flex-wrap gap-1 bg-gray-100 rounded-xl p-1">
                 {MODAL_TABS.filter((tab) => !['payroll', 'access'].includes(tab.id)).map((tab) => {
                   const Icon = tab.icon;
+                  const active = employeeModalTab === tab.id;
                   return (
-                    <button key={tab.id} type="button" onClick={() => setEmployeeModalTab(tab.id)} className={`flex items-center gap-2 px-3 py-2 text-[10px] uppercase tracking-wider border-b-2 ${employeeModalTab === tab.id ? 'border-foreground text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
-                      <Icon className="w-3.5 h-3.5" strokeWidth={1.5} />
+                    <button key={tab.id} type="button" onClick={() => setEmployeeModalTab(tab.id)} className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${active ? 'bg-white text-[#2a4038] shadow-sm font-semibold' : 'text-gray-500 hover:text-gray-700'}`}>
+                      <Icon size={12} />
                       {tab.label}
                     </button>
                   );
                 })}
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex-1 overflow-y-auto px-6 py-5">
               <div className="grid md:grid-cols-4 gap-4 mb-5">
-                <div className="border border-border p-4"><div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Perfil completado</div><div className="text-xl">{viewingEmployee.profile_completion_percentage}%</div></div>
-                <div className="border border-border p-4"><div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Pendientes</div><div className="text-xl">{viewingEmployee.pending_documents_count}</div></div>
-                <div className="border border-border p-4"><div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Vencidos</div><div className="text-xl">{viewingEmployee.expired_documents_count}</div></div>
-                <div className="border border-border p-4"><div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Contrato restante</div><div className="text-xl">{viewingEmployee.remaining_contract_days == null ? 'Contrato indefinido' : `${viewingEmployee.remaining_contract_days} días`}</div></div>
+                <Card className="p-4"><div className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Perfil completado</div><div className="text-xl font-bold text-gray-900">{viewingEmployee.profile_completion_percentage}%</div></Card>
+                <Card className="p-4"><div className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Pendientes</div><div className="text-xl font-bold text-gray-900">{viewingEmployee.pending_documents_count}</div></Card>
+                <Card className="p-4"><div className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Vencidos</div><div className="text-xl font-bold text-gray-900">{viewingEmployee.expired_documents_count}</div></Card>
+                <Card className="p-4"><div className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Contrato restante</div><div className="text-xl font-bold text-gray-900">{viewingEmployee.remaining_contract_days == null ? 'Contrato indefinido' : `${viewingEmployee.remaining_contract_days} días`}</div></Card>
               </div>
               {renderReadOnlyEmployeeTab(viewingEmployee)}
             </div>
-          </motion.div>
+          </div>
         </div>
       )}
 
-      {showBranchDetailModal && viewingBranch && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-background border border-border max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-border flex justify-between gap-4">
-              <div>
-                <h3 className="text-2xl">{viewingBranch.name}</h3>
-                <p className="text-xs text-muted-foreground mt-2">{viewingBranch.code} · {viewingBranch.status === 'ACTIVE' ? 'Activa' : 'Inactiva'}</p>
-              </div>
-              <button onClick={() => setShowBranchDetailModal(false)} className="p-2 hover:bg-secondary/50"><X className="w-4 h-4" /></button>
-            </div>
-            <div className="p-6 grid sm:grid-cols-2 gap-4">
+      <Modal title={viewingBranch ? `${viewingBranch.name}` : ''} open={showBranchDetailModal && Boolean(viewingBranch)} onClose={() => setShowBranchDetailModal(false)} wide>
+        {viewingBranch && (
+          <div className="space-y-4">
+            <p className="text-xs text-gray-500">{viewingBranch.code} · {viewingBranch.status === 'ACTIVE' ? 'Activa' : 'Inactiva'}</p>
+            <div className="grid sm:grid-cols-2 gap-4">
               {[
                 ['Dirección', viewingBranch.address],
                 ['Ciudad', viewingBranch.city],
@@ -2107,155 +2076,139 @@ export function AdminHR() {
                 ['Empleados asignados', viewingBranch.employee_count],
                 ['Departamentos asociados', viewingBranch.department_names?.join(', ')],
               ].map(([label, value]) => (
-                <div key={label} className="border border-border p-4">
-                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">{label}</div>
-                  <div className="text-sm">{value || 'Sin registrar'}</div>
+                <div key={label} className="border border-gray-100 rounded-xl p-4 bg-gray-50/60">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1">{label}</div>
+                  <div className="text-sm text-gray-700">{value || 'Sin registrar'}</div>
                 </div>
               ))}
             </div>
-          </motion.div>
-        </div>
-      )}
+          </div>
+        )}
+      </Modal>
 
-      {showRequestDetailModal && viewingRequest && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-background border border-border max-w-5xl w-full max-h-[92vh] overflow-y-auto">
-            <div className="p-6 border-b border-border flex justify-between gap-4">
-              <div>
-                <h3 className="text-2xl">Solicitud {viewingRequest.request_number ?? viewingRequest.id}</h3>
-                <p className="text-xs text-muted-foreground mt-2">{getRequestTypeLabel(viewingRequest.request_type)} · {getRequestSubtypeLabel(viewingRequest.subtype)}</p>
-              </div>
-              <button onClick={() => setShowRequestDetailModal(false)} className="p-2 hover:bg-secondary/50"><X className="w-4 h-4" /></button>
-            </div>
-            <div className="p-6 space-y-6">
-              {(() => {
-                const employee = employeeById.get(viewingRequest.employee);
-                return (
-                  <div className="grid md:grid-cols-4 gap-4">
-                    {[
-                      ['Empleado', employee ? getEmployeeName(employee) : viewingRequest.employee],
-                      ['Cargo', employee?.position ? positionById.get(employee.position)?.name : 'Sin cargo'],
-                      ['Área', employee?.department ? departmentById.get(employee.department)?.name : 'Sin área'],
-                      ['Estado', requestStatusLabel(viewingRequest.status)],
-                      ['Fecha creación', parseDate(viewingRequest.created_at)],
-                      ['Fecha inicio', parseDate(viewingRequest.start_date)],
-                      ['Fecha fin', parseDate(viewingRequest.end_date)],
-                      ['Días / horas', `${viewingRequest.days_count ?? 0} días · ${viewingRequest.hours_count ?? 0} horas`],
-                    ].map(([label, value]) => (
-                      <div key={label} className="border border-border p-4">
-                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">{label}</div>
-                        <div className="text-sm">{value || 'Sin registrar'}</div>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()}
-              <div className="grid md:grid-cols-3 gap-4">
-                <div className="border border-border p-4"><div className="text-sm font-medium mb-2">Motivo</div><p className="text-xs text-muted-foreground">{viewingRequest.reason || 'Sin motivo'}</p></div>
-                <div className="border border-border p-4"><div className="text-sm font-medium mb-2">Descripción</div><p className="text-xs text-muted-foreground">{viewingRequest.description || 'Sin descripción'}</p></div>
-                <div className="border border-border p-4"><div className="text-sm font-medium mb-2">Observaciones</div><p className="text-xs text-muted-foreground">{viewingRequest.observations || 'Sin observaciones'}</p></div>
-              </div>
-              <div className="border border-border p-4">
-                <div className="text-sm font-medium mb-3">Flujo de aprobación</div>
-                <div className="grid md:grid-cols-4 gap-3">
-                  {viewingRequest.approval_steps.map((step) => (
-                    <div key={step.id} className="border border-border p-3 text-xs">
-                      <div className="font-medium">{approvalStepLabel(step.step)}</div>
-                      <div className={`inline-block mt-2 px-2 py-1 border ${statusBadge(step.status)}`}>{requestStatusLabel(step.status)}</div>
-                      <div className="text-muted-foreground mt-2">{parseDate(step.acted_at)}</div>
-                      <div className="text-muted-foreground">{step.comment || 'Sin comentario'}</div>
+      <Modal title={viewingRequest ? `Solicitud ${viewingRequest.request_number ?? viewingRequest.id}` : ''} open={showRequestDetailModal && Boolean(viewingRequest)} onClose={() => setShowRequestDetailModal(false)} wide>
+        {viewingRequest && (
+          <div className="space-y-6">
+            <p className="text-xs text-gray-500">{getRequestTypeLabel(viewingRequest.request_type)} · {getRequestSubtypeLabel(viewingRequest.subtype)}</p>
+            {(() => {
+              const employee = employeeById.get(viewingRequest.employee);
+              return (
+                <div className="grid md:grid-cols-4 gap-4">
+                  {[
+                    ['Empleado', employee ? getEmployeeName(employee) : viewingRequest.employee],
+                    ['Cargo', employee?.position ? positionById.get(employee.position)?.name : 'Sin cargo'],
+                    ['Área', employee?.department ? departmentById.get(employee.department)?.name : 'Sin área'],
+                    ['Estado', requestStatusLabel(viewingRequest.status)],
+                    ['Fecha creación', parseDate(viewingRequest.created_at)],
+                    ['Fecha inicio', parseDate(viewingRequest.start_date)],
+                    ['Fecha fin', parseDate(viewingRequest.end_date)],
+                    ['Días / horas', `${viewingRequest.days_count ?? 0} días · ${viewingRequest.hours_count ?? 0} horas`],
+                  ].map(([label, value]) => (
+                    <div key={label} className="border border-gray-100 rounded-xl p-4 bg-gray-50/60">
+                      <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1">{label}</div>
+                      <div className="text-sm text-gray-700">{value || 'Sin registrar'}</div>
                     </div>
                   ))}
                 </div>
-              </div>
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="border border-border p-4">
-                  <div className="text-sm font-medium mb-3">Adjuntos</div>
-                  <div className="space-y-2">
-                    {viewingRequest.support_document && <a href={viewingRequest.support_document} target="_blank" rel="noreferrer" className="block text-xs underline">Soporte principal</a>}
-                    {viewingRequest.attachments.map((attachment) => <a key={attachment.id} href={attachment.file} target="_blank" rel="noreferrer" className="block text-xs underline">{attachment.name}</a>)}
-                    {!viewingRequest.support_document && viewingRequest.attachments.length === 0 && <div className="text-xs text-muted-foreground">Sin adjuntos</div>}
-                  </div>
-                </div>
-                <div className="border border-border p-4">
-                  <div className="text-sm font-medium mb-3">Historial</div>
-                  <div className="space-y-2 max-h-64 overflow-y-auto">
-                    {viewingRequest.history.map((item) => (
-                      <div key={item.id} className="text-xs border-b border-border pb-2">
-                        <div className="font-medium">{item.action}</div>
-                        <div className="text-muted-foreground">{item.old_status || 'Inicio'} → {item.new_status || 'Sin cambio'}</div>
-                        <div className="text-muted-foreground">{item.comment || 'Sin comentario'} · {parseDate(item.created_at)}</div>
-                      </div>
-                    ))}
-                    {viewingRequest.history.length === 0 && <div className="text-xs text-muted-foreground">Sin historial</div>}
-                  </div>
-                </div>
-              </div>
+              );
+            })()}
+            <div className="grid md:grid-cols-3 gap-4">
+              <Card className="p-4"><div className="text-sm font-semibold text-gray-900 mb-2">Motivo</div><p className="text-xs text-gray-500">{viewingRequest.reason || 'Sin motivo'}</p></Card>
+              <Card className="p-4"><div className="text-sm font-semibold text-gray-900 mb-2">Descripción</div><p className="text-xs text-gray-500">{viewingRequest.description || 'Sin descripción'}</p></Card>
+              <Card className="p-4"><div className="text-sm font-semibold text-gray-900 mb-2">Observaciones</div><p className="text-xs text-gray-500">{viewingRequest.observations || 'Sin observaciones'}</p></Card>
             </div>
-          </motion.div>
-        </div>
-      )}
+            <Card className="p-4">
+              <div className="text-sm font-semibold text-gray-900 mb-3">Flujo de aprobación</div>
+              <div className="grid md:grid-cols-4 gap-3">
+                {viewingRequest.approval_steps.map((step) => (
+                  <div key={step.id} className="border border-gray-100 rounded-xl p-3 text-xs">
+                    <div className="font-medium text-gray-900">{approvalStepLabel(step.step)}</div>
+                    <div className="inline-block mt-2"><Badge label={requestStatusLabel(step.status)} color={statusBadge(step.status)} /></div>
+                    <div className="text-gray-400 mt-2">{parseDate(step.acted_at)}</div>
+                    <div className="text-gray-400">{step.comment || 'Sin comentario'}</div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+            <div className="grid md:grid-cols-2 gap-4">
+              <Card className="p-4">
+                <div className="text-sm font-semibold text-gray-900 mb-3">Adjuntos</div>
+                <div className="space-y-2">
+                  {viewingRequest.support_document && <a href={viewingRequest.support_document} target="_blank" rel="noreferrer" className="block text-xs text-[#2a4038] underline">Soporte principal</a>}
+                  {viewingRequest.attachments.map((attachment) => <a key={attachment.id} href={attachment.file} target="_blank" rel="noreferrer" className="block text-xs text-[#2a4038] underline">{attachment.name}</a>)}
+                  {!viewingRequest.support_document && viewingRequest.attachments.length === 0 && <div className="text-xs text-gray-400">Sin adjuntos</div>}
+                </div>
+              </Card>
+              <Card className="p-4">
+                <div className="text-sm font-semibold text-gray-900 mb-3">Historial</div>
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {viewingRequest.history.map((item) => (
+                    <div key={item.id} className="text-xs border-b border-gray-100 pb-2">
+                      <div className="font-medium text-gray-900">{item.action}</div>
+                      <div className="text-gray-400">{item.old_status || 'Inicio'} → {item.new_status || 'Sin cambio'}</div>
+                      <div className="text-gray-400">{item.comment || 'Sin comentario'} · {parseDate(item.created_at)}</div>
+                    </div>
+                  ))}
+                  {viewingRequest.history.length === 0 && <div className="text-xs text-gray-400">Sin historial</div>}
+                </div>
+              </Card>
+            </div>
+          </div>
+        )}
+      </Modal>
 
-      {showBranchModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-background border border-border max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-border flex justify-between gap-4">
-              <div>
-                <h3 className="text-2xl">{editingBranch ? 'Editar sede' : 'Nueva sede'}</h3>
-                <p className="text-xs text-muted-foreground mt-2">Gestión independiente de sedes y sucursales.</p>
-              </div>
-              <button onClick={resetBranchModal} className="p-2 hover:bg-secondary/50"><X className="w-4 h-4" /></button>
+      <Modal title={editingBranch ? 'Editar sede' : 'Nueva sede'} open={showBranchModal} onClose={resetBranchModal} wide>
+        <p className="text-xs text-gray-500 mb-4">Gestión independiente de sedes y sucursales.</p>
+        <form onSubmit={handleBranchSubmit} className="space-y-4">
+          <div className="grid sm:grid-cols-2 gap-4">
+            <TextInput label="Nombre" required value={branchForm.name} onChange={(value) => setBranchForm((current) => ({ ...current, name: value }))} />
+            <TextInput label="Código" required value={branchForm.code} onChange={(value) => setBranchForm((current) => ({ ...current, code: value }))} />
+            <TextInput label="Dirección" value={branchForm.address} onChange={(value) => setBranchForm((current) => ({ ...current, address: value }))} />
+            <div className="sm:col-span-2">
+              <LocationPicker value={branchLocation} onChange={setBranchLocation} />
             </div>
-            <form onSubmit={handleBranchSubmit} className="p-6 space-y-4">
-              <div className="grid sm:grid-cols-2 gap-4">
-                <TextInput label="Nombre" required value={branchForm.name} onChange={(value) => setBranchForm((current) => ({ ...current, name: value }))} />
-                <TextInput label="Código" required value={branchForm.code} onChange={(value) => setBranchForm((current) => ({ ...current, code: value }))} />
-                <TextInput label="Dirección" value={branchForm.address} onChange={(value) => setBranchForm((current) => ({ ...current, address: value }))} />
-                <div className="sm:col-span-2">
-                  <LocationPicker value={branchLocation} onChange={setBranchLocation} />
-                </div>
-                <TextInput label="Teléfono" value={branchForm.phone} onChange={(value) => setBranchForm((current) => ({ ...current, phone: value }))} />
-                <TextInput label="Correo" type="email" value={branchForm.email} onChange={(value) => setBranchForm((current) => ({ ...current, email: value }))} />
-                <SelectInput label="Responsable" value={branchForm.responsible} onChange={(value) => setBranchForm((current) => ({ ...current, responsible: value }))} options={activeEmployees.map((employee) => ({ value: employee.id, label: getEmployeeName(employee) }))} emptyLabel="Sin responsable" />
-                <SelectInput label="Estado" value={branchForm.status} onChange={(value) => setBranchForm((current) => ({ ...current, status: value as 'ACTIVE' | 'INACTIVE', is_active: value === 'ACTIVE' }))} options={[{ value: 'ACTIVE', label: 'Activa' }, { value: 'INACTIVE', label: 'Inactiva' }]} emptyLabel="Estado" />
-              </div>
-              <div className="flex gap-3 pt-4">
-                <button type="button" onClick={resetBranchModal} className="flex-1 px-6 py-3 border border-border hover:border-foreground transition-colors text-sm">Cancelar</button>
-                <button type="submit" disabled={savingBranch} className="flex-1 px-6 py-3 bg-foreground text-background hover:bg-background hover:text-foreground border border-foreground transition-colors text-sm disabled:opacity-50">{savingBranch ? 'Guardando...' : 'Guardar sede'}</button>
-              </div>
-            </form>
-          </motion.div>
-        </div>
-      )}
+            <TextInput label="Teléfono" value={branchForm.phone} onChange={(value) => setBranchForm((current) => ({ ...current, phone: value }))} />
+            <TextInput label="Correo" type="email" value={branchForm.email} onChange={(value) => setBranchForm((current) => ({ ...current, email: value }))} />
+            <SelectInput label="Responsable" value={branchForm.responsible} onChange={(value) => setBranchForm((current) => ({ ...current, responsible: value }))} options={activeEmployees.map((employee) => ({ value: employee.id, label: getEmployeeName(employee) }))} emptyLabel="Sin responsable" />
+            <SelectInput label="Estado" value={branchForm.status} onChange={(value) => setBranchForm((current) => ({ ...current, status: value as 'ACTIVE' | 'INACTIVE', is_active: value === 'ACTIVE' }))} options={[{ value: 'ACTIVE', label: 'Activa' }, { value: 'INACTIVE', label: 'Inactiva' }]} emptyLabel="Estado" />
+          </div>
+          <div className="flex gap-3 pt-4 border-t border-gray-100 mt-2">
+            <button type="button" onClick={resetBranchModal} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancelar</button>
+            <button type="submit" disabled={savingBranch} className="flex-1 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold hover:bg-[#3d5c4e] disabled:opacity-50">{savingBranch ? 'Guardando...' : 'Guardar sede'}</button>
+          </div>
+        </form>
+      </Modal>
 
       {showEmployeeModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-background border border-border max-w-6xl w-full max-h-[92vh] overflow-hidden flex flex-col">
-            <div className="p-6 border-b border-border flex items-start justify-between gap-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={resetEmployeeModal} />
+          <div className="relative bg-white max-w-6xl w-full max-h-[92vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+            <div className="px-6 py-4 border-b border-gray-100 bg-gray-50 flex items-start justify-between gap-4">
               <div>
-                <h3 className="text-2xl">{editingEmployee ? 'Editar empleado' : 'Nuevo empleado'}</h3>
-                <p className="text-xs text-muted-foreground mt-2">
+                <h3 className="font-semibold text-gray-900">{editingEmployee ? 'Editar empleado' : 'Nuevo empleado'}</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
                   Guarda como borrador sin documentos y completa el expediente por secciones.
                 </p>
               </div>
-              <button onClick={resetEmployeeModal} className="p-2 hover:bg-secondary/50 transition-colors">
-                <X className="w-4 h-4" strokeWidth={1} />
+              <button onClick={resetEmployeeModal} className="p-2 rounded-lg hover:bg-gray-200">
+                <X size={16} />
               </button>
             </div>
 
             <form onSubmit={handleEmployeeSubmit} className="flex-1 overflow-hidden flex flex-col">
-              <div className="px-6 pt-4 border-b border-border">
-                <div className="flex flex-wrap gap-2">
+              <div className="px-6 pt-4 border-b border-gray-100">
+                <div className="flex flex-wrap gap-1 bg-gray-100 rounded-xl p-1">
                   {MODAL_TABS.map((tab) => {
                     const Icon = tab.icon;
+                    const active = employeeModalTab === tab.id;
                     return (
                       <button
                         key={tab.id}
                         type="button"
                         onClick={() => setEmployeeModalTab(tab.id)}
-                        className={`flex items-center gap-2 px-3 py-2 text-[10px] uppercase tracking-wider border-b-2 transition-colors ${employeeModalTab === tab.id ? 'border-foreground text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+                        className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${active ? 'bg-white text-[#2a4038] shadow-sm font-semibold' : 'text-gray-500 hover:text-gray-700'}`}
                       >
-                        <Icon className="w-3.5 h-3.5" strokeWidth={1.5} />
+                        <Icon size={12} />
                         {tab.label}
                       </button>
                     );
@@ -2263,41 +2216,41 @@ export function AdminHR() {
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-6">
+              <div className="flex-1 overflow-y-auto px-6 py-5">
                 {editingEmployee && (
                   <div className="grid md:grid-cols-4 gap-4 mb-5">
-                    <div className="border border-border p-4">
-                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Perfil completado</div>
-                      <div className="text-xl">{editingEmployee.profile_completion_percentage}%</div>
-                    </div>
-                    <div className="border border-border p-4">
-                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Pendientes</div>
-                      <div className="text-xl">{editingEmployee.pending_documents_count}</div>
-                    </div>
-                    <div className="border border-border p-4">
-                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Vencidos</div>
-                      <div className="text-xl">{editingEmployee.expired_documents_count}</div>
-                    </div>
-                    <div className="border border-border p-4">
-                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Contrato restante</div>
-                      <div className="text-xl">{editingEmployee.remaining_contract_days == null ? 'Contrato indefinido' : `${editingEmployee.remaining_contract_days} días`}</div>
-                    </div>
+                    <Card className="p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Perfil completado</div>
+                      <div className="text-xl font-bold text-gray-900">{editingEmployee.profile_completion_percentage}%</div>
+                    </Card>
+                    <Card className="p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Pendientes</div>
+                      <div className="text-xl font-bold text-gray-900">{editingEmployee.pending_documents_count}</div>
+                    </Card>
+                    <Card className="p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Vencidos</div>
+                      <div className="text-xl font-bold text-gray-900">{editingEmployee.expired_documents_count}</div>
+                    </Card>
+                    <Card className="p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Contrato restante</div>
+                      <div className="text-xl font-bold text-gray-900">{editingEmployee.remaining_contract_days == null ? 'Contrato indefinido' : `${editingEmployee.remaining_contract_days} días`}</div>
+                    </Card>
                   </div>
                 )}
                 {renderModalTab()}
               </div>
 
-              <div className="p-6 border-t border-border flex flex-col sm:flex-row gap-3">
-                <button type="button" onClick={resetEmployeeModal} className="flex-1 px-6 py-3 border border-border hover:border-foreground transition-colors text-sm">
+              <div className="px-6 py-4 border-t border-gray-100 flex flex-col sm:flex-row gap-3">
+                <button type="button" onClick={resetEmployeeModal} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">
                   Cancelar
                 </button>
-                <button type="submit" disabled={savingEmployee || savingDocument} className="flex-1 px-6 py-3 bg-foreground text-background hover:bg-background hover:text-foreground border border-foreground transition-colors text-sm disabled:opacity-50 flex items-center justify-center gap-2">
-                  <Save className="w-4 h-4" strokeWidth={1.5} />
+                <button type="submit" disabled={savingEmployee || savingDocument} className="flex-1 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold hover:bg-[#3d5c4e] disabled:opacity-50 flex items-center justify-center gap-2">
+                  <Save size={14} />
                   {savingEmployee ? 'Guardando...' : editingEmployee ? 'Actualizar empleado' : 'Crear empleado'}
                 </button>
               </div>
             </form>
-          </motion.div>
+          </div>
         </div>
       )}
     </div>

@@ -27,6 +27,7 @@ type CatalogBadge = 'nuevo' | 'destacado';
 
 const FALLBACK_IMAGE =
   'https://images.unsplash.com/photo-1608248597279-f99d160bfcbc?w=900&q=80';
+const PRODUCTS_PER_PAGE = 6;
 
 /* ── Helpers ── */
 function formatPrice(price: number | null, currency = 'COP'): string {
@@ -473,6 +474,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
   const [quickViewProduct, setQuickViewProduct] = useState<CatalogProduct | null>(null);
   const [isLoading, setIsLoading]         = useState(true);
   const [error, setError]                 = useState<string | null>(null);
+  const [currentPage, setCurrentPage]     = useState(1);
 
   useEffect(() => {
     let isMounted = true;
@@ -507,6 +509,10 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
     }
   }, [activeCategory, categories]);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeCategory, collectionFilter, localSearchQuery, priceRange]);
+
   const categoryTabs = useMemo(() => [
     { id: 'all', label: 'Todos', count: products.length },
     ...categories.map(c => ({
@@ -538,6 +544,21 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
       return matchCat && matchSearch && matchPrice && matchCol;
     });
   }, [activeCategory, collectionFilter, localSearchQuery, priceRange, products]);
+
+  const totalPages = Math.max(1, Math.ceil(currentProducts.length / PRODUCTS_PER_PAGE));
+  const paginatedProducts = useMemo(() => {
+    const start = (currentPage - 1) * PRODUCTS_PER_PAGE;
+    return currentProducts.slice(start, start + PRODUCTS_PER_PAGE);
+  }, [currentPage, currentProducts]);
+  const pageNumbers = useMemo(() => (
+    Array.from({ length: totalPages }, (_, index) => index + 1)
+  ), [totalPages]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   const handleAddToCart = async (product: CatalogProduct, closeModal?: boolean) => {
     if (!currentUser) {
@@ -775,7 +796,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
         {!isLoading && !error && (
           <AnimatePresence mode="wait">
             <motion.div
-              key={`${activeCategory}-${viewMode}`}
+              key={`${activeCategory}-${viewMode}-${currentPage}`}
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
@@ -785,7 +806,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                 : 'flex flex-col gap-3'
               }
             >
-              {currentProducts.map((product, index) => {
+              {paginatedProducts.map((product, index) => {
                 const sizes  = getProductSizes(product);
                 const badge  = getProductBadge(product);
                 const saved  = isProductSaved(product.id);
@@ -965,6 +986,56 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
               })}
             </motion.div>
           </AnimatePresence>
+        )}
+
+        {/* ── Paginacion ── */}
+        {!isLoading && !error && currentProducts.length > PRODUCTS_PER_PAGE && (
+          <div className="mt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <p className="text-[11px] text-stone-400">
+              Mostrando {(currentPage - 1) * PRODUCTS_PER_PAGE + 1}-{Math.min(currentPage * PRODUCTS_PER_PAGE, currentProducts.length)} de {currentProducts.length} productos
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCurrentPage(page => Math.max(1, page - 1))}
+                disabled={currentPage === 1}
+                className="p-2.5 rounded-xl border border-stone-200 bg-white text-stone-500 transition-all hover:border-stone-400 hover:text-stone-800 disabled:opacity-35 disabled:hover:border-stone-200 disabled:hover:text-stone-500"
+                aria-label="Pagina anterior"
+              >
+                <ChevronLeft className="w-4 h-4" strokeWidth={1.5} />
+              </button>
+              <div className="flex items-center gap-1">
+                {pageNumbers.map(page => {
+                  const active = currentPage === page;
+                  return (
+                    <button
+                      key={page}
+                      type="button"
+                      onClick={() => setCurrentPage(page)}
+                      className={`min-w-10 h-10 rounded-xl border text-[12px] font-medium transition-all ${
+                        active
+                          ? 'text-white border-transparent'
+                          : 'border-stone-200 bg-white text-stone-500 hover:border-stone-400 hover:text-stone-800'
+                      }`}
+                      style={active ? { backgroundColor: OLIVE } : {}}
+                      aria-current={active ? 'page' : undefined}
+                    >
+                      {page}
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                type="button"
+                onClick={() => setCurrentPage(page => Math.min(totalPages, page + 1))}
+                disabled={currentPage === totalPages}
+                className="p-2.5 rounded-xl border border-stone-200 bg-white text-stone-500 transition-all hover:border-stone-400 hover:text-stone-800 disabled:opacity-35 disabled:hover:border-stone-200 disabled:hover:text-stone-500"
+                aria-label="Pagina siguiente"
+              >
+                <ChevronRight className="w-4 h-4" strokeWidth={1.5} />
+              </button>
+            </div>
+          </div>
         )}
 
         {/* ── Empty state ── */}

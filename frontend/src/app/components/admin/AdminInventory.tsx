@@ -1,5 +1,4 @@
 import { useState, useMemo } from 'react';
-import { motion } from 'motion/react';
 import { useAdmin } from '../../contexts/AdminContext';
 import {
   AlertTriangle, TrendingUp, TrendingDown, Package, ArrowUpDown,
@@ -16,6 +15,7 @@ import {
 import { requestProductsExport, type ExportFormat, type PdfLayout } from '../../services/products.service';
 import { pollExportStatus } from '../../utils/pollExportStatus';
 import { resolveBackendUrl } from '../../services/api';
+import { KpiCard, Table, Th, Td, Badge, inputCls } from './AdminUI';
 
 type SortField = 'nombre' | 'categoria' | 'stockActual' | 'stockMinimo' | 'ubicacion';
 type SortOrder = 'asc' | 'desc';
@@ -202,92 +202,51 @@ export function AdminInventory({ initialSearch = '' }: AdminInventoryProps) {
     }
   };
 
+  const SortHeader = ({ field, children, center }: { field: SortField; children: React.ReactNode; center?: boolean }) => (
+    <th className={`px-4 py-3 ${center ? 'text-center' : 'text-left'} bg-gray-50 border-b border-gray-100 whitespace-nowrap`}>
+      <button
+        onClick={() => handleSort(field)}
+        className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-gray-400 hover:text-gray-700 ${center ? 'mx-auto' : ''}`}
+      >
+        {children}
+        {sortField === field && <ArrowUpDown size={11} />}
+      </button>
+    </th>
+  );
+
   return (
-    <div className="space-y-6">
+    <div>
       {/* Header */}
-      <div>
-        <h1 className="text-3xl mb-2">Inventario</h1>
-        <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-          {processedInventory.length} de {inventory.length} productos · Control de stock en tiempo real
-        </div>
+      <div className="mb-6">
+        <h2 className="text-lg font-semibold text-gray-900">Inventario</h2>
+        <p className="text-xs text-gray-500 mt-0.5">{processedInventory.length} de {inventory.length} productos · Control de stock en tiempo real</p>
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-secondary p-4 border border-border"
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <KpiCard label="Total SKUs" value={String(inventory.length)} icon={Package} color="text-gray-600 bg-gray-100" />
+        <button
+          onClick={() => { setActiveFilters({ estado: ['ok'] }); setCurrentPage(1); }}
+          className="text-left"
         >
-          <div className="flex items-center gap-2 mb-2">
-            <Package className="w-4 h-4 text-muted-foreground" strokeWidth={1} />
-            <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-              Total SKUs
-            </div>
-          </div>
-          <div className="text-xl">{inventory.length}</div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="bg-secondary p-4 border border-border cursor-pointer hover:bg-background/50 transition-colors"
-          onClick={() => {
-            setActiveFilters({ estado: ['ok'] });
-            setCurrentPage(1);
-          }}
+          <KpiCard label="Stock OK" value={String(okStock.length)} icon={TrendingUp} color="text-emerald-600 bg-emerald-50" />
+        </button>
+        <button
+          onClick={() => { setActiveFilters({ estado: ['low'] }); setCurrentPage(1); }}
+          className="text-left"
         >
-          <div className="flex items-center gap-2 mb-2">
-            <TrendingUp className="w-4 h-4 text-green-600" strokeWidth={1} />
-            <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-              Stock OK
-            </div>
-          </div>
-          <div className="text-xl">{okStock.length}</div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="bg-secondary p-4 border border-border cursor-pointer hover:bg-background/50 transition-colors"
-          onClick={() => {
-            setActiveFilters({ estado: ['low'] });
-            setCurrentPage(1);
-          }}
+          <KpiCard label="Stock Bajo" value={String(lowStock.length)} icon={AlertTriangle} color="text-amber-600 bg-amber-50" />
+        </button>
+        <button
+          onClick={() => { setActiveFilters({ estado: ['out'] }); setCurrentPage(1); }}
+          className="text-left"
         >
-          <div className="flex items-center gap-2 mb-2">
-            <AlertTriangle className="w-4 h-4 text-orange-500" strokeWidth={1} />
-            <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-              Stock Bajo
-            </div>
-          </div>
-          <div className="text-xl">{lowStock.length}</div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="bg-secondary p-4 border border-border cursor-pointer hover:bg-background/50 transition-colors"
-          onClick={() => {
-            setActiveFilters({ estado: ['out'] });
-            setCurrentPage(1);
-          }}
-        >
-          <div className="flex items-center gap-2 mb-2">
-            <TrendingDown className="w-4 h-4 text-red-600" strokeWidth={1} />
-            <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-              Sin Stock
-            </div>
-          </div>
-          <div className="text-xl">{outOfStock.length}</div>
-        </motion.div>
+          <KpiCard label="Sin Stock" value={String(outOfStock.length)} icon={TrendingDown} color="text-red-600 bg-red-50" />
+        </button>
       </div>
 
       {/* Toolbar: Search & Filters */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
+      <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 mb-6">
         <SearchBar
           value={searchQuery}
           onChange={setSearchQuery}
@@ -304,10 +263,10 @@ export function AdminInventory({ initialSearch = '' }: AdminInventoryProps) {
           <DropdownMenuTrigger asChild>
             <button
               disabled={isExporting || processedInventory.length === 0}
-              className="flex items-center gap-2 px-3 py-2 border border-border text-xs tracking-wider uppercase hover:bg-secondary disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 px-3 py-2.5 border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               title="Exportar inventario filtrado"
             >
-              <Download className="w-4 h-4" strokeWidth={1} />
+              <Download size={14} />
               Exportar
             </button>
           </DropdownMenuTrigger>
@@ -336,212 +295,128 @@ export function AdminInventory({ initialSearch = '' }: AdminInventoryProps) {
 
       {/* Low Stock Alert */}
       {lowStock.length > 0 && !activeFilters.estado?.includes('low') && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-orange-50 border border-orange-200 p-4 cursor-pointer hover:bg-orange-100 transition-colors"
-          onClick={() => {
-            setActiveFilters({ estado: ['low'] });
-            setCurrentPage(1);
-          }}
+        <button
+          onClick={() => { setActiveFilters({ estado: ['low'] }); setCurrentPage(1); }}
+          className="w-full flex items-center gap-3 bg-amber-50 border border-amber-100 rounded-2xl p-4 mb-6 hover:bg-amber-100/70 transition-colors text-left"
         >
-          <div className="flex items-center gap-3">
-            <AlertTriangle className="w-5 h-5 text-orange-600" strokeWidth={1} />
-            <div className="text-sm text-orange-900">
-              {lowStock.length} producto(s) con stock bajo necesitan reabastecimiento
-            </div>
-            <div className="ml-auto text-xs text-orange-700 underline">
-              Ver productos
-            </div>
-          </div>
-        </motion.div>
+          <AlertTriangle size={18} className="text-amber-500" />
+          <p className="text-sm text-amber-900">{lowStock.length} producto(s) con stock bajo necesitan reabastecimiento</p>
+          <span className="ml-auto text-xs text-amber-700 underline">Ver productos</span>
+        </button>
       )}
 
       {/* Inventory Table */}
-      <div className="bg-secondary border border-border overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-background border-b border-border">
-              <tr>
-                <th className="px-4 py-3 text-left">
-                  <button
-                    onClick={() => handleSort('nombre')}
-                    className="flex items-center gap-1 text-[10px] tracking-[0.2em] uppercase text-muted-foreground hover:text-foreground"
-                  >
-                    Producto
-                    {sortField === 'nombre' && (
-                      <ArrowUpDown className="w-3 h-3" strokeWidth={1} />
-                    )}
-                  </button>
-                </th>
-                <th className="px-4 py-3 text-left">
-                  <button
-                    onClick={() => handleSort('categoria')}
-                    className="flex items-center gap-1 text-[10px] tracking-[0.2em] uppercase text-muted-foreground hover:text-foreground"
-                  >
-                    Categoría
-                    {sortField === 'categoria' && (
-                      <ArrowUpDown className="w-3 h-3" strokeWidth={1} />
-                    )}
-                  </button>
-                </th>
-                <th className="px-4 py-3 text-center">
-                  <button
-                    onClick={() => handleSort('stockActual')}
-                    className="flex items-center gap-1 text-[10px] tracking-[0.2em] uppercase text-muted-foreground hover:text-foreground mx-auto"
-                  >
-                    Stock Actual
-                    {sortField === 'stockActual' && (
-                      <ArrowUpDown className="w-3 h-3" strokeWidth={1} />
-                    )}
-                  </button>
-                </th>
-                <th className="px-4 py-3 text-center">
-                  <button
-                    onClick={() => handleSort('stockMinimo')}
-                    className="flex items-center gap-1 text-[10px] tracking-[0.2em] uppercase text-muted-foreground hover:text-foreground mx-auto"
-                  >
-                    Stock Mínimo
-                    {sortField === 'stockMinimo' && (
-                      <ArrowUpDown className="w-3 h-3" strokeWidth={1} />
-                    )}
-                  </button>
-                </th>
-                <th className="px-4 py-3 text-left">
-                  <button
-                    onClick={() => handleSort('ubicacion')}
-                    className="flex items-center gap-1 text-[10px] tracking-[0.2em] uppercase text-muted-foreground hover:text-foreground"
-                  >
-                    Ubicación
-                    {sortField === 'ubicacion' && (
-                      <ArrowUpDown className="w-3 h-3" strokeWidth={1} />
-                    )}
-                  </button>
-                </th>
-                <th className="px-4 py-3 text-center text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-                  Estado
-                </th>
-                <th className="px-4 py-3 text-center text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-                  Acción
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {paginatedInventory.map((inv) => {
-                const isLow = inv.stockActual < inv.stockMinimo;
-                const isEditing = editingId === inv.id;
+      <Table>
+        <thead>
+          <tr>
+            <SortHeader field="nombre">Producto</SortHeader>
+            <SortHeader field="categoria">Categoría</SortHeader>
+            <SortHeader field="stockActual" center>Stock Actual</SortHeader>
+            <SortHeader field="stockMinimo" center>Stock Mínimo</SortHeader>
+            <SortHeader field="ubicacion">Ubicación</SortHeader>
+            <Th>Estado</Th>
+            <Th>Acción</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {paginatedInventory.map((inv) => {
+            const isLow = inv.stockActual < inv.stockMinimo;
+            const isEditing = editingId === inv.id;
 
-                return (
-                  <tr key={inv.id} className="hover:bg-background/50 transition-colors">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <img
-                          src={inv.product?.imagen}
-                          alt={inv.product?.nombre}
-                          className="w-10 h-10 object-cover bg-background"
-                        />
-                        <div>
-                          <div className="text-xs">{inv.product?.nombre}</div>
-                          <div className="text-[10px] text-muted-foreground">
-                            {inv.product?.presentacion}
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="text-xs capitalize">{inv.product?.categoria}</div>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      {isEditing ? (
-                        <input
-                          type="number"
-                          min="0"
-                          step="any"
-                          value={newStock}
-                          onChange={(e) => setNewStock(e.target.value)}
-                          className="w-20 px-2 py-1 bg-transparent border border-border text-xs text-center focus:outline-none focus:border-foreground"
-                          autoFocus
-                        />
-                      ) : (
-                        <div className={`text-sm ${isLow ? 'text-orange-600 font-medium' : ''}`}>
-                          {inv.stockActual}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <div className="text-xs text-muted-foreground">{inv.stockMinimo}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="text-xs">{inv.ubicacion}</div>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      {inv.stockActual === 0 ? (
-                        <span className="inline-flex items-center gap-1 text-xs px-2 py-1 bg-red-100 text-red-800">
-                          Sin stock
-                        </span>
-                      ) : isLow ? (
-                        <span className="inline-flex items-center gap-1 text-xs px-2 py-1 bg-orange-100 text-orange-800">
-                          <AlertTriangle className="w-3 h-3" strokeWidth={1} />
-                          Bajo
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-xs px-2 py-1 bg-green-100 text-green-800">
-                          ✓ OK
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      {isEditing ? (
-                        <div className="flex items-center justify-center gap-2">
-                          <button
-                            onClick={() => void handleUpdate(inv.id)}
-                            disabled={isUpdating}
-                            className="text-xs px-2 py-1 bg-foreground text-background hover:opacity-90"
-                          >
-                            ✓
-                          </button>
-                          <button
-                            onClick={() => {
-                              setEditingId(null);
-                              setNewStock('');
-                            }}
-                            className="text-xs px-2 py-1 border border-border hover:bg-background"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            setEditingId(inv.id);
-                            setNewStock(inv.stockActual.toString());
-                          }}
-                          className="text-xs px-3 py-1 border border-border hover:bg-background transition-colors"
-                        >
-                          Ajustar
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            return (
+              <tr key={inv.id} className="hover:bg-gray-50/50">
+                <Td>
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={inv.product?.imagen}
+                      alt={inv.product?.nombre}
+                      className="w-10 h-10 rounded-lg object-cover bg-gray-50 border border-gray-100"
+                    />
+                    <div>
+                      <p className="text-xs font-medium text-gray-900">{inv.product?.nombre}</p>
+                      <p className="text-[11px] text-gray-400">{inv.product?.presentacion}</p>
+                    </div>
+                  </div>
+                </Td>
+                <Td className="capitalize">{inv.product?.categoria}</Td>
+                <Td className="text-center">
+                  {isEditing ? (
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={newStock}
+                      onChange={(e) => setNewStock(e.target.value)}
+                      className={inputCls + ' w-20 text-center py-1.5'}
+                      autoFocus
+                    />
+                  ) : (
+                    <span className={`text-sm font-semibold ${isLow ? 'text-amber-600' : 'text-gray-700'}`}>{inv.stockActual}</span>
+                  )}
+                </Td>
+                <Td className="text-center text-gray-400">{inv.stockMinimo}</Td>
+                <Td>{inv.ubicacion}</Td>
+                <Td className="text-center">
+                  {inv.stockActual === 0 ? (
+                    <Badge label="Sin stock" color="red" />
+                  ) : isLow ? (
+                    <Badge label={<span className="flex items-center gap-1"><AlertTriangle size={11} />Bajo</span>} color="yellow" />
+                  ) : (
+                    <Badge label="✓ OK" color="green" />
+                  )}
+                </Td>
+                <Td className="text-center">
+                  {isEditing ? (
+                    <div className="flex items-center justify-center gap-2">
+                      <button
+                        onClick={() => void handleUpdate(inv.id)}
+                        disabled={isUpdating}
+                        className="text-xs px-2.5 py-1.5 rounded-lg bg-[#2a4038] text-white hover:bg-[#3d5c4e] transition-colors"
+                      >
+                        ✓
+                      </button>
+                      <button
+                        onClick={() => {
+                          setEditingId(null);
+                          setNewStock('');
+                        }}
+                        className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setEditingId(inv.id);
+                        setNewStock(inv.stockActual.toString());
+                      }}
+                      className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                    >
+                      Ajustar
+                    </button>
+                  )}
+                </Td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </Table>
 
       {/* Pagination */}
-      <Pagination
-        currentPage={currentPage}
-        totalPages={totalPages}
-        totalItems={processedInventory.length}
-        itemsPerPage={itemsPerPage}
-        onPageChange={setCurrentPage}
-        onItemsPerPageChange={(count) => {
-          setItemsPerPage(count);
-          setCurrentPage(1);
-        }}
-      />
+      <div className="mt-4">
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={processedInventory.length}
+          itemsPerPage={itemsPerPage}
+          onPageChange={setCurrentPage}
+          onItemsPerPageChange={(count) => {
+            setItemsPerPage(count);
+            setCurrentPage(1);
+          }}
+        />
+      </div>
     </div>
   );
 }

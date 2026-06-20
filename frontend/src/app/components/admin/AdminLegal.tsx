@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react';
-import { motion } from 'motion/react';
-import { FileText, Upload, Download, Search, AlertCircle, CheckCircle, Clock, X } from 'lucide-react';
+import { FileText, Upload, Download, AlertCircle, CheckCircle, Clock } from 'lucide-react';
 import { SearchBar } from './SearchBar';
 import { useToast } from '../../contexts/ToastContext';
+import { KpiCard, Table, Th, Td, Badge, type BadgeColor, Modal, EmptyState, inputCls, selectCls } from './AdminUI';
 
 interface LegalDocument {
   id: string;
@@ -22,7 +22,7 @@ export function AdminLegal() {
   const [filterEstado, setFilterEstado] = useState<string>('all');
   const [showUploadModal, setShowUploadModal] = useState(false);
 
-  const [documents, setDocuments] = useState<LegalDocument[]>([
+  const [documents] = useState<LegalDocument[]>([
     {
       id: '1',
       titulo: 'Contrato de Arrendamiento Local',
@@ -96,26 +96,26 @@ export function AdminLegal() {
     };
   }, [documents]);
 
-  const getEstadoBadge = (estado: string) => {
-    const styles = {
-      'Vigente': 'bg-green-50 text-green-700 border-green-200',
-      'Por vencer': 'bg-orange-50 text-orange-700 border-orange-200',
-      'Vencido': 'bg-red-50 text-red-700 border-red-200',
-      'En revisión': 'bg-blue-50 text-blue-700 border-blue-200'
+  const getEstadoColor = (estado: string): BadgeColor => {
+    const colors: Record<string, BadgeColor> = {
+      'Vigente': 'green',
+      'Por vencer': 'yellow',
+      'Vencido': 'red',
+      'En revisión': 'blue',
     };
-    return styles[estado as keyof typeof styles] || '';
+    return colors[estado] ?? 'gray';
   };
 
   const getEstadoIcon = (estado: string) => {
     switch (estado) {
       case 'Vigente':
-        return <CheckCircle className="w-4 h-4" strokeWidth={1} />;
+        return <CheckCircle size={12} />;
       case 'Por vencer':
-        return <Clock className="w-4 h-4" strokeWidth={1} />;
+        return <Clock size={12} />;
       case 'Vencido':
-        return <AlertCircle className="w-4 h-4" strokeWidth={1} />;
+        return <AlertCircle size={12} />;
       case 'En revisión':
-        return <FileText className="w-4 h-4" strokeWidth={1} />;
+        return <FileText size={12} />;
       default:
         return null;
     }
@@ -127,51 +127,32 @@ export function AdminLegal() {
   };
 
   return (
-    <div className="space-y-6">
+    <div>
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-2xl md:text-3xl mb-2">Gestión Legal</h2>
-          <p className="text-xs text-muted-foreground">
-            Documentos, contratos y certificaciones
-          </p>
+          <h2 className="text-lg font-semibold text-gray-900">Gestión Legal</h2>
+          <p className="text-xs text-gray-500 mt-0.5">Documentos, contratos y certificaciones</p>
         </div>
         <button
           onClick={() => setShowUploadModal(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-foreground text-background hover:bg-background hover:text-foreground border border-foreground transition-colors text-xs"
+          className="flex items-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white text-xs font-semibold rounded-xl hover:bg-[#3d5c4e] transition-colors"
         >
-          <Upload className="w-4 h-4" strokeWidth={1} />
+          <Upload size={14} />
           Cargar Documento
         </button>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: 'Total Documentos', value: stats.total, icon: FileText },
-          { label: 'Vigentes', value: stats.vigentes, icon: CheckCircle },
-          { label: 'Por Vencer', value: stats.porVencer, icon: Clock },
-          { label: 'En Revisión', value: stats.revision, icon: AlertCircle }
-        ].map((stat) => {
-          const Icon = stat.icon;
-          return (
-            <div key={stat.label} className="bg-secondary/30 border border-border p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <Icon className="w-4 h-4 text-muted-foreground" strokeWidth={1} />
-                <div className="text-[9px] tracking-[0.2em] uppercase text-muted-foreground">
-                  {stat.label}
-                </div>
-              </div>
-              <div className="text-2xl font-light">
-                {stat.value}
-              </div>
-            </div>
-          );
-        })}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <KpiCard label="Total Documentos" value={String(stats.total)} icon={FileText} color="text-gray-600 bg-gray-100" />
+        <KpiCard label="Vigentes" value={String(stats.vigentes)} icon={CheckCircle} color="text-emerald-600 bg-emerald-50" />
+        <KpiCard label="Por Vencer" value={String(stats.porVencer)} icon={Clock} color="text-amber-600 bg-amber-50" />
+        <KpiCard label="En Revisión" value={String(stats.revision)} icon={AlertCircle} color="text-blue-600 bg-blue-50" />
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
+      <div className="flex flex-col sm:flex-row gap-3 mb-6">
         <SearchBar
           value={searchQuery}
           onChange={setSearchQuery}
@@ -182,7 +163,7 @@ export function AdminLegal() {
         <select
           value={filterTipo}
           onChange={(e) => setFilterTipo(e.target.value)}
-          className="px-4 py-2 border border-border bg-transparent text-xs focus:outline-none focus:border-foreground"
+          className={selectCls + ' sm:w-48'}
         >
           <option value="all">Todos los tipos</option>
           <option value="Contrato">Contrato</option>
@@ -196,7 +177,7 @@ export function AdminLegal() {
         <select
           value={filterEstado}
           onChange={(e) => setFilterEstado(e.target.value)}
-          className="px-4 py-2 border border-border bg-transparent text-xs focus:outline-none focus:border-foreground"
+          className={selectCls + ' sm:w-48'}
         >
           <option value="all">Todos los estados</option>
           <option value="Vigente">Vigente</option>
@@ -207,138 +188,99 @@ export function AdminLegal() {
       </div>
 
       {/* Documents Table */}
-      <div className="border border-border overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-border bg-secondary/30">
-                <th className="text-left p-3 font-medium">Documento</th>
-                <th className="text-left p-3 font-medium">Tipo</th>
-                <th className="text-left p-3 font-medium">Estado</th>
-                <th className="text-left p-3 font-medium">Responsable</th>
-                <th className="text-left p-3 font-medium">Vencimiento</th>
-                <th className="text-center p-3 font-medium">Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredDocuments.map((doc) => (
-                <tr key={doc.id} className="border-b border-border hover:bg-secondary/20 transition-colors">
-                  <td className="p-3">
-                    <div className="font-medium mb-1">{doc.titulo}</div>
-                    <div className="text-muted-foreground text-[10px]">
-                      {doc.descripcion}
-                    </div>
-                  </td>
-                  <td className="p-3">
-                    <span className="inline-block px-2 py-1 bg-secondary border border-border text-[10px]">
-                      {doc.tipo}
-                    </span>
-                  </td>
-                  <td className="p-3">
-                    <div className={`inline-flex items-center gap-1.5 px-2 py-1 border text-[10px] ${getEstadoBadge(doc.estado)}`}>
-                      {getEstadoIcon(doc.estado)}
-                      {doc.estado}
-                    </div>
-                  </td>
-                  <td className="p-3">{doc.responsable}</td>
-                  <td className="p-3">
-                    {doc.fechaVencimiento
-                      ? new Date(doc.fechaVencimiento).toLocaleDateString('es-CO')
-                      : 'N/A'
-                    }
-                  </td>
-                  <td className="p-3">
-                    <div className="flex items-center justify-center gap-2">
-                      <button
-                        onClick={() => toast.info('Descargando documento...')}
-                        className="p-1.5 hover:bg-secondary/50 transition-colors"
-                        title="Descargar"
-                      >
-                        <Download className="w-3.5 h-3.5" strokeWidth={1} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      <Table>
+        <thead>
+          <tr>
+            <Th>Documento</Th>
+            <Th>Tipo</Th>
+            <Th>Estado</Th>
+            <Th>Responsable</Th>
+            <Th>Vencimiento</Th>
+            <Th>Acciones</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {filteredDocuments.map((doc) => (
+            <tr key={doc.id} className="hover:bg-gray-50/50">
+              <Td>
+                <p className="font-medium text-gray-900 mb-0.5">{doc.titulo}</p>
+                <p className="text-gray-400 text-[11px]">{doc.descripcion}</p>
+              </Td>
+              <Td><Badge label={doc.tipo} color="gray" /></Td>
+              <Td>
+                <Badge label={<span className="flex items-center gap-1">{getEstadoIcon(doc.estado)}{doc.estado}</span>} color={getEstadoColor(doc.estado)} />
+              </Td>
+              <Td>{doc.responsable}</Td>
+              <Td>{doc.fechaVencimiento ? new Date(doc.fechaVencimiento).toLocaleDateString('es-CO') : 'N/A'}</Td>
+              <Td>
+                <div className="flex items-center justify-center gap-2">
+                  <button
+                    onClick={() => toast.info('Descargando documento...')}
+                    className="p-1.5 rounded-lg hover:bg-gray-50 text-gray-400 hover:text-gray-600 transition-colors"
+                    title="Descargar"
+                  >
+                    <Download size={14} />
+                  </button>
+                </div>
+              </Td>
+            </tr>
+          ))}
+        </tbody>
+      </Table>
 
-        {filteredDocuments.length === 0 && (
-          <div className="p-12 text-center text-muted-foreground">
-            <FileText className="w-12 h-12 mx-auto mb-3 opacity-20" strokeWidth={1} />
-            <div className="text-sm">No se encontraron documentos</div>
-          </div>
-        )}
-      </div>
+      {filteredDocuments.length === 0 && (
+        <EmptyState title="No se encontraron documentos" />
+      )}
 
       {/* Upload Modal */}
-      {showUploadModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-background border border-border max-w-md w-full"
-          >
-            <div className="flex items-center justify-between p-6 border-b border-border">
-              <h3 className="text-xl">Cargar Documento</h3>
-              <button
-                onClick={() => setShowUploadModal(false)}
-                className="p-2 hover:bg-secondary transition-colors"
-              >
-                <X className="w-4 h-4" strokeWidth={1} />
-              </button>
-            </div>
+      <Modal title="Cargar Documento" open={showUploadModal} onClose={() => setShowUploadModal(false)}>
+        <div className="space-y-4">
+          <div>
+            <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Título del documento</label>
+            <input
+              type="text"
+              className={inputCls}
+              placeholder="Ej: Contrato de Servicios 2026"
+            />
+          </div>
 
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-xs mb-2">Título del documento</label>
-                <input
-                  type="text"
-                  className="w-full px-4 py-2.5 border border-border bg-transparent focus:outline-none focus:border-foreground text-sm"
-                  placeholder="Ej: Contrato de Servicios 2026"
-                />
-              </div>
+          <div>
+            <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Tipo</label>
+            <select className={selectCls}>
+              <option value="">Selecciona un tipo</option>
+              <option value="Contrato">Contrato</option>
+              <option value="Licencia">Licencia</option>
+              <option value="Política">Política</option>
+              <option value="Acuerdo">Acuerdo</option>
+              <option value="Certificado">Certificado</option>
+              <option value="Otro">Otro</option>
+            </select>
+          </div>
 
-              <div>
-                <label className="block text-xs mb-2">Tipo</label>
-                <select className="w-full px-4 py-2.5 border border-border bg-background focus:outline-none focus:border-foreground text-sm">
-                  <option value="">Selecciona un tipo</option>
-                  <option value="Contrato">Contrato</option>
-                  <option value="Licencia">Licencia</option>
-                  <option value="Política">Política</option>
-                  <option value="Acuerdo">Acuerdo</option>
-                  <option value="Certificado">Certificado</option>
-                  <option value="Otro">Otro</option>
-                </select>
-              </div>
+          <div>
+            <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Archivo</label>
+            <input
+              type="file"
+              className={inputCls}
+            />
+          </div>
 
-              <div>
-                <label className="block text-xs mb-2">Archivo</label>
-                <input
-                  type="file"
-                  className="w-full px-4 py-2.5 border border-border bg-transparent focus:outline-none focus:border-foreground text-sm"
-                />
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <button
-                  onClick={() => setShowUploadModal(false)}
-                  className="flex-1 px-6 py-3 border border-border hover:border-foreground transition-colors text-sm"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleUpload}
-                  className="flex-1 px-6 py-3 bg-foreground text-background hover:bg-background hover:text-foreground border border-foreground transition-colors text-sm"
-                >
-                  Cargar
-                </button>
-              </div>
-            </div>
-          </motion.div>
+          <div className="flex gap-3 pt-4">
+            <button
+              onClick={() => setShowUploadModal(false)}
+              className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleUpload}
+              className="flex-1 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold hover:bg-[#3d5c4e] transition-colors"
+            >
+              Cargar
+            </button>
+          </div>
         </div>
-      )}
+      </Modal>
     </div>
   );
 }

@@ -9,6 +9,7 @@ import {
   registrarGuiaManual,
   type Transportadora,
 } from '../../services/enviosApi';
+import { inputCls, selectCls } from './AdminUI';
 
 export function AdminRegistrarGuia({
   pedidoId,
@@ -71,21 +72,21 @@ export function AdminRegistrarGuia({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-2 border border-border px-3 py-2 text-[10px] uppercase tracking-wider hover:bg-background"
+        className="mt-3 inline-flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
       >
-        <Truck className="w-4 h-4" strokeWidth={1} />
+        <Truck size={14} />
         Registrar guía
       </button>
     );
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-4 grid gap-3 border border-border bg-background p-4 md:grid-cols-2">
+    <form onSubmit={handleSubmit} className="mt-4 grid gap-3 border border-gray-100 bg-gray-50 rounded-xl p-4 md:grid-cols-2">
       <select
         value={carrierId}
         onChange={event => setCarrierId(event.target.value)}
         required
-        className="border border-border bg-background px-3 py-2 text-xs"
+        className={selectCls}
       >
         {carriers.map(carrier => (
           <option key={carrier.id} value={carrier.id}>{carrier.nombre}</option>
@@ -97,14 +98,14 @@ export function AdminRegistrarGuia({
         required
         minLength={3}
         placeholder="Número de guía"
-        className="border border-border bg-background px-3 py-2 text-xs"
+        className={inputCls}
       />
       <input
         type="url"
         value={trackingUrl}
         onChange={event => setTrackingUrl(event.target.value)}
         placeholder="URL de rastreo (opcional)"
-        className="border border-border bg-background px-3 py-2 text-xs"
+        className={inputCls}
       />
       <input
         type="number"
@@ -112,26 +113,26 @@ export function AdminRegistrarGuia({
         value={shippingCost}
         onChange={event => setShippingCost(event.target.value)}
         placeholder="Costo de envío"
-        className="border border-border bg-background px-3 py-2 text-xs"
+        className={inputCls}
       />
       <input
         type="date"
         value={estimatedDate}
         onChange={event => setEstimatedDate(event.target.value)}
-        className="border border-border bg-background px-3 py-2 text-xs"
+        className={inputCls}
       />
       <div className="flex gap-2">
         <button
           type="submit"
           disabled={saving || !carrierId}
-          className="bg-foreground px-4 py-2 text-[10px] uppercase tracking-wider text-background disabled:opacity-50"
+          className="bg-[#2a4038] rounded-xl px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#3d5c4e] transition-colors disabled:opacity-50"
         >
           {saving ? 'Guardando...' : 'Guardar guía'}
         </button>
         <button
           type="button"
           onClick={() => setOpen(false)}
-          className="border border-border px-4 py-2 text-[10px] uppercase tracking-wider"
+          className="border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-semibold text-gray-600 hover:bg-white transition-colors"
         >
           Cancelar
         </button>

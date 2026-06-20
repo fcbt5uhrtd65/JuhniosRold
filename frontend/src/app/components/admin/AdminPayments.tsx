@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback } from 'react';
-import { motion } from 'motion/react';
 import { CreditCard, Check, X, Clock, AlertTriangle, FileText } from 'lucide-react';
 import { format } from 'date-fns';
 import { SearchBar } from './SearchBar';
@@ -9,6 +8,7 @@ import {
   getAdminPayments, openInvoicePdf, type AdminPayment, type AdminPaymentStatus,
 } from '../../services/payments.service';
 import { useToast } from '../../contexts/ToastContext';
+import { KpiCard, Table, Th, Td, Badge, type BadgeColor, EmptyState } from './AdminUI';
 
 const STATUS_LABELS: Record<AdminPaymentStatus, string> = {
   PENDING: 'Pendiente',
@@ -19,19 +19,19 @@ const STATUS_LABELS: Record<AdminPaymentStatus, string> = {
   EXPIRED: 'Expirado',
 };
 
-const STATUS_COLORS: Record<AdminPaymentStatus, string> = {
-  PENDING: 'bg-yellow-100 text-yellow-800',
-  APPROVED: 'bg-green-100 text-green-800',
-  DECLINED: 'bg-red-100 text-red-800',
-  ERROR: 'bg-red-100 text-red-800',
-  VOIDED: 'bg-gray-100 text-gray-700',
-  EXPIRED: 'bg-gray-100 text-gray-700',
+const STATUS_COLORS: Record<AdminPaymentStatus, BadgeColor> = {
+  PENDING: 'yellow',
+  APPROVED: 'green',
+  DECLINED: 'red',
+  ERROR: 'red',
+  VOIDED: 'gray',
+  EXPIRED: 'gray',
 };
 
 function StatusIcon({ status }: { status: AdminPaymentStatus }) {
-  if (status === 'APPROVED') return <Check className="w-4 h-4" strokeWidth={1} />;
-  if (status === 'PENDING') return <Clock className="w-4 h-4" strokeWidth={1} />;
-  return <X className="w-4 h-4" strokeWidth={1} />;
+  if (status === 'APPROVED') return <Check size={12} />;
+  if (status === 'PENDING') return <Clock size={12} />;
+  return <X size={12} />;
 }
 
 const FILTER_GROUPS: FilterGroup[] = [
@@ -102,66 +102,22 @@ export function AdminPayments() {
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl mb-2">Pagos</h1>
-        <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-          {total} transacciones registradas
-        </div>
+    <div>
+      <div className="mb-6">
+        <h2 className="text-lg font-semibold text-gray-900">Pagos</h2>
+        <p className="text-xs text-gray-500 mt-0.5">{total} transacciones registradas</p>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-secondary p-4 border border-border"
-        >
-          <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-2">
-            Aprobados (página)
-          </div>
-          <div className="text-xl">{stats.aprobados}</div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="bg-secondary p-4 border border-border"
-        >
-          <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-2">
-            Pendientes (página)
-          </div>
-          <div className="text-xl">{stats.pendientes}</div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="bg-secondary p-4 border border-border"
-        >
-          <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-2">
-            Rechazados (página)
-          </div>
-          <div className="text-xl">{stats.rechazados}</div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="bg-secondary p-4 border border-border"
-        >
-          <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-2">
-            Total Procesado (página)
-          </div>
-          <div className="text-xl">${(stats.total / 1000).toFixed(0)}k</div>
-        </motion.div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <KpiCard label="Aprobados (página)" value={String(stats.aprobados)} icon={Check} color="text-emerald-600 bg-emerald-50" />
+        <KpiCard label="Pendientes (página)" value={String(stats.pendientes)} icon={Clock} color="text-amber-600 bg-amber-50" />
+        <KpiCard label="Rechazados (página)" value={String(stats.rechazados)} icon={X} color="text-red-600 bg-red-50" />
+        <KpiCard label="Total Procesado (página)" value={`$${(stats.total / 1000).toFixed(0)}k`} icon={CreditCard} color="text-[#2a4038] bg-[#2a4038]/10" />
       </div>
 
       {/* Toolbar */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
+      <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 mb-6">
         <SearchBar
           value={searchQuery}
           onChange={v => { setSearchQuery(v); setCurrentPage(1); }}
@@ -177,14 +133,14 @@ export function AdminPayments() {
       </div>
 
       {status === 'error' && (
-        <div className="bg-red-50 border border-red-200 p-4 flex items-center justify-between">
+        <div className="bg-red-50 border border-red-100 rounded-2xl p-4 flex items-center justify-between mb-6">
           <div className="flex items-center gap-2 text-red-700 text-sm">
-            <AlertTriangle className="w-4 h-4" strokeWidth={1} />
+            <AlertTriangle size={15} />
             {errorMessage}
           </div>
           <button
             onClick={loadPayments}
-            className="px-3 py-1.5 border border-red-300 text-red-700 text-xs uppercase tracking-wider hover:bg-red-100"
+            className="px-3 py-1.5 border border-red-200 rounded-lg text-red-700 text-xs font-semibold hover:bg-red-100 transition-colors"
           >
             Reintentar
           </button>
@@ -192,113 +148,78 @@ export function AdminPayments() {
       )}
 
       {/* Payments Table */}
-      <div className="bg-secondary border border-border overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-background border-b border-border">
-              <tr>
-                <th className="px-4 py-3 text-left text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-                  Pedido
-                </th>
-                <th className="px-4 py-3 text-left text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-                  Cliente
-                </th>
-                <th className="px-4 py-3 text-left text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-                  Proveedor
-                </th>
-                <th className="px-4 py-3 text-right text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-                  Monto
-                </th>
-                <th className="px-4 py-3 text-center text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-                  Estado
-                </th>
-                <th className="px-4 py-3 text-left text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-                  Referencia
-                </th>
-                <th className="px-4 py-3 text-left text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-                  Fecha
-                </th>
-                <th className="px-4 py-3 text-center text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-                  Factura
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {payments.map((payment) => (
-                <tr key={payment.id} className="hover:bg-background/50 transition-colors">
-                  <td className="px-4 py-3">
-                    <div className="text-xs font-mono">{payment.orderNumber}</div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="text-xs">{payment.customerName || '—'}</div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <CreditCard className="w-4 h-4" strokeWidth={1} />
-                      <div className="text-xs">{payment.provider === 'WOMPI' ? 'Wompi' : 'Simulado'}</div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="text-sm font-medium">${payment.amount.toLocaleString()}</div>
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <div className={`inline-flex items-center gap-1 text-[10px] px-2 py-1 ${STATUS_COLORS[payment.status]}`}>
-                      <StatusIcon status={payment.status} />
-                      <span>{STATUS_LABELS[payment.status]}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="text-xs font-mono text-muted-foreground">
-                      {payment.reference}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="text-xs text-muted-foreground">
-                      {format(new Date(payment.createdAt), 'dd/MM/yyyy')}
-                    </div>
-                    <div className="text-[10px] text-muted-foreground">
-                      {format(new Date(payment.createdAt), 'HH:mm')}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    {payment.invoiceId ? (
-                      <button
-                        onClick={() => handleViewInvoice(payment.invoiceId!)}
-                        disabled={loadingInvoiceId === payment.invoiceId}
-                        className="inline-flex items-center gap-1 text-[10px] px-2 py-1 border border-border hover:bg-background disabled:opacity-40 disabled:cursor-not-allowed"
-                        title={payment.invoiceNumber ?? undefined}
-                      >
-                        <FileText className="w-3.5 h-3.5" strokeWidth={1} />
-                        Ver factura
-                      </button>
-                    ) : (
-                      <span className="text-[10px] text-muted-foreground">—</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <Table>
+        <thead>
+          <tr>
+            <Th>Pedido</Th>
+            <Th>Cliente</Th>
+            <Th>Proveedor</Th>
+            <Th>Monto</Th>
+            <Th>Estado</Th>
+            <Th>Referencia</Th>
+            <Th>Fecha</Th>
+            <Th>Factura</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {payments.map((payment) => (
+            <tr key={payment.id} className="hover:bg-gray-50/50">
+              <Td><span className="font-mono text-xs">{payment.orderNumber}</span></Td>
+              <Td>{payment.customerName || '—'}</Td>
+              <Td>
+                <div className="flex items-center gap-2">
+                  <CreditCard size={14} className="text-gray-400" />
+                  {payment.provider === 'WOMPI' ? 'Wompi' : 'Simulado'}
+                </div>
+              </Td>
+              <Td className="font-semibold">${payment.amount.toLocaleString()}</Td>
+              <Td>
+                <Badge label={
+                  <span className="flex items-center gap-1">
+                    <StatusIcon status={payment.status} />
+                    {STATUS_LABELS[payment.status]}
+                  </span>
+                } color={STATUS_COLORS[payment.status]} />
+              </Td>
+              <Td><span className="font-mono text-xs text-gray-400">{payment.reference}</span></Td>
+              <Td>
+                <div className="text-gray-600">{format(new Date(payment.createdAt), 'dd/MM/yyyy')}</div>
+                <div className="text-[11px] text-gray-400">{format(new Date(payment.createdAt), 'HH:mm')}</div>
+              </Td>
+              <Td>
+                {payment.invoiceId ? (
+                  <button
+                    onClick={() => handleViewInvoice(payment.invoiceId!)}
+                    disabled={loadingInvoiceId === payment.invoiceId}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-gray-200 text-[11px] font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    title={payment.invoiceNumber ?? undefined}
+                  >
+                    <FileText size={12} />
+                    Ver factura
+                  </button>
+                ) : (
+                  <span className="text-[11px] text-gray-400">—</span>
+                )}
+              </Td>
+            </tr>
+          ))}
+        </tbody>
+      </Table>
 
       {status === 'success' && payments.length === 0 && (
-        <div className="bg-secondary border border-border p-12 text-center">
-          <CreditCard className="w-12 h-12 mx-auto mb-4 text-muted-foreground" strokeWidth={1} />
-          <div className="text-sm text-muted-foreground">
-            No hay transacciones registradas
-          </div>
-        </div>
+        <EmptyState title="No hay transacciones registradas" />
       )}
 
       {totalPages > 1 && (
-        <Pagination
-          currentPage={currentPage}
-          totalPages={totalPages}
-          totalItems={total}
-          itemsPerPage={PAGE_SIZE}
-          onPageChange={setCurrentPage}
-        />
+        <div className="mt-4">
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={total}
+            itemsPerPage={PAGE_SIZE}
+            onPageChange={setCurrentPage}
+          />
+        </div>
       )}
     </div>
   );

@@ -1,9 +1,9 @@
 import { useState, useMemo } from 'react';
-import { motion } from 'motion/react';
 import { useAdmin } from '../../contexts/AdminContext';
 import { TrendingUp, ShoppingCart, AlertTriangle, Users, DollarSign, Package, Wifi, WifiOff, RefreshCw } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
 import { format } from 'date-fns';
+import { KpiCard, Card, Badge, type BadgeColor } from './AdminUI';
 
 export function AdminDashboard() {
   const { orders, products, inventory, customers, backendOnline, isLoading, refreshData } = useAdmin();
@@ -60,252 +60,132 @@ export function AdminDashboard() {
     [products.length]
   );
 
+  const orderStatusColor = (estado: string): BadgeColor => ({
+    entregado: 'green',
+    enviado: 'blue',
+    pagado: 'purple',
+  } as Record<string, BadgeColor>)[estado] ?? 'yellow';
+
   return (
-    <div className="space-y-6">
+    <div>
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between mb-6">
         <div>
-          <h1 className="text-3xl mb-2">Dashboard</h1>
-          <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-            {format(new Date(), 'EEEE, dd MMMM yyyy')}
-          </div>
+          <h2 className="text-lg font-semibold text-gray-900">Dashboard</h2>
+          <p className="text-xs text-gray-500 mt-0.5">{format(new Date(), 'EEEE, dd MMMM yyyy')}</p>
         </div>
 
         {/* Backend status + refresh */}
-        <div className="flex items-center gap-3">
-          <div className={`flex items-center gap-1.5 px-3 py-1.5 border text-[10px] tracking-widest uppercase ${
-            backendOnline
-              ? 'bg-green-50 border-green-200 text-green-800'
-              : 'bg-amber-50 border-amber-200 text-amber-800'
-          }`}>
-            {backendOnline
-              ? <Wifi className="w-3 h-3" strokeWidth={1.5} />
-              : <WifiOff className="w-3 h-3" strokeWidth={1.5} />
-            }
-            <span>{backendOnline ? 'API Online' : 'Modo Demo'}</span>
-          </div>
+        <div className="flex items-center gap-2">
+          <Badge label={
+            <span className="flex items-center gap-1.5">
+              {backendOnline ? <Wifi size={12} /> : <WifiOff size={12} />}
+              {backendOnline ? 'API Online' : 'Modo Demo'}
+            </span>
+          } color={backendOnline ? 'green' : 'yellow'} />
           <button
             onClick={handleRefresh}
             disabled={refreshing || isLoading}
-            className="flex items-center gap-1.5 px-3 py-1.5 border border-border text-[10px] tracking-widest uppercase hover:bg-secondary transition-colors disabled:opacity-40"
+            className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-40"
           >
-            <RefreshCw className={`w-3 h-3 ${refreshing ? 'animate-spin' : ''}`} strokeWidth={1.5} />
-            <span>Sincronizar</span>
+            <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />
+            Sincronizar
           </button>
         </div>
       </div>
 
       {/* Metrics Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-secondary p-4 border border-border"
-        >
-          <div className="flex items-center gap-2 mb-2">
-            <DollarSign className="w-4 h-4 text-muted-foreground" strokeWidth={1} />
-            <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-              Hoy
-            </div>
-          </div>
-          <div className="text-xl">${(ventasHoy / 1000).toFixed(0)}k</div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="bg-secondary p-4 border border-border"
-        >
-          <div className="flex items-center gap-2 mb-2">
-            <TrendingUp className="w-4 h-4 text-muted-foreground" strokeWidth={1} />
-            <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-              Este mes
-            </div>
-          </div>
-          <div className="text-xl">${(ventasMes / 1000).toFixed(0)}k</div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="bg-secondary p-4 border border-border"
-        >
-          <div className="flex items-center gap-2 mb-2">
-            <ShoppingCart className="w-4 h-4 text-muted-foreground" strokeWidth={1} />
-            <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-              Pendientes
-            </div>
-          </div>
-          <div className="text-xl">{pedidosPendientes}</div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="bg-secondary p-4 border border-border"
-        >
-          <div className="flex items-center gap-2 mb-2">
-            <AlertTriangle className="w-4 h-4 text-orange-500" strokeWidth={1} />
-            <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-              Stock bajo
-            </div>
-          </div>
-          <div className="text-xl">{productosStockBajo}</div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-          className="bg-secondary p-4 border border-border"
-        >
-          <div className="flex items-center gap-2 mb-2">
-            <Users className="w-4 h-4 text-muted-foreground" strokeWidth={1} />
-            <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-              Nuevos
-            </div>
-          </div>
-          <div className="text-xl">{clientesNuevos}</div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 }}
-          className="bg-secondary p-4 border border-border"
-        >
-          <div className="flex items-center gap-2 mb-2">
-            <Package className="w-4 h-4 text-muted-foreground" strokeWidth={1} />
-            <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-              Productos
-            </div>
-          </div>
-          <div className="text-xl">{products.length}</div>
-        </motion.div>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+        <KpiCard label="Hoy" value={`$${(ventasHoy / 1000).toFixed(0)}k`} icon={DollarSign} color="text-[#2a4038] bg-[#2a4038]/10" />
+        <KpiCard label="Este mes" value={`$${(ventasMes / 1000).toFixed(0)}k`} icon={TrendingUp} color="text-emerald-600 bg-emerald-50" />
+        <KpiCard label="Pendientes" value={String(pedidosPendientes)} icon={ShoppingCart} color="text-blue-600 bg-blue-50" />
+        <KpiCard label="Stock bajo" value={String(productosStockBajo)} icon={AlertTriangle} color="text-amber-600 bg-amber-50" />
+        <KpiCard label="Nuevos" value={String(clientesNuevos)} icon={Users} color="text-purple-600 bg-purple-50" />
+        <KpiCard label="Productos" value={String(products.length)} icon={Package} color="text-gray-600 bg-gray-100" />
       </div>
 
       {/* Charts */}
-      <div className="grid md:grid-cols-2 gap-6">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.6 }}
-          className="bg-secondary p-6 border border-border"
-        >
-          <div className="text-xs tracking-[0.2em] uppercase text-muted-foreground mb-4">
-            Ventas Última Semana
-          </div>
+      <div className="grid md:grid-cols-2 gap-6 mb-6">
+        <Card className="p-6">
+          <h3 className="text-sm font-semibold text-gray-900 mb-4">Ventas Última Semana</h3>
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={salesData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
               <XAxis dataKey="name" tick={{ fontSize: 10 }} stroke="#999" />
               <YAxis tick={{ fontSize: 10 }} stroke="#999" />
               <Tooltip />
-              <Line type="monotone" dataKey="ventas" stroke="#0a0a0a" strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="ventas" stroke="#2a4038" strokeWidth={2} dot={false} />
             </LineChart>
           </ResponsiveContainer>
-        </motion.div>
+        </Card>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.7 }}
-          className="bg-secondary p-6 border border-border"
-        >
-          <div className="text-xs tracking-[0.2em] uppercase text-muted-foreground mb-4">
-            Productos Más Vendidos
-          </div>
+        <Card className="p-6">
+          <h3 className="text-sm font-semibold text-gray-900 mb-4">Productos Más Vendidos</h3>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={topProducts}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
               <XAxis dataKey="nombre" tick={{ fontSize: 9 }} stroke="#999" />
               <YAxis tick={{ fontSize: 10 }} stroke="#999" />
               <Tooltip />
-              <Bar dataKey="ventas" fill="#0a0a0a" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="ventas" fill="#2a4038" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
-        </motion.div>
+        </Card>
       </div>
 
       {/* Recent Orders & Low Stock Alerts */}
       <div className="grid md:grid-cols-2 gap-6">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.8 }}
-          className="bg-secondary border border-border"
-        >
-          <div className="p-4 border-b border-border">
-            <div className="text-xs tracking-[0.2em] uppercase text-muted-foreground">
-              Pedidos Recientes
-            </div>
+        <Card>
+          <div className="px-5 py-4 border-b border-gray-100">
+            <h3 className="text-sm font-semibold text-gray-900">Pedidos Recientes</h3>
           </div>
-          <div className="divide-y divide-border">
+          <div className="divide-y divide-gray-50">
             {orders.slice(0, 5).map((order) => {
               const customer = customers.find(c => c.id === order.clienteId);
               return (
-                <div key={order.id} className="p-4 hover:bg-background/50 transition-colors">
+                <div key={order.id} className="p-4 hover:bg-gray-50/50 transition-colors">
                   <div className="flex items-center justify-between mb-2">
-                    <div className="text-xs">{customer?.nombre || 'Cliente'}</div>
-                    <div className={`text-[10px] px-2 py-1 ${
-                      order.estado === 'entregado' ? 'bg-green-100 text-green-800' :
-                      order.estado === 'enviado' ? 'bg-blue-100 text-blue-800' :
-                      order.estado === 'pagado' ? 'bg-purple-100 text-purple-800' :
-                      'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {order.estado}
-                    </div>
+                    <p className="text-xs font-medium text-gray-900">{customer?.nombre || 'Cliente'}</p>
+                    <Badge label={order.estado} color={orderStatusColor(order.estado)} />
                   </div>
-                  <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                    <div>{order.productos.length} producto(s)</div>
-                    <div className="font-medium text-foreground">${order.total.toLocaleString()}</div>
+                  <div className="flex items-center justify-between text-[11px] text-gray-400">
+                    <span>{order.productos.length} producto(s)</span>
+                    <span className="font-semibold text-gray-700">${order.total.toLocaleString()}</span>
                   </div>
                 </div>
               );
             })}
           </div>
-        </motion.div>
+        </Card>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.9 }}
-          className="bg-secondary border border-border"
-        >
-          <div className="p-4 border-b border-border">
-            <div className="text-xs tracking-[0.2em] uppercase text-muted-foreground">
-              Alertas de Inventario
-            </div>
+        <Card>
+          <div className="px-5 py-4 border-b border-gray-100">
+            <h3 className="text-sm font-semibold text-gray-900">Alertas de Inventario</h3>
           </div>
-          <div className="divide-y divide-border">
+          <div className="divide-y divide-gray-50">
             {inventory
               .filter(inv => inv.stockActual < inv.stockMinimo)
               .map((inv) => {
                 const product = products.find(p => p.id === inv.productoId);
                 return (
-                  <div key={inv.id} className="p-4 hover:bg-background/50 transition-colors">
+                  <div key={inv.id} className="p-4 hover:bg-gray-50/50 transition-colors">
                     <div className="flex items-center gap-3">
-                      <AlertTriangle className="w-4 h-4 text-orange-500 flex-shrink-0" strokeWidth={1} />
+                      <AlertTriangle size={16} className="text-amber-500 flex-shrink-0" />
                       <div className="flex-1">
-                        <div className="text-xs mb-1">{product?.nombre}</div>
-                        <div className="text-[10px] text-muted-foreground">
-                          Stock: {inv.stockActual} / Mínimo: {inv.stockMinimo}
-                        </div>
+                        <p className="text-xs font-medium text-gray-900 mb-0.5">{product?.nombre}</p>
+                        <p className="text-[11px] text-gray-400">Stock: {inv.stockActual} / Mínimo: {inv.stockMinimo}</p>
                       </div>
                     </div>
                   </div>
                 );
               })}
             {inventory.filter(inv => inv.stockActual < inv.stockMinimo).length === 0 && (
-              <div className="p-4 text-xs text-muted-foreground text-center">
+              <div className="p-6 text-xs text-gray-400 text-center">
                 ✓ Todos los productos tienen stock suficiente
               </div>
             )}
           </div>
-        </motion.div>
+        </Card>
       </div>
     </div>
   );

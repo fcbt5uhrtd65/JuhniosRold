@@ -1,5 +1,4 @@
 import { useState, useMemo, useRef } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
 import { useAdmin } from '../../contexts/AdminContext';
 import {
   Plus, Edit2, Trash2, Eye, EyeOff, Grid3x3, List, ArrowUpDown,
@@ -18,6 +17,7 @@ import {
 import { requestProductsExport, type ExportFormat, type PdfLayout } from '../../services/products.service';
 import { pollExportStatus } from '../../utils/pollExportStatus';
 import { resolveBackendUrl } from '../../services/api';
+import { Card, Badge, type BadgeColor, Table, Th, Td, Modal, EmptyState, inputCls, selectCls } from './AdminUI';
 
 type ViewMode = 'grid' | 'table';
 type SortField = 'nombre' | 'precio' | 'categoria' | 'estado' | 'stock';
@@ -57,15 +57,15 @@ function margenGanancia(venta: number, costo: number | undefined): string | null
 function estadoBadge(estado: Product['estado'], stockActual?: number, stockMinimo?: number) {
   const isLow = stockActual !== undefined && stockMinimo !== undefined && stockActual > 0 && stockActual < stockMinimo;
   if (estado === 'agotado' || stockActual === 0) {
-    return <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 bg-red-100 text-red-800 uppercase tracking-wide">Agotado</span>;
+    return <Badge label="Agotado" color="red" />;
   }
   if (estado === 'inactivo') {
-    return <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 bg-gray-100 text-gray-600 uppercase tracking-wide"><EyeOff className="w-3 h-3" strokeWidth={1} />Inactivo</span>;
+    return <Badge label={<span className="flex items-center gap-1"><EyeOff size={11} />Inactivo</span>} color="gray" />;
   }
   if (isLow) {
-    return <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 bg-orange-100 text-orange-800 uppercase tracking-wide"><AlertTriangle className="w-3 h-3" strokeWidth={1} />Stock bajo</span>;
+    return <Badge label={<span className="flex items-center gap-1"><AlertTriangle size={11} />Stock bajo</span>} color="yellow" />;
   }
-  return <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 bg-green-100 text-green-800 uppercase tracking-wide"><Eye className="w-3 h-3" strokeWidth={1} />Activo</span>;
+  return <Badge label={<span className="flex items-center gap-1"><Eye size={11} />Activo</span>} color="green" />;
 }
 
 interface ComboboxProps {
@@ -93,26 +93,26 @@ function Combobox({ value, onChange, options, placeholder, required, id }: Combo
           onBlur={() => setTimeout(() => setOpen(false), 150)}
           placeholder={placeholder}
           required={required}
-          className="w-full px-3 py-2 bg-transparent border border-border text-xs focus:outline-none focus:border-foreground pr-8"
+          className={inputCls + ' pr-8'}
         />
         <button
           type="button"
           tabIndex={-1}
           onClick={() => setOpen(o => !o)}
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground"
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
         >
-          <ChevronDown className="w-3 h-3" strokeWidth={1} />
+          <ChevronDown size={13} />
         </button>
       </div>
       {open && options.length > 0 && (
-        <ul className="absolute z-20 w-full bg-background border border-border shadow-lg max-h-48 overflow-y-auto">
+        <ul className="absolute z-20 w-full bg-white border border-gray-100 rounded-xl shadow-lg max-h-48 overflow-y-auto mt-1">
           {options
             .filter(o => o.toLowerCase().includes(value.toLowerCase()))
             .map(option => (
               <li
                 key={option}
                 onMouseDown={() => { onChange(option); setOpen(false); }}
-                className="px-3 py-2 text-xs cursor-pointer hover:bg-secondary"
+                className="px-3 py-2 text-xs cursor-pointer hover:bg-gray-50"
               >
                 {option}
               </li>
@@ -150,20 +150,20 @@ function ImageUploader({ value, onChange }: ImageUploaderProps) {
           <img
             src={value}
             alt="Vista previa"
-            className="w-full h-48 object-cover border border-border bg-secondary"
+            className="w-full h-48 object-cover rounded-xl border border-gray-100 bg-gray-50"
           />
-          <div className="absolute inset-0 bg-foreground/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+          <div className="absolute inset-0 bg-black/50 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
             <button
               type="button"
               onClick={() => fileRef.current?.click()}
-              className="text-background text-[10px] uppercase tracking-wider px-3 py-1.5 border border-background hover:bg-background hover:text-foreground transition-colors"
+              className="text-white text-xs font-semibold px-3 py-1.5 rounded-lg border border-white/70 hover:bg-white hover:text-gray-900 transition-colors"
             >
               Cambiar
             </button>
             <button
               type="button"
               onClick={() => onChange('')}
-              className="text-background text-[10px] uppercase tracking-wider px-3 py-1.5 border border-background hover:bg-background hover:text-foreground transition-colors"
+              className="text-white text-xs font-semibold px-3 py-1.5 rounded-lg border border-white/70 hover:bg-white hover:text-gray-900 transition-colors"
             >
               Eliminar
             </button>
@@ -174,11 +174,11 @@ function ImageUploader({ value, onChange }: ImageUploaderProps) {
           onDrop={handleDrop}
           onDragOver={e => e.preventDefault()}
           onClick={() => fileRef.current?.click()}
-          className="border border-dashed border-border h-48 flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-secondary transition-colors"
+          className="border-2 border-dashed border-gray-200 rounded-xl h-48 flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-gray-50 transition-colors"
         >
-          <Upload className="w-6 h-6 text-muted-foreground" strokeWidth={1} />
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Subir imagen</span>
-          <span className="text-[10px] text-muted-foreground">o arrastra aquí</span>
+          <Upload size={20} className="text-gray-400" />
+          <span className="text-xs font-semibold text-gray-500">Subir imagen</span>
+          <span className="text-[11px] text-gray-400">o arrastra aquí</span>
         </div>
       )}
       <input
@@ -192,7 +192,7 @@ function ImageUploader({ value, onChange }: ImageUploaderProps) {
         }}
       />
       <div>
-        <label className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-1 block">
+        <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">
           O pega una URL de imagen
         </label>
         <input
@@ -200,7 +200,7 @@ function ImageUploader({ value, onChange }: ImageUploaderProps) {
           value={value.startsWith('data:') ? '' : value}
           onChange={e => onChange(e.target.value)}
           placeholder="https://..."
-          className="w-full px-3 py-2 bg-transparent border border-border text-xs focus:outline-none focus:border-foreground"
+          className={inputCls}
         />
       </div>
     </div>
@@ -423,10 +423,10 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
   const SortBtn = ({ field, children }: { field: SortField; children: React.ReactNode }) => (
     <button
       onClick={() => handleSort(field)}
-      className="flex items-center gap-1 text-[10px] tracking-[0.2em] uppercase text-muted-foreground hover:text-foreground"
+      className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-gray-400 hover:text-gray-700"
     >
       {children}
-      {sortField === field && <ArrowUpDown className="w-3 h-3" strokeWidth={1} />}
+      {sortField === field && <ArrowUpDown size={11} />}
     </button>
   );
 
@@ -441,26 +441,24 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
   const margen = margenGanancia(formData.precio, formData.precioCosto);
 
   return (
-    <div className="space-y-6">
+    <div>
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-3xl mb-2">Productos</h1>
-          <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-            {processedProducts.length} de {products.length} productos
-          </div>
+          <h2 className="text-lg font-semibold text-gray-900">Productos</h2>
+          <p className="text-xs text-gray-500 mt-0.5">{processedProducts.length} de {products.length} productos</p>
         </div>
         <button
           onClick={openCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-foreground text-background text-xs tracking-wider uppercase hover:opacity-90"
+          className="flex items-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white text-xs font-semibold rounded-xl hover:bg-[#3d5c4e] transition-colors"
         >
-          <Plus className="w-4 h-4" strokeWidth={1} />
+          <Plus size={14} />
           Nuevo Producto
         </button>
       </div>
 
       {/* Toolbar */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
+      <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 mb-6">
         <SearchBar
           value={searchQuery}
           onChange={v => { setSearchQuery(v); setCurrentPage(1); }}
@@ -476,26 +474,26 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
         <div className="flex gap-2">
           <button
             onClick={() => setViewMode('grid')}
-            className={`p-2 border border-border transition-colors ${viewMode === 'grid' ? 'bg-foreground text-background' : 'hover:bg-secondary'}`}
+            className={`p-2.5 rounded-xl border transition-colors ${viewMode === 'grid' ? 'bg-[#2a4038] text-white border-[#2a4038]' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}
             title="Cuadrícula"
           >
-            <Grid3x3 className="w-4 h-4" strokeWidth={1} />
+            <Grid3x3 size={15} />
           </button>
           <button
             onClick={() => setViewMode('table')}
-            className={`p-2 border border-border transition-colors ${viewMode === 'table' ? 'bg-foreground text-background' : 'hover:bg-secondary'}`}
+            className={`p-2.5 rounded-xl border transition-colors ${viewMode === 'table' ? 'bg-[#2a4038] text-white border-[#2a4038]' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}
             title="Tabla"
           >
-            <List className="w-4 h-4" strokeWidth={1} />
+            <List size={15} />
           </button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
                 disabled={isExporting || processedProducts.length === 0}
-                className="flex items-center gap-2 px-3 py-2 border border-border text-xs tracking-wider uppercase hover:bg-secondary disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 px-3 py-2.5 border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 title="Exportar productos filtrados"
               >
-                <Download className="w-4 h-4" strokeWidth={1} />
+                <Download size={14} />
                 Exportar
               </button>
             </DropdownMenuTrigger>
@@ -525,16 +523,17 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
 
       {/* Empty state */}
       {paginatedProducts.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-24 text-center">
-          <Package className="w-12 h-12 text-muted-foreground mb-4" strokeWidth={1} />
-          <p className="text-sm text-muted-foreground mb-6">No se encontraron productos</p>
-          <button
-            onClick={openCreate}
-            className="px-4 py-2 bg-foreground text-background text-xs tracking-wider uppercase hover:opacity-90"
-          >
-            Agregar producto
-          </button>
-        </div>
+        <EmptyState
+          title="No se encontraron productos"
+          action={
+            <button
+              onClick={openCreate}
+              className="px-4 py-2.5 bg-[#2a4038] text-white rounded-xl text-xs font-semibold hover:bg-[#3d5c4e] transition-colors"
+            >
+              Agregar producto
+            </button>
+          }
+        />
       )}
 
       {/* Grid View */}
@@ -546,54 +545,47 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
             const stockMinimo = inv?.stockMinimo;
 
             return (
-              <motion.div
-                key={product.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-secondary border border-border overflow-hidden"
-              >
-                <div className="aspect-square bg-background overflow-hidden relative">
+              <Card key={product.id} className="overflow-hidden">
+                <div className="aspect-square bg-gray-50 overflow-hidden relative">
                   {product.imagen ? (
                     <img src={product.imagen} alt={product.nombre} className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
-                      <Package className="w-12 h-12 text-muted-foreground" strokeWidth={1} />
+                      <Package size={40} className="text-gray-300" />
                     </div>
                   )}
                   {product.marca && (
-                    <div className="absolute top-2 left-2 bg-background/90 text-[10px] px-2 py-0.5 uppercase tracking-wider">
+                    <span className="absolute top-2 left-2 bg-white/90 rounded-lg text-[10px] font-semibold px-2 py-0.5 text-gray-700">
                       {product.marca}
-                    </div>
+                    </span>
                   )}
                 </div>
                 <div className="p-4">
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex-1 min-w-0">
-                      <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-1">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">
                         {product.categoria}{product.codigo ? ` · ${product.codigo}` : ''}
-                      </div>
-                      <h3 className="text-sm mb-1 truncate">{product.nombre}</h3>
-                      <div className="text-[10px] text-muted-foreground">
-                        {product.tipo} · {product.presentacion}
-                      </div>
+                      </p>
+                      <h3 className="text-sm font-semibold text-gray-900 mb-1 truncate">{product.nombre}</h3>
+                      <p className="text-[11px] text-gray-400">{product.tipo} · {product.presentacion}</p>
                     </div>
                     <div className="ml-2 flex-shrink-0">
                       {estadoBadge(product.estado, stockActual, stockMinimo)}
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between pt-3 border-t border-border">
+                  <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                     <div>
-                      <div className="text-sm">${product.precio.toLocaleString()}</div>
+                      <p className="text-sm font-semibold text-gray-900">${product.precio.toLocaleString()}</p>
                       {Boolean(product.precioCosto) && product.precioCosto! > 0 && (
-                        <div className="text-[10px] text-muted-foreground">
+                        <p className="text-[11px] text-gray-400">
                           Costo: ${product.precioCosto!.toLocaleString()}
                           {margenGanancia(product.precio, product.precioCosto) && (
-                            <span className="ml-1 text-green-700">
+                            <span className="ml-1 text-emerald-600 font-medium">
                               ({margenGanancia(product.precio, product.precioCosto)})
                             </span>
                           )}
-                        </div>
+                        </p>
                       )}
                     </div>
                   </div>
@@ -601,37 +593,37 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
                   <div className="flex items-center gap-2 mt-3">
                     <button
                       onClick={() => openView(product)}
-                      className="flex-1 py-2 border border-border text-[10px] tracking-wider uppercase hover:bg-background transition-colors flex items-center justify-center gap-1"
+                      className="flex-1 py-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors flex items-center justify-center"
                       title="Ver"
                     >
-                      <Eye className="w-3 h-3" strokeWidth={1} />
+                      <Eye size={13} />
                     </button>
                     <button
                       onClick={() => openEdit(product)}
-                      className="flex-1 py-2 border border-border text-[10px] tracking-wider uppercase hover:bg-background transition-colors flex items-center justify-center gap-1"
+                      className="flex-1 py-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors flex items-center justify-center"
                       title="Editar"
                     >
-                      <Edit2 className="w-3 h-3" strokeWidth={1} />
+                      <Edit2 size={13} />
                     </button>
                     {onViewInInventory && (
                       <button
                         onClick={() => onViewInInventory(product.nombre)}
-                        className="flex-1 py-2 border border-border text-[10px] tracking-wider uppercase hover:bg-background transition-colors flex items-center justify-center gap-1"
+                        className="flex-1 py-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors flex items-center justify-center"
                         title="Ver en Inventario"
                       >
-                        <Warehouse className="w-3 h-3" strokeWidth={1} />
+                        <Warehouse size={13} />
                       </button>
                     )}
                     <button
                       onClick={() => { if (confirm('¿Eliminar este producto?')) void handleDelete(product.id); }}
-                      className="flex-1 py-2 border border-border text-[10px] tracking-wider uppercase hover:bg-background transition-colors flex items-center justify-center gap-1"
+                      className="flex-1 py-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors flex items-center justify-center"
                       title="Eliminar"
                     >
-                      <Trash2 className="w-3 h-3" strokeWidth={1} />
+                      <Trash2 size={13} />
                     </button>
                   </div>
                 </div>
-              </motion.div>
+              </Card>
             );
           })}
         </div>
@@ -639,586 +631,549 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
 
       {/* Table View */}
       {viewMode === 'table' && paginatedProducts.length > 0 && (
-        <div className="bg-secondary border border-border overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-background border-b border-border">
-                <tr>
-                  <th className="px-4 py-3 text-left"><SortBtn field="nombre">Producto</SortBtn></th>
-                  <th className="px-4 py-3 text-left"><SortBtn field="categoria">Categoría</SortBtn></th>
-                  <th className="px-4 py-3 text-left text-[10px] tracking-[0.2em] uppercase text-muted-foreground">Presentación</th>
-                  <th className="px-4 py-3 text-left"><SortBtn field="precio">Precio</SortBtn></th>
-                  <th className="px-4 py-3 text-center"><SortBtn field="stock">Stock</SortBtn></th>
-                  <th className="px-4 py-3 text-center"><SortBtn field="estado">Estado</SortBtn></th>
-                  <th className="px-4 py-3 text-left text-[10px] tracking-[0.2em] uppercase text-muted-foreground">Creación</th>
-                  <th className="px-4 py-3 text-center text-[10px] tracking-[0.2em] uppercase text-muted-foreground">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {paginatedProducts.map(product => {
-                  const inv = inventory.find(i => i.productoId === product.id);
-                  const stockActual = inv?.stockActual ?? 0;
-                  const stockMinimo = inv?.stockMinimo ?? 0;
-                  const isLow = inv && stockActual > 0 && stockActual < stockMinimo;
+        <Table>
+          <thead>
+            <tr>
+              <th className="px-4 py-3 text-left bg-gray-50 border-b border-gray-100"><SortBtn field="nombre">Producto</SortBtn></th>
+              <th className="px-4 py-3 text-left bg-gray-50 border-b border-gray-100"><SortBtn field="categoria">Categoría</SortBtn></th>
+              <Th>Presentación</Th>
+              <th className="px-4 py-3 text-left bg-gray-50 border-b border-gray-100"><SortBtn field="precio">Precio</SortBtn></th>
+              <th className="px-4 py-3 text-center bg-gray-50 border-b border-gray-100"><SortBtn field="stock">Stock</SortBtn></th>
+              <th className="px-4 py-3 text-center bg-gray-50 border-b border-gray-100"><SortBtn field="estado">Estado</SortBtn></th>
+              <Th>Creación</Th>
+              <Th>Acciones</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {paginatedProducts.map(product => {
+              const inv = inventory.find(i => i.productoId === product.id);
+              const stockActual = inv?.stockActual ?? 0;
+              const stockMinimo = inv?.stockMinimo ?? 0;
+              const isLow = inv && stockActual > 0 && stockActual < stockMinimo;
 
-                  return (
-                    <tr key={product.id} className="hover:bg-background/50 transition-colors">
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 flex-shrink-0 bg-background border border-border overflow-hidden">
-                            {product.imagen ? (
-                              <img src={product.imagen} alt={product.nombre} className="w-full h-full object-cover" />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center">
-                                <Package className="w-4 h-4 text-muted-foreground" strokeWidth={1} />
-                              </div>
-                            )}
-                          </div>
-                          <div>
-                            <div className="text-xs">{product.nombre}</div>
-                            <div className="text-[10px] text-muted-foreground">
-                              {product.tipo}{product.marca ? ` · ${product.marca}` : ''}
-                            </div>
-                            {product.codigo && (
-                              <div className="text-[10px] text-muted-foreground font-mono">{product.codigo}</div>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="text-xs capitalize">{product.categoria}</div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="text-xs">{product.presentacion}</div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="text-xs">${product.precio.toLocaleString()}</div>
-                        {Boolean(product.precioCosto) && product.precioCosto! > 0 && (
-                          <div className="text-[10px] text-muted-foreground">
-                            Costo: ${product.precioCosto!.toLocaleString()}
+              return (
+                <tr key={product.id} className="hover:bg-gray-50/50">
+                  <Td>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 flex-shrink-0 rounded-lg bg-gray-50 border border-gray-100 overflow-hidden">
+                        {product.imagen ? (
+                          <img src={product.imagen} alt={product.nombre} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <Package size={15} className="text-gray-300" />
                           </div>
                         )}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <div className={`text-xs ${isLow ? 'text-orange-600 font-medium' : stockActual === 0 ? 'text-red-600 font-medium' : ''}`}>
-                          {inv ? stockActual : '—'}
-                        </div>
-                        {inv && stockActual < stockMinimo && stockActual > 0 && (
-                          <div className="text-[10px] text-orange-500">mín. {stockMinimo}</div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {estadoBadge(product.estado, inv?.stockActual, inv?.stockMinimo)}
-                      </td>
-                      <td className="px-4 py-3">
-                        {product.fechaCreacion ? (
-                          <div className="text-[10px] text-muted-foreground">
-                            {new Date(product.fechaCreacion).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })}
-                          </div>
-                        ) : '—'}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-center gap-1">
-                          <button onClick={() => openView(product)} className="p-1.5 border border-border hover:bg-background transition-colors" title="Ver"><Eye className="w-3 h-3" strokeWidth={1} /></button>
-                          <button onClick={() => openEdit(product)} className="p-1.5 border border-border hover:bg-background transition-colors" title="Editar"><Edit2 className="w-3 h-3" strokeWidth={1} /></button>
-                          {onViewInInventory && (
-                            <button onClick={() => onViewInInventory(product.nombre)} className="p-1.5 border border-border hover:bg-background transition-colors" title="Ver en Inventario"><Warehouse className="w-3 h-3" strokeWidth={1} /></button>
-                          )}
-                          <button onClick={() => { if (confirm('¿Eliminar este producto?')) void handleDelete(product.id); }} className="p-1.5 border border-border hover:bg-background transition-colors" title="Eliminar"><Trash2 className="w-3 h-3" strokeWidth={1} /></button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-gray-900">{product.nombre}</p>
+                        <p className="text-[11px] text-gray-400">{product.tipo}{product.marca ? ` · ${product.marca}` : ''}</p>
+                        {product.codigo && <p className="text-[11px] text-gray-400 font-mono">{product.codigo}</p>}
+                      </div>
+                    </div>
+                  </Td>
+                  <Td className="capitalize">{product.categoria}</Td>
+                  <Td>{product.presentacion}</Td>
+                  <Td>
+                    <div className="font-semibold">${product.precio.toLocaleString()}</div>
+                    {Boolean(product.precioCosto) && product.precioCosto! > 0 && (
+                      <div className="text-[11px] text-gray-400">Costo: ${product.precioCosto!.toLocaleString()}</div>
+                    )}
+                  </Td>
+                  <Td className="text-center">
+                    <div className={`text-xs font-semibold ${isLow ? 'text-amber-600' : stockActual === 0 ? 'text-red-600' : 'text-gray-700'}`}>
+                      {inv ? stockActual : '—'}
+                    </div>
+                    {inv && stockActual < stockMinimo && stockActual > 0 && (
+                      <div className="text-[10px] text-amber-500">mín. {stockMinimo}</div>
+                    )}
+                  </Td>
+                  <Td className="text-center">{estadoBadge(product.estado, inv?.stockActual, inv?.stockMinimo)}</Td>
+                  <Td>
+                    {product.fechaCreacion ? (
+                      <span className="text-gray-400">
+                        {new Date(product.fechaCreacion).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </span>
+                    ) : '—'}
+                  </Td>
+                  <Td>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => openView(product)} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors" title="Ver"><Eye size={13} /></button>
+                      <button onClick={() => openEdit(product)} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-amber-50 hover:text-amber-600 transition-colors" title="Editar"><Edit2 size={13} /></button>
+                      {onViewInInventory && (
+                        <button onClick={() => onViewInInventory(product.nombre)} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors" title="Ver en Inventario"><Warehouse size={13} /></button>
+                      )}
+                      <button onClick={() => { if (confirm('¿Eliminar este producto?')) void handleDelete(product.id); }} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors" title="Eliminar"><Trash2 size={13} /></button>
+                    </div>
+                  </Td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </Table>
       )}
 
-      <Pagination
-        currentPage={currentPage}
-        totalPages={totalPages}
-        totalItems={processedProducts.length}
-        itemsPerPage={itemsPerPage}
-        onPageChange={setCurrentPage}
-        onItemsPerPageChange={count => { setItemsPerPage(count); setCurrentPage(1); }}
-      />
+      <div className="mt-4">
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={processedProducts.length}
+          itemsPerPage={itemsPerPage}
+          onPageChange={setCurrentPage}
+          onItemsPerPageChange={count => { setItemsPerPage(count); setCurrentPage(1); }}
+        />
+      </div>
 
       {/* ---- MODALS ---- */}
-      <AnimatePresence>
-        {modalMode !== null && (
-          <div className="fixed inset-0 bg-foreground/90 z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              transition={{ duration: 0.15 }}
-              className="bg-background w-full max-w-3xl max-h-[92vh] flex flex-col"
-            >
-              {/* Modal header */}
-              <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
-                <h2 className="text-xl">
-                  {modalMode === 'create' && 'Nuevo Producto'}
-                  {modalMode === 'edit' && 'Editar Producto'}
-                  {modalMode === 'view' && selectedProduct?.nombre}
-                </h2>
-                <button onClick={closeModal} className="p-1 hover:bg-secondary transition-colors">
-                  <X className="w-5 h-5" strokeWidth={1} />
-                </button>
+      <Modal
+        title={modalMode === 'create' ? 'Nuevo Producto' : modalMode === 'edit' ? 'Editar Producto' : (selectedProduct?.nombre ?? '')}
+        open={modalMode !== null}
+        onClose={closeModal}
+        wide
+      >
+        {/* VIEW MODE */}
+        {modalMode === 'view' && selectedProduct && (() => {
+          const inv = inventory.find(i => i.productoId === selectedProduct.id);
+          return (
+            <div className="space-y-6">
+              <div className="grid md:grid-cols-2 gap-6">
+                {/* Image */}
+                <div className="space-y-4">
+                  <div className="aspect-square rounded-xl bg-gray-50 border border-gray-100 overflow-hidden">
+                    {selectedProduct.imagen ? (
+                      <img src={selectedProduct.imagen} alt={selectedProduct.nombre} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Package size={56} className="text-gray-300" />
+                      </div>
+                    )}
+                  </div>
+                  {/* Stock card */}
+                  {inv && (
+                    <Card className="p-4">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">Inventario</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <p className="text-[11px] text-gray-400 mb-0.5">Stock actual</p>
+                          <p className={`text-2xl font-bold ${inv.stockActual === 0 ? 'text-red-600' : inv.stockActual < inv.stockMinimo ? 'text-amber-600' : 'text-gray-900'}`}>
+                            {inv.stockActual}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] text-gray-400 mb-0.5">Stock mínimo</p>
+                          <p className="text-2xl font-bold text-gray-900">{inv.stockMinimo}</p>
+                        </div>
+                      </div>
+                      {inv.stockActual < inv.stockMinimo && (
+                        <div className="mt-3 flex items-center gap-2 text-[11px] text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
+                          <AlertTriangle size={13} className="flex-shrink-0" />
+                          Stock por debajo del mínimo
+                        </div>
+                      )}
+                      <p className="mt-2 text-[11px] text-gray-400">{inv.ubicacion}</p>
+                    </Card>
+                  )}
+                </div>
+
+                {/* Details */}
+                <div className="space-y-4">
+                  <div>{estadoBadge(selectedProduct.estado, inv?.stockActual, inv?.stockMinimo)}</div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <ViewField label="Categoría" value={selectedProduct.categoria} capitalize />
+                    <ViewField label="Tipo" value={selectedProduct.tipo} />
+                    <ViewField label="Presentación" value={selectedProduct.presentacion} />
+                    {selectedProduct.marca && <ViewField label="Marca" value={selectedProduct.marca} />}
+                    {selectedProduct.codigo && <ViewField label="Código / SKU" value={selectedProduct.codigo} mono />}
+                  </div>
+
+                  <Card className="p-4 space-y-2">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">Precio</p>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-2xl font-bold text-gray-900">${selectedProduct.precio.toLocaleString()}</span>
+                      <span className="text-[11px] text-gray-400">COP</span>
+                    </div>
+                    {Boolean(selectedProduct.precioCosto) && selectedProduct.precioCosto! > 0 && (
+                      <p className="text-xs text-gray-500">
+                        Costo: ${selectedProduct.precioCosto!.toLocaleString()}
+                        {margenGanancia(selectedProduct.precio, selectedProduct.precioCosto) && (
+                          <span className="ml-2 text-emerald-600 font-semibold">
+                            Margen: {margenGanancia(selectedProduct.precio, selectedProduct.precioCosto)}
+                          </span>
+                        )}
+                      </p>
+                    )}
+                  </Card>
+
+                  {selectedProduct.descripcion && (
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Descripción</p>
+                      <p className="text-xs leading-relaxed text-gray-600">{selectedProduct.descripcion}</p>
+                    </div>
+                  )}
+
+                  {selectedProduct.fechaCreacion && (
+                    <p className="text-[11px] text-gray-400">
+                      Creado: {new Date(selectedProduct.fechaCreacion).toLocaleDateString('es-CO', { dateStyle: 'long' })}
+                    </p>
+                  )}
+                </div>
               </div>
 
-              {/* VIEW MODE */}
-              {modalMode === 'view' && selectedProduct && (() => {
-                const inv = inventory.find(i => i.productoId === selectedProduct.id);
-                return (
-                  <div className="overflow-y-auto flex-1 p-6 space-y-6">
-                    <div className="grid md:grid-cols-2 gap-6">
-                      {/* Image */}
-                      <div className="space-y-4">
-                        <div className="aspect-square bg-secondary border border-border overflow-hidden">
-                          {selectedProduct.imagen ? (
-                            <img src={selectedProduct.imagen} alt={selectedProduct.nombre} className="w-full h-full object-cover" />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center">
-                              <Package className="w-16 h-16 text-muted-foreground" strokeWidth={1} />
-                            </div>
-                          )}
+              {/* Additional info */}
+              {(selectedProduct.beneficios || selectedProduct.modoDeUso || selectedProduct.ingredientes) && (
+                <div className="grid md:grid-cols-3 gap-4 pt-4 border-t border-gray-100">
+                  {selectedProduct.beneficios && (
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Beneficios</p>
+                      <p className="text-xs leading-relaxed whitespace-pre-line text-gray-600">{selectedProduct.beneficios}</p>
+                    </div>
+                  )}
+                  {selectedProduct.modoDeUso && (
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Modo de uso</p>
+                      <p className="text-xs leading-relaxed whitespace-pre-line text-gray-600">{selectedProduct.modoDeUso}</p>
+                    </div>
+                  )}
+                  {selectedProduct.ingredientes && (
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Ingredientes</p>
+                      <p className="text-xs leading-relaxed whitespace-pre-line text-gray-600">{selectedProduct.ingredientes}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-4 border-t border-gray-100">
+                <button
+                  onClick={() => { closeModal(); openEdit(selectedProduct); }}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white rounded-xl text-xs font-semibold hover:bg-[#3d5c4e] transition-colors"
+                >
+                  <Edit2 size={13} />
+                  Editar
+                </button>
+                <button onClick={closeModal} className="px-4 py-2.5 border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* CREATE / EDIT MODE */}
+        {(modalMode === 'create' || modalMode === 'edit') && (
+          <form onSubmit={handleSubmit} className="flex flex-col">
+            {/* Section tabs */}
+            <div className="flex gap-1 mb-5 bg-gray-100 rounded-xl p-1 flex-wrap">
+              {SECTIONS.map(s => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => setActiveSection(s.id)}
+                  className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                    activeSection === s.id
+                      ? 'bg-white text-[#2a4038] shadow-sm font-semibold'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Section content */}
+            <div>
+              {/* GENERAL */}
+              {activeSection === 'general' && (
+                <div className="space-y-5">
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div className="md:col-span-2">
+                      <FormLabel required>Nombre del producto</FormLabel>
+                      <input
+                        type="text"
+                        value={formData.nombre}
+                        onChange={e => set({ nombre: e.target.value })}
+                        className={inputCls}
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <FormLabel required>Categoría</FormLabel>
+                      <Combobox
+                        value={formData.categoria}
+                        onChange={v => set({ categoria: v.toLowerCase() })}
+                        options={CATEGORIAS}
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <FormLabel required>Tipo</FormLabel>
+                      <Combobox
+                        value={formData.tipo}
+                        onChange={v => set({ tipo: v })}
+                        options={TIPOS}
+                        placeholder="Aceite, Gel, Silicona..."
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <FormLabel required>Presentación</FormLabel>
+                      <Combobox
+                        value={formData.presentacion}
+                        onChange={v => set({ presentacion: v })}
+                        options={PRESENTACIONES}
+                        placeholder="120 ml, 50 gr..."
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <FormLabel>Marca</FormLabel>
+                      <input
+                        type="text"
+                        value={formData.marca ?? ''}
+                        onChange={e => set({ marca: e.target.value })}
+                        className={inputCls}
+                      />
+                    </div>
+
+                    <div>
+                      <FormLabel>Código / Referencia</FormLabel>
+                      <input
+                        type="text"
+                        value={formData.codigo ?? ''}
+                        onChange={e => set({ codigo: e.target.value })}
+                        className={inputCls}
+                        placeholder="SKU-001"
+                      />
+                    </div>
+
+                    <div>
+                      <FormLabel required>Estado</FormLabel>
+                      <select
+                        value={formData.estado}
+                        onChange={e => set({ estado: e.target.value as Product['estado'] })}
+                        className={selectCls}
+                      >
+                        <option value="activo">Activo</option>
+                        <option value="inactivo">Inactivo</option>
+                        <option value="agotado">Agotado</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <FormLabel>Descripción</FormLabel>
+                    <textarea
+                      value={formData.descripcion}
+                      onChange={e => set({ descripcion: e.target.value })}
+                      className={inputCls + ' resize-none'}
+                      rows={3}
+                    />
+                  </div>
+
+                  <div>
+                    <FormLabel>Imagen</FormLabel>
+                    <ImageUploader value={formData.imagen} onChange={v => set({ imagen: v })} />
+                  </div>
+                </div>
+              )}
+
+              {/* PRECIOS */}
+              {activeSection === 'precios' && (
+                <div className="space-y-5">
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div>
+                      <FormLabel required>Precio de venta (COP)</FormLabel>
+                      <input
+                        type="number"
+                        min="0"
+                        step="100"
+                        value={formData.precio || ''}
+                        onChange={e => set({ precio: Number(e.target.value) })}
+                        className={inputCls}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <FormLabel>Precio de costo (COP)</FormLabel>
+                      <input
+                        type="number"
+                        min="0"
+                        step="100"
+                        value={formData.precioCosto ?? ''}
+                        onChange={e => set({ precioCosto: e.target.value ? Number(e.target.value) : undefined })}
+                        className={inputCls}
+                      />
+                    </div>
+                  </div>
+
+                  {margen && (
+                    <Card className="p-4">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Margen de ganancia calculado</p>
+                      <p className="text-2xl font-bold text-emerald-600">{margen}</p>
+                      <p className="text-[11px] text-gray-400 mt-1">
+                        Ganancia: ${(formData.precio - (formData.precioCosto ?? 0)).toLocaleString()} por unidad
+                      </p>
+                    </Card>
+                  )}
+
+                  {(!formData.precio || formData.precio <= 0) && (
+                    <div className="text-[11px] text-gray-500 border border-gray-100 rounded-xl p-3 bg-gray-50">
+                      Ingresa el precio de venta para calcular el margen.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* INVENTARIO */}
+              {activeSection === 'inventario' && (
+                <div className="space-y-5">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      id="controlarInventario"
+                      type="checkbox"
+                      checked={formData.controlarInventario ?? true}
+                      onChange={e => set({ controlarInventario: e.target.checked })}
+                      className="w-4 h-4 accent-[#2a4038]"
+                    />
+                    <span className="text-xs text-gray-700">Controlar inventario para este producto</span>
+                  </label>
+
+                  {formData.controlarInventario && (
+                    <div className="space-y-4">
+                      <div className="grid md:grid-cols-2 gap-4">
+                        <div>
+                          <FormLabel>Stock mínimo</FormLabel>
+                          <input
+                            type="number"
+                            min="0"
+                            value={formData.stockMinimo ?? ''}
+                            onChange={e => set({ stockMinimo: e.target.value === '' ? undefined : Number(e.target.value) })}
+                            onBlur={e => { if (e.target.value === '') set({ stockMinimo: 10 }); }}
+                            className={inputCls}
+                          />
+                          <p className="text-[11px] text-gray-400 mt-1">
+                            Se mostrará una alerta cuando el stock esté por debajo de este valor.
+                          </p>
                         </div>
-                        {/* Stock card */}
-                        {inv && (
-                          <div className="border border-border p-4">
-                            <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-3">Inventario</div>
-                            <div className="grid grid-cols-2 gap-3">
+                      </div>
+
+                      {modalMode === 'edit' && selectedProduct && (() => {
+                        const inv = inventory.find(i => i.productoId === selectedProduct.id);
+                        if (!inv) return null;
+                        return (
+                          <Card className="p-4">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">Stock actual</p>
+                            <div className="grid grid-cols-2 gap-4">
                               <div>
-                                <div className="text-[10px] text-muted-foreground mb-0.5">Stock actual</div>
-                                <div className={`text-2xl ${inv.stockActual === 0 ? 'text-red-600' : inv.stockActual < inv.stockMinimo ? 'text-orange-600' : ''}`}>
+                                <p className="text-[11px] text-gray-400 mb-1">Disponible</p>
+                                <p className={`text-3xl font-bold ${inv.stockActual === 0 ? 'text-red-600' : inv.stockActual < inv.stockMinimo ? 'text-amber-600' : 'text-gray-900'}`}>
                                   {inv.stockActual}
-                                </div>
+                                </p>
                               </div>
                               <div>
-                                <div className="text-[10px] text-muted-foreground mb-0.5">Stock mínimo</div>
-                                <div className="text-2xl">{inv.stockMinimo}</div>
+                                <p className="text-[11px] text-gray-400 mb-1">Ubicación</p>
+                                <p className="text-xs text-gray-700">{inv.ubicacion}</p>
                               </div>
                             </div>
                             {inv.stockActual < inv.stockMinimo && (
-                              <div className="mt-3 flex items-center gap-2 text-[10px] text-orange-700 bg-orange-50 px-3 py-2">
-                                <AlertTriangle className="w-3 h-3 flex-shrink-0" strokeWidth={1} />
-                                Stock por debajo del mínimo
+                              <div className="mt-3 flex items-center gap-2 text-[11px] text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
+                                <AlertTriangle size={13} />
+                                Stock por debajo del mínimo. Ajusta el stock desde el módulo de Inventario.
                               </div>
                             )}
-                            <div className="mt-2 text-[10px] text-muted-foreground">{inv.ubicacion}</div>
-                          </div>
-                        )}
-                      </div>
+                          </Card>
+                        );
+                      })()}
 
-                      {/* Details */}
-                      <div className="space-y-4">
+                      {modalMode === 'create' && (
                         <div>
-                          {estadoBadge(selectedProduct.estado, inv?.stockActual, inv?.stockMinimo)}
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                          <ViewField label="Categoría" value={selectedProduct.categoria} capitalize />
-                          <ViewField label="Tipo" value={selectedProduct.tipo} />
-                          <ViewField label="Presentación" value={selectedProduct.presentacion} />
-                          {selectedProduct.marca && <ViewField label="Marca" value={selectedProduct.marca} />}
-                          {selectedProduct.codigo && <ViewField label="Código / SKU" value={selectedProduct.codigo} mono />}
-                        </div>
-
-                        <div className="border border-border p-4 space-y-2">
-                          <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-3">Precio</div>
-                          <div className="flex items-baseline gap-2">
-                            <span className="text-2xl">${selectedProduct.precio.toLocaleString()}</span>
-                            <span className="text-[10px] text-muted-foreground">COP</span>
-                          </div>
-                          {Boolean(selectedProduct.precioCosto) && selectedProduct.precioCosto! > 0 && (
-                            <div className="text-xs text-muted-foreground">
-                              Costo: ${selectedProduct.precioCosto!.toLocaleString()}
-                              {margenGanancia(selectedProduct.precio, selectedProduct.precioCosto) && (
-                                <span className="ml-2 text-green-700 font-medium">
-                                  Margen: {margenGanancia(selectedProduct.precio, selectedProduct.precioCosto)}
-                                </span>
-                              )}
-                            </div>
-                          )}
-                        </div>
-
-                        {selectedProduct.descripcion && (
-                          <div>
-                            <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-2">Descripción</div>
-                            <p className="text-xs leading-relaxed">{selectedProduct.descripcion}</p>
-                          </div>
-                        )}
-
-                        {selectedProduct.fechaCreacion && (
-                          <div className="text-[10px] text-muted-foreground">
-                            Creado: {new Date(selectedProduct.fechaCreacion).toLocaleDateString('es-CO', { dateStyle: 'long' })}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Additional info */}
-                    {(selectedProduct.beneficios || selectedProduct.modoDeUso || selectedProduct.ingredientes) && (
-                      <div className="grid md:grid-cols-3 gap-4 pt-4 border-t border-border">
-                        {selectedProduct.beneficios && (
-                          <div>
-                            <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-2">Beneficios</div>
-                            <p className="text-xs leading-relaxed whitespace-pre-line">{selectedProduct.beneficios}</p>
-                          </div>
-                        )}
-                        {selectedProduct.modoDeUso && (
-                          <div>
-                            <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-2">Modo de uso</div>
-                            <p className="text-xs leading-relaxed whitespace-pre-line">{selectedProduct.modoDeUso}</p>
-                          </div>
-                        )}
-                        {selectedProduct.ingredientes && (
-                          <div>
-                            <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-2">Ingredientes</div>
-                            <p className="text-xs leading-relaxed whitespace-pre-line">{selectedProduct.ingredientes}</p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    <div className="flex gap-3 pt-2 border-t border-border">
-                      <button
-                        onClick={() => { closeModal(); openEdit(selectedProduct); }}
-                        className="flex items-center gap-2 px-4 py-2 bg-foreground text-background text-xs tracking-wider uppercase hover:opacity-90"
-                      >
-                        <Edit2 className="w-3 h-3" strokeWidth={1} />
-                        Editar
-                      </button>
-                      <button onClick={closeModal} className="px-4 py-2 border border-border text-xs tracking-wider uppercase hover:bg-secondary">
-                        Cerrar
-                      </button>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* CREATE / EDIT MODE */}
-              {(modalMode === 'create' || modalMode === 'edit') && (
-                <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
-                  {/* Section tabs */}
-                  <div className="flex border-b border-border flex-shrink-0 overflow-x-auto">
-                    {SECTIONS.map(s => (
-                      <button
-                        key={s.id}
-                        type="button"
-                        onClick={() => setActiveSection(s.id)}
-                        className={`px-5 py-3 text-[10px] tracking-[0.2em] uppercase whitespace-nowrap transition-colors ${
-                          activeSection === s.id
-                            ? 'border-b-2 border-foreground text-foreground'
-                            : 'text-muted-foreground hover:text-foreground'
-                        }`}
-                      >
-                        {s.label}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Section content */}
-                  <div className="overflow-y-auto flex-1 p-6">
-                    {/* GENERAL */}
-                    {activeSection === 'general' && (
-                      <div className="space-y-5">
-                        <div className="grid md:grid-cols-2 gap-4">
-                          <div className="md:col-span-2">
-                            <FormLabel required>Nombre del producto</FormLabel>
-                            <input
-                              type="text"
-                              value={formData.nombre}
-                              onChange={e => set({ nombre: e.target.value })}
-                              className="w-full px-3 py-2 bg-transparent border border-border text-xs focus:outline-none focus:border-foreground"
-                              required
-                            />
-                          </div>
-
-                          <div>
-                            <FormLabel required>Categoría</FormLabel>
-                            <Combobox
-                              value={formData.categoria}
-                              onChange={v => set({ categoria: v.toLowerCase() })}
-                              options={CATEGORIAS}
-                              required
-                            />
-                          </div>
-
-                          <div>
-                            <FormLabel required>Tipo</FormLabel>
-                            <Combobox
-                              value={formData.tipo}
-                              onChange={v => set({ tipo: v })}
-                              options={TIPOS}
-                              placeholder="Aceite, Gel, Silicona..."
-                              required
-                            />
-                          </div>
-
-                          <div>
-                            <FormLabel required>Presentación</FormLabel>
-                            <Combobox
-                              value={formData.presentacion}
-                              onChange={v => set({ presentacion: v })}
-                              options={PRESENTACIONES}
-                              placeholder="120 ml, 50 gr..."
-                              required
-                            />
-                          </div>
-
-                          <div>
-                            <FormLabel>Marca</FormLabel>
-                            <input
-                              type="text"
-                              value={formData.marca ?? ''}
-                              onChange={e => set({ marca: e.target.value })}
-                              className="w-full px-3 py-2 bg-transparent border border-border text-xs focus:outline-none focus:border-foreground"
-                            />
-                          </div>
-
-                          <div>
-                            <FormLabel>Código / Referencia</FormLabel>
-                            <input
-                              type="text"
-                              value={formData.codigo ?? ''}
-                              onChange={e => set({ codigo: e.target.value })}
-                              className="w-full px-3 py-2 bg-transparent border border-border text-xs focus:outline-none focus:border-foreground"
-                              placeholder="SKU-001"
-                            />
-                          </div>
-
-                          <div>
-                            <FormLabel required>Estado</FormLabel>
-                            <select
-                              value={formData.estado}
-                              onChange={e => set({ estado: e.target.value as Product['estado'] })}
-                              className="w-full px-3 py-2 bg-transparent border border-border text-xs focus:outline-none focus:border-foreground"
-                            >
-                              <option value="activo">Activo</option>
-                              <option value="inactivo">Inactivo</option>
-                              <option value="agotado">Agotado</option>
-                            </select>
-                          </div>
-                        </div>
-
-                        <div>
-                          <FormLabel>Descripción</FormLabel>
-                          <textarea
-                            value={formData.descripcion}
-                            onChange={e => set({ descripcion: e.target.value })}
-                            className="w-full px-3 py-2 bg-transparent border border-border text-xs focus:outline-none focus:border-foreground resize-none"
-                            rows={3}
-                          />
-                        </div>
-
-                        <div>
-                          <FormLabel>Imagen</FormLabel>
-                          <ImageUploader value={formData.imagen} onChange={v => set({ imagen: v })} />
-                        </div>
-                      </div>
-                    )}
-
-                    {/* PRECIOS */}
-                    {activeSection === 'precios' && (
-                      <div className="space-y-5">
-                        <div className="grid md:grid-cols-2 gap-4">
-                          <div>
-                            <FormLabel required>Precio de venta (COP)</FormLabel>
-                            <input
-                              type="number"
-                              min="0"
-                              step="100"
-                              value={formData.precio || ''}
-                              onChange={e => set({ precio: Number(e.target.value) })}
-                              className="w-full px-3 py-2 bg-transparent border border-border text-xs focus:outline-none focus:border-foreground"
-                              required
-                            />
-                          </div>
-                          <div>
-                            <FormLabel>Precio de costo (COP)</FormLabel>
-                            <input
-                              type="number"
-                              min="0"
-                              step="100"
-                              value={formData.precioCosto ?? ''}
-                              onChange={e => set({ precioCosto: e.target.value ? Number(e.target.value) : undefined })}
-                              className="w-full px-3 py-2 bg-transparent border border-border text-xs focus:outline-none focus:border-foreground"
-                            />
-                          </div>
-                        </div>
-
-                        {margen && (
-                          <div className="border border-border p-4">
-                            <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-2">Margen de ganancia calculado</div>
-                            <div className="text-2xl text-green-700">{margen}</div>
-                            <div className="text-[10px] text-muted-foreground mt-1">
-                              Ganancia: ${(formData.precio - (formData.precioCosto ?? 0)).toLocaleString()} por unidad
-                            </div>
-                          </div>
-                        )}
-
-                        {(!formData.precio || formData.precio <= 0) && (
-                          <div className="text-[10px] text-muted-foreground border border-border p-3">
-                            Ingresa el precio de venta para calcular el margen.
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* INVENTARIO */}
-                    {activeSection === 'inventario' && (
-                      <div className="space-y-5">
-                        <div className="flex items-center gap-3">
+                          <FormLabel>Stock inicial</FormLabel>
                           <input
-                            id="controlarInventario"
-                            type="checkbox"
-                            checked={formData.controlarInventario ?? true}
-                            onChange={e => set({ controlarInventario: e.target.checked })}
-                            className="w-4 h-4"
+                            type="number"
+                            min="0"
+                            value={formData.stockInicial ?? ''}
+                            onChange={e => set({ stockInicial: e.target.value === '' ? undefined : Number(e.target.value) })}
+                            onBlur={e => { if (e.target.value === '') set({ stockInicial: 0 }); }}
+                            className={inputCls}
                           />
-                          <label htmlFor="controlarInventario" className="text-xs">
-                            Controlar inventario para este producto
-                          </label>
+                          <p className="text-[11px] text-gray-400 mt-1">
+                            Cantidad disponible al publicar el producto. Podrás ajustarla luego desde el módulo de Inventario.
+                          </p>
                         </div>
-
-                        {formData.controlarInventario && (
-                          <div className="space-y-4">
-                            <div className="grid md:grid-cols-2 gap-4">
-                              <div>
-                                <FormLabel>Stock mínimo</FormLabel>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  value={formData.stockMinimo ?? ''}
-                                  onChange={e => set({ stockMinimo: e.target.value === '' ? undefined : Number(e.target.value) })}
-                                  onBlur={e => { if (e.target.value === '') set({ stockMinimo: 10 }); }}
-                                  className="w-full px-3 py-2 bg-transparent border border-border text-xs focus:outline-none focus:border-foreground"
-                                />
-                                <p className="text-[10px] text-muted-foreground mt-1">
-                                  Se mostrará una alerta cuando el stock esté por debajo de este valor.
-                                </p>
-                              </div>
-                            </div>
-
-                            {modalMode === 'edit' && selectedProduct && (() => {
-                              const inv = inventory.find(i => i.productoId === selectedProduct.id);
-                              if (!inv) return null;
-                              return (
-                                <div className="border border-border p-4">
-                                  <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-3">Stock actual</div>
-                                  <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                      <div className="text-[10px] text-muted-foreground mb-1">Disponible</div>
-                                      <div className={`text-3xl ${inv.stockActual === 0 ? 'text-red-600' : inv.stockActual < inv.stockMinimo ? 'text-orange-600' : ''}`}>
-                                        {inv.stockActual}
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <div className="text-[10px] text-muted-foreground mb-1">Ubicación</div>
-                                      <div className="text-xs">{inv.ubicacion}</div>
-                                    </div>
-                                  </div>
-                                  {inv.stockActual < inv.stockMinimo && (
-                                    <div className="mt-3 flex items-center gap-2 text-[10px] text-orange-700 bg-orange-50 px-3 py-2">
-                                      <AlertTriangle className="w-3 h-3" strokeWidth={1} />
-                                      Stock por debajo del mínimo. Ajusta el stock desde el módulo de Inventario.
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })()}
-
-                            {modalMode === 'create' && (
-                              <div>
-                                <FormLabel>Stock inicial</FormLabel>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  value={formData.stockInicial ?? ''}
-                                  onChange={e => set({ stockInicial: e.target.value === '' ? undefined : Number(e.target.value) })}
-                                  onBlur={e => { if (e.target.value === '') set({ stockInicial: 0 }); }}
-                                  className="w-full px-3 py-2 bg-transparent border border-border text-xs focus:outline-none focus:border-foreground"
-                                />
-                                <p className="text-[10px] text-muted-foreground mt-1">
-                                  Cantidad disponible al publicar el producto. Podrás ajustarla luego desde el módulo de Inventario.
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* ADICIONAL */}
-                    {activeSection === 'adicional' && (
-                      <div className="space-y-5">
-                        <div>
-                          <FormLabel>Beneficios del producto</FormLabel>
-                          <textarea
-                            value={formData.beneficios ?? ''}
-                            onChange={e => set({ beneficios: e.target.value })}
-                            className="w-full px-3 py-2 bg-transparent border border-border text-xs focus:outline-none focus:border-foreground resize-none"
-                            rows={3}
-                            placeholder="Lista los beneficios principales..."
-                          />
-                        </div>
-                        <div>
-                          <FormLabel>Modo de uso</FormLabel>
-                          <textarea
-                            value={formData.modoDeUso ?? ''}
-                            onChange={e => set({ modoDeUso: e.target.value })}
-                            className="w-full px-3 py-2 bg-transparent border border-border text-xs focus:outline-none focus:border-foreground resize-none"
-                            rows={3}
-                            placeholder="¿Cómo se aplica el producto?"
-                          />
-                        </div>
-                        <div>
-                          <FormLabel>Ingredientes</FormLabel>
-                          <textarea
-                            value={formData.ingredientes ?? ''}
-                            onChange={e => set({ ingredientes: e.target.value })}
-                            className="w-full px-3 py-2 bg-transparent border border-border text-xs focus:outline-none focus:border-foreground resize-none"
-                            rows={3}
-                            placeholder="Ingredientes principales (opcional)"
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Footer */}
-                  <div className="flex gap-3 p-6 border-t border-border flex-shrink-0">
-                    <button
-                      type="submit"
-                      disabled={isSubmitting}
-                      className="flex-1 py-3 bg-foreground text-background text-xs tracking-wider uppercase hover:opacity-90 disabled:opacity-50"
-                    >
-                      {isSubmitting ? 'Guardando...' : modalMode === 'edit' ? 'Actualizar Producto' : 'Crear Producto'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={closeModal}
-                      className="flex-1 py-3 border border-border text-xs tracking-wider uppercase hover:bg-secondary"
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-                </form>
+                      )}
+                    </div>
+                  )}
+                </div>
               )}
-            </motion.div>
-          </div>
+
+              {/* ADICIONAL */}
+              {activeSection === 'adicional' && (
+                <div className="space-y-5">
+                  <div>
+                    <FormLabel>Beneficios del producto</FormLabel>
+                    <textarea
+                      value={formData.beneficios ?? ''}
+                      onChange={e => set({ beneficios: e.target.value })}
+                      className={inputCls + ' resize-none'}
+                      rows={3}
+                      placeholder="Lista los beneficios principales..."
+                    />
+                  </div>
+                  <div>
+                    <FormLabel>Modo de uso</FormLabel>
+                    <textarea
+                      value={formData.modoDeUso ?? ''}
+                      onChange={e => set({ modoDeUso: e.target.value })}
+                      className={inputCls + ' resize-none'}
+                      rows={3}
+                      placeholder="¿Cómo se aplica el producto?"
+                    />
+                  </div>
+                  <div>
+                    <FormLabel>Ingredientes</FormLabel>
+                    <textarea
+                      value={formData.ingredientes ?? ''}
+                      onChange={e => set({ ingredientes: e.target.value })}
+                      className={inputCls + ' resize-none'}
+                      rows={3}
+                      placeholder="Ingredientes principales (opcional)"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex gap-3 mt-8 pt-5 border-t border-gray-100">
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="flex-1 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold hover:bg-[#3d5c4e] transition-colors disabled:opacity-50"
+              >
+                {isSubmitting ? 'Guardando...' : modalMode === 'edit' ? 'Actualizar Producto' : 'Crear Producto'}
+              </button>
+              <button
+                type="button"
+                onClick={closeModal}
+                className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </form>
         )}
-      </AnimatePresence>
+      </Modal>
     </div>
   );
 }
 
 function FormLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
   return (
-    <label className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-2 block">
+    <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">
       {children}{required && <span className="text-red-500 ml-0.5">*</span>}
     </label>
   );
@@ -1228,8 +1183,8 @@ function ViewField({ label, value, capitalize, mono }: { label: string; value: s
   if (!value) return null;
   return (
     <div>
-      <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-0.5">{label}</div>
-      <div className={`text-xs ${capitalize ? 'capitalize' : ''} ${mono ? 'font-mono' : ''}`}>{value}</div>
+      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-0.5">{label}</p>
+      <p className={`text-xs text-gray-700 ${capitalize ? 'capitalize' : ''} ${mono ? 'font-mono' : ''}`}>{value}</p>
     </div>
   );
 }

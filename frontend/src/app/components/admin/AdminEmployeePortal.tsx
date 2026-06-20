@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { motion } from 'motion/react';
 import { CalendarClock, CheckCircle2, Clock3, FileText, Paperclip, Send, UserRound, X } from 'lucide-react';
 import { useAdmin } from '../../contexts/AdminContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -11,6 +10,7 @@ import {
   type VacationRequestStatus,
   type VacationRequestType,
 } from '../../services/human-resources.service';
+import { Card, KpiCard, Badge, type BadgeColor, LoadingState, EmptyState, inputCls, selectCls } from './AdminUI';
 
 type RequestPeriodMode = 'SINGLE_DAY' | 'DATE_RANGE';
 type RequestTimeMode = 'FULL_DAY' | 'FROM_TIME' | 'TIME_RANGE';
@@ -66,13 +66,13 @@ function getStatusLabel(status: VacationRequestStatus): string {
   return labels[status];
 }
 
-function getStatusBadge(status: VacationRequestStatus): string {
-  const styles: Record<VacationRequestStatus, string> = {
-    PENDING: 'bg-amber-50 text-amber-700 border-amber-200',
-    APPROVED: 'bg-green-50 text-green-700 border-green-200',
-    REJECTED: 'bg-red-50 text-red-700 border-red-200',
+function getStatusColor(status: VacationRequestStatus): BadgeColor {
+  const colors: Record<VacationRequestStatus, BadgeColor> = {
+    PENDING: 'yellow',
+    APPROVED: 'green',
+    REJECTED: 'red',
   };
-  return styles[status];
+  return colors[status];
 }
 
 function getRequestTypeLabel(type: VacationRequestType): string {
@@ -210,95 +210,70 @@ export function AdminEmployeePortal() {
   };
 
   if (isLoading) {
-    return (
-      <div className="border border-border p-12 text-center text-muted-foreground">
-        Cargando tu portal interno...
-      </div>
-    );
+    return <LoadingState label="Cargando tu portal interno..." />;
   }
 
   if (!employeeProfile) {
     return (
-      <div className="border border-border p-8 space-y-3">
+      <Card className="p-8 space-y-3">
         <div className="flex items-center gap-2">
-          <UserRound className="w-4 h-4" strokeWidth={1} />
-          <div className="text-xs tracking-[0.2em] uppercase">Portal interno</div>
+          <UserRound size={15} className="text-gray-400" />
+          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Portal interno</p>
         </div>
-        <div className="text-sm">
+        <p className="text-sm text-gray-700">
           Tu usuario no tiene un perfil de empleado asociado. RRHH debe vincular tu cuenta a un registro en el módulo de empleados.
-        </div>
-        <div className="text-xs text-muted-foreground">
-          Usuario actual: {currentUser?.email}
-        </div>
-      </div>
+        </p>
+        <p className="text-xs text-gray-400">Usuario actual: {currentUser?.email}</p>
+      </Card>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+    <div>
+      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between mb-6">
         <div>
-          <h2 className="text-2xl md:text-3xl mb-2">Portal interno</h2>
-          <p className="text-xs text-muted-foreground">
-            Solicitudes personales de vacaciones y novedades laborales.
-          </p>
+          <h2 className="text-lg font-semibold text-gray-900">Portal interno</h2>
+          <p className="text-xs text-gray-500 mt-0.5">Solicitudes personales de vacaciones y novedades laborales.</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        {[
-          { label: 'Total', value: stats.total, icon: FileText },
-          { label: 'Pendientes', value: stats.pending, icon: Clock3 },
-          { label: 'Aprobadas', value: stats.approved, icon: CheckCircle2 },
-        ].map((stat) => {
-          const Icon = stat.icon;
-          return (
-            <div key={stat.label} className="bg-secondary/30 border border-border p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <Icon className="w-4 h-4 text-muted-foreground" strokeWidth={1} />
-                <div className="text-[9px] tracking-[0.2em] uppercase text-muted-foreground">
-                  {stat.label}
-                </div>
-              </div>
-              <div className="text-2xl font-light">{stat.value}</div>
-            </div>
-          );
-        })}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+        <KpiCard label="Total" value={String(stats.total)} icon={FileText} color="text-gray-600 bg-gray-100" />
+        <KpiCard label="Pendientes" value={String(stats.pending)} icon={Clock3} color="text-amber-600 bg-amber-50" />
+        <KpiCard label="Aprobadas" value={String(stats.approved)} icon={CheckCircle2} color="text-emerald-600 bg-emerald-50" />
       </div>
 
       <div className="grid xl:grid-cols-[1.2fr_0.8fr] gap-6">
-        <div className="border border-border p-6">
+        <Card className="p-6">
           <div className="flex items-center gap-2 mb-4">
-            <CalendarClock className="w-4 h-4" strokeWidth={1} />
-            <div className="text-xs tracking-[0.2em] uppercase">Crear solicitud</div>
+            <CalendarClock size={15} className="text-gray-400" />
+            <h3 className="text-sm font-semibold text-gray-900">Crear solicitud</h3>
           </div>
 
-          <div className="mb-6 p-4 bg-secondary/20 border border-border text-sm">
-            <div className="font-medium mb-1">{getEmployeeName(employeeProfile)}</div>
-            <div className="text-xs text-muted-foreground">
-              {employeeProfile.employee_code} · {employeeProfile.email}
-            </div>
+          <div className="mb-6 p-4 bg-gray-50 border border-gray-100 rounded-xl text-sm">
+            <p className="font-medium text-gray-900 mb-1">{getEmployeeName(employeeProfile)}</p>
+            <p className="text-xs text-gray-400">{employeeProfile.employee_code} · {employeeProfile.email}</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs mb-2">Tipo de solicitud</label>
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Tipo de solicitud</label>
                 <select
                   value={form.request_type}
                   onChange={(event) => setForm({ ...form, request_type: event.target.value as VacationRequestType })}
-                  className="w-full px-4 py-2.5 border border-border bg-background focus:outline-none focus:border-foreground text-sm"
+                  className={selectCls}
                 >
                   <option value="PERMISSION">Permiso</option>
                   <option value="VACATION">Vacaciones</option>
                 </select>
               </div>
               <div>
-                <label className="block text-xs mb-2">Duración</label>
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Duración</label>
                 <select
                   value={form.period_mode}
                   onChange={(event) => setForm({ ...form, period_mode: event.target.value as RequestPeriodMode })}
-                  className="w-full px-4 py-2.5 border border-border bg-background focus:outline-none focus:border-foreground text-sm"
+                  className={selectCls}
                 >
                   <option value="SINGLE_DAY">Un solo día</option>
                   <option value="DATE_RANGE">Varios días</option>
@@ -308,42 +283,42 @@ export function AdminEmployeePortal() {
 
             {form.period_mode === 'SINGLE_DAY' ? (
               <div>
-                <label className="block text-xs mb-2">Fecha</label>
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Fecha</label>
                 <input
                   type="date"
                   required
                   value={form.single_date}
                   onChange={(event) => setForm({ ...form, single_date: event.target.value })}
-                  className="w-full px-4 py-2.5 border border-border bg-transparent focus:outline-none focus:border-foreground text-sm"
+                  className={inputCls}
                 />
               </div>
             ) : (
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs mb-2">Fecha inicio</label>
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Fecha inicio</label>
                   <input
                     type="date"
                     required
                     value={form.start_date}
                     onChange={(event) => setForm({ ...form, start_date: event.target.value })}
-                    className="w-full px-4 py-2.5 border border-border bg-transparent focus:outline-none focus:border-foreground text-sm"
+                    className={inputCls}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs mb-2">Fecha fin</label>
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Fecha fin</label>
                   <input
                     type="date"
                     required
                     value={form.end_date}
                     onChange={(event) => setForm({ ...form, end_date: event.target.value })}
-                    className="w-full px-4 py-2.5 border border-border bg-transparent focus:outline-none focus:border-foreground text-sm"
+                    className={inputCls}
                   />
                 </div>
               </div>
             )}
 
             <div>
-              <label className="block text-xs mb-2">Cobertura del horario</label>
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Cobertura del horario</label>
               <div className="grid gap-3 sm:grid-cols-3">
                 {[
                   { value: 'FULL_DAY', label: 'Jornada completa' },
@@ -352,10 +327,10 @@ export function AdminEmployeePortal() {
                 ].map((option) => (
                   <label
                     key={option.value}
-                    className={`flex items-center gap-2 border px-3 py-2 text-xs cursor-pointer ${
+                    className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs cursor-pointer transition-colors ${
                       form.time_mode === option.value
-                        ? 'border-foreground bg-secondary/30'
-                        : 'border-border'
+                        ? 'border-[#2a4038] bg-[#2a4038]/5 text-gray-900'
+                        : 'border-gray-200 text-gray-600 hover:bg-gray-50'
                     }`}
                   >
                     <input
@@ -364,6 +339,7 @@ export function AdminEmployeePortal() {
                       value={option.value}
                       checked={form.time_mode === option.value}
                       onChange={(event) => setForm({ ...form, time_mode: event.target.value as RequestTimeMode })}
+                      className="accent-[#2a4038]"
                     />
                     {option.label}
                   </label>
@@ -374,15 +350,15 @@ export function AdminEmployeePortal() {
             {form.time_mode !== 'FULL_DAY' && (
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs mb-2">Hora inicio</label>
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Hora inicio</label>
                   <input
                     type="time"
                     required
                     value={form.start_time}
                     onChange={(event) => setForm({ ...form, start_time: event.target.value })}
-                    className="w-full px-4 py-2.5 border border-border bg-transparent focus:outline-none focus:border-foreground text-sm"
+                    className={inputCls}
                   />
-                  <p className="mt-1 text-[11px] text-muted-foreground">
+                  <p className="mt-1 text-[11px] text-gray-400">
                     {form.time_mode === 'FROM_TIME'
                       ? 'Se usará desde esta hora hasta el final del día.'
                       : 'Se repetirá este rango en todos los días del periodo.'}
@@ -391,13 +367,13 @@ export function AdminEmployeePortal() {
 
                 {form.time_mode === 'TIME_RANGE' && (
                   <div>
-                    <label className="block text-xs mb-2">Hora fin</label>
+                    <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Hora fin</label>
                     <input
                       type="time"
                       required
                       value={form.end_time}
                       onChange={(event) => setForm({ ...form, end_time: event.target.value })}
-                      className="w-full px-4 py-2.5 border border-border bg-transparent focus:outline-none focus:border-foreground text-sm"
+                      className={inputCls}
                     />
                   </div>
                 )}
@@ -405,27 +381,25 @@ export function AdminEmployeePortal() {
             )}
 
             <div>
-              <label className="block text-xs mb-2">Motivo</label>
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Motivo</label>
               <textarea
                 value={form.reason}
                 onChange={(event) => setForm({ ...form, reason: event.target.value })}
                 rows={4}
-                className="w-full px-4 py-2.5 border border-border bg-transparent focus:outline-none focus:border-foreground text-sm resize-none"
+                className={inputCls + ' resize-none'}
                 placeholder="Describe brevemente tu solicitud"
               />
             </div>
 
             <div>
-              <label className="block text-xs mb-2">Documento de soporte</label>
-              <label className="flex items-center gap-3 w-full px-4 py-3 border border-dashed border-border bg-secondary/10 cursor-pointer hover:bg-secondary/20 transition-colors">
-                <Paperclip className="w-4 h-4 text-muted-foreground shrink-0" strokeWidth={1} />
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Documento de soporte</label>
+              <label className="flex items-center gap-3 w-full px-4 py-3 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors">
+                <Paperclip size={15} className="text-gray-400 shrink-0" />
                 <div className="text-sm flex-1">
-                  <div className="font-medium">
+                  <p className="font-medium text-gray-900">
                     {form.support_document ? form.support_document.name : 'Subir PDF, PNG o JPG'}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    Adjunta soportes como cita médica, certificado o constancia.
-                  </div>
+                  </p>
+                  <p className="text-xs text-gray-400">Adjunta soportes como cita médica, certificado o constancia.</p>
                 </div>
                 {form.support_document && (
                   <button
@@ -435,10 +409,10 @@ export function AdminEmployeePortal() {
                       event.stopPropagation();
                       setForm({ ...form, support_document: null });
                     }}
-                    className="p-2 hover:bg-background border border-border transition-colors"
+                    className="p-2 rounded-lg hover:bg-white border border-gray-200 transition-colors"
                     aria-label="Quitar documento de soporte"
                   >
-                    <X className="w-4 h-4" strokeWidth={1} />
+                    <X size={14} />
                   </button>
                 )}
                 <input
@@ -456,87 +430,72 @@ export function AdminEmployeePortal() {
               </label>
             </div>
 
-            <div className="border border-border bg-secondary/20 p-4 text-xs text-muted-foreground space-y-1">
-              <div className="font-medium text-foreground">Resumen</div>
-              <div>Tipo: {getRequestTypeLabel(form.request_type)}</div>
-              <div>
+            <div className="bg-gray-50 border border-gray-100 rounded-xl p-4 text-xs text-gray-500 space-y-1">
+              <p className="font-medium text-gray-900">Resumen</p>
+              <p>Tipo: {getRequestTypeLabel(form.request_type)}</p>
+              <p>
                 {form.period_mode === 'SINGLE_DAY'
                   ? `Fecha: ${form.single_date || 'pendiente'}`
                   : `Fechas: ${form.start_date || 'pendiente'} - ${form.end_date || 'pendiente'}`}
-              </div>
-              <div>
+              </p>
+              <p>
                 Horario:{' '}
                 {form.time_mode === 'FULL_DAY'
                   ? 'Jornada completa'
                   : form.time_mode === 'FROM_TIME'
                     ? `Desde ${form.start_time || 'pendiente'} hasta fin del día`
                     : `De ${form.start_time || 'pendiente'} a ${form.end_time || 'pendiente'}`}
-              </div>
-              <div>Soporte: {form.support_document ? form.support_document.name : 'Sin adjuntar'}</div>
+              </p>
+              <p>Soporte: {form.support_document ? form.support_document.name : 'Sin adjuntar'}</p>
             </div>
 
             <div className="flex items-center gap-3 pt-2">
               <button
                 type="submit"
                 disabled={saving}
-                className="flex items-center gap-2 px-5 py-3 bg-foreground text-background hover:opacity-90 transition-opacity text-sm disabled:opacity-50"
+                className="flex items-center gap-2 px-5 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold hover:bg-[#3d5c4e] transition-colors disabled:opacity-50"
               >
-                <Send className="w-4 h-4" strokeWidth={1} />
+                <Send size={14} />
                 {saving ? 'Enviando...' : 'Enviar solicitud'}
               </button>
-              <div className="text-xs text-muted-foreground">
-                RRHH revisará y actualizará el estado desde su panel.
-              </div>
+              <p className="text-xs text-gray-400">RRHH revisará y actualizará el estado desde su panel.</p>
             </div>
           </form>
-        </div>
+        </Card>
 
-        <div className="border border-border p-6">
+        <Card className="p-6">
           <div className="flex items-center gap-2 mb-4">
-            <FileText className="w-4 h-4" strokeWidth={1} />
-            <div className="text-xs tracking-[0.2em] uppercase">Mis solicitudes</div>
+            <FileText size={15} className="text-gray-400" />
+            <h3 className="text-sm font-semibold text-gray-900">Mis solicitudes</h3>
           </div>
 
           <div className="space-y-3">
             {requests.map((request) => (
-              <motion.div
-                key={request.id}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="border border-border p-4"
-              >
+              <Card key={request.id} className="p-4">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-1">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">
                       {getRequestTypeLabel(request.request_type)}
-                    </div>
-                    <div className="font-medium">
-                      {getRequestScheduleLabel(request)}
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      {request.reason || 'Sin motivo'}
-                    </div>
-                    <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mt-2">
+                    </p>
+                    <p className="text-sm font-medium text-gray-900">{getRequestScheduleLabel(request)}</p>
+                    <p className="text-xs text-gray-400 mt-1">{request.reason || 'Sin motivo'}</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mt-2">
                       Soporte: {request.support_document ? 'Adjunto' : 'Sin adjuntar'}
-                    </div>
-                    <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mt-2">
+                    </p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mt-2">
                       Registrada {formatDate(request.created_at)}
-                    </div>
+                    </p>
                   </div>
-                  <span className={`inline-block px-2 py-1 border text-[10px] ${getStatusBadge(request.status)}`}>
-                    {getStatusLabel(request.status)}
-                  </span>
+                  <Badge label={getStatusLabel(request.status)} color={getStatusColor(request.status)} />
                 </div>
-              </motion.div>
+              </Card>
             ))}
 
             {requests.length === 0 && (
-              <div className="py-10 text-center text-sm text-muted-foreground">
-                No has enviado solicitudes todavía.
-              </div>
+              <EmptyState title="No has enviado solicitudes todavía." />
             )}
           </div>
-        </div>
+        </Card>
       </div>
     </div>
   );
