@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { motion } from 'motion/react';
 import { useAdmin } from '../../contexts/AdminContext';
 import { Users, TrendingUp, DollarSign, Plus } from 'lucide-react';
 import { format } from 'date-fns';
 import { LocationPicker } from '../ui/LocationPicker';
 import { AddressMap } from '../ui/AddressMap';
 import { EMPTY_LOCATION, type LocationValue } from '../../services/geography.types';
+import { KpiCard, Table, Th, Td, Modal, Field, inputCls, selectCls } from './AdminUI';
 
 export function AdminCustomers() {
   const { customers, orders, addCustomer } = useAdmin();
@@ -49,276 +49,171 @@ export function AdminCustomers() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div>
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-3xl mb-2">Clientes</h1>
-          <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-            {customers.length} clientes registrados
-          </div>
+          <h2 className="text-lg font-semibold text-gray-900">Clientes</h2>
+          <p className="text-xs text-gray-500 mt-0.5">{customers.length} clientes registrados</p>
         </div>
         <button
           onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-foreground text-background text-xs tracking-wider uppercase hover:opacity-90"
+          className="flex items-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white text-xs font-semibold rounded-xl hover:bg-[#3d5c4e] transition-colors"
         >
-          <Plus className="w-4 h-4" strokeWidth={1} />
-          Nuevo Cliente
+          <Plus size={14} /> Nuevo Cliente
         </button>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-secondary p-4 border border-border"
-        >
-          <div className="flex items-center gap-2 mb-2">
-            <Users className="w-4 h-4 text-muted-foreground" strokeWidth={1} />
-            <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-              Total
-            </div>
-          </div>
-          <div className="text-xl">{stats.total}</div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="bg-secondary p-4 border border-border"
-        >
-          <div className="flex items-center gap-2 mb-2">
-            <TrendingUp className="w-4 h-4 text-muted-foreground" strokeWidth={1} />
-            <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-              Nuevos (30d)
-            </div>
-          </div>
-          <div className="text-xl">{stats.nuevos}</div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="bg-secondary p-4 border border-border"
-        >
-          <div className="flex items-center gap-2 mb-2">
-            <DollarSign className="w-4 h-4 text-muted-foreground" strokeWidth={1} />
-            <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-              Total Compras
-            </div>
-          </div>
-          <div className="text-xl">${(stats.ingresos / 1000).toFixed(0)}k</div>
-        </motion.div>
+      <div className="grid grid-cols-3 gap-4 mb-8">
+        <KpiCard label="Total" value={String(stats.total)} icon={Users} color="text-[#2a4038] bg-[#2a4038]/10" />
+        <KpiCard label="Nuevos (30d)" value={String(stats.nuevos)} icon={TrendingUp} color="text-emerald-600 bg-emerald-50" />
+        <KpiCard label="Total Compras" value={`$${(stats.ingresos / 1000).toFixed(0)}k`} icon={DollarSign} color="text-blue-600 bg-blue-50" />
       </div>
 
       {/* Top Customers */}
       <div>
-        <div className="text-xs tracking-[0.2em] uppercase text-muted-foreground mb-4">
-          Top 10 Clientes
-        </div>
-        <div className="bg-secondary border border-border overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-background border-b border-border">
-                <tr>
-                  <th className="px-4 py-3 text-left text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-                    Cliente
-                  </th>
-                  <th className="px-4 py-3 text-left text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-                    Documento
-                  </th>
-                  <th className="px-4 py-3 text-left text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-                    Contacto
-                  </th>
-                  <th className="px-4 py-3 text-left text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-                    Ciudad
-                  </th>
-                  <th className="px-4 py-3 text-center text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-                    Pedidos
-                  </th>
-                  <th className="px-4 py-3 text-right text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-                    Total Compras
-                  </th>
-                  <th className="px-4 py-3 text-left text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-                    Última Compra
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {topCustomers.map((customer) => {
-                  const customerOrders = getCustomerOrders(customer.id);
+        <h3 className="text-sm font-semibold text-gray-900 mb-3">Top 10 Clientes</h3>
+        <Table>
+          <thead>
+            <tr>
+              <Th>Cliente</Th>
+              <Th>Documento</Th>
+              <Th>Contacto</Th>
+              <Th>Ciudad</Th>
+              <Th>Pedidos</Th>
+              <Th>Total Compras</Th>
+              <Th>Última Compra</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {topCustomers.map((customer) => {
+              const customerOrders = getCustomerOrders(customer.id);
 
-                  return (
-                    <tr key={customer.id} className="hover:bg-background/50 transition-colors">
-                      <td className="px-4 py-3">
-                        <div className="text-xs">{customer.nombre}</div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="text-xs">{customer.tipoDocumento} {customer.documento}</div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="text-xs">{customer.email}</div>
-                        <div className="text-[10px] text-muted-foreground">{customer.telefono}</div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="text-xs">{customer.ciudad}</div>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <div className="text-xs">{customerOrders.length}</div>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="text-xs font-medium">${customer.totalCompras.toLocaleString()}</div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="text-xs text-muted-foreground">
-                          {customer.ultimaCompra
-                            ? format(new Date(customer.ultimaCompra), 'dd/MM/yyyy')
-                            : '-'}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
+              return (
+                <tr key={customer.id} className="hover:bg-gray-50/50">
+                  <Td className="font-medium text-gray-900">{customer.nombre}</Td>
+                  <Td>{customer.tipoDocumento} {customer.documento}</Td>
+                  <Td>
+                    <div>{customer.email}</div>
+                    <div className="text-[11px] text-gray-400">{customer.telefono}</div>
+                  </Td>
+                  <Td>{customer.ciudad}</Td>
+                  <Td>{customerOrders.length}</Td>
+                  <Td className="font-semibold">${customer.totalCompras.toLocaleString()}</Td>
+                  <Td className="text-gray-500">
+                    {customer.ultimaCompra ? format(new Date(customer.ultimaCompra), 'dd/MM/yyyy') : '-'}
+                  </Td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </Table>
       </div>
 
       {/* Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-foreground/90 z-50 flex items-center justify-center p-4">
-          <motion.div
-            initial={{ scale: 0.9 }}
-            animate={{ scale: 1 }}
-            className="bg-background p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
-          >
-            <h2 className="text-2xl mb-6">Nuevo Cliente</h2>
+      <Modal title="Nuevo Cliente" open={showModal} onClose={() => setShowModal(false)} wide>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid md:grid-cols-2 gap-4">
+            <Field label="Tipo de Documento" required>
+              <select
+                value={formData.tipoDocumento}
+                onChange={(e) => setFormData({ ...formData, tipoDocumento: e.target.value })}
+                className={selectCls}
+                required
+              >
+                <option value="CC">Cédula de Ciudadanía</option>
+                <option value="CE">Cédula de Extranjería</option>
+                <option value="PASSPORT">Pasaporte</option>
+                <option value="NIT">NIT</option>
+                <option value="OTHER">Otro</option>
+              </select>
+            </Field>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-2 block">
-                    Tipo de Documento
-                  </label>
-                  <select
-                    value={formData.tipoDocumento}
-                    onChange={(e) => setFormData({ ...formData, tipoDocumento: e.target.value })}
-                    className="w-full px-3 py-2 bg-transparent border border-border text-xs focus:outline-none focus:border-foreground"
-                    required
-                  >
-                    <option value="CC">Cédula de Ciudadanía</option>
-                    <option value="CE">Cédula de Extranjería</option>
-                    <option value="PASSPORT">Pasaporte</option>
-                    <option value="NIT">NIT</option>
-                    <option value="OTHER">Otro</option>
-                  </select>
-                </div>
+            <Field label="Número de Documento" required>
+              <input
+                type="text"
+                value={formData.documento}
+                onChange={(e) => setFormData({ ...formData, documento: e.target.value })}
+                className={inputCls}
+                required
+              />
+            </Field>
 
-                <div>
-                  <label className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-2 block">
-                    Número de Documento
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.documento}
-                    onChange={(e) => setFormData({ ...formData, documento: e.target.value })}
-                    className="w-full px-3 py-2 bg-transparent border border-border text-xs focus:outline-none focus:border-foreground"
-                    required
-                  />
-                </div>
+            <Field label="Nombre Completo" required>
+              <input
+                type="text"
+                value={formData.nombre}
+                onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+                className={inputCls}
+                required
+              />
+            </Field>
 
-                <div>
-                  <label className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-2 block">
-                    Nombre Completo
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.nombre}
-                    onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-                    className="w-full px-3 py-2 bg-transparent border border-border text-xs focus:outline-none focus:border-foreground"
-                    required
-                  />
-                </div>
+            <Field label="Teléfono" required>
+              <input
+                type="tel"
+                value={formData.telefono}
+                onChange={(e) => setFormData({ ...formData, telefono: e.target.value })}
+                className={inputCls}
+                required
+              />
+            </Field>
 
-                <div>
-                  <label className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-2 block">
-                    Teléfono
-                  </label>
-                  <input
-                    type="tel"
-                    value={formData.telefono}
-                    onChange={(e) => setFormData({ ...formData, telefono: e.target.value })}
-                    className="w-full px-3 py-2 bg-transparent border border-border text-xs focus:outline-none focus:border-foreground"
-                    required
-                  />
-                </div>
+            <Field label="Email" required>
+              <input
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                className={inputCls}
+                required
+              />
+            </Field>
 
-                <div>
-                  <label className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-2 block">
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full px-3 py-2 bg-transparent border border-border text-xs focus:outline-none focus:border-foreground"
-                    required
-                  />
-                </div>
+            <div className="sm:col-span-2">
+              <LocationPicker
+                value={customerLocation}
+                onChange={setCustomerLocation}
+              />
+            </div>
+          </div>
 
-                <div className="sm:col-span-2">
-                  <LocationPicker
-                    value={customerLocation}
-                    onChange={setCustomerLocation}
-                  />
-                </div>
-              </div>
+          <Field label="Dirección" required>
+            <input
+              type="text"
+              value={formData.direccion}
+              onChange={(e) => setFormData({ ...formData, direccion: e.target.value })}
+              className={inputCls}
+              required
+            />
+          </Field>
 
-              <div>
-                <label className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-2 block">
-                  Dirección
-                </label>
-                <input
-                  type="text"
-                  value={formData.direccion}
-                  onChange={(e) => setFormData({ ...formData, direccion: e.target.value })}
-                  className="w-full px-3 py-2 bg-transparent border border-border text-xs focus:outline-none focus:border-foreground"
-                  required
-                />
-              </div>
+          {/* Mapa de vista previa */}
+          {(formData.direccion || customerLocation.cityName) && (
+            <AddressMap
+              address={formData.direccion}
+              city={customerLocation.cityName}
+              country={customerLocation.countryName || 'Colombia'}
+              className="h-56 rounded-xl border border-gray-200"
+            />
+          )}
 
-              {/* Mapa de vista previa */}
-              {(formData.direccion || customerLocation.cityName) && (
-                <AddressMap
-                  address={formData.direccion}
-                  city={customerLocation.cityName}
-                  country={customerLocation.countryName || 'Colombia'}
-                  className="h-56 border border-border"
-                />
-              )}
-
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="submit"
-                  className="flex-1 py-3 bg-foreground text-background text-xs tracking-wider uppercase hover:opacity-90"
-                >
-                  Crear Cliente
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="flex-1 py-3 border border-border text-xs tracking-wider uppercase hover:bg-secondary"
-                >
-                  Cancelar
-                </button>
-              </div>
-            </form>
-          </motion.div>
-        </div>
-      )}
+          <div className="flex gap-3 pt-4">
+            <button
+              type="submit"
+              className="flex-1 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold hover:bg-[#3d5c4e] transition-colors"
+            >
+              Crear Cliente
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowModal(false)}
+              className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+            >
+              Cancelar
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

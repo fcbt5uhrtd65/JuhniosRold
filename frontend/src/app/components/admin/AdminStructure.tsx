@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { motion } from 'motion/react';
 import { Building2, Briefcase, Edit2, Plus, Trash2, Users } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import {
@@ -16,6 +15,7 @@ import {
   type Employee,
   type Position,
 } from '../../services/employees.service';
+import { Card, LoadingState, EmptyState, inputCls, selectCls } from './AdminUI';
 
 interface DepartmentFormState {
   name: string;
@@ -177,20 +177,16 @@ export function AdminStructure() {
   };
 
   if (isLoading) {
-    return (
-      <div className="border border-border p-12 text-center text-muted-foreground">
-        Cargando catálogo organizacional...
-      </div>
-    );
+    return <LoadingState label="Cargando catálogo organizacional..." />;
   }
 
   return (
     <div className="grid xl:grid-cols-2 gap-6">
-      <div className="space-y-6">
-        <div className="border border-border p-6">
+      <div>
+        <Card className="p-6">
           <div className="flex items-center gap-2 mb-4">
-            <Building2 className="w-4 h-4" strokeWidth={1} />
-            <div className="text-xs tracking-[0.2em] uppercase">Departamentos</div>
+            <Building2 size={15} className="text-gray-400" />
+            <h3 className="text-sm font-semibold text-gray-900">Departamentos</h3>
           </div>
 
           <form onSubmit={handleDepartmentSubmit} className="space-y-3 mb-6">
@@ -201,13 +197,14 @@ export function AdminStructure() {
                 value={departmentForm.name}
                 onChange={(event) => setDepartmentForm({ ...departmentForm, name: event.target.value })}
                 placeholder="Nombre del departamento"
-                className="px-4 py-2.5 border border-border bg-transparent text-sm focus:outline-none focus:border-foreground"
+                className={inputCls}
               />
-              <label className="flex items-center gap-2 px-4 py-2.5 border border-border text-sm">
+              <label className="flex items-center gap-2 px-3 rounded-lg border border-gray-200 text-sm text-gray-700">
                 <input
                   type="checkbox"
                   checked={departmentForm.is_active}
                   onChange={(event) => setDepartmentForm({ ...departmentForm, is_active: event.target.checked })}
+                  className="accent-[#2a4038]"
                 />
                 Activo
               </label>
@@ -218,41 +215,39 @@ export function AdminStructure() {
               onChange={(event) => setDepartmentForm({ ...departmentForm, description: event.target.value })}
               placeholder="Descripción"
               rows={3}
-              className="w-full px-4 py-2.5 border border-border bg-transparent text-sm focus:outline-none focus:border-foreground resize-none"
+              className={inputCls + ' resize-none'}
             />
 
             <div className="flex gap-2">
               <button
                 type="button"
                 onClick={resetDepartmentForm}
-                className="px-4 py-2 border border-border text-xs uppercase tracking-wider hover:bg-secondary/50 transition-colors"
+                className="px-4 py-2.5 border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
               >
                 Limpiar
               </button>
               <button
                 type="submit"
                 disabled={savingDepartment}
-                className="px-4 py-2 bg-foreground text-background text-xs uppercase tracking-wider hover:opacity-90 transition-opacity disabled:opacity-50"
+                className="px-4 py-2.5 bg-[#2a4038] text-white rounded-xl text-xs font-semibold hover:bg-[#3d5c4e] transition-colors disabled:opacity-50"
               >
                 {savingDepartment ? 'Guardando...' : editingDepartment ? 'Actualizar' : 'Crear'}
               </button>
             </div>
           </form>
 
-          <div className="divide-y divide-border">
+          <div className="divide-y divide-gray-100">
             {departments.map((department) => (
               <div key={department.id} className="py-4">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <div className="font-medium">{department.name}</div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      {department.description || 'Sin descripción'}
-                    </div>
-                    <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mt-2">
+                    <p className="font-medium text-gray-900">{department.name}</p>
+                    <p className="text-xs text-gray-400 mt-1">{department.description || 'Sin descripción'}</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mt-2">
                       {employeesByDepartment.get(department.id) ?? 0} empleados
-                    </div>
+                    </p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1">
                     <button
                       onClick={() => {
                         setEditingDepartment(department);
@@ -262,36 +257,34 @@ export function AdminStructure() {
                           is_active: department.is_active,
                         });
                       }}
-                      className="p-2 hover:bg-secondary/50 transition-colors"
+                      className="p-2 rounded-lg hover:bg-amber-50 hover:text-amber-600 text-gray-400 transition-colors"
                       title="Editar"
                     >
-                      <Edit2 className="w-3.5 h-3.5" strokeWidth={1} />
+                      <Edit2 size={14} />
                     </button>
                     <button
                       onClick={() => void handleDeleteDepartment(department)}
-                      className="p-2 hover:bg-red-50 hover:text-red-600 transition-colors"
+                      className="p-2 rounded-lg hover:bg-red-50 hover:text-red-500 text-gray-400 transition-colors"
                       title="Eliminar"
                     >
-                      <Trash2 className="w-3.5 h-3.5" strokeWidth={1} />
+                      <Trash2 size={14} />
                     </button>
                   </div>
                 </div>
               </div>
             ))}
             {departments.length === 0 && (
-              <div className="py-6 text-center text-sm text-muted-foreground">
-                No hay departamentos registrados.
-              </div>
+              <EmptyState title="No hay departamentos registrados." />
             )}
           </div>
-        </div>
+        </Card>
       </div>
 
-      <div className="space-y-6">
-        <div className="border border-border p-6">
+      <div>
+        <Card className="p-6">
           <div className="flex items-center gap-2 mb-4">
-            <Briefcase className="w-4 h-4" strokeWidth={1} />
-            <div className="text-xs tracking-[0.2em] uppercase">Cargos</div>
+            <Briefcase size={15} className="text-gray-400" />
+            <h3 className="text-sm font-semibold text-gray-900">Cargos</h3>
           </div>
 
           <form onSubmit={handlePositionSubmit} className="space-y-3 mb-6">
@@ -300,7 +293,7 @@ export function AdminStructure() {
                 required
                 value={positionForm.department}
                 onChange={(event) => setPositionForm({ ...positionForm, department: event.target.value })}
-                className="px-4 py-2.5 border border-border bg-background text-sm focus:outline-none focus:border-foreground"
+                className={selectCls}
               >
                 <option value="">Selecciona un departamento</option>
                 {departments.map((department) => (
@@ -310,11 +303,12 @@ export function AdminStructure() {
                 ))}
               </select>
 
-              <label className="flex items-center gap-2 px-4 py-2.5 border border-border text-sm">
+              <label className="flex items-center gap-2 px-3 rounded-lg border border-gray-200 text-sm text-gray-700">
                 <input
                   type="checkbox"
                   checked={positionForm.is_active}
                   onChange={(event) => setPositionForm({ ...positionForm, is_active: event.target.checked })}
+                  className="accent-[#2a4038]"
                 />
                 Activo
               </label>
@@ -326,7 +320,7 @@ export function AdminStructure() {
               value={positionForm.name}
               onChange={(event) => setPositionForm({ ...positionForm, name: event.target.value })}
               placeholder="Nombre del cargo"
-              className="w-full px-4 py-2.5 border border-border bg-transparent text-sm focus:outline-none focus:border-foreground"
+              className={inputCls}
             />
 
             <textarea
@@ -334,44 +328,40 @@ export function AdminStructure() {
               onChange={(event) => setPositionForm({ ...positionForm, description: event.target.value })}
               placeholder="Descripción"
               rows={3}
-              className="w-full px-4 py-2.5 border border-border bg-transparent text-sm focus:outline-none focus:border-foreground resize-none"
+              className={inputCls + ' resize-none'}
             />
 
             <div className="flex gap-2">
               <button
                 type="button"
                 onClick={resetPositionForm}
-                className="px-4 py-2 border border-border text-xs uppercase tracking-wider hover:bg-secondary/50 transition-colors"
+                className="px-4 py-2.5 border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
               >
                 Limpiar
               </button>
               <button
                 type="submit"
                 disabled={savingPosition}
-                className="px-4 py-2 bg-foreground text-background text-xs uppercase tracking-wider hover:opacity-90 transition-opacity disabled:opacity-50"
+                className="px-4 py-2.5 bg-[#2a4038] text-white rounded-xl text-xs font-semibold hover:bg-[#3d5c4e] transition-colors disabled:opacity-50"
               >
                 {savingPosition ? 'Guardando...' : editingPosition ? 'Actualizar' : 'Crear'}
               </button>
             </div>
           </form>
 
-          <div className="divide-y divide-border">
+          <div className="divide-y divide-gray-100">
             {positions.map((position) => (
               <div key={position.id} className="py-4">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <div className="font-medium">{position.name}</div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      {departmentNames.get(position.department) ?? 'Sin departamento'}
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      {position.description || 'Sin descripción'}
-                    </div>
-                    <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mt-2">
+                    <p className="font-medium text-gray-900">{position.name}</p>
+                    <p className="text-xs text-gray-400 mt-1">{departmentNames.get(position.department) ?? 'Sin departamento'}</p>
+                    <p className="text-xs text-gray-400 mt-1">{position.description || 'Sin descripción'}</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mt-2">
                       {employeesByPosition.get(position.id) ?? 0} empleados
-                    </div>
+                    </p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1">
                     <button
                       onClick={() => {
                         setEditingPosition(position);
@@ -382,29 +372,27 @@ export function AdminStructure() {
                           is_active: position.is_active,
                         });
                       }}
-                      className="p-2 hover:bg-secondary/50 transition-colors"
+                      className="p-2 rounded-lg hover:bg-amber-50 hover:text-amber-600 text-gray-400 transition-colors"
                       title="Editar"
                     >
-                      <Edit2 className="w-3.5 h-3.5" strokeWidth={1} />
+                      <Edit2 size={14} />
                     </button>
                     <button
                       onClick={() => void handleDeletePosition(position)}
-                      className="p-2 hover:bg-red-50 hover:text-red-600 transition-colors"
+                      className="p-2 rounded-lg hover:bg-red-50 hover:text-red-500 text-gray-400 transition-colors"
                       title="Eliminar"
                     >
-                      <Trash2 className="w-3.5 h-3.5" strokeWidth={1} />
+                      <Trash2 size={14} />
                     </button>
                   </div>
                 </div>
               </div>
             ))}
             {positions.length === 0 && (
-              <div className="py-6 text-center text-sm text-muted-foreground">
-                No hay cargos registrados.
-              </div>
+              <EmptyState title="No hay cargos registrados." />
             )}
           </div>
-        </div>
+        </Card>
       </div>
     </div>
   );

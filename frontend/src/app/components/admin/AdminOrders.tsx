@@ -1,9 +1,9 @@
-import { motion } from 'motion/react';
 import { useAdmin } from '../../contexts/AdminContext';
 import { Package, Clock, Check, X, Truck } from 'lucide-react';
 import { format } from 'date-fns';
 import type { Order } from '../../types/admin';
 import { AdminRegistrarGuia } from './AdminRegistrarGuia';
+import { KpiCard, Card, Badge, type BadgeColor } from './AdminUI';
 
 export function AdminOrders() {
   const { orders, customers, updateOrderStatus } = useAdmin();
@@ -11,44 +11,44 @@ export function AdminOrders() {
   const getStatusIcon = (estado: Order['estado']) => {
     switch (estado) {
       case 'pendiente':
-        return <Clock className="w-4 h-4" strokeWidth={1} />;
+        return <Clock size={13} />;
       case 'pagado':
-        return <Check className="w-4 h-4" strokeWidth={1} />;
+        return <Check size={13} />;
       case 'confirmado':
       case 'procesando':
       case 'empacado':
-        return <Package className="w-4 h-4" strokeWidth={1} />;
+        return <Package size={13} />;
       case 'enviado':
       case 'en_camino':
-        return <Truck className="w-4 h-4" strokeWidth={1} />;
+        return <Truck size={13} />;
       case 'entregado':
-        return <Package className="w-4 h-4" strokeWidth={1} />;
+        return <Package size={13} />;
       case 'cancelado':
       case 'devuelto':
       case 'fallido':
-        return <X className="w-4 h-4" strokeWidth={1} />;
+        return <X size={13} />;
     }
   };
 
-  const getStatusColor = (estado: Order['estado']) => {
+  const getStatusColor = (estado: Order['estado']): BadgeColor => {
     switch (estado) {
       case 'pendiente':
-        return 'bg-yellow-100 text-yellow-800';
+        return 'yellow';
       case 'pagado':
-        return 'bg-purple-100 text-purple-800';
+        return 'purple';
       case 'confirmado':
       case 'procesando':
       case 'empacado':
-        return 'bg-cyan-100 text-cyan-800';
+        return 'blue';
       case 'enviado':
       case 'en_camino':
-        return 'bg-blue-100 text-blue-800';
+        return 'blue';
       case 'entregado':
-        return 'bg-green-100 text-green-800';
+        return 'green';
       case 'cancelado':
       case 'devuelto':
       case 'fallido':
-        return 'bg-red-100 text-red-800';
+        return 'red';
     }
   };
 
@@ -62,62 +62,18 @@ export function AdminOrders() {
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl mb-2">Pedidos</h1>
-        <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground">
-          {orders.length} pedidos totales
-        </div>
+    <div>
+      <div className="mb-6">
+        <h2 className="text-lg font-semibold text-gray-900">Pedidos</h2>
+        <p className="text-xs text-gray-500 mt-0.5">{orders.length} pedidos totales</p>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-secondary p-4 border border-border"
-        >
-          <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-2">
-            Pendientes
-          </div>
-          <div className="text-xl">{stats.pendientes}</div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="bg-secondary p-4 border border-border"
-        >
-          <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-2">
-            Enviados
-          </div>
-          <div className="text-xl">{stats.enviados}</div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="bg-secondary p-4 border border-border"
-        >
-          <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-2">
-            Entregados
-          </div>
-          <div className="text-xl">{stats.entregados}</div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="bg-secondary p-4 border border-border"
-        >
-          <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-2">
-            Ingresos
-          </div>
-          <div className="text-xl">${(stats.total / 1000).toFixed(0)}k</div>
-        </motion.div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <KpiCard label="Pendientes" value={String(stats.pendientes)} icon={Clock} color="text-amber-600 bg-amber-50" />
+        <KpiCard label="Enviados" value={String(stats.enviados)} icon={Truck} color="text-blue-600 bg-blue-50" />
+        <KpiCard label="Entregados" value={String(stats.entregados)} icon={Package} color="text-emerald-600 bg-emerald-50" />
+        <KpiCard label="Ingresos" value={`$${(stats.total / 1000).toFixed(0)}k`} icon={Check} color="text-[#2a4038] bg-[#2a4038]/10" />
       </div>
 
       {/* Orders List */}
@@ -126,90 +82,77 @@ export function AdminOrders() {
           const customer = customers.find(c => c.id === order.clienteId);
 
           return (
-            <motion.div
-              key={order.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-secondary border border-border"
-            >
-              <div className="p-4">
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className="text-sm">Pedido #{order.id}</div>
-                      <div className={`flex items-center gap-1 text-[10px] px-2 py-1 ${getStatusColor(order.estado)}`}>
-                        {getStatusIcon(order.estado)}
-                        <span className="capitalize">{order.estado}</span>
-                      </div>
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {format(new Date(order.fecha), "dd/MM/yyyy 'a las' HH:mm")}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-lg mb-1">${order.total.toLocaleString()}</div>
-                    {order.metodoPago && (
-                      <div className="text-[10px] text-muted-foreground uppercase">
-                        {order.metodoPago}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="mb-4 pb-4 border-b border-border">
-                  <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-2">
-                    Cliente
-                  </div>
-                  <div className="text-xs">{customer?.nombre || 'Cliente'}</div>
-                  <div className="text-xs text-muted-foreground">{customer?.email}</div>
-                  <div className="text-xs text-muted-foreground">{customer?.ciudad}</div>
-                </div>
-
-                <div className="mb-4">
-                  <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-3">
-                    Productos ({order.productos.length})
-                  </div>
-                  <div className="space-y-2">
-                    {order.productos.map((item, index) => (
-                      <div key={index} className="flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 bg-background flex items-center justify-center text-[10px] text-muted-foreground">
-                            {item.cantidad}x
-                          </div>
-                          <div>{item.nombre}</div>
-                        </div>
-                        <div>${(item.precio * item.cantidad).toLocaleString()}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
+            <Card key={order.id} className="p-5">
+              <div className="flex items-start justify-between mb-4">
                 <div>
-                  <div className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-2">
-                    Cambiar Estado
+                  <div className="flex items-center gap-3 mb-2">
+                    <p className="text-sm font-semibold text-gray-900">Pedido #{order.id}</p>
+                    <Badge label={
+                      <span className="flex items-center gap-1 capitalize">
+                        {getStatusIcon(order.estado)}
+                        {order.estado}
+                      </span>
+                    } color={getStatusColor(order.estado)} />
                   </div>
-                  <div className="flex gap-2">
-                    {statusOptions.map((status) => (
-                      <button
-                        key={status}
-                        onClick={() => updateOrderStatus(order.id, status)}
-                        className={`flex-1 py-2 text-[10px] tracking-wider uppercase border transition-colors ${
-                          order.estado === status
-                            ? 'border-foreground bg-foreground text-background'
-                            : 'border-border hover:bg-background'
-                        }`}
-                      >
-                        {status}
-                      </button>
-                    ))}
-                  </div>
-                  <AdminRegistrarGuia
-                    pedidoId={order.id}
-                    onSaved={() => void updateOrderStatus(order.id, 'enviado')}
-                  />
+                  <p className="text-xs text-gray-400">{format(new Date(order.fecha), "dd/MM/yyyy 'a las' HH:mm")}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-lg font-bold text-gray-900 mb-1">${order.total.toLocaleString()}</p>
+                  {order.metodoPago && (
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wider">{order.metodoPago}</p>
+                  )}
                 </div>
               </div>
-            </motion.div>
+
+              <div className="mb-4 pb-4 border-b border-gray-100">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Cliente</p>
+                <p className="text-xs font-medium text-gray-900">{customer?.nombre || 'Cliente'}</p>
+                <p className="text-xs text-gray-400">{customer?.email}</p>
+                <p className="text-xs text-gray-400">{customer?.ciudad}</p>
+              </div>
+
+              <div className="mb-4">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">
+                  Productos ({order.productos.length})
+                </p>
+                <div className="space-y-2">
+                  {order.productos.map((item, index) => (
+                    <div key={index} className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="w-6 h-6 rounded-lg bg-gray-50 border border-gray-100 flex items-center justify-center text-[10px] text-gray-500">
+                          {item.cantidad}x
+                        </span>
+                        <span className="text-gray-700">{item.nombre}</span>
+                      </div>
+                      <span className="font-medium text-gray-900">${(item.precio * item.cantidad).toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Cambiar Estado</p>
+                <div className="flex gap-2">
+                  {statusOptions.map((status) => (
+                    <button
+                      key={status}
+                      onClick={() => updateOrderStatus(order.id, status)}
+                      className={`flex-1 py-2 rounded-lg text-[11px] font-semibold capitalize transition-colors ${
+                        order.estado === status
+                          ? 'bg-[#2a4038] text-white'
+                          : 'border border-gray-200 text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      {status}
+                    </button>
+                  ))}
+                </div>
+                <AdminRegistrarGuia
+                  pedidoId={order.id}
+                  onSaved={() => void updateOrderStatus(order.id, 'enviado')}
+                />
+              </div>
+            </Card>
           );
         })}
       </div>
