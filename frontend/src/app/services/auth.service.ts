@@ -42,6 +42,13 @@ export interface RegisterPayload {
   phone?: string;
   document_type?: string;
   document_number?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  reference?: string;
 }
 
 export interface LoginPayload {

@@ -10,3 +10,10 @@ class RegisterUserDTO:
     phone: str = ""
     document_type: str = ""
     document_number: str = ""
+    address: str = ""
+    city: str = ""
+    state: str = ""
+    country: str = ""
+    latitude: float | None = None
+    longitude: float | None = None
+    reference: str = ""

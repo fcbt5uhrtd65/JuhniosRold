@@ -1,12 +1,18 @@
 from django.contrib import admin
 
-from .models import Customer, CustomerContact, CustomerSegment
+from .models import Customer, CustomerAddress, CustomerContact, CustomerSegment
 
 
 class CustomerContactInline(admin.TabularInline):
     model = CustomerContact
     extra = 0
     fields = ("name", "relationship", "email", "phone", "is_primary")
+
+
+class CustomerAddressInline(admin.TabularInline):
+    model = CustomerAddress
+    extra = 0
+    fields = ("address", "city", "state", "country", "latitude", "longitude", "reference", "is_default")
 
 
 @admin.register(CustomerSegment)
@@ -30,7 +36,7 @@ class CustomerAdmin(admin.ModelAdmin):
     search_fields = ("document_number", "first_name", "last_name", "email", "phone")
     filter_horizontal = ("segments",)
     list_select_related = ("user",)
-    inlines = (CustomerContactInline,)
+    inlines = (CustomerContactInline, CustomerAddressInline)
 
     @admin.display(description="Nombre", ordering="first_name")
     def full_name(self, customer):

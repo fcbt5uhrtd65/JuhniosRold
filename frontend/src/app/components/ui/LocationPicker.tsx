@@ -273,8 +273,8 @@ export function LocationPicker({
     onChange({ ...value, cityId: null, cityName: '' });
   }
 
-  const stateDisabled = !value.countryId || loadingStates;
-  const cityDisabled = !value.stateId || loadingCities;
+  const stateDisabled = !value.countryId;
+  const cityDisabled = !value.stateId;
 
   return (
     <div className="space-y-3">

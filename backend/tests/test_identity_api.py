@@ -1,8 +1,10 @@
+from decimal import Decimal
+
 from django.test import TestCase
 from rest_framework.test import APIClient
 from unittest.mock import patch
 
-from apps.customers.infrastructure.models import Customer
+from apps.customers.infrastructure.models import Customer, CustomerAddress
 
 
 class IdentityApiTests(TestCase):
@@ -27,6 +29,12 @@ class IdentityApiTests(TestCase):
                     "first_name": "Cliente",
                     "last_name": "Prueba",
                     "phone": "3001234567",
+                    "address": "Calle 100 # 15-20",
+                    "city": "Bogotá",
+                    "state": "Bogotá D.C.",
+                    "country": "Colombia",
+                    "latitude": 4.711,
+                    "longitude": -74.0721,
                 },
                 format="json",
             )
@@ -71,6 +79,68 @@ class IdentityApiTests(TestCase):
                 email="cliente@example.com",
             ).exists()
         )
+        self.assertTrue(
+            CustomerAddress.objects.filter(
+                customer__email="cliente@example.com",
+                latitude=Decimal("4.711000"),
+                longitude=Decimal("-74.072100"),
+                is_default=True,
+            ).exists()
+        )
+
+    def test_registration_without_location_does_not_create_address(self):
+        with (
+            patch(
+                "apps.identity.infrastructure.serializers.EmailVerificationCode.generate_code",
+                return_value="222333",
+            ),
+            patch(
+                "apps.identity.infrastructure.serializers.send_registration_verification_email.delay"
+            ),
+        ):
+            register_response = self.client.post(
+                "/api/v1/auth/register/",
+                {
+                    "email": "sinubicacion@example.com",
+                    "password": "password-seguro",
+                    "first_name": "Sin",
+                    "last_name": "Ubicacion",
+                },
+                format="json",
+            )
+        self.assertEqual(register_response.status_code, 202)
+
+        verify_response = self.client.post(
+            "/api/v1/auth/register/verify/",
+            {
+                "verification_id": register_response.data["verification_id"],
+                "code": "222333",
+            },
+            format="json",
+        )
+        self.assertEqual(verify_response.status_code, 201)
+        self.assertTrue(
+            Customer.objects.filter(email="sinubicacion@example.com").exists()
+        )
+        self.assertFalse(
+            CustomerAddress.objects.filter(
+                customer__email="sinubicacion@example.com"
+            ).exists()
+        )
+
+    def test_registration_rejects_latitude_without_longitude(self):
+        response = self.client.post(
+            "/api/v1/auth/register/",
+            {
+                "email": "coordenadasincompletas@example.com",
+                "password": "password-seguro",
+                "first_name": "Cliente",
+                "latitude": 4.711,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("latitude", response.data)
 
     def test_invalid_registration_does_not_create_local_or_database_customer(self):
         response = self.client.post(

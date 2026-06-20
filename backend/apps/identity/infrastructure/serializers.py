@@ -131,6 +131,22 @@ class RegisterSerializer(serializers.Serializer):
     phone = serializers.CharField(required=False, allow_blank=True)
     document_type = serializers.CharField(required=False, allow_blank=True)
     document_number = serializers.CharField(required=False, allow_blank=True)
+    address = serializers.CharField(required=False, allow_blank=True)
+    city = serializers.CharField(required=False, allow_blank=True)
+    state = serializers.CharField(required=False, allow_blank=True)
+    country = serializers.CharField(required=False, allow_blank=True)
+    latitude = serializers.FloatField(required=False, allow_null=True, default=None)
+    longitude = serializers.FloatField(required=False, allow_null=True, default=None)
+    reference = serializers.CharField(required=False, allow_blank=True)
+
+    def validate(self, attrs):
+        latitude = attrs.get("latitude")
+        longitude = attrs.get("longitude")
+        if (latitude is None) != (longitude is None):
+            raise serializers.ValidationError(
+                {"latitude": "Debes enviar latitud y longitud juntas."}
+            )
+        return attrs
 
     def create(self, validated_data):
         if User.objects.filter(email__iexact=validated_data["email"]).exists():
@@ -150,6 +166,13 @@ class RegisterSerializer(serializers.Serializer):
             "phone": validated_data.get("phone", ""),
             "document_type": validated_data.get("document_type", ""),
             "document_number": validated_data.get("document_number", ""),
+            "address": validated_data.get("address", ""),
+            "city": validated_data.get("city", ""),
+            "state": validated_data.get("state", ""),
+            "country": validated_data.get("country", ""),
+            "latitude": validated_data.get("latitude"),
+            "longitude": validated_data.get("longitude"),
+            "reference": validated_data.get("reference", ""),
         }
 
         EmailVerificationCode.objects.filter(

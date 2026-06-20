@@ -3,8 +3,9 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, Lock, Mail, User as UserIcon, Eye, EyeOff, Shield, Phone, CreditCard, MapPin } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
 import { LocationPicker } from './ui/LocationPicker';
-import { AddressMap } from './ui/AddressMap';
+import { DeliveryLocationSection } from './ui/DeliveryLocationSection';
 import { EMPTY_LOCATION, type LocationValue } from '../services/geography.types';
+import { EMPTY_DELIVERY_LOCATION, type DeliveryLocationValue } from '../services/delivery-location.types';
 
 const OLIVE = '#2D3A1F';
 
@@ -144,8 +145,8 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
   const [tipoDocumento, setTipoDocumento] = useState('CC');
   const [documento, setDocumento] = useState('');
   const [telefono, setTelefono] = useState('');
-  const [direccion, setDireccion] = useState('');
   const [regLocation, setRegLocation] = useState<LocationValue>(EMPTY_LOCATION);
+  const [deliveryLocation, setDeliveryLocation] = useState<DeliveryLocationValue>(EMPTY_DELIVERY_LOCATION);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -154,8 +155,9 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
     setError(''); setSuccess('');
     setNombre(''); setEmail(''); setPassword(''); setConfirm('');
     setShowPass(false); setShowConfirm(false); setTerms(false);
-    setTipoDocumento('CC'); setDocumento(''); setTelefono(''); setDireccion('');
+    setTipoDocumento('CC'); setDocumento(''); setTelefono('');
     setRegLocation(EMPTY_LOCATION);
+    setDeliveryLocation(EMPTY_DELIVERY_LOCATION);
     setVerificationId(''); setVerificationEmail(''); setVerificationCode(''); setDebugCode('');
     setResetVerificationId(''); setResetCode(''); setResetDebugCode('');
     setResetToken(''); setNewPassword(''); setConfirmNewPassword('');
@@ -255,12 +257,21 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
         if (password.length < 8) { setError('La contraseña debe tener al menos 8 caracteres.'); return; }
         if (password !== confirm) { setError('Las contraseñas no coinciden.'); return; }
         if (!terms) { setError('Debes aceptar los términos y condiciones.'); return; }
+        if (!deliveryLocation.confirmed || deliveryLocation.lat === null || deliveryLocation.lng === null) {
+          setError('Debes confirmar tu ubicación de entrega antes de continuar.');
+          return;
+        }
         const result = await customerRegister(nombre, email, password, {
           phone: telefono || undefined,
-          address: direccion || undefined,
-          city: regLocation.cityName || undefined,
+          address: deliveryLocation.address || undefined,
+          city: regLocation.cityName || deliveryLocation.city || undefined,
           document_type: tipoDocumento || undefined,
           document_number: documento || undefined,
+          state: deliveryLocation.state || undefined,
+          country: deliveryLocation.country || regLocation.countryName || undefined,
+          latitude: deliveryLocation.lat,
+          longitude: deliveryLocation.lng,
+          reference: deliveryLocation.reference || undefined,
         });
         if (result.ok && result.verificationId) {
           setVerificationId(result.verificationId);
@@ -424,6 +435,7 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
                   {(['login', 'register'] as const).map(t => (
                     <button
                       key={t}
+                      type="button"
                       onClick={() => switchTab(t)}
                       className="relative flex-1 pb-3 text-[10px] tracking-[0.22em] uppercase font-semibold transition-colors"
                       style={{ color: tab === t ? OLIVE : '#C4BDB4' }}
@@ -705,14 +717,14 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
                   </div>
                 )}
 
-                {/* Ubicación y dirección (solo registro) */}
+                {/* Dirección de entrega (solo registro) */}
                 {tab === 'register' && !isForgot && !verificationId && (
                   <div className="space-y-3">
                     <div className="rounded-xl border border-stone-200 overflow-hidden p-4 space-y-3">
                       <div className="flex items-center gap-1.5">
                         <MapPin className="w-3.5 h-3.5" style={{ color: OLIVE }} strokeWidth={1.5} />
                         <span className="text-[10px] tracking-[0.22em] uppercase font-semibold" style={{ color: OLIVE }}>
-                          Ubicación
+                          Dirección de entrega
                         </span>
                       </div>
 
@@ -724,36 +736,12 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
                         />
                       </div>
 
-                      <div>
-                        <label className="block text-[9px] tracking-[0.28em] uppercase text-stone-400 font-medium mb-1.5">
-                          Dirección
-                        </label>
-                        <div
-                          className="relative flex items-center rounded-xl border border-stone-200 bg-white"
-                        >
-                          <MapPin
-                            className="absolute left-3.5 w-4 h-4 text-stone-300"
-                            strokeWidth={1.3}
-                          />
-                          <input
-                            type="text"
-                            value={direccion}
-                            onChange={e => setDireccion(e.target.value)}
-                            placeholder="Calle 123 #45-67, Apto 8"
-                            className="w-full pl-10 pr-4 py-3 bg-transparent text-sm text-stone-800 placeholder:text-stone-300 focus:outline-none rounded-xl"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Map preview */}
-                      {(direccion || regLocation.cityName) && (
-                        <AddressMap
-                          address={direccion}
-                          city={regLocation.cityName}
-                          country={regLocation.countryName || 'Colombia'}
-                          className="h-48 rounded-xl overflow-hidden border border-stone-200"
-                        />
-                      )}
+                      <DeliveryLocationSection
+                        value={deliveryLocation}
+                        onChange={setDeliveryLocation}
+                        searchScope={{ state: regLocation.stateName, country: regLocation.countryName }}
+                        onCityResolved={cityName => setRegLocation(prev => ({ ...prev, cityId: null, cityName }))}
+                      />
                     </div>
                   </div>
                 )}

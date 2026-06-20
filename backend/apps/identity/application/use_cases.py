@@ -1,10 +1,26 @@
 from django.contrib.auth import get_user_model
 from django.db import transaction
 
-from apps.customers.infrastructure.models import Customer
+from apps.customers.infrastructure.models import Customer, CustomerAddress
 
 from .dtos import RegisterUserDTO
 from ..domain.exceptions import EmailAlreadyRegistered
+
+
+def _create_customer_address(customer: Customer, data: RegisterUserDTO) -> None:
+    if data.latitude is None or data.longitude is None:
+        return
+    CustomerAddress.objects.create(
+        customer=customer,
+        address=data.address,
+        city=data.city,
+        state=data.state,
+        country=data.country,
+        latitude=data.latitude,
+        longitude=data.longitude,
+        reference=data.reference,
+        is_default=True,
+    )
 
 
 class RegisterUser:
@@ -20,7 +36,7 @@ class RegisterUser:
             last_name=data.last_name,
             phone=data.phone,
         )
-        Customer.objects.create(
+        customer = Customer.objects.create(
             user=user,
             document_type=data.document_type or "PENDING",
             document_number=data.document_number or f"USR-{user.id.hex}",
@@ -28,7 +44,10 @@ class RegisterUser:
             last_name=data.last_name,
             email=user.email,
             phone=data.phone,
+            address=data.address,
+            city=data.city,
         )
+        _create_customer_address(customer, data)
         return user
 
     @transaction.atomic
@@ -44,7 +63,7 @@ class RegisterUser:
         )
         user.password = password_hash
         user.save()
-        Customer.objects.create(
+        customer = Customer.objects.create(
             user=user,
             document_type=data.document_type or "PENDING",
             document_number=data.document_number or f"USR-{user.id.hex}",
@@ -52,5 +71,8 @@ class RegisterUser:
             last_name=data.last_name,
             email=user.email,
             phone=data.phone,
+            address=data.address,
+            city=data.city,
         )
+        _create_customer_address(customer, data)
         return user

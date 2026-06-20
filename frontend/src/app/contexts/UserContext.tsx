@@ -348,6 +348,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
       phone?: string;
       address?: string;
       city?: string;
+      state?: string;
+      country?: string;
+      latitude?: number | null;
+      longitude?: number | null;
+      reference?: string;
       document_type?: string;
       document_number?: string;
     },
@@ -362,6 +367,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
         email: email.trim().toLowerCase(),
         password,
         phone: extra?.phone,
+        address: extra?.address,
+        city: extra?.city,
+        state: extra?.state,
+        country: extra?.country,
+        latitude: extra?.latitude,
+        longitude: extra?.longitude,
+        reference: extra?.reference,
         document_type: extra?.document_type,
         document_number: extra?.document_number,
       });
