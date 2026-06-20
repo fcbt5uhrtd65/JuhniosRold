@@ -25,10 +25,10 @@ const TikTokIcon = ({ className }: { className?: string }) => (
 
 const LeafLogo = () => (
   <svg width="20" height="16" viewBox="0 0 28 22" fill="none">
-    <path d="M14 20C14 20 4 14 4 7C4 3.5 7 1 10.5 1C12 1 13.2 1.6 14 2.5C14.8 1.6 16 1 17.5 1C21 1 24 3.5 24 7C24 14 14 20 14 20Z" stroke="rgba(255,255,255,0.8)" strokeWidth="1" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
-    <path d="M14 20V6" stroke="rgba(255,255,255,0.5)" strokeWidth="0.8" strokeLinecap="round" strokeDasharray="1.5 2"/>
-    <path d="M14 10C12 8.5 9 8 7 9" stroke="rgba(255,255,255,0.5)" strokeWidth="0.8" strokeLinecap="round"/>
-    <path d="M14 14C16 12.5 19 12 21 13" stroke="rgba(255,255,255,0.5)" strokeWidth="0.8" strokeLinecap="round"/>
+    <path d="M14 20C14 20 4 14 4 7C4 3.5 7 1 10.5 1C12 1 13.2 1.6 14 2.5C14.8 1.6 16 1 17.5 1C21 1 24 3.5 24 7C24 14 14 20 14 20Z" stroke="#8B7355" strokeWidth="1" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M14 20V6" stroke="#8B7355" strokeWidth="0.8" strokeLinecap="round" strokeDasharray="1.5 2"/>
+    <path d="M14 10C12 8.5 9 8 7 9" stroke="#8B7355" strokeWidth="0.8" strokeLinecap="round"/>
+    <path d="M14 14C16 12.5 19 12 21 13" stroke="#8B7355" strokeWidth="0.8" strokeLinecap="round"/>
   </svg>
 );
 
@@ -221,10 +221,10 @@ export function Hero({ onLoginClick }: HeroProps = {}) {
         className="absolute left-0 right-0 z-40 transition-all duration-300"
         style={{ top: '16px' }}
       >
-        <div className={`mx-4 md:mx-6 lg:mx-8 px-5 md:px-7 rounded-[16px] transition-all duration-400 ${
+        <div className={`mx-4 md:mx-6 lg:mx-8 px-5 md:px-7 rounded-[16px] transition-all duration-400 bg-white/90 backdrop-blur-md border border-white/40 ${
           scrolled
-            ? 'bg-white/15 backdrop-blur-md border border-white/20 shadow-[0_4px_24px_rgba(0,0,0,0.12)]'
-            : 'bg-white/8 backdrop-blur-sm border border-white/12'
+            ? 'shadow-[0_4px_24px_rgba(0,0,0,0.12)]'
+            : 'shadow-[0_2px_12px_rgba(0,0,0,0.06)]'
         }`}>
           <div className="flex items-center justify-between h-[62px] gap-4">
 
@@ -235,10 +235,10 @@ export function Hero({ onLoginClick }: HeroProps = {}) {
                 <LeafLogo />
               </div>
               <div>
-                <div className="text-[12.5px] tracking-[0.2em] uppercase font-semibold text-white leading-none">
+                <div className="text-[12.5px] tracking-[0.2em] uppercase font-semibold text-stone-900 leading-none">
                   JUHNIOS ROLD
                 </div>
-                <div className="text-[7px] tracking-[0.24em] uppercase mt-0.5 font-light" style={{ color: 'rgba(196,169,125,0.9)' }}>
+                <div className="text-[7px] tracking-[0.24em] uppercase mt-0.5 font-light text-[#8B7355]">
                   CUIDADO CAPILAR NATURAL
                 </div>
               </div>
@@ -254,7 +254,7 @@ export function Hero({ onLoginClick }: HeroProps = {}) {
                     href={link.href === '#' ? undefined : link.href}
                     onClick={e => handleNavClick(link.href, e)}
                     className={`relative flex items-center gap-1 px-4 h-[62px] text-[11.5px] tracking-[0.07em] transition-colors duration-200 ${
-                      isActive ? 'text-white font-medium' : 'text-white/60 hover:text-white'
+                      isActive ? 'text-stone-900 font-medium' : 'text-stone-500 hover:text-stone-900'
                     }`}
                   >
                     {link.label}
@@ -262,7 +262,8 @@ export function Hero({ onLoginClick }: HeroProps = {}) {
                     {isActive && (
                       <motion.div
                         layoutId="activeNavHero"
-                        className="absolute bottom-0 left-3 right-3 h-[2px] rounded-t-full bg-white/60"
+                        className="absolute bottom-0 left-3 right-3 h-[2px] rounded-t-full"
+                        style={{ backgroundColor: OLIVE }}
                         transition={{ type: 'spring', stiffness: 350, damping: 30 }}
                       />
                     )}
@@ -282,15 +283,15 @@ export function Hero({ onLoginClick }: HeroProps = {}) {
                       initial={{ width: 0, opacity: 0 }} animate={{ width: 190, opacity: 1 }} exit={{ width: 0, opacity: 0 }}
                       transition={{ duration: 0.25 }} className="overflow-hidden"
                     >
-                      <div className="flex items-center gap-2 px-3 py-1.5 bg-white/15 border border-white/20 rounded-full backdrop-blur-sm">
-                        <Search className="w-3.5 h-3.5 text-white/60 flex-shrink-0" strokeWidth={1.5} />
+                      <div className="flex items-center gap-2 px-3 py-1.5 bg-stone-50 border border-stone-200 rounded-full">
+                        <Search className="w-3.5 h-3.5 text-stone-400 flex-shrink-0" strokeWidth={1.5} />
                         <input autoFocus type="search" placeholder="Buscar…"
                           value={searchQuery}
                           onChange={e => { setSearchQuery(e.target.value); if (e.target.value) document.getElementById('catalogo')?.scrollIntoView({ behavior: 'smooth' }); }}
-                          className="bg-transparent text-[12px] focus:outline-none placeholder:text-white/40 text-white w-full"
+                          className="bg-transparent text-[12px] focus:outline-none placeholder:text-stone-400 text-stone-700 w-full"
                         />
                         <button onClick={() => { setIsSearchOpen(false); setSearchQuery(''); }}>
-                          <X className="w-3 h-3 text-white/50 hover:text-white transition-colors" strokeWidth={1.5} />
+                          <X className="w-3 h-3 text-stone-400 hover:text-stone-600 transition-colors" strokeWidth={1.5} />
                         </button>
                       </div>
                     </motion.div>
@@ -298,7 +299,7 @@ export function Hero({ onLoginClick }: HeroProps = {}) {
                     <motion.button key="closed"
                       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                       onClick={() => setIsSearchOpen(true)}
-                      className="p-2 rounded-full text-white/60 hover:text-white hover:bg-white/10 transition-all"
+                      className="p-2 rounded-full text-stone-400 hover:text-stone-600 hover:bg-stone-100 transition-all"
                     >
                       <Search className="w-4 h-4" strokeWidth={1.5} />
                     </motion.button>
@@ -308,9 +309,9 @@ export function Hero({ onLoginClick }: HeroProps = {}) {
 
               {/* Notificaciones */}
               {currentUser && notifications.length > 0 && (
-                <button className="relative p-2 rounded-full text-white/60 hover:text-white hover:bg-white/10 transition-all hidden md:block">
+                <button className="relative p-2 rounded-full text-stone-500 hover:text-stone-700 hover:bg-stone-100 transition-all hidden md:block">
                   <Bell className="w-4 h-4" strokeWidth={1.5} />
-                  <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-red-400 rounded-full" />
+                  <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-red-500 rounded-full" />
                 </button>
               )}
 
@@ -320,7 +321,7 @@ export function Hero({ onLoginClick }: HeroProps = {}) {
                   <UserDropdown />
                 ) : (
                   <button onClick={onLoginClick}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-white/60 hover:text-white hover:bg-white/10 transition-all"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-stone-600 hover:text-stone-900 hover:bg-stone-100 transition-all"
                   >
                     <User className="w-4 h-4" strokeWidth={1.5} />
                     <span className="text-[11px] tracking-wide hidden xl:inline">Mi cuenta</span>
@@ -329,7 +330,7 @@ export function Hero({ onLoginClick }: HeroProps = {}) {
               </div>
 
               {/* Carrito */}
-              <div className="rounded-full border border-white/20 bg-white/10 backdrop-blur-sm">
+              <div className="rounded-full border border-stone-200">
                 <ShoppingCart onLoginRequired={onLoginClick} />
               </div>
 
