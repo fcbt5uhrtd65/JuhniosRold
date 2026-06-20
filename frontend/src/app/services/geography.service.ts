@@ -1,4 +1,5 @@
 import { publicApi } from './api';
+import { EMPTY_LOCATION, type LocationValue } from './geography.types';
 
 export interface Country {
   id: number;
@@ -52,5 +53,47 @@ export const geographyService = {
     const qs = buildQuery({ state: stateId, search: search ?? '', page_size: 300 });
     const res = await publicApi.get<PaginatedResponse<City>>(`/geography/cities/${qs}`);
     return res.data?.results ?? [];
+  },
+
+  /**
+   * Resuelve nombres sueltos de país/departamento/ciudad (tal como se guardan en el
+   * perfil del cliente) a un LocationValue completo con sus IDs, para poder
+   * precargar el LocationPicker con la ubicación ya registrada.
+   */
+  async resolveLocationByNames(names: {
+    country?: string;
+    state?: string;
+    city?: string;
+  }): Promise<LocationValue> {
+    const result: LocationValue = { ...EMPTY_LOCATION };
+    if (!names.country) return result;
+
+    const countries = await geographyService.getCountries(names.country);
+    const country = countries.find(
+      (c) => c.name.toLowerCase() === names.country!.toLowerCase(),
+    ) ?? countries[0];
+    if (!country) return result;
+    result.countryId = country.id;
+    result.countryName = country.name;
+
+    if (!names.state) return result;
+    const states = await geographyService.getStates(country.id, names.state);
+    const state = states.find(
+      (s) => s.name.toLowerCase() === names.state!.toLowerCase(),
+    ) ?? states[0];
+    if (!state) return result;
+    result.stateId = state.id;
+    result.stateName = state.name;
+
+    if (!names.city) return result;
+    const cities = await geographyService.getCities(state.id, names.city);
+    const city = cities.find(
+      (c) => c.name.toLowerCase() === names.city!.toLowerCase(),
+    ) ?? cities[0];
+    if (!city) return result;
+    result.cityId = city.id;
+    result.cityName = city.name;
+
+    return result;
   },
 };

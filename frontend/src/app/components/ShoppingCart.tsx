@@ -159,17 +159,17 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.22 }}
                 onClick={() => setIsOpen(false)}
-                className="fixed inset-0 bg-black/35 backdrop-blur-sm z-[100]"
+                className="fixed inset-0 bg-stone-950/45 backdrop-blur-sm z-[100]"
               />
 
               <motion.div
-                initial={{ x: '100%' }}
-                animate={{ x: 0 }}
-                exit={{ x: '100%' }}
-                transition={{ type: 'tween', duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-                className="fixed top-0 right-0 h-screen w-full max-w-md bg-[#F8F7F4] z-[100] flex flex-col shadow-2xl sm:rounded-l-[28px] overflow-hidden"
+                initial={{ opacity: 0, y: 24, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 16, scale: 0.98 }}
+                transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+                className="fixed inset-0 z-[100] mx-auto flex h-[100dvh] w-full max-w-4xl flex-col bg-[#F7F5F1] shadow-2xl sm:inset-4 sm:h-[calc(100dvh-2rem)] sm:rounded-[32px] sm:border sm:border-white/70 overflow-hidden"
               >
-                <div className="flex items-center justify-between px-5 py-4 bg-white border-b border-stone-100">
+                <div className="flex items-center justify-between px-5 py-4 bg-white/95 border-b border-stone-200 sm:rounded-t-[32px] md:px-8">
                   <div className="flex items-center gap-3">
                     <div className="w-9 h-9 rounded-full bg-[#2D3A1F]/10 text-[#2D3A1F] flex items-center justify-center">
                       <ShoppingBag className="w-4 h-4" strokeWidth={1.7} />
@@ -188,7 +188,7 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
                   </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto px-4 py-4">
+                <div className="flex-1 overflow-y-auto px-4 py-4 md:px-8 md:py-6">
                   {isLoading ? (
                     <div className="h-full min-h-[420px] flex flex-col items-center justify-center gap-4 text-center">
                       <div className="w-16 h-16 rounded-2xl bg-white flex items-center justify-center shadow-sm">
@@ -421,49 +421,53 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
                 </div>
 
                 {items.length > 0 && (
-                  <div className="bg-white border-t border-stone-100 px-4 pt-4 pb-[max(16px,env(safe-area-inset-bottom))]">
-                    <div className="rounded-3xl bg-[#F8F7F4] border border-stone-100 p-4 mb-3">
-                      <div className="space-y-2.5">
-                        <div className="flex justify-between text-[13px]">
-                          <span className="text-stone-500">Subtotal</span>
-                          <span className="font-semibold text-stone-950">{formatMoney(total)}</span>
-                        </div>
-                        <div className="flex justify-between text-[13px]">
-                          <span className="text-stone-500">Envío</span>
-                          <span className={freeShipping ? 'font-semibold text-emerald-700' : 'font-semibold text-stone-950'}>
-                            {freeShipping ? 'Gratis' : formatMoney(shippingCost)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between border-t border-stone-200 pt-3 text-[17px] font-bold text-stone-950">
-                          <span>Total</span>
-                          <span>{formatMoney(finalTotal)}</span>
+                  <div className="border-t border-stone-200 bg-white px-4 py-4 sm:rounded-b-[32px] md:px-8">
+                    <div className="mx-auto grid max-w-3xl gap-4 md:grid-cols-[1fr_auto] md:items-end">
+                      <div className="rounded-3xl border border-stone-200 bg-[#F8F7F4] p-4">
+                        <h3 className="mb-3 text-sm font-semibold text-stone-950">Resumen del pedido</h3>
+                        <div className="space-y-2">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-stone-500">Subtotal</span>
+                            <span className="font-medium text-stone-900">{formatMoney(total)}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-stone-500">Envío</span>
+                            <span className={freeShipping ? 'font-semibold text-emerald-700' : 'font-medium text-stone-900'}>
+                              {freeShipping ? 'Gratis' : formatMoney(shippingCost)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between border-t border-stone-200 pt-3 text-lg font-bold text-stone-950">
+                            <span>Total</span>
+                            <span>{formatMoney(finalTotal)}</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <div className="mb-3 flex items-center justify-center gap-1.5 text-[10px] text-stone-500">
-                      <ShieldCheck className="w-3.5 h-3.5" strokeWidth={1.7} />
-                      <span>Compra segura</span>
-                      <span>|</span>
-                      <PackageCheck className="w-3.5 h-3.5" strokeWidth={1.7} />
-                      <span>Pago protegido</span>
-                      <span>|</span>
-                      <MessageCircle className="w-3.5 h-3.5" strokeWidth={1.7} />
-                      <span>Soporte por WhatsApp</span>
+                      <div className="min-w-[260px]">
+                        <div className="mb-3 flex flex-wrap items-center justify-center gap-1.5 text-center text-[11px] text-stone-500 md:justify-end">
+                          <ShieldCheck className="h-3.5 w-3.5 text-[#2D3A1F]" strokeWidth={1.8} />
+                          <span>Compra segura</span>
+                          <span>|</span>
+                          <PackageCheck className="h-3.5 w-3.5 text-[#2D3A1F]" strokeWidth={1.8} />
+                          <span>Pago protegido</span>
+                          <span>|</span>
+                          <MessageCircle className="h-3.5 w-3.5 text-[#2D3A1F]" strokeWidth={1.8} />
+                          <span>Soporte por WhatsApp</span>
+                        </div>
+                        <motion.button
+                          whileHover={{ scale: 1.01 }}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={() => {
+                            setIsOpen(false);
+                            setCheckoutOpen(true);
+                          }}
+                          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#2D3A1F] px-6 py-4 text-sm font-bold uppercase tracking-[0.12em] text-white shadow-lg shadow-[#2D3A1F]/15 transition-opacity hover:opacity-95"
+                        >
+                          Finalizar compra segura
+                          <ArrowRight className="h-4 w-4" strokeWidth={2} />
+                        </motion.button>
+                      </div>
                     </div>
-
-                    <motion.button
-                      whileHover={{ scale: 1.01 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => {
-                        setIsOpen(false);
-                        setCheckoutOpen(true);
-                      }}
-                      className="w-full rounded-2xl bg-stone-950 py-4 text-[12px] font-bold uppercase tracking-[0.14em] text-white shadow-lg shadow-stone-950/15 hover:bg-[#2D3A1F] transition-colors flex items-center justify-center gap-2"
-                    >
-                      Finalizar compra segura
-                      <ArrowRight className="w-4 h-4" strokeWidth={2} />
-                    </motion.button>
                   </div>
                 )}
               </motion.div>

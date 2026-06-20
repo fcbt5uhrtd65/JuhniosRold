@@ -22,3 +22,22 @@ class CustomerSerializer(serializers.ModelSerializer):
         model = Customer
         fields = "__all__"
         read_only_fields = ("deleted_at",)
+
+
+class MyCustomerProfileSerializer(serializers.ModelSerializer):
+    """Datos propios del cliente autenticado que viven en el modelo Customer."""
+
+    class Meta:
+        model = Customer
+        fields = (
+            "id",
+            "document_type",
+            "document_number",
+            "first_name",
+            "last_name",
+            "email",
+            "phone",
+            "address",
+            "city",
+        )
+        read_only_fields = ("id", "email")
