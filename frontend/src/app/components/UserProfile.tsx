@@ -113,7 +113,11 @@ export function UserProfile({ isOpen, onClose }: UserProfileProps) {
     return () => {
       active = false;
     };
-  }, [isOpen, currentUser]);
+    // Solo se sincroniza al abrir el modal: si dependiera de currentUser, guardar
+    // cambios dispararía este efecto de nuevo (currentUser cambia de referencia tras
+    // updateProfile) y el setSuccess(false) de aquí pisaría el aviso de éxito.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   useEffect(() => {
     if (!profileLocation.stateId) {
