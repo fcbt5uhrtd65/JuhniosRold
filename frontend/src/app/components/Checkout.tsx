@@ -29,7 +29,10 @@ import {
 } from '../services/payments.service';
 import { usePaymentStatusPolling } from '../hooks/usePaymentStatusPolling';
 import { LocationPicker } from './ui/LocationPicker';
+import { DeliveryLocationSection } from './ui/DeliveryLocationSection';
+import { geographyService, type City } from '../services/geography.service';
 import { EMPTY_LOCATION, type LocationValue } from '../services/geography.types';
+import { EMPTY_DELIVERY_LOCATION, type DeliveryLocationValue } from '../services/delivery-location.types';
 
 interface CheckoutProps {
   isOpen: boolean;
@@ -72,11 +75,12 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
     fullName: currentUser?.nombre ?? '',
     email: currentUser?.email ?? '',
     phone: currentUser?.telefono ?? '',
-    address: currentUser?.direccion ?? '',
     zipCode: '',
-    reference: '',
   });
   const [shippingLocation, setShippingLocation] = useState<LocationValue>(EMPTY_LOCATION);
+  const [deliveryLocation, setDeliveryLocation] = useState<DeliveryLocationValue>(EMPTY_DELIVERY_LOCATION);
+  const [shippingCities, setShippingCities] = useState<City[]>([]);
+  const shippingCityNames = shippingCities.map((city) => city.name);
   const [formErrors, setFormErrors] = useState<Partial<Record<CheckoutFormField, string>>>({});
   const [showAddressForm, setShowAddressForm] = useState(!currentUser?.direccion);
 
@@ -89,7 +93,11 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
     phone: currentUser?.telefono ?? '',
     address: currentUser?.direccion ?? '',
     city: currentUser?.ciudad ?? '',
-    country: 'Colombia',
+    state: currentUser?.departamento ?? '',
+    country: currentUser?.pais || 'Colombia',
+    reference: currentUser?.referencia ?? '',
+    lat: currentUser?.latitud ?? null,
+    lng: currentUser?.longitud ?? null,
   };
 
   useEffect(() => {
@@ -108,10 +116,29 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
       fullName: current.fullName || currentUser?.nombre || '',
       email: current.email || currentUser?.email || '',
       phone: current.phone || currentUser?.telefono || '',
-      address: current.address || currentUser?.direccion || '',
     }));
     setShowAddressForm(!currentUser?.direccion);
-  }, [currentUser, isOpen]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!shippingLocation.stateId) {
+      setShippingCities([]);
+      return;
+    }
+    let cancelled = false;
+    geographyService
+      .getCities(shippingLocation.stateId)
+      .then((cities) => {
+        if (!cancelled) setShippingCities(cities);
+      })
+      .catch(() => {
+        if (!cancelled) setShippingCities([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [shippingLocation.stateId]);
 
   const close = () => {
     if (!isSubmitting) {
@@ -130,12 +157,14 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
       full_name: formData.fullName,
       email: formData.email,
       phone: formData.phone,
-      address_line1: formData.address,
-      address_line2: formData.reference,
-      city: shippingLocation.cityName,
-      department: shippingLocation.stateName,
+      address_line1: deliveryLocation.address,
+      address_line2: deliveryLocation.reference,
+      city: shippingLocation.cityName || deliveryLocation.city,
+      department: shippingLocation.stateName || deliveryLocation.state,
       postal_code: formData.zipCode,
-      country: shippingLocation.countryName || 'Colombia',
+      country: shippingLocation.countryName || deliveryLocation.country || 'Colombia',
+      latitude: deliveryLocation.lat,
+      longitude: deliveryLocation.lng,
     });
 
   const updateFormField = (field: keyof typeof formData, value: string) => {
@@ -149,8 +178,28 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
       fullName: registeredAddress.fullName,
       email: registeredAddress.email,
       phone: registeredAddress.phone,
-      address: registeredAddress.address,
     }));
+    setDeliveryLocation({
+      ...EMPTY_DELIVERY_LOCATION,
+      address: registeredAddress.address,
+      reference: registeredAddress.reference,
+      city: registeredAddress.city,
+      state: registeredAddress.state,
+      country: registeredAddress.country,
+      lat: registeredAddress.lat,
+      lng: registeredAddress.lng,
+      confirmed: Boolean(registeredAddress.lat && registeredAddress.lng),
+    });
+    if (registeredAddress.country) {
+      geographyService
+        .resolveLocationByNames({
+          country: registeredAddress.country,
+          state: registeredAddress.state,
+          city: registeredAddress.city,
+        })
+        .then(setShippingLocation)
+        .catch(() => {});
+    }
     setShowAddressForm(true);
     setFormErrors({});
     setError('');
@@ -161,7 +210,7 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
     if (!formData.fullName.trim()) errors.fullName = 'Ingresa tu nombre completo.';
     if (!formData.email.trim()) errors.email = 'Ingresa tu correo electrónico.';
     if (!formData.phone.trim()) errors.phone = 'Ingresa tu número de teléfono.';
-    if (!formData.address.trim()) errors.address = 'Escribe tu dirección completa.';
+    if (!deliveryLocation.address.trim()) errors.address = 'Confirma tu dirección de envío en el mapa.';
     if (!shippingLocation.countryName.trim()) errors.country = 'Selecciona el país.';
     if (!shippingLocation.stateName.trim()) errors.state = 'Selecciona el departamento o estado.';
     if (!shippingLocation.cityName.trim()) errors.city = 'Selecciona la ciudad o municipio.';
@@ -433,7 +482,11 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
                           <p className="font-semibold text-stone-950">{registeredAddress.fullName || 'Nombre por completar'}</p>
                           <p>{registeredAddress.phone || 'Teléfono por completar'}</p>
                           <p>{registeredAddress.address}</p>
-                          <p>{registeredAddress.city ? `${registeredAddress.city}, departamento por confirmar` : 'Ciudad y departamento por confirmar'}</p>
+                          <p>
+                            {registeredAddress.city
+                              ? `${registeredAddress.city}${registeredAddress.state ? `, ${registeredAddress.state}` : ''}`
+                              : 'Ciudad y departamento por confirmar'}
+                          </p>
                           <p>{registeredAddress.country}</p>
                           <p>Código postal por completar</p>
                         </div>
@@ -491,17 +544,6 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
                           <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-stone-500">Código postal</span>
                           <input type="text" value={formData.zipCode} onChange={(event) => updateFormField('zipCode', event.target.value)} placeholder="Ej. 110111" className={inputBaseClass} />
                         </label>
-                        <label className="md:col-span-2">
-                          <span className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-stone-500">
-                            <Home className="h-3.5 w-3.5" /> Dirección *
-                          </span>
-                          <input type="text" value={formData.address} onChange={(event) => updateFormField('address', event.target.value)} placeholder="Escribe tu dirección completa" className={inputBaseClass} />
-                          {formErrors.address && <p className="mt-1.5 text-xs text-red-600">{formErrors.address}</p>}
-                        </label>
-                        <label className="md:col-span-2">
-                          <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-stone-500">Referencia adicional</span>
-                          <input type="text" value={formData.reference} onChange={(event) => updateFormField('reference', event.target.value)} placeholder="Apartamento, torre, barrio o indicaciones para el repartidor" className={inputBaseClass} />
-                        </label>
                         <div className="rounded-3xl border border-stone-200 bg-[#F8F7F4] p-4 md:col-span-2">
                           <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-stone-900">
                             <MapPin className="h-4 w-4 text-[#2D3A1F]" strokeWidth={1.7} />
@@ -510,17 +552,32 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
                           {!shippingLocation.countryName && (
                             <p className="mb-3 rounded-2xl bg-white px-3 py-2 text-xs text-stone-500">Selecciona primero el país para continuar.</p>
                           )}
-                          <LocationPicker
-                            value={shippingLocation}
-                            onChange={(value) => {
-                              setShippingLocation(value);
-                              setFormErrors((current) => ({ ...current, country: undefined, state: undefined, city: undefined }));
-                            }}
-                            required
-                          />
-                          {(formErrors.country || formErrors.state || formErrors.city) && (
-                            <p className="mt-3 text-xs text-red-600">{formErrors.country || formErrors.state || formErrors.city}</p>
-                          )}
+                          <div className="space-y-3">
+                            <LocationPicker
+                              value={shippingLocation}
+                              onChange={(value) => {
+                                setShippingLocation(value);
+                                setFormErrors((current) => ({ ...current, country: undefined, state: undefined, city: undefined }));
+                              }}
+                              required
+                            />
+                            {(formErrors.country || formErrors.state || formErrors.city) && (
+                              <p className="text-xs text-red-600">{formErrors.country || formErrors.state || formErrors.city}</p>
+                            )}
+                            <DeliveryLocationSection
+                              value={deliveryLocation}
+                              onChange={(value) => {
+                                setDeliveryLocation(value);
+                                setFormErrors((current) => ({ ...current, address: undefined }));
+                              }}
+                              searchScope={{ state: shippingLocation.stateName, country: shippingLocation.countryName }}
+                              cityOptions={shippingCityNames}
+                              onCityResolved={(cityName) =>
+                                setShippingLocation((prev) => ({ ...prev, cityId: null, cityName }))
+                              }
+                            />
+                            {formErrors.address && <p className="text-xs text-red-600">{formErrors.address}</p>}
+                          </div>
                         </div>
                       </div>
                     </section>
