@@ -236,6 +236,10 @@ function mapApiOrder(o: {
   payment_method?: string; user_id?: string; items?: Array<{
     product_id: string; product_name: string; quantity: number; unit_price: number;
   }>;
+  shipping_address?: {
+    address_line1?: string; city?: string; department?: string; country?: string;
+    latitude?: number | null; longitude?: number | null;
+  };
 }): Order {
   const statusMap: Record<string, Order['estado']> = {
     pending: 'pendiente',
@@ -263,6 +267,12 @@ function mapApiOrder(o: {
     estado: statusMap[o.status] ?? 'pendiente',
     fecha: o.created_at,
     metodoPago: o.payment_method,
+    direccionEnvio: o.shipping_address?.address_line1,
+    ciudadEnvio: o.shipping_address?.city,
+    departamentoEnvio: o.shipping_address?.department,
+    paisEnvio: o.shipping_address?.country,
+    latitudEnvio: o.shipping_address?.latitude ?? null,
+    longitudEnvio: o.shipping_address?.longitude ?? null,
   };
 }
 

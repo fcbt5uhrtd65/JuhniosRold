@@ -10,13 +10,15 @@ interface InteractiveLocationMapProps {
   /** Called when the user drags the marker or clicks elsewhere on the map. */
   onMarkerMove: (lat: number, lng: number) => void;
   className?: string;
+  /** Disables dragging and click-to-move, for views that only display a saved location. */
+  readOnly?: boolean;
 }
 
 const DEFAULT_VIEW: [number, number] = [4.711, -74.0721]; // Colombia
 const DEFAULT_ZOOM = 5;
 const FOCUSED_ZOOM = 16;
 
-export function InteractiveLocationMap({ lat, lng, onMarkerMove, className = '' }: InteractiveLocationMapProps) {
+export function InteractiveLocationMap({ lat, lng, onMarkerMove, className = '', readOnly = false }: InteractiveLocationMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mapInstanceRef = useRef<any>(null);
@@ -26,6 +28,8 @@ export function InteractiveLocationMap({ lat, lng, onMarkerMove, className = '' 
   const leafletRef = useRef<any>(null);
   const onMarkerMoveRef = useRef(onMarkerMove);
   onMarkerMoveRef.current = onMarkerMove;
+  const readOnlyRef = useRef(readOnly);
+  readOnlyRef.current = readOnly;
 
   // Init map once
   useEffect(() => {
@@ -64,6 +68,7 @@ export function InteractiveLocationMap({ lat, lng, onMarkerMove, className = '' 
       }).addTo(map);
 
       map.on('click', (e: { latlng: { lat: number; lng: number } }) => {
+        if (readOnlyRef.current) return;
         placeMarker(e.latlng.lat, e.latlng.lng);
         onMarkerMoveRef.current(e.latlng.lat, e.latlng.lng);
       });
@@ -84,7 +89,7 @@ export function InteractiveLocationMap({ lat, lng, onMarkerMove, className = '' 
         markerRef.current.setLatLng([markerLat, markerLng]);
         return;
       }
-      const marker = L.marker([markerLat, markerLng], { draggable: true }).addTo(map);
+      const marker = L.marker([markerLat, markerLng], { draggable: !readOnlyRef.current }).addTo(map);
       marker.on('dragend', () => {
         const pos = marker.getLatLng();
         onMarkerMoveRef.current(pos.lat, pos.lng);
@@ -123,7 +128,7 @@ export function InteractiveLocationMap({ lat, lng, onMarkerMove, className = '' 
     if (markerRef.current) {
       markerRef.current.setLatLng([lat, lng]);
     } else {
-      const marker = L.marker([lat, lng], { draggable: true }).addTo(map);
+      const marker = L.marker([lat, lng], { draggable: !readOnly }).addTo(map);
       marker.on('dragend', () => {
         const pos = marker.getLatLng();
         onMarkerMoveRef.current(pos.lat, pos.lng);
@@ -131,7 +136,7 @@ export function InteractiveLocationMap({ lat, lng, onMarkerMove, className = '' 
       markerRef.current = marker;
     }
     map.setView([lat, lng], FOCUSED_ZOOM);
-  }, [lat, lng]);
+  }, [lat, lng, readOnly]);
 
   return (
     <div className={`relative ${className}`}>

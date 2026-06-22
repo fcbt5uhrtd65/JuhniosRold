@@ -70,6 +70,12 @@ export interface Order {
     | 'fallido';
   fecha: string;
   metodoPago?: string;
+  direccionEnvio?: string;
+  ciudadEnvio?: string;
+  departamentoEnvio?: string;
+  paisEnvio?: string;
+  latitudEnvio?: number | null;
+  longitudEnvio?: number | null;
 }
 
 export interface Payment {
