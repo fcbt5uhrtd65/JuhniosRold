@@ -100,3 +100,17 @@ class ReportExportView(generics.GenericAPIView):
             serializer.validated_data["filters"],
         )
         return Response({"task_id": task.id, "status": "queued"}, status=202)
+
+
+class ReportExportStatusView(APIView):
+    permission_classes = (HasComponentAccess,)
+    required_component = "analytics.management"
+
+    def get(self, request, task_id):
+        result = AsyncResult(task_id)
+        if result.successful():
+            payload = result.result or {}
+            return Response({"status": "success", "url": payload.get("url")})
+        if result.failed():
+            return Response({"status": "failure", "error": str(result.result)})
+        return Response({"status": "pending"})

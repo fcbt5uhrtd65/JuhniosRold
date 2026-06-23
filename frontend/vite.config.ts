@@ -7,7 +7,7 @@ import react from '@vitejs/plugin-react'
 const devServerPort = Number(process.env.VITE_DEV_SERVER_PORT ?? '5173')
 const hmrClientPort = Number(process.env.VITE_HMR_PORT ?? '5174')
 const hmrHost = process.env.VITE_HMR_HOST ?? 'localhost'
-const proxyTarget = process.env.VITE_PROXY_TARGET ?? 'http://localhost:4000'
+const proxyTarget = process.env.VITE_PROXY_TARGET ?? 'http://localhost:8001'
 
 function figmaAssetResolver(): Plugin {
   return {

@@ -37,6 +37,14 @@ import {
   type PurchaseOrderRecord,
   type StockRecord,
 } from '../../services/inventory-production.service';
+import {
+  getGenericReportExportStatus,
+  requestGenericReportExport,
+  type InventoryReportExportFormat,
+} from '../../services/reports.service';
+import { getAuditLogs, type AuditLog } from '../../services/audit.service';
+import { pollExportStatus } from '../../utils/pollExportStatus';
+import { resolveBackendUrl } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 
 /* ═══════════════════════════════════════════════════════
@@ -2071,10 +2079,12 @@ function ModuloConversion() {
    MÓDULO REPORTES
 ═══════════════════════════════════════════════════════ */
 function ModuloReportes() {
+  const toast = useToast();
   const [desde, setDesde] = useState('2025-06-01');
   const [hasta, setHasta] = useState('2025-06-19');
   const [bodega, setBodega] = useState('');
   const [grupo, setGrupo] = useState('');
+  const [exporting, setExporting] = useState<string | null>(null);
 
   const reportes = [
     { id: 'inv-general', title: 'Inventario General', desc: 'Existencias en todas las bodegas con costos y valorización', icon: Package, tags: ['PDF', 'Excel'] },
@@ -2090,6 +2100,27 @@ function ModuloReportes() {
     { id: 'bajo-minimo', title: 'Artículos bajo Mínimo', desc: 'Artículos que requieren reabastecimiento urgente', icon: TrendingDown, tags: ['PDF', 'Excel'] },
     { id: 'vencimiento', title: 'Control de Vencimientos', desc: 'Lotes por vencer en los próximos 30, 60 y 90 días', icon: Clock, tags: ['PDF'] },
   ];
+
+  const handleExport = async (reportId: string, format: InventoryReportExportFormat) => {
+    const exportKey = `${reportId}-${format}`;
+    setExporting(exportKey);
+    toast.info('Generando reporte, esto puede tardar unos segundos...');
+    try {
+      const taskId = await requestGenericReportExport(reportId, format, {
+        desde,
+        hasta,
+        bodega,
+        grupo,
+      });
+      const relativeUrl = await pollExportStatus(taskId, getGenericReportExportStatus);
+      window.open(resolveBackendUrl(relativeUrl), '_blank');
+      toast.success('Reporte listo.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo generar el reporte');
+    } finally {
+      setExporting(null);
+    }
+  };
 
   return (
     <div>
@@ -2110,8 +2141,8 @@ function ModuloReportes() {
             <h3 className="font-semibold text-gray-900 mb-1">{r.title}</h3>
             <p className="text-xs text-gray-500 mb-4">{r.desc}</p>
             <div className="flex gap-2">
-              {r.tags.includes('PDF') && <button className="flex-1 py-2 text-xs font-semibold border border-[#2a4038] text-[#2a4038] rounded-xl hover:bg-[#2a4038] hover:text-white transition-all flex items-center justify-center gap-1.5"><Download size={12} /> PDF</button>}
-              {r.tags.includes('Excel') && <button className="flex-1 py-2 text-xs font-semibold bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors flex items-center justify-center gap-1.5"><Download size={12} /> Excel</button>}
+              {r.tags.includes('PDF') && <button disabled={exporting !== null} onClick={() => handleExport(r.id, 'pdf')} className="flex-1 py-2 text-xs font-semibold border border-[#2a4038] text-[#2a4038] rounded-xl hover:bg-[#2a4038] hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1.5">{exporting === `${r.id}-pdf` ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />} PDF</button>}
+              {r.tags.includes('Excel') && <button disabled={exporting !== null} onClick={() => handleExport(r.id, 'xlsx')} className="flex-1 py-2 text-xs font-semibold bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1.5">{exporting === `${r.id}-xlsx` ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />} Excel</button>}
             </div>
           </div>
         ))}
@@ -2124,14 +2155,34 @@ function ModuloReportes() {
    MÓDULO AUDITORÍA
 ═══════════════════════════════════════════════════════ */
 function ModuloAuditoria() {
+  const toast = useToast();
   const [search, setSearch] = useState('');
   const [modFilter, setModFilter] = useState('');
+  const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const modulos = [...new Set(AUDITORIA.map(a => a.modulo))];
-  const filtered = useMemo(() => AUDITORIA.filter(a =>
-    (!modFilter || a.modulo === modFilter) &&
-    (!search || a.detalle.toLowerCase().includes(search.toLowerCase()) || a.usuario.toLowerCase().includes(search.toLowerCase()) || a.accion.toLowerCase().includes(search.toLowerCase()))
-  ), [search, modFilter]);
+  useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+    getAuditLogs()
+      .then(data => {
+        if (mounted) setLogs(data);
+      })
+      .catch(error => {
+        toast.error(error instanceof Error ? error.message : 'No fue posible cargar auditoría');
+      })
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
+    return () => { mounted = false; };
+  }, [toast]);
+
+  const modulos = [...new Set(logs.map(a => a.module).filter(Boolean))];
+  const filtered = useMemo(() => logs.filter(a => {
+    const detail = `${a.resource_type} ${a.resource_id} ${a.request_path} ${JSON.stringify(a.metadata ?? {})}`;
+    return (!modFilter || a.module === modFilter) &&
+      (!search || detail.toLowerCase().includes(search.toLowerCase()) || (a.actor_email ?? '').toLowerCase().includes(search.toLowerCase()) || a.action.toLowerCase().includes(search.toLowerCase()));
+  }), [logs, search, modFilter]);
 
   return (
     <div>
@@ -2149,17 +2200,24 @@ function ModuloAuditoria() {
       <Tbl>
         <thead><tr><Th>Fecha</Th><Th>Hora</Th><Th>Usuario</Th><Th>Módulo</Th><Th>Acción</Th><Th>Detalle</Th><Th>IP</Th></tr></thead>
         <tbody>
-          {filtered.map(a => (
+          {loading && <LoadingRow colSpan={7} />}
+          {!loading && filtered.map(a => {
+            const createdAt = new Date(a.created_at);
+            const detail = a.resource_type || a.resource_id
+              ? `${a.resource_type || 'Recurso'} ${a.resource_id}`.trim()
+              : a.request_path || 'Sin detalle';
+            return (
             <tr key={a.id} className="hover:bg-gray-50/50">
-              <Td className="text-xs text-gray-500">{a.fecha}</Td>
-              <Td className="font-mono text-xs text-gray-500">{a.hora}</Td>
-              <Td className="font-medium text-gray-900">{a.usuario}</Td>
-              <Td><Badge label={a.modulo} color="blue" /></Td>
-              <Td className="text-xs font-semibold text-gray-700">{a.accion}</Td>
-              <Td className="text-xs text-gray-500 max-w-xs"><span className="line-clamp-2">{a.detalle}</span></Td>
-              <Td><span className="font-mono text-[10px] text-gray-400">{a.ip}</span></Td>
+              <Td className="text-xs text-gray-500">{createdAt.toLocaleDateString('es-CO')}</Td>
+              <Td className="font-mono text-xs text-gray-500">{createdAt.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</Td>
+              <Td className="font-medium text-gray-900">{a.actor_email ?? 'Sistema'}</Td>
+              <Td><Badge label={a.module} color="blue" /></Td>
+              <Td className="text-xs font-semibold text-gray-700">{a.action}</Td>
+              <Td className="text-xs text-gray-500 max-w-xs"><span className="line-clamp-2">{detail}</span></Td>
+              <Td><span className="font-mono text-[10px] text-gray-400">{a.ip_address ?? '—'}</span></Td>
             </tr>
-          ))}
+          );})}
+          {!loading && filtered.length === 0 && <EmptyRow colSpan={7} label="Sin registros de auditoría" />}
         </tbody>
       </Tbl>
     </div>
