@@ -43,10 +43,12 @@ class SalesInvoiceSerializer(serializers.ModelSerializer):
             "subtotal",
             "shipping_cost",
             "total",
+            "tax_rate",
             "customer_name",
             "customer_email",
             "customer_document",
             "billing_address",
             "issued_at",
+            "dian_resolution",
             "lines",
         )
