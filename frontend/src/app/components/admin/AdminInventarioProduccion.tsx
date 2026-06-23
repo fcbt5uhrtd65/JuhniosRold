@@ -1,4 +1,4 @@
-import { useState, useMemo, type ComponentType } from 'react';
+import { useState, useMemo, useEffect, useCallback, type ComponentType } from 'react';
 import {
   Plus, Search, Edit2, Trash2, X, Save, ChevronRight,
   Warehouse, Package, ArrowRightLeft, Factory,
@@ -6,8 +6,21 @@ import {
   Truck, RefreshCw, FileText, Scale, Box,
   Filter, Download, Eye, ShoppingCart,
   LayoutDashboard, TrendingDown, TrendingUp, Bell,
-  MoveRight, Beaker, ClipboardCheck,
+  MoveRight, Beaker, ClipboardCheck, Loader2,
 } from 'lucide-react';
+import {
+  getWarehouses, createWarehouse, updateWarehouse, deleteWarehouse,
+  getSuppliers, createSupplier,
+  getItemGroups, createItemGroup,
+  getItemTypes,
+  getUnits, createUnit,
+  type Warehouse as ApiWarehouse,
+  type Supplier as ApiSupplier,
+  type ItemGroup as ApiItemGroup,
+  type ItemType as ApiItemType,
+  type UnitOfMeasure as ApiUnitOfMeasure,
+} from '../../services/inventory-masters.service';
+import { useToast } from '../../contexts/ToastContext';
 
 /* ═══════════════════════════════════════════════════════
    TYPES
@@ -393,6 +406,14 @@ function ModuloMaestros() {
   );
 }
 
+function LoadingRow({ colSpan }: { colSpan: number }) {
+  return <tr><td colSpan={colSpan} className="px-4 py-8 text-center text-gray-400 text-sm"><Loader2 size={16} className="inline animate-spin mr-2" /> Cargando...</td></tr>;
+}
+
+function EmptyRow({ colSpan, label }: { colSpan: number; label: string }) {
+  return <tr><td colSpan={colSpan} className="px-4 py-8 text-center text-gray-400 text-sm">{label}</td></tr>;
+}
+
 function TabArticulos({ search, setSearch, drawerOpen, setDrawerOpen }: { search: string; setSearch: (v: string) => void; drawerOpen: boolean; setDrawerOpen: (v: boolean) => void }) {
   const [filterTipo, setFilterTipo] = useState('');
   const filtered = useMemo(() => ARTICULOS.filter(a => (a.nombre.toLowerCase().includes(search.toLowerCase()) || a.codigo.toLowerCase().includes(search.toLowerCase())) && (!filterTipo || a.tipo === filterTipo)), [search, filterTipo]);
@@ -454,96 +475,368 @@ function TabArticulos({ search, setSearch, drawerOpen, setDrawerOpen }: { search
 }
 
 function TabBodegas({ search, setSearch, drawerOpen, setDrawerOpen }: { search: string; setSearch: (v: string) => void; drawerOpen: boolean; setDrawerOpen: (v: boolean) => void }) {
-  const filtered = useMemo(() => BODEGAS.filter(b => b.nombre.toLowerCase().includes(search.toLowerCase())), [search]);
+  const toast = useToast();
+  const [warehouses, setWarehouses] = useState<ApiWarehouse[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ code: '', name: '', address: '', isActive: true });
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setWarehouses(await getWarehouses());
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No fue posible cargar las bodegas');
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const filtered = useMemo(
+    () => warehouses.filter(b => b.name.toLowerCase().includes(search.toLowerCase()) || b.code.toLowerCase().includes(search.toLowerCase())),
+    [warehouses, search],
+  );
+
+  const handleCreate = async () => {
+    if (!form.code.trim() || !form.name.trim()) {
+      toast.warning('Código y nombre son obligatorios.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await createWarehouse(form);
+      toast.success('Bodega creada correctamente');
+      setForm({ code: '', name: '', address: '', isActive: true });
+      setDrawerOpen(false);
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No fue posible crear la bodega');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleActive = async (warehouse: ApiWarehouse) => {
+    try {
+      await updateWarehouse(warehouse.id, { isActive: !warehouse.isActive });
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No fue posible actualizar la bodega');
+    }
+  };
+
+  const handleDelete = async (warehouse: ApiWarehouse) => {
+    try {
+      await deleteWarehouse(warehouse.id);
+      toast.success('Bodega eliminada');
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No fue posible eliminar la bodega');
+    }
+  };
+
   return (
     <>
-      <Hdr title="Bodegas" subtitle={`${BODEGAS.length} bodegas`} onNew={() => setDrawerOpen(true)} newLabel="Nueva Bodega" />
+      <Hdr title="Bodegas" subtitle={`${warehouses.length} bodegas`} onNew={() => setDrawerOpen(true)} newLabel="Nueva Bodega" />
       <div className="mb-4"><SBar value={search} onChange={setSearch} placeholder="Buscar bodega..." /></div>
       <Tbl>
-        <thead><tr><Th>Código</Th><Th>Nombre</Th><Th>Tipo</Th><Th>Responsable</Th><Th>Estado</Th><Th></Th></tr></thead>
-        <tbody>{filtered.map(b => <tr key={b.id} className="hover:bg-gray-50/50"><Td><span className="font-mono text-xs">{b.codigo}</span></Td><Td className="font-medium text-gray-900">{b.nombre}</Td><Td><Badge label={b.tipo} color="blue" /></Td><Td className="text-gray-500">{b.responsable}</Td><Td><Badge label={b.activa ? 'Activa' : 'Inactiva'} color={b.activa ? 'green' : 'red'} /></Td><Td><div className="flex gap-1"><button className="p-1.5 rounded-lg hover:bg-amber-50 text-gray-400 hover:text-amber-600"><Edit2 size={13} /></button><button className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500"><Trash2 size={13} /></button></div></Td></tr>)}</tbody>
+        <thead><tr><Th>Código</Th><Th>Nombre</Th><Th>Dirección</Th><Th>Estado</Th><Th></Th></tr></thead>
+        <tbody>
+          {loading && <LoadingRow colSpan={5} />}
+          {!loading && filtered.length === 0 && <EmptyRow colSpan={5} label="Sin bodegas registradas" />}
+          {!loading && filtered.map(b => (
+            <tr key={b.id} className="hover:bg-gray-50/50">
+              <Td><span className="font-mono text-xs">{b.code}</span></Td>
+              <Td className="font-medium text-gray-900">{b.name}</Td>
+              <Td className="text-gray-500 text-xs">{b.address || '—'}</Td>
+              <Td><button onClick={() => handleToggleActive(b)}><Badge label={b.isActive ? 'Activa' : 'Inactiva'} color={b.isActive ? 'green' : 'red'} /></button></Td>
+              <Td><div className="flex gap-1"><button onClick={() => handleDelete(b)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500"><Trash2 size={13} /></button></div></Td>
+            </tr>
+          ))}
+        </tbody>
       </Tbl>
       <Drawer title="Nueva Bodega" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Código" required><input className={inp} placeholder="Ej: B08" /></Field>
-          <Field label="Tipo de bodega" required><select className={sel}><option>Materia Prima</option><option>Producto Terminado</option><option>Empaque</option><option>En Proceso</option><option>Deteriorados</option><option>Distribución</option><option>Punto de Venta</option></select></Field>
-          <div className="col-span-2"><Field label="Nombre de la bodega" required><input className={inp} placeholder="Nombre completo" /></Field></div>
-          <div className="col-span-2"><Field label="Responsable" required><select className={sel}><option>Carlos Roldán</option><option>Laura Mejía</option><option>Ana González</option><option>Pedro Vásquez</option></select></Field></div>
-          <div className="col-span-2"><Field label="Ubicación física"><input className={inp} placeholder="Área, bloque o dirección" /></Field></div>
-          <div className="col-span-2"><Field label="Observaciones"><textarea className={inp + ' resize-none h-14'} placeholder="Notas sobre la bodega..." /></Field></div>
-          <div className="col-span-2"><label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"><input type="checkbox" className="w-4 h-4 accent-[#2a4038]" defaultChecked /> Bodega activa</label></div>
+          <Field label="Código" required><input className={inp} placeholder="Ej: B08" value={form.code} onChange={e => setForm(f => ({ ...f, code: e.target.value }))} /></Field>
+          <div className="col-span-2"><Field label="Nombre de la bodega" required><input className={inp} placeholder="Nombre completo" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></Field></div>
+          <div className="col-span-2"><Field label="Dirección"><input className={inp} placeholder="Área, bloque o dirección" value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} /></Field></div>
+          <div className="col-span-2"><label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"><input type="checkbox" className="w-4 h-4 accent-[#2a4038]" checked={form.isActive} onChange={e => setForm(f => ({ ...f, isActive: e.target.checked }))} /> Bodega activa</label></div>
         </div>
-        <DrawerFooter onClose={() => setDrawerOpen(false)} />
+        <div className="flex gap-3 mt-8 pt-5 border-t border-gray-100">
+          <button onClick={() => setDrawerOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancelar</button>
+          <button onClick={handleCreate} disabled={saving} className="flex-1 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold hover:bg-[#3d5c4e] flex items-center justify-center gap-2 disabled:opacity-50">{saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Guardar</button>
+        </div>
       </Drawer>
     </>
   );
 }
 
 function TabGrupos({ search, setSearch, drawerOpen, setDrawerOpen }: { search: string; setSearch: (v: string) => void; drawerOpen: boolean; setDrawerOpen: (v: boolean) => void }) {
-  const filtered = useMemo(() => GRUPOS.filter(g => g.nombre.toLowerCase().includes(search.toLowerCase())), [search]);
+  const toast = useToast();
+  const [groups, setGroups] = useState<ApiItemGroup[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ code: '', name: '', isInventoried: true });
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setGroups(await getItemGroups());
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No fue posible cargar los grupos');
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const filtered = useMemo(() => groups.filter(g => g.name.toLowerCase().includes(search.toLowerCase())), [groups, search]);
+
+  const handleCreate = async () => {
+    if (!form.code.trim() || !form.name.trim()) {
+      toast.warning('Código y nombre son obligatorios.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await createItemGroup(form);
+      toast.success('Grupo creado correctamente');
+      setForm({ code: '', name: '', isInventoried: true });
+      setDrawerOpen(false);
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No fue posible crear el grupo');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <>
       <Hdr title="Grupos de Artículos" subtitle="Clasificación primaria" onNew={() => setDrawerOpen(true)} newLabel="Nuevo Grupo" />
       <div className="mb-4"><SBar value={search} onChange={setSearch} placeholder="Buscar grupo..." /></div>
       <Tbl>
-        <thead><tr><Th>Código</Th><Th>Nombre</Th><Th>Tipo</Th><Th>Artículos</Th><Th></Th></tr></thead>
-        <tbody>{filtered.map(g => <tr key={g.id} className="hover:bg-gray-50/50"><Td><span className="font-mono text-xs">{g.codigo}</span></Td><Td className="font-medium text-gray-900">{g.nombre}</Td><Td><Badge label={g.tipo} color={g.tipo === 'Inventariable' ? 'green' : 'purple'} /></Td><Td className="font-semibold">{g.articulos}</Td><Td><div className="flex gap-1"><button className="p-1.5 rounded-lg hover:bg-amber-50 text-gray-400 hover:text-amber-600"><Edit2 size={13} /></button><button className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500"><Trash2 size={13} /></button></div></Td></tr>)}</tbody>
+        <thead><tr><Th>Código</Th><Th>Nombre</Th><Th>Inventariable</Th></tr></thead>
+        <tbody>
+          {loading && <LoadingRow colSpan={3} />}
+          {!loading && filtered.length === 0 && <EmptyRow colSpan={3} label="Sin grupos registrados" />}
+          {!loading && filtered.map(g => (
+            <tr key={g.id} className="hover:bg-gray-50/50">
+              <Td><span className="font-mono text-xs">{g.code}</span></Td>
+              <Td className="font-medium text-gray-900">{g.name}</Td>
+              <Td><Badge label={g.isInventoried ? 'Sí' : 'No'} color={g.isInventoried ? 'green' : 'gray'} /></Td>
+            </tr>
+          ))}
+        </tbody>
       </Tbl>
       <Drawer title="Nuevo Grupo de Artículo" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Código" required><input className={inp} placeholder="Ej: GR11" /></Field>
-          <Field label="Tipo" required><select className={sel}><option>Inventariable</option><option>Especial</option><option>No Inventariable</option></select></Field>
-          <div className="col-span-2"><Field label="Nombre del grupo" required><input className={inp} placeholder="Nombre descriptivo" /></Field></div>
-          <div className="col-span-2"><Field label="Descripción"><textarea className={inp + ' resize-none h-14'} placeholder="Descripción del grupo..." /></Field></div>
+          <Field label="Código" required><input className={inp} placeholder="Ej: GR11" value={form.code} onChange={e => setForm(f => ({ ...f, code: e.target.value }))} /></Field>
+          <div className="col-span-2"><Field label="Nombre del grupo" required><input className={inp} placeholder="Nombre descriptivo" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></Field></div>
+          <div className="col-span-2"><label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"><input type="checkbox" className="w-4 h-4 accent-[#2a4038]" checked={form.isInventoried} onChange={e => setForm(f => ({ ...f, isInventoried: e.target.checked }))} /> Es inventariable</label></div>
         </div>
-        <DrawerFooter onClose={() => setDrawerOpen(false)} />
+        <div className="flex gap-3 mt-8 pt-5 border-t border-gray-100">
+          <button onClick={() => setDrawerOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancelar</button>
+          <button onClick={handleCreate} disabled={saving} className="flex-1 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold hover:bg-[#3d5c4e] flex items-center justify-center gap-2 disabled:opacity-50">{saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Guardar</button>
+        </div>
       </Drawer>
     </>
   );
 }
 
 function TabTipos() {
-  return (<><Hdr title="Tipos de Artículo" subtitle="Clasificación técnica para reglas de negocio" /><Tbl><thead><tr><Th>#</Th><Th>Tipo</Th><Th>Inventariable</Th><Th>Descripción</Th></tr></thead><tbody>{TIPOS_ARTICULO.map((t, i) => <tr key={t.id} className="hover:bg-gray-50/50"><Td className="text-gray-400 text-xs">{i + 1}</Td><Td className="font-medium text-gray-900">{t.nombre}</Td><Td><Badge label={t.inventariable ? 'Sí' : 'No'} color={t.inventariable ? 'green' : 'gray'} /></Td><Td className="text-gray-500 text-xs">{t.descripcion}</Td></tr>)}</tbody></Tbl></>);
+  const toast = useToast();
+  const [types, setTypes] = useState<ApiItemType[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        setTypes(await getItemTypes());
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'No fue posible cargar los tipos de artículo');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [toast]);
+
+  return (
+    <>
+      <Hdr title="Tipos de Artículo" subtitle="Clasificación técnica para reglas de negocio" />
+      <Tbl>
+        <thead><tr><Th>#</Th><Th>Tipo</Th><Th>Inventariable</Th><Th>Descripción</Th></tr></thead>
+        <tbody>
+          {loading && <LoadingRow colSpan={4} />}
+          {!loading && types.length === 0 && <EmptyRow colSpan={4} label="Sin tipos de artículo registrados" />}
+          {!loading && types.map((t, i) => (
+            <tr key={t.id} className="hover:bg-gray-50/50">
+              <Td className="text-gray-400 text-xs">{i + 1}</Td>
+              <Td className="font-medium text-gray-900">{t.name}</Td>
+              <Td><Badge label={t.isInventoried ? 'Sí' : 'No'} color={t.isInventoried ? 'green' : 'gray'} /></Td>
+              <Td className="text-gray-500 text-xs">{t.description}</Td>
+            </tr>
+          ))}
+        </tbody>
+      </Tbl>
+    </>
+  );
 }
 
 function TabProveedores({ search, setSearch, drawerOpen, setDrawerOpen }: { search: string; setSearch: (v: string) => void; drawerOpen: boolean; setDrawerOpen: (v: boolean) => void }) {
-  const filtered = useMemo(() => PROVEEDORES.filter(p => p.nombre.toLowerCase().includes(search.toLowerCase()) || p.nit.includes(search)), [search]);
+  const toast = useToast();
+  const [suppliers, setSuppliers] = useState<ApiSupplier[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ nit: '', name: '', contactName: '', phone: '', email: '', city: '', address: '', isActive: true });
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setSuppliers(await getSuppliers());
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No fue posible cargar los proveedores');
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const filtered = useMemo(
+    () => suppliers.filter(p => p.name.toLowerCase().includes(search.toLowerCase()) || p.nit.includes(search)),
+    [suppliers, search],
+  );
+
+  const handleCreate = async () => {
+    if (!form.nit.trim() || !form.name.trim()) {
+      toast.warning('NIT y razón social son obligatorios.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await createSupplier(form);
+      toast.success('Proveedor creado correctamente');
+      setForm({ nit: '', name: '', contactName: '', phone: '', email: '', city: '', address: '', isActive: true });
+      setDrawerOpen(false);
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No fue posible crear el proveedor');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <>
-      <Hdr title="Proveedores" subtitle={`${PROVEEDORES.length} proveedores`} onNew={() => setDrawerOpen(true)} newLabel="Nuevo Proveedor" />
+      <Hdr title="Proveedores" subtitle={`${suppliers.length} proveedores`} onNew={() => setDrawerOpen(true)} newLabel="Nuevo Proveedor" />
       <div className="mb-4"><SBar value={search} onChange={setSearch} placeholder="Buscar por nombre o NIT..." /></div>
       <Tbl>
-        <thead><tr><Th>NIT</Th><Th>Razón Social</Th><Th>Contacto</Th><Th>Teléfono</Th><Th>Ciudad</Th><Th>Estado</Th><Th></Th></tr></thead>
-        <tbody>{filtered.map(p => <tr key={p.id} className="hover:bg-gray-50/50"><Td><span className="font-mono text-xs">{p.nit}</span></Td><Td className="font-medium text-gray-900">{p.nombre}</Td><Td className="text-gray-500">{p.contacto}</Td><Td className="text-gray-500">{p.telefono}</Td><Td><Badge label={p.ciudad} color="blue" /></Td><Td><Badge label={p.activo ? 'Activo' : 'Inactivo'} color={p.activo ? 'green' : 'red'} /></Td><Td><div className="flex gap-1"><button className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600"><Eye size={13} /></button><button className="p-1.5 rounded-lg hover:bg-amber-50 text-gray-400 hover:text-amber-600"><Edit2 size={13} /></button></div></Td></tr>)}</tbody>
+        <thead><tr><Th>NIT</Th><Th>Razón Social</Th><Th>Contacto</Th><Th>Teléfono</Th><Th>Ciudad</Th><Th>Estado</Th></tr></thead>
+        <tbody>
+          {loading && <LoadingRow colSpan={6} />}
+          {!loading && filtered.length === 0 && <EmptyRow colSpan={6} label="Sin proveedores registrados" />}
+          {!loading && filtered.map(p => (
+            <tr key={p.id} className="hover:bg-gray-50/50">
+              <Td><span className="font-mono text-xs">{p.nit}</span></Td>
+              <Td className="font-medium text-gray-900">{p.name}</Td>
+              <Td className="text-gray-500">{p.contactName || '—'}</Td>
+              <Td className="text-gray-500">{p.phone || '—'}</Td>
+              <Td>{p.city ? <Badge label={p.city} color="blue" /> : '—'}</Td>
+              <Td><Badge label={p.isActive ? 'Activo' : 'Inactivo'} color={p.isActive ? 'green' : 'red'} /></Td>
+            </tr>
+          ))}
+        </tbody>
       </Tbl>
       <Drawer title="Nuevo Proveedor" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
         <div className="grid grid-cols-2 gap-4">
-          <Field label="NIT" required><input className={inp} placeholder="000.000.000-0" /></Field>
-          <Field label="Tipo persona"><select className={sel}><option>Jurídica</option><option>Natural</option></select></Field>
-          <div className="col-span-2"><Field label="Razón social / Nombre" required><input className={inp} placeholder="Nombre completo o razón social" /></Field></div>
-          <Field label="Nombre contacto"><input className={inp} placeholder="Nombre del contacto" /></Field>
-          <Field label="Cargo"><input className={inp} placeholder="Cargo" /></Field>
-          <Field label="Teléfono"><input className={inp} placeholder="Teléfono o celular" /></Field>
-          <Field label="Correo"><input className={inp} type="email" placeholder="correo@empresa.com" /></Field>
-          <Field label="Ciudad"><input className={inp} placeholder="Ciudad" /></Field>
-          <Field label="Departamento"><input className={inp} placeholder="Departamento" /></Field>
-          <div className="col-span-2"><Field label="Dirección"><input className={inp} placeholder="Dirección completa" /></Field></div>
-          <div className="col-span-2"><Field label="Artículos que provee"><textarea className={inp + ' resize-none h-14'} placeholder="Descripción de los productos suministrados..." /></Field></div>
+          <Field label="NIT" required><input className={inp} placeholder="000.000.000-0" value={form.nit} onChange={e => setForm(f => ({ ...f, nit: e.target.value }))} /></Field>
+          <Field label="Teléfono"><input className={inp} placeholder="Teléfono o celular" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} /></Field>
+          <div className="col-span-2"><Field label="Razón social / Nombre" required><input className={inp} placeholder="Nombre completo o razón social" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></Field></div>
+          <Field label="Nombre contacto"><input className={inp} placeholder="Nombre del contacto" value={form.contactName} onChange={e => setForm(f => ({ ...f, contactName: e.target.value }))} /></Field>
+          <Field label="Correo"><input className={inp} type="email" placeholder="correo@empresa.com" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></Field>
+          <Field label="Ciudad"><input className={inp} placeholder="Ciudad" value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} /></Field>
+          <div className="col-span-2"><Field label="Dirección"><input className={inp} placeholder="Dirección completa" value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} /></Field></div>
         </div>
-        <DrawerFooter onClose={() => setDrawerOpen(false)} />
+        <div className="flex gap-3 mt-8 pt-5 border-t border-gray-100">
+          <button onClick={() => setDrawerOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancelar</button>
+          <button onClick={handleCreate} disabled={saving} className="flex-1 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold hover:bg-[#3d5c4e] flex items-center justify-center gap-2 disabled:opacity-50">{saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Guardar</button>
+        </div>
       </Drawer>
     </>
   );
 }
 
 function TabUnidades({ drawerOpen, setDrawerOpen }: { drawerOpen: boolean; setDrawerOpen: (v: boolean) => void }) {
+  const toast = useToast();
+  const [units, setUnits] = useState<ApiUnitOfMeasure[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ code: '', name: '', abbreviation: '' });
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setUnits(await getUnits());
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No fue posible cargar las unidades');
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleCreate = async () => {
+    if (!form.code.trim() || !form.name.trim() || !form.abbreviation.trim()) {
+      toast.warning('Código, nombre y abreviatura son obligatorios.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await createUnit(form);
+      toast.success('Unidad creada correctamente');
+      setForm({ code: '', name: '', abbreviation: '' });
+      setDrawerOpen(false);
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No fue posible crear la unidad');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <>
       <Hdr title="Unidades de Medida" onNew={() => setDrawerOpen(true)} newLabel="Nueva Unidad" />
-      <Tbl><thead><tr><Th>Código</Th><Th>Nombre</Th><Th>Abreviatura</Th></tr></thead><tbody>{UNIDADES.map(u => <tr key={u.id} className="hover:bg-gray-50/50"><Td><span className="font-mono text-xs">{u.codigo}</span></Td><Td className="font-medium">{u.nombre}</Td><Td className="font-semibold">{u.abreviatura}</Td></tr>)}</tbody></Tbl>
+      <Tbl>
+        <thead><tr><Th>Código</Th><Th>Nombre</Th><Th>Abreviatura</Th></tr></thead>
+        <tbody>
+          {loading && <LoadingRow colSpan={3} />}
+          {!loading && units.length === 0 && <EmptyRow colSpan={3} label="Sin unidades registradas" />}
+          {!loading && units.map(u => (
+            <tr key={u.id} className="hover:bg-gray-50/50">
+              <Td><span className="font-mono text-xs">{u.code}</span></Td>
+              <Td className="font-medium">{u.name}</Td>
+              <Td className="font-semibold">{u.abbreviation}</Td>
+            </tr>
+          ))}
+        </tbody>
+      </Tbl>
       <Drawer title="Nueva Unidad de Medida" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
-        <div className="grid grid-cols-2 gap-4"><Field label="Código" required><input className={inp} placeholder="Ej: TON" /></Field><Field label="Abreviatura" required><input className={inp} placeholder="Ej: t" /></Field><div className="col-span-2"><Field label="Nombre completo" required><input className={inp} placeholder="Ej: Tonelada" /></Field></div></div>
-        <DrawerFooter onClose={() => setDrawerOpen(false)} />
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Código" required><input className={inp} placeholder="Ej: TON" value={form.code} onChange={e => setForm(f => ({ ...f, code: e.target.value }))} /></Field>
+          <Field label="Abreviatura" required><input className={inp} placeholder="Ej: t" value={form.abbreviation} onChange={e => setForm(f => ({ ...f, abbreviation: e.target.value }))} /></Field>
+          <div className="col-span-2"><Field label="Nombre completo" required><input className={inp} placeholder="Ej: Tonelada" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></Field></div>
+        </div>
+        <div className="flex gap-3 mt-8 pt-5 border-t border-gray-100">
+          <button onClick={() => setDrawerOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancelar</button>
+          <button onClick={handleCreate} disabled={saving} className="flex-1 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold hover:bg-[#3d5c4e] flex items-center justify-center gap-2 disabled:opacity-50">{saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Guardar</button>
+        </div>
       </Drawer>
     </>
   );
