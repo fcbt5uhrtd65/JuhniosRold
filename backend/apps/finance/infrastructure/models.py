@@ -1,3 +1,4 @@
+import hashlib
 import uuid
 from decimal import Decimal
 
@@ -6,6 +7,8 @@ from django.db import models
 from django.utils import timezone
 
 from shared.infrastructure.models import BaseModel
+
+from .issuer import COMPANY_NIT
 
 
 class FinancialTransaction(BaseModel):
@@ -68,10 +71,20 @@ class SalesInvoice(BaseModel):
         blank=True,
         help_text="Texto de la resolución de facturación DIAN vigente al momento de emisión.",
     )
+    cufe = models.CharField(
+        max_length=96,
+        unique=True,
+        editable=False,
+        blank=True,
+        help_text="Código único de verificación de la factura, usado como contenido del QR.",
+    )
 
     def save(self, *args, **kwargs):
         if not self.number:
             self.number = f"FAC-JR-{uuid.uuid4().hex[:12].upper()}"
+        if not self.cufe:
+            seed = f"{self.number}{self.total}{self.issued_at.isoformat()}{COMPANY_NIT}{uuid.uuid4().hex}"
+            self.cufe = hashlib.sha256(seed.encode("utf-8")).hexdigest()
         super().save(*args, **kwargs)
 
 
