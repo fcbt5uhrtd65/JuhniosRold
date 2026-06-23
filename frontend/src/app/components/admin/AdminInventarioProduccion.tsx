@@ -1,10 +1,10 @@
-import { useState, useMemo, useEffect, useCallback, type ComponentType } from 'react';
+import { useState, useMemo, useEffect, useCallback, type ComponentType, type ReactNode } from 'react';
 import {
   Plus, Search, Edit2, Trash2, X, Save, ChevronRight,
   Warehouse, Package, ArrowRightLeft, Factory,
   BarChart3, Layers, AlertTriangle, CheckCircle, Clock,
   Truck, RefreshCw, FileText, Scale, Box,
-  Filter, Download, Eye, ShoppingCart,
+  Download, Eye, ShoppingCart,
   LayoutDashboard, TrendingDown, TrendingUp, Bell,
   MoveRight, Beaker, ClipboardCheck, Loader2,
 } from 'lucide-react';
@@ -14,12 +14,29 @@ import {
   getItemGroups, createItemGroup,
   getItemTypes,
   getUnits, createUnit,
+  getItems, createItem,
   type Warehouse as ApiWarehouse,
   type Supplier as ApiSupplier,
   type ItemGroup as ApiItemGroup,
   type ItemType as ApiItemType,
   type UnitOfMeasure as ApiUnitOfMeasure,
+  type Item as ApiInventoryItem,
 } from '../../services/inventory-masters.service';
+import {
+  createFormula,
+  createInventoryMovement,
+  createProductionOrder,
+  createPurchaseOrder,
+  createStockConversion,
+  getInventoryWorkspace,
+  numeric,
+  type InventoryMovementRecord,
+  type InventoryWorkspace,
+  type MovementType,
+  type ProductionOrderRecord,
+  type PurchaseOrderRecord,
+  type StockRecord,
+} from '../../services/inventory-production.service';
 import { useToast } from '../../contexts/ToastContext';
 
 /* ═══════════════════════════════════════════════════════
@@ -40,8 +57,6 @@ interface Unidad { id: string; codigo: string; nombre: string; abreviatura: stri
 interface Stock { id: string; articuloId: string; articulo: string; tipo: string; bodega: string; lote: string; cantidad: number; reservado: number; enProceso: number; costo: number; vencimiento: string; }
 interface Movimiento { id: string; fecha: string; tipo: string; articulo: string; bodega: string; cantidad: number; lote: string; usuario: string; motivo: string; }
 interface Traslado { id: string; numero: string; fecha: string; bOrigen: string; bDestino: string; articulo: string; cantidad: number; lote: string; estado: 'pendiente' | 'confirmado' | 'anulado'; solicitadoPor: string; }
-interface OrdenCompra { id: string; numero: string; proveedor: string; fechaEmision: string; fechaEntrega: string; estado: 'borrador' | 'enviada' | 'parcial' | 'cerrada' | 'anulada'; total: number; lineas: LineaOC[]; }
-interface LineaOC { id: string; articulo: string; cantidad: number; precio: number; recibido: number; }
 interface OrdenProduccion { id: string; numero: string; producto: string; formula: string; cantidadPlan: number; cantidadReal: number; estado: 'pendiente' | 'en-proceso' | 'cerrada' | 'anulada'; fechaInicio: string; fechaCierre: string; responsable: string; dispensada: boolean; ptRecibido: boolean; }
 interface Formula { id: string; codigo: string; nombre: string; producto: string; rendimiento: number; unidad: string; lineas: FormulaLinea[]; }
 interface FormulaLinea { id: string; materia: string; cantidad: number; unidad: string; }
@@ -49,7 +64,6 @@ interface OrdenDispensacion { id: string; numero: string; ordenProduccion: strin
 interface DispensacionLinea { id: string; materia: string; cantidadTeorica: number; cantidadPesada: number; unidad: string; }
 interface RecepcionPT { id: string; numero: string; ordenProduccion: string; producto: string; lote: string; cantidadProducida: number; cantidadRecibida: number; cantidadRechazada: number; cantidadDeterioro: number; cajas: number; entregadoPor: string; recibidoPor: string; bodegaDestino: string; estado: 'pendiente' | 'recibido' | 'parcial'; fecha: string; }
 interface MermaSobrante { id: string; fecha: string; ordenProduccion: string; tipo: 'merma' | 'sobrante'; articulo: string; cantidad: number; unidad: string; motivo: string; responsable: string; }
-interface Conversion { id: string; numero: string; fecha: string; articuloSalida: string; cantidadSalida: number; articuloEntrada: string; cantidadEntrada: number; motivo: string; usuario: string; }
 interface AuditoriaLog { id: string; fecha: string; hora: string; usuario: string; modulo: string; accion: string; detalle: string; ip: string; }
 
 /* ═══════════════════════════════════════════════════════
@@ -148,13 +162,6 @@ const TRASLADOS: Traslado[] = [
   { id: '2', numero: 'TRF-2025-009', fecha: '2025-06-18', bOrigen: 'Principal Cosméticos', bDestino: 'Producto en Proceso', articulo: 'Betaína de Coco 30%', cantidad: 9, lote: 'L2024-003', estado: 'pendiente', solicitadoPor: 'Ana González' },
 ];
 
-const ORDENES_COMPRA: OrdenCompra[] = [
-  { id: '1', numero: 'OC-2025-089', proveedor: 'Químicos Andinos SAS', fechaEmision: '2025-06-15', fechaEntrega: '2025-06-18', estado: 'cerrada', total: 1875000, lineas: [{ id: '1', articulo: 'Glicerina Vegetal USP', cantidad: 50, precio: 12500, recibido: 50 }, { id: '2', articulo: 'Betaína de Coco 30%', cantidad: 30, precio: 18000, recibido: 30 }] },
-  { id: '2', numero: 'OC-2025-090', proveedor: 'Aromática del Valle Ltda', fechaEmision: '2025-06-16', fechaEntrega: '2025-06-22', estado: 'enviada', total: 1700000, lineas: [{ id: '1', articulo: 'Fragancia Coco Tahití', cantidad: 20, precio: 85000, recibido: 0 }] },
-  { id: '3', numero: 'OC-2025-091', proveedor: 'Ingredientes Naturales SAS', fechaEmision: '2025-06-18', fechaEntrega: '2025-06-25', estado: 'borrador', total: 2900000, lineas: [{ id: '1', articulo: 'Aceite de Argán Prensado en Frío', cantidad: 20, precio: 145000, recibido: 0 }] },
-  { id: '4', numero: 'OC-2025-088', proveedor: 'Envases y Más Colombia', fechaEmision: '2025-06-10', fechaEntrega: '2025-06-14', estado: 'parcial', total: 7560000, lineas: [{ id: '1', articulo: 'Envase PET 400ml Blanco', cantidad: 5000, precio: 1200, recibido: 3000 }, { id: '2', articulo: 'Tapa Flip-Top Negra 38mm', cantidad: 5000, precio: 380, recibido: 5000 }] },
-];
-
 const ORDENES_PRODUCCION: OrdenProduccion[] = [
   { id: '1', numero: 'OP-2025-042', producto: 'Shampoo Botánico 400ml', formula: 'FM-SHB-001', cantidadPlan: 500, cantidadReal: 0, estado: 'en-proceso', fechaInicio: '2025-06-18', fechaCierre: '', responsable: 'Ana González', dispensada: true, ptRecibido: false },
   { id: '2', numero: 'OP-2025-041', producto: 'Mascarilla Regeneradora 250g', formula: 'FM-MAS-003', cantidadPlan: 300, cantidadReal: 298, estado: 'cerrada', fechaInicio: '2025-06-14', fechaCierre: '2025-06-17', responsable: 'Ana González', dispensada: true, ptRecibido: true },
@@ -178,10 +185,6 @@ const MERMAS_SOBRANTES: MermaSobrante[] = [
   { id: '1', fecha: '2025-06-17', ordenProduccion: 'OP-2025-041', tipo: 'merma', articulo: 'Glicerina Vegetal USP', cantidad: 0.8, unidad: 'Kg', motivo: 'Adherencia en paredes del reactor', responsable: 'Ana González' },
   { id: '2', fecha: '2025-06-17', ordenProduccion: 'OP-2025-041', tipo: 'sobrante', articulo: 'Agua Purificada', cantidad: 2.5, unidad: 'Kg', motivo: 'Ajuste de viscosidad no requerido', responsable: 'Ana González' },
   { id: '3', fecha: '2025-06-13', ordenProduccion: 'OP-2025-040', tipo: 'merma', articulo: 'Aceite de Argán', cantidad: 0.15, unidad: 'Kg', motivo: 'Merma por trasvase', responsable: 'Pedro Vásquez' },
-];
-
-const CONVERSIONES: Conversion[] = [
-  { id: '1', numero: 'CV-2025-001', fecha: '2025-06-10', articuloSalida: 'Base Shampoo Granel', cantidadSalida: 50, articuloEntrada: 'Shampoo Botánico 400ml', cantidadEntrada: 120, motivo: 'Envasado lote PT2024-016', usuario: 'Ana González' },
 ];
 
 const AUDITORIA: AuditoriaLog[] = [
@@ -217,12 +220,98 @@ function stockAlert(articuloId: string): 'ok' | 'low' | 'critical' {
   return 'ok';
 }
 
+function useInventoryWorkspace() {
+  const toast = useToast();
+  const [data, setData] = useState<InventoryWorkspace | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setData(await getInventoryWorkspace());
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No fue posible cargar inventario y producción');
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => { load(); }, [load]);
+
+  return { data, loading, reload: load };
+}
+
+function buildInventoryMaps(data: InventoryWorkspace | null) {
+  const warehouses = new Map((data?.warehouses ?? []).map(item => [item.id, item]));
+  const locations = new Map((data?.locations ?? []).map(item => [item.id, item]));
+  const units = new Map((data?.units ?? []).map(item => [item.id, item]));
+  const itemGroups = new Map((data?.itemGroups ?? []).map(item => [item.id, item]));
+  const itemTypes = new Map((data?.itemTypes ?? []).map(item => [item.id, item]));
+  const suppliers = new Map((data?.suppliers ?? []).map(item => [item.id, item]));
+  const items = new Map((data?.items ?? []).map(item => [item.id, item]));
+  const formulas = new Map((data?.formulas ?? []).map(item => [item.id, item]));
+
+  return { warehouses, locations, units, itemGroups, itemTypes, suppliers, items, formulas };
+}
+
+function locationName(data: InventoryWorkspace | null, locationId: string | null | undefined) {
+  if (!data || !locationId) return 'Sin ubicación';
+  const { warehouses, locations } = buildInventoryMaps(data);
+  const location = locations.get(locationId);
+  const warehouse = location ? warehouses.get(location.warehouse) : undefined;
+  return location ? `${warehouse?.name ?? 'Bodega'} / ${location.name}` : 'Sin ubicación';
+}
+
+function itemName(data: InventoryWorkspace | null, itemId: string | null | undefined) {
+  if (!data || !itemId) return 'Sin artículo';
+  return buildInventoryMaps(data).items.get(itemId)?.name ?? 'Sin artículo';
+}
+
+function unitLabel(data: InventoryWorkspace | null, unitId: string | null | undefined) {
+  if (!data || !unitId) return '';
+  return buildInventoryMaps(data).units.get(unitId)?.abbreviation ?? '';
+}
+
+function variantName(data: InventoryWorkspace | null, variantId: string | null | undefined) {
+  if (!data || !variantId) return 'Variante sin nombre';
+  const variant = data.variants.find(item => item.id === variantId);
+  return data.productNameByVariantId.get(variantId) ?? variant?.sku ?? 'Variante sin nombre';
+}
+
+function movementLabel(type: MovementType | string) {
+  const labels: Record<string, string> = {
+    ENTRY: 'Entrada',
+    EXIT: 'Salida',
+    LOSS: 'Merma',
+    ADJUSTMENT_IN: 'Ajuste positivo',
+    ADJUSTMENT_OUT: 'Ajuste negativo',
+  };
+  return labels[type] ?? type;
+}
+
+function movementSignedQuantity(movement: Pick<InventoryMovementRecord, 'movement_type' | 'quantity'>) {
+  const qty = numeric(movement.quantity);
+  return ['EXIT', 'LOSS', 'ADJUSTMENT_OUT'].includes(movement.movement_type) ? -qty : qty;
+}
+
+function stockLevel(stock: StockRecord): 'ok' | 'low' | 'critical' {
+  const quantity = numeric(stock.quantity);
+  const minimum = numeric(stock.minimum_quantity);
+  if (minimum <= 0 || quantity > minimum) return 'ok';
+  if (quantity <= 0 || quantity < minimum * 0.5) return 'critical';
+  return 'low';
+}
+
+function currentDateInput() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 function Badge({ label, color }: { label: string; color: 'green' | 'yellow' | 'red' | 'blue' | 'gray' | 'purple' }) {
   const s = { green: 'bg-emerald-50 text-emerald-700 border border-emerald-200', yellow: 'bg-amber-50 text-amber-700 border border-amber-200', red: 'bg-red-50 text-red-700 border border-red-200', blue: 'bg-blue-50 text-blue-700 border border-blue-200', gray: 'bg-gray-50 text-gray-600 border border-gray-200', purple: 'bg-purple-50 text-purple-700 border border-purple-200' };
   return <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold ${s[color]}`}>{label}</span>;
 }
 
-function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
+function Field({ label, required, children }: { label: string; required?: boolean; children: ReactNode }) {
   return <div className="flex flex-col gap-1.5"><label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">{label}{required && <span className="text-red-500 ml-1">*</span>}</label>{children}</div>;
 }
 
@@ -233,14 +322,14 @@ function Hdr({ title, subtitle, onNew, newLabel }: { title: string; subtitle?: s
   return <div className="flex items-center justify-between mb-6"><div><h2 className="text-lg font-semibold text-gray-900">{title}</h2>{subtitle && <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>}</div>{onNew && <button onClick={onNew} className="flex items-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white text-xs font-semibold rounded-xl hover:bg-[#3d5c4e] transition-colors"><Plus size={14} /> {newLabel ?? 'Nuevo'}</button>}</div>;
 }
 
-function Tbl({ children }: { children: React.ReactNode }) {
+function Tbl({ children }: { children: ReactNode }) {
   return <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm"><div className="overflow-x-auto"><table className="w-full text-sm">{children}</table></div></div>;
 }
 
-function Th({ children }: { children: React.ReactNode }) { return <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-gray-400 bg-gray-50 border-b border-gray-100 whitespace-nowrap">{children}</th>; }
-function Td({ children, className }: { children: React.ReactNode; className?: string }) { return <td className={`px-4 py-3 border-b border-gray-50 text-sm text-gray-700 ${className ?? ''}`}>{children}</td>; }
+function Th({ children }: { children: ReactNode }) { return <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-gray-400 bg-gray-50 border-b border-gray-100 whitespace-nowrap">{children}</th>; }
+function Td({ children, className }: { children: ReactNode; className?: string }) { return <td className={`px-4 py-3 border-b border-gray-50 text-sm text-gray-700 ${className ?? ''}`}>{children}</td>; }
 
-function Drawer({ title, open, onClose, wide, children }: { title: string; open: boolean; onClose: () => void; wide?: boolean; children: React.ReactNode }) {
+function Drawer({ title, open, onClose, wide, children }: { title: string; open: boolean; onClose: () => void; wide?: boolean; children: ReactNode }) {
   if (!open) return null;
   return <div className="fixed inset-0 z-50 flex justify-end"><div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} /><div className={`relative bg-white ${wide ? 'w-full max-w-2xl' : 'w-full max-w-xl'} h-full flex flex-col shadow-2xl`}><div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50"><h3 className="font-semibold text-gray-900">{title}</h3><button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-200"><X size={16} /></button></div><div className="flex-1 overflow-y-auto px-6 py-5">{children}</div></div></div>;
 }
@@ -257,28 +346,32 @@ function DrawerFooter({ onClose }: { onClose: () => void }) {
    PANEL — Dashboard KPIs
 ═══════════════════════════════════════════════════════ */
 function ModuloPanel() {
-  const totalInventario = STOCKS.reduce((a, s) => a + s.cantidad * s.costo, 0);
-  const artBajoMin = ARTICULOS.filter(a => stockAlert(a.id) !== 'ok').length;
-  const lotesAlerta = STOCKS.filter(s => { const b = loteBadge(s.vencimiento); return b.color === 'red' || b.color === 'yellow'; }).length;
-  const opsActivas = ORDENES_PRODUCCION.filter(op => op.estado === 'en-proceso' || op.estado === 'pendiente').length;
-  const ocPendientes = ORDENES_COMPRA.filter(oc => oc.estado === 'enviada' || oc.estado === 'parcial').length;
+  const { data, loading } = useInventoryWorkspace();
+  const variantCost = useMemo(
+    () => new Map((data?.variants ?? []).map(variant => [variant.id, variant.cost])),
+    [data],
+  );
+  const totalInventario = (data?.stocks ?? []).reduce((a, s) => a + numeric(s.quantity) * (variantCost.get(s.variant) ?? 0), 0);
+  const artBajoMin = (data?.stocks ?? []).filter(s => stockLevel(s) !== 'ok').length;
+  const lotesAlerta = (data?.items ?? []).filter(item => item.tracks_batches).length;
+  const opsActivas = (data?.productionOrders ?? []).filter(op => op.status === 'IN_PROGRESS' || op.status === 'PENDING').length;
+  const ocPendientes = (data?.purchaseOrders ?? []).filter(oc => oc.status === 'SENT' || oc.status === 'PARTIAL').length;
+  const today = currentDateInput();
+  const movementsToday = (data?.movements ?? []).filter(m => m.created_at?.slice(0, 10) === today);
 
   const kpis = [
-    { label: 'Valor total inventario', value: `$${(totalInventario / 1000000).toFixed(1)}M`, sub: 'Costo sin IVA', icon: BarChart3, color: 'text-[#2a4038] bg-[#2a4038]/10', trend: '+12% vs mes ant.' },
+    { label: 'Valor total inventario', value: `$${(totalInventario / 1000000).toFixed(1)}M`, sub: 'Costo de variantes', icon: BarChart3, color: 'text-[#2a4038] bg-[#2a4038]/10', trend: loading ? 'Cargando...' : `${data?.stocks.length ?? 0} stocks` },
     { label: 'Artículos bajo mínimo', value: String(artBajoMin), sub: 'Requieren compra urgente', icon: TrendingDown, color: 'text-red-600 bg-red-50', trend: 'Ver alertas ↓' },
-    { label: 'Lotes por vencer', value: String(lotesAlerta), sub: 'En los próximos 60 días', icon: Clock, color: 'text-amber-600 bg-amber-50', trend: '2 rojos · 1 amarillo' },
-    { label: 'OPs activas', value: String(opsActivas), sub: `${ORDENES_PRODUCCION.filter(o => o.estado === 'en-proceso').length} en proceso`, icon: Factory, color: 'text-blue-600 bg-blue-50', trend: '1 sin recepción PT' },
+    { label: 'Artículos con lote', value: String(lotesAlerta), sub: 'Manejan trazabilidad', icon: Clock, color: 'text-amber-600 bg-amber-50', trend: 'Según maestros' },
+    { label: 'OPs activas', value: String(opsActivas), sub: `${(data?.productionOrders ?? []).filter(o => o.status === 'IN_PROGRESS').length} en proceso`, icon: Factory, color: 'text-blue-600 bg-blue-50', trend: `${(data?.productionOrders ?? []).filter(o => o.is_dispensed && !o.is_output_received).length} sin recepción PT` },
     { label: 'OC pendientes', value: String(ocPendientes), sub: 'Enviadas o parciales', icon: ShoppingCart, color: 'text-purple-600 bg-purple-50', trend: '1 parcial pendiente' },
-    { label: 'Movimientos hoy', value: '3', sub: '2 entradas · 1 salida', icon: RefreshCw, color: 'text-emerald-600 bg-emerald-50', trend: 'Último: 09:45' },
+    { label: 'Movimientos hoy', value: String(movementsToday.length), sub: `${movementsToday.filter(m => movementSignedQuantity(m) > 0).length} entradas · ${movementsToday.filter(m => movementSignedQuantity(m) < 0).length} salidas`, icon: RefreshCw, color: 'text-emerald-600 bg-emerald-50', trend: movementsToday[0]?.created_at ? `Último: ${new Date(movementsToday[0].created_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}` : 'Sin movimientos' },
   ];
 
-  const alertasStock = ARTICULOS.filter(a => stockAlert(a.id) !== 'ok').map(a => {
-    const stock = STOCKS.filter(s => s.articuloId === a.id).reduce((acc, s) => acc + s.cantidad, 0);
-    const alert = stockAlert(a.id);
-    return { ...a, stockActual: stock, alert };
-  });
-
-  const alertasVenc = STOCKS.filter(s => { const b = loteBadge(s.vencimiento); return b.color === 'red' || b.color === 'yellow'; });
+  const alertasStock = (data?.stocks ?? []).filter(s => stockLevel(s) !== 'ok');
+  const recentMovements = [...(data?.movements ?? [])]
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, 6);
 
   return (
     <div>
@@ -311,42 +404,42 @@ function ModuloPanel() {
           </div>
           <div className="space-y-2">
             {alertasStock.length === 0 && <p className="text-xs text-gray-400 py-4 text-center">Sin alertas activas</p>}
-            {alertasStock.map(a => (
-              <div key={a.id} className={`flex items-center gap-3 p-3 rounded-xl border ${a.alert === 'critical' ? 'bg-red-50 border-red-100' : 'bg-amber-50 border-amber-100'}`}>
-                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${a.alert === 'critical' ? 'bg-red-500' : 'bg-amber-500'}`} />
+            {alertasStock.map(s => {
+              const alert = stockLevel(s);
+              return (
+              <div key={s.id} className={`flex items-center gap-3 p-3 rounded-xl border ${alert === 'critical' ? 'bg-red-50 border-red-100' : 'bg-amber-50 border-amber-100'}`}>
+                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${alert === 'critical' ? 'bg-red-500' : 'bg-amber-500'}`} />
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-gray-900 truncate">{a.nombre}</p>
-                  <p className="text-[10px] text-gray-500">Stock: <strong>{a.stockActual} {a.unidad}</strong> · Mín: {a.stockMin} {a.unidad}</p>
+                  <p className="text-xs font-semibold text-gray-900 truncate">{variantName(data, s.variant)}</p>
+                  <p className="text-[10px] text-gray-500">Stock: <strong>{numeric(s.quantity)}</strong> · Mín: {numeric(s.minimum_quantity)} · {locationName(data, s.location)}</p>
                 </div>
-                <Badge label={a.alert === 'critical' ? 'Crítico' : 'Bajo'} color={a.alert === 'critical' ? 'red' : 'yellow'} />
+                <Badge label={alert === 'critical' ? 'Crítico' : 'Bajo'} color={alert === 'critical' ? 'red' : 'yellow'} />
               </div>
-            ))}
+            );})}
           </div>
         </div>
 
-        {/* Alertas de vencimiento */}
+        {/* Trazabilidad */}
         <div>
           <div className="flex items-center gap-2 mb-3">
             <Clock size={14} className="text-amber-500" />
-            <h3 className="text-sm font-semibold text-gray-900">Lotes próximos a vencer</h3>
-            <span className="ml-auto text-xs text-gray-400">{alertasVenc.length} lotes</span>
+            <h3 className="text-sm font-semibold text-gray-900">Artículos con trazabilidad por lote</h3>
+            <span className="ml-auto text-xs text-gray-400">{lotesAlerta} artículos</span>
           </div>
           <div className="space-y-2">
-            {alertasVenc.map(s => {
-              const lb = loteBadge(s.vencimiento);
-              return (
-                <div key={s.id} className={`flex items-center gap-3 p-3 rounded-xl border ${lb.color === 'red' ? 'bg-red-50 border-red-100' : 'bg-amber-50 border-amber-100'}`}>
+            {(data?.items ?? []).filter(item => item.tracks_batches).slice(0, 6).map(item => (
+                <div key={item.id} className="flex items-center gap-3 p-3 rounded-xl border bg-amber-50 border-amber-100">
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-gray-900 truncate">{s.articulo}</p>
-                    <p className="text-[10px] text-gray-500">Lote: <span className="font-mono">{s.lote}</span> · {s.cantidad} {ARTICULOS.find(a => a.id === s.articuloId)?.unidad ?? 'und'}</p>
+                    <p className="text-xs font-semibold text-gray-900 truncate">{item.name}</p>
+                    <p className="text-[10px] text-gray-500">Código: <span className="font-mono">{item.code}</span> · Unidad {unitLabel(data, item.unit)}</p>
                   </div>
                   <div className="text-right flex-shrink-0">
-                    <Badge label={lb.label} color={lb.color} />
-                    <p className="text-[10px] text-gray-400 mt-1">{s.vencimiento}</p>
+                    <Badge label="Lotes" color="yellow" />
+                    <p className="text-[10px] text-gray-400 mt-1">Activo</p>
                   </div>
                 </div>
-              );
-            })}
+            ))}
+            {!loading && lotesAlerta === 0 && <p className="text-xs text-gray-400 py-4 text-center">Sin artículos marcados para manejo por lote</p>}
           </div>
         </div>
       </div>
@@ -357,16 +450,19 @@ function ModuloPanel() {
         <Tbl>
           <thead><tr><Th>Hora</Th><Th>Tipo</Th><Th>Artículo</Th><Th>Cantidad</Th><Th>Usuario</Th><Th>Referencia</Th></tr></thead>
           <tbody>
-            {MOVIMIENTOS.filter(m => m.fecha === '2025-06-18').map(m => (
+            {recentMovements.map(m => {
+              const qty = movementSignedQuantity(m);
+              return (
               <tr key={m.id} className="hover:bg-gray-50/50">
-                <Td className="text-gray-400 text-xs">09:{m.id}4</Td>
-                <Td><Badge label={m.tipo} color={m.cantidad > 0 ? 'green' : 'red'} /></Td>
-                <Td className="font-medium">{m.articulo}</Td>
-                <Td><span className={`font-bold ${m.cantidad > 0 ? 'text-emerald-600' : 'text-red-600'}`}>{m.cantidad > 0 ? '+' : ''}{m.cantidad}</span></Td>
-                <Td className="text-xs text-gray-500">{m.usuario}</Td>
-                <Td className="text-xs text-gray-400">{m.motivo}</Td>
+                <Td className="text-gray-400 text-xs">{new Date(m.created_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</Td>
+                <Td><Badge label={movementLabel(m.movement_type)} color={qty > 0 ? 'green' : 'red'} /></Td>
+                <Td className="font-medium">{variantName(data, m.variant)}</Td>
+                <Td><span className={`font-bold ${qty > 0 ? 'text-emerald-600' : 'text-red-600'}`}>{qty > 0 ? '+' : ''}{qty}</span></Td>
+                <Td className="text-xs text-gray-500">{m.created_by ?? 'Sistema'}</Td>
+                <Td className="text-xs text-gray-400">{m.reference || m.reason}</Td>
               </tr>
-            ))}
+            );})}
+            {!loading && recentMovements.length === 0 && <EmptyRow colSpan={6} label="Sin movimientos registrados" />}
           </tbody>
         </Tbl>
       </div>
@@ -415,34 +511,126 @@ function EmptyRow({ colSpan, label }: { colSpan: number; label: string }) {
 }
 
 function TabArticulos({ search, setSearch, drawerOpen, setDrawerOpen }: { search: string; setSearch: (v: string) => void; drawerOpen: boolean; setDrawerOpen: (v: boolean) => void }) {
+  const toast = useToast();
   const [filterTipo, setFilterTipo] = useState('');
-  const filtered = useMemo(() => ARTICULOS.filter(a => (a.nombre.toLowerCase().includes(search.toLowerCase()) || a.codigo.toLowerCase().includes(search.toLowerCase())) && (!filterTipo || a.tipo === filterTipo)), [search, filterTipo]);
+  const [items, setItems] = useState<ApiInventoryItem[]>([]);
+  const [types, setTypes] = useState<ApiItemType[]>([]);
+  const [groups, setGroups] = useState<ApiItemGroup[]>([]);
+  const [units, setUnits] = useState<ApiUnitOfMeasure[]>([]);
+  const [suppliers, setSuppliers] = useState<ApiSupplier[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    code: '',
+    name: '',
+    itemTypeId: '',
+    itemGroupId: '',
+    unitId: '',
+    supplierId: '',
+    cost: '',
+    taxRate: '0',
+    minimumQuantity: '',
+    maximumQuantity: '',
+    description: '',
+    tracksInventory: true,
+    tracksBatches: false,
+    isActive: true,
+  });
+  const typeMap = useMemo(() => new Map(types.map(t => [t.id, t])), [types]);
+  const unitMap = useMemo(() => new Map(units.map(u => [u.id, u])), [units]);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [nextItems, nextTypes, nextGroups, nextUnits, nextSuppliers] = await Promise.all([
+        getItems(),
+        getItemTypes(),
+        getItemGroups(),
+        getUnits(),
+        getSuppliers(),
+      ]);
+      setItems(nextItems);
+      setTypes(nextTypes);
+      setGroups(nextGroups);
+      setUnits(nextUnits);
+      setSuppliers(nextSuppliers);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No fue posible cargar los artículos');
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const filtered = useMemo(() => items.filter(a => {
+    const typeName = typeMap.get(a.itemTypeId)?.name ?? '';
+    return (a.name.toLowerCase().includes(search.toLowerCase()) || a.code.toLowerCase().includes(search.toLowerCase())) && (!filterTipo || a.itemTypeId === filterTipo || typeName === filterTipo);
+  }), [items, search, filterTipo, typeMap]);
   const tipoColor = (t: string): 'blue' | 'green' | 'purple' | 'yellow' | 'gray' => ({ 'Materia Prima': 'blue', 'Producto Terminado': 'green', 'Fragancia': 'purple', 'Material de Empaque': 'yellow' } as Record<string, 'blue' | 'green' | 'purple' | 'yellow' | 'gray'>)[t] ?? 'gray';
+
+  const handleCreate = async () => {
+    if (!form.code.trim() || !form.name.trim() || !form.itemTypeId || !form.itemGroupId || !form.unitId) {
+      toast.warning('Código, nombre, tipo, grupo y unidad son obligatorios.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await createItem({
+        code: form.code.trim(),
+        name: form.name.trim(),
+        itemTypeId: form.itemTypeId,
+        itemGroupId: form.itemGroupId,
+        unitId: form.unitId,
+        supplierId: form.supplierId || null,
+        cost: Number(form.cost) || 0,
+        taxRate: Number(form.taxRate) || 0,
+        minimumQuantity: Number(form.minimumQuantity) || 0,
+        maximumQuantity: Number(form.maximumQuantity) || 0,
+        description: form.description,
+        tracksInventory: form.tracksInventory,
+        tracksBatches: form.tracksBatches,
+        isActive: form.isActive,
+      });
+      toast.success('Artículo creado correctamente');
+      setForm({ code: '', name: '', itemTypeId: '', itemGroupId: '', unitId: '', supplierId: '', cost: '', taxRate: '0', minimumQuantity: '', maximumQuantity: '', description: '', tracksInventory: true, tracksBatches: false, isActive: true });
+      setDrawerOpen(false);
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No fue posible crear el artículo');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <>
-      <Hdr title="Artículos" subtitle={`${filtered.length} de ${ARTICULOS.length} artículos`} onNew={() => setDrawerOpen(true)} newLabel="Nuevo Artículo" />
+      <Hdr title="Artículos" subtitle={`${filtered.length} de ${items.length} artículos`} onNew={() => setDrawerOpen(true)} newLabel="Nuevo Artículo" />
       <div className="flex gap-3 mb-4">
         <div className="flex-1"><SBar value={search} onChange={setSearch} placeholder="Buscar por nombre o código..." /></div>
-        <select className={sel + ' w-52'} value={filterTipo} onChange={e => setFilterTipo(e.target.value)}><option value="">Todos los tipos</option>{TIPOS_ARTICULO.filter(t => t.inventariable).map(t => <option key={t.id}>{t.nombre}</option>)}</select>
+        <select className={sel + ' w-52'} value={filterTipo} onChange={e => setFilterTipo(e.target.value)}><option value="">Todos los tipos</option>{types.filter(t => t.isInventoried).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
         <button className="flex items-center gap-2 px-3 py-2.5 border border-gray-200 rounded-xl text-xs text-gray-600 hover:bg-gray-50"><Download size={13} /> Exportar</button>
       </div>
       <Tbl>
         <thead><tr><Th>Código</Th><Th>Nombre</Th><Th>Tipo</Th><Th>Unidad</Th><Th>Costo</Th><Th>Stock Mín.</Th><Th>IVA</Th><Th>Alerta</Th><Th>Estado</Th><Th></Th></tr></thead>
         <tbody>
-          {filtered.map(a => {
-            const alert = stockAlert(a.id);
+          {loading && <LoadingRow colSpan={10} />}
+          {!loading && filtered.length === 0 && <EmptyRow colSpan={10} label="Sin artículos registrados" />}
+          {!loading && filtered.map(a => {
+            const typeName = typeMap.get(a.itemTypeId)?.name ?? 'Sin tipo';
+            const unit = unitMap.get(a.unitId);
+            const alert = a.minimumQuantity > 0 ? 'low' : 'ok';
             return (
               <tr key={a.id} className="hover:bg-gray-50/50">
-                <Td><span className="font-mono text-xs text-gray-500">{a.codigo}</span></Td>
-                <Td><span className="font-medium text-gray-900">{a.nombre}</span></Td>
-                <Td><Badge label={a.tipo} color={tipoColor(a.tipo)} /></Td>
-                <Td className="font-medium">{a.unidad}</Td>
-                <Td className="font-semibold">${a.costo.toLocaleString('es-CO')}</Td>
-                <Td className="text-gray-500">{a.stockMin} {a.unidad}</Td>
-                <Td>{a.iva > 0 ? <Badge label={`${a.iva}%`} color="yellow" /> : <Badge label="Exento" color="gray" />}</Td>
+                <Td><span className="font-mono text-xs text-gray-500">{a.code}</span></Td>
+                <Td><span className="font-medium text-gray-900">{a.name}</span></Td>
+                <Td><Badge label={typeName} color={tipoColor(typeName)} /></Td>
+                <Td className="font-medium">{unit?.abbreviation ?? '—'}</Td>
+                <Td className="font-semibold">${a.cost.toLocaleString('es-CO')}</Td>
+                <Td className="text-gray-500">{a.minimumQuantity} {unit?.abbreviation ?? ''}</Td>
+                <Td>{a.taxRate > 0 ? <Badge label={`${a.taxRate}%`} color="yellow" /> : <Badge label="Exento" color="gray" />}</Td>
                 <Td>{alert === 'critical' ? <Badge label="Crítico" color="red" /> : alert === 'low' ? <Badge label="Bajo" color="yellow" /> : <Badge label="OK" color="green" />}</Td>
-                <Td><Badge label={a.activo ? 'Activo' : 'Inactivo'} color={a.activo ? 'green' : 'red'} /></Td>
+                <Td><Badge label={a.isActive ? 'Activo' : 'Inactivo'} color={a.isActive ? 'green' : 'red'} /></Td>
                 <Td><div className="flex gap-1"><button className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600"><Eye size={13} /></button><button className="p-1.5 rounded-lg hover:bg-amber-50 text-gray-400 hover:text-amber-600"><Edit2 size={13} /></button></div></Td>
               </tr>
             );
@@ -451,24 +639,27 @@ function TabArticulos({ search, setSearch, drawerOpen, setDrawerOpen }: { search
       </Tbl>
       <Drawer title="Nuevo Artículo" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Código" required><input className={inp} placeholder="Ej: MP005" /></Field>
+          <Field label="Código" required><input className={inp} placeholder="Ej: MP005" value={form.code} onChange={e => setForm(f => ({ ...f, code: e.target.value }))} /></Field>
           <Field label="Código de barras"><input className={inp} placeholder="EAN / UPC" /></Field>
-          <div className="col-span-2"><Field label="Nombre del artículo" required><input className={inp} placeholder="Nombre completo" /></Field></div>
-          <Field label="Tipo de artículo" required><select className={sel}><option value="">Seleccionar...</option>{TIPOS_ARTICULO.map(t => <option key={t.id}>{t.nombre}</option>)}</select></Field>
-          <Field label="Grupo de artículo" required><select className={sel}><option value="">Seleccionar...</option>{GRUPOS.map(g => <option key={g.id}>{g.nombre}</option>)}</select></Field>
-          <Field label="Unidad de medida" required><select className={sel}><option value="">Seleccionar...</option>{UNIDADES.map(u => <option key={u.id}>{u.nombre} ({u.abreviatura})</option>)}</select></Field>
-          <Field label="Proveedor principal"><select className={sel}><option value="">Ninguno</option>{PROVEEDORES.map(p => <option key={p.id}>{p.nombre}</option>)}</select></Field>
-          <Field label="Costo unitario" required><input className={inp} type="number" placeholder="0.00" /></Field>
-          <Field label="IVA (%)"><select className={sel}><option value="0">0% — Exento</option><option value="5">5%</option><option value="19">19%</option></select></Field>
-          <Field label="Stock mínimo"><input className={inp} type="number" placeholder="0" /></Field>
-          <Field label="Stock máximo"><input className={inp} type="number" placeholder="0" /></Field>
-          <div className="col-span-2"><Field label="Descripción técnica"><textarea className={inp + ' resize-none h-16'} placeholder="Descripción y especificaciones del artículo..." /></Field></div>
+          <div className="col-span-2"><Field label="Nombre del artículo" required><input className={inp} placeholder="Nombre completo" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></Field></div>
+          <Field label="Tipo de artículo" required><select className={sel} value={form.itemTypeId} onChange={e => setForm(f => ({ ...f, itemTypeId: e.target.value }))}><option value="">Seleccionar...</option>{types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></Field>
+          <Field label="Grupo de artículo" required><select className={sel} value={form.itemGroupId} onChange={e => setForm(f => ({ ...f, itemGroupId: e.target.value }))}><option value="">Seleccionar...</option>{groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select></Field>
+          <Field label="Unidad de medida" required><select className={sel} value={form.unitId} onChange={e => setForm(f => ({ ...f, unitId: e.target.value }))}><option value="">Seleccionar...</option>{units.map(u => <option key={u.id} value={u.id}>{u.name} ({u.abbreviation})</option>)}</select></Field>
+          <Field label="Proveedor principal"><select className={sel} value={form.supplierId} onChange={e => setForm(f => ({ ...f, supplierId: e.target.value }))}><option value="">Ninguno</option>{suppliers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
+          <Field label="Costo unitario" required><input className={inp} type="number" placeholder="0.00" value={form.cost} onChange={e => setForm(f => ({ ...f, cost: e.target.value }))} /></Field>
+          <Field label="IVA (%)"><select className={sel} value={form.taxRate} onChange={e => setForm(f => ({ ...f, taxRate: e.target.value }))}><option value="0">0% — Exento</option><option value="5">5%</option><option value="19">19%</option></select></Field>
+          <Field label="Stock mínimo"><input className={inp} type="number" placeholder="0" value={form.minimumQuantity} onChange={e => setForm(f => ({ ...f, minimumQuantity: e.target.value }))} /></Field>
+          <Field label="Stock máximo"><input className={inp} type="number" placeholder="0" value={form.maximumQuantity} onChange={e => setForm(f => ({ ...f, maximumQuantity: e.target.value }))} /></Field>
+          <div className="col-span-2"><Field label="Descripción técnica"><textarea className={inp + ' resize-none h-16'} placeholder="Descripción y especificaciones del artículo..." value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} /></Field></div>
           <div className="col-span-2 flex flex-col gap-2 pt-1">
-            <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"><input type="checkbox" className="w-4 h-4 accent-[#2a4038]" defaultChecked /> Genera movimiento de inventario</label>
-            <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"><input type="checkbox" className="w-4 h-4 accent-[#2a4038]" /> Maneja lote y fecha de vencimiento</label>
+            <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"><input type="checkbox" className="w-4 h-4 accent-[#2a4038]" checked={form.tracksInventory} onChange={e => setForm(f => ({ ...f, tracksInventory: e.target.checked }))} /> Genera movimiento de inventario</label>
+            <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"><input type="checkbox" className="w-4 h-4 accent-[#2a4038]" checked={form.tracksBatches} onChange={e => setForm(f => ({ ...f, tracksBatches: e.target.checked }))} /> Maneja lote y fecha de vencimiento</label>
           </div>
         </div>
-        <DrawerFooter onClose={() => setDrawerOpen(false)} />
+        <div className="flex gap-3 mt-8 pt-5 border-t border-gray-100">
+          <button onClick={() => setDrawerOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancelar</button>
+          <button onClick={handleCreate} disabled={saving} className="flex-1 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold hover:bg-[#3d5c4e] flex items-center justify-center gap-2 disabled:opacity-50">{saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Guardar</button>
+        </div>
       </Drawer>
     </>
   );
@@ -846,22 +1037,56 @@ function TabUnidades({ drawerOpen, setDrawerOpen }: { drawerOpen: boolean; setDr
    MÓDULO COMPRAS (NUEVO)
 ═══════════════════════════════════════════════════════ */
 function ModuloCompras() {
+  const toast = useToast();
+  const { data, loading, reload } = useInventoryWorkspace();
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [recepcionOC, setRecepcionOC] = useState<OrdenCompra | null>(null);
+  const [recepcionOC, setRecepcionOC] = useState<PurchaseOrderRecord | null>(null);
   const [search, setSearch] = useState('');
   const [filterEstado, setFilterEstado] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ supplier: '', issuedAt: currentDateInput(), expectedAt: '', destinationLocation: '', notes: '', item: '', quantity: '', unitPrice: '' });
+  const maps = useMemo(() => buildInventoryMaps(data), [data]);
 
-  const filtered = useMemo(() => ORDENES_COMPRA.filter(oc => (oc.numero.toLowerCase().includes(search.toLowerCase()) || oc.proveedor.toLowerCase().includes(search.toLowerCase())) && (!filterEstado || oc.estado === filterEstado)), [search, filterEstado]);
+  const filtered = useMemo(() => (data?.purchaseOrders ?? []).filter(oc => {
+    const supplier = maps.suppliers.get(oc.supplier)?.name ?? '';
+    return (oc.number.toLowerCase().includes(search.toLowerCase()) || supplier.toLowerCase().includes(search.toLowerCase())) && (!filterEstado || oc.status === filterEstado);
+  }), [data, search, filterEstado, maps.suppliers]);
 
-  const estadoColor: Record<string, 'yellow' | 'blue' | 'green' | 'red' | 'gray'> = { borrador: 'gray', enviada: 'blue', parcial: 'yellow', cerrada: 'green', anulada: 'red' };
-  const estadoLabel: Record<string, string> = { borrador: 'Borrador', enviada: 'Enviada', parcial: 'Parcial', cerrada: 'Cerrada', anulada: 'Anulada' };
+  const estadoApiColor: Record<string, 'yellow' | 'blue' | 'green' | 'red' | 'gray'> = { DRAFT: 'gray', SENT: 'blue', PARTIAL: 'yellow', CLOSED: 'green', VOIDED: 'red' };
+  const estadoApiLabel: Record<string, string> = { DRAFT: 'Borrador', SENT: 'Enviada', PARTIAL: 'Parcial', CLOSED: 'Cerrada', VOIDED: 'Anulada' };
 
   const resumen = useMemo(() => ({
-    pendientes: ORDENES_COMPRA.filter(oc => oc.estado === 'enviada').length,
-    parciales: ORDENES_COMPRA.filter(oc => oc.estado === 'parcial').length,
-    cerradas: ORDENES_COMPRA.filter(oc => oc.estado === 'cerrada').length,
-    valorTotal: ORDENES_COMPRA.filter(oc => oc.estado !== 'anulada').reduce((a, oc) => a + oc.total, 0),
-  }), []);
+    pendientes: (data?.purchaseOrders ?? []).filter(oc => oc.status === 'SENT').length,
+    parciales: (data?.purchaseOrders ?? []).filter(oc => oc.status === 'PARTIAL').length,
+    cerradas: (data?.purchaseOrders ?? []).filter(oc => oc.status === 'CLOSED').length,
+    valorTotal: (data?.purchaseOrders ?? []).filter(oc => oc.status !== 'VOIDED').reduce((a, oc) => a + numeric(oc.total), 0),
+  }), [data]);
+
+  const handleCreate = async () => {
+    if (!form.supplier || !form.issuedAt || !form.item || !Number(form.quantity) || !Number(form.unitPrice)) {
+      toast.warning('Proveedor, fecha y una línea con cantidad y precio son obligatorios.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await createPurchaseOrder({
+        supplier: form.supplier,
+        issued_at: form.issuedAt,
+        expected_at: form.expectedAt || null,
+        destination_location: form.destinationLocation || null,
+        notes: form.notes,
+        lines: [{ item: form.item, quantity: Number(form.quantity), unit_price: Number(form.unitPrice) }],
+      });
+      toast.success('Orden de compra creada');
+      setForm({ supplier: '', issuedAt: currentDateInput(), expectedAt: '', destinationLocation: '', notes: '', item: '', quantity: '', unitPrice: '' });
+      setDrawerOpen(false);
+      await reload();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No fue posible crear la OC');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div>
@@ -878,25 +1103,26 @@ function ModuloCompras() {
 
       <div className="flex gap-3 mb-4">
         <div className="flex-1"><SBar value={search} onChange={setSearch} placeholder="Buscar por número o proveedor..." /></div>
-        <select className={sel + ' w-44'} value={filterEstado} onChange={e => setFilterEstado(e.target.value)}><option value="">Todos los estados</option><option value="borrador">Borrador</option><option value="enviada">Enviada</option><option value="parcial">Parcial</option><option value="cerrada">Cerrada</option><option value="anulada">Anulada</option></select>
+        <select className={sel + ' w-44'} value={filterEstado} onChange={e => setFilterEstado(e.target.value)}><option value="">Todos los estados</option><option value="DRAFT">Borrador</option><option value="SENT">Enviada</option><option value="PARTIAL">Parcial</option><option value="CLOSED">Cerrada</option><option value="VOIDED">Anulada</option></select>
         <button className="flex items-center gap-2 px-3 py-2.5 border border-gray-200 rounded-xl text-xs text-gray-600 hover:bg-gray-50"><Download size={13} /> Exportar</button>
       </div>
 
       <Tbl>
         <thead><tr><Th>Número</Th><Th>Proveedor</Th><Th>F. Emisión</Th><Th>F. Entrega</Th><Th>Total</Th><Th>Estado</Th><Th>Avance</Th><Th>Acciones</Th></tr></thead>
         <tbody>
-          {filtered.map(oc => {
-            const totalPedido = oc.lineas.reduce((a, l) => a + l.cantidad, 0);
-            const totalRecibido = oc.lineas.reduce((a, l) => a + l.recibido, 0);
+          {loading && <LoadingRow colSpan={8} />}
+          {!loading && filtered.map(oc => {
+            const totalPedido = oc.lines.reduce((a, l) => a + numeric(l.quantity), 0);
+            const totalRecibido = oc.lines.reduce((a, l) => a + numeric(l.received_quantity), 0);
             const pct = totalPedido > 0 ? Math.round((totalRecibido / totalPedido) * 100) : 0;
             return (
               <tr key={oc.id} className="hover:bg-gray-50/50">
-                <Td><span className="font-mono text-xs font-semibold text-[#2a4038]">{oc.numero}</span></Td>
-                <Td className="font-medium text-gray-900">{oc.proveedor}</Td>
-                <Td className="text-xs text-gray-500">{oc.fechaEmision}</Td>
-                <Td className="text-xs text-gray-500">{oc.fechaEntrega}</Td>
-                <Td className="font-semibold">${oc.total.toLocaleString('es-CO')}</Td>
-                <Td><Badge label={estadoLabel[oc.estado]} color={estadoColor[oc.estado]} /></Td>
+                <Td><span className="font-mono text-xs font-semibold text-[#2a4038]">{oc.number}</span></Td>
+                <Td className="font-medium text-gray-900">{maps.suppliers.get(oc.supplier)?.name ?? 'Proveedor'}</Td>
+                <Td className="text-xs text-gray-500">{oc.issued_at}</Td>
+                <Td className="text-xs text-gray-500">{oc.expected_at ?? '—'}</Td>
+                <Td className="font-semibold">${numeric(oc.total).toLocaleString('es-CO')}</Td>
+                <Td><Badge label={estadoApiLabel[oc.status]} color={estadoApiColor[oc.status]} /></Td>
                 <Td>
                   <div className="flex items-center gap-2 w-28">
                     <div className="flex-1 bg-gray-100 rounded-full h-1.5"><div className="bg-[#2a4038] h-1.5 rounded-full" style={{ width: `${pct}%` }} /></div>
@@ -906,27 +1132,28 @@ function ModuloCompras() {
                 <Td>
                   <div className="flex gap-1">
                     <button className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600"><Eye size={13} /></button>
-                    {(oc.estado === 'enviada' || oc.estado === 'parcial') && (
+                    {(oc.status === 'SENT' || oc.status === 'PARTIAL') && (
                       <button onClick={() => setRecepcionOC(oc)} className="p-1.5 rounded-lg hover:bg-emerald-50 text-gray-400 hover:text-emerald-600" title="Registrar recepción"><ClipboardCheck size={13} /></button>
                     )}
-                    {oc.estado === 'borrador' && <button className="p-1.5 rounded-lg hover:bg-amber-50 text-gray-400 hover:text-amber-600"><Edit2 size={13} /></button>}
+                    {oc.status === 'DRAFT' && <button className="p-1.5 rounded-lg hover:bg-amber-50 text-gray-400 hover:text-amber-600"><Edit2 size={13} /></button>}
                   </div>
                 </Td>
               </tr>
             );
           })}
+          {!loading && filtered.length === 0 && <EmptyRow colSpan={8} label="Sin órdenes de compra registradas" />}
         </tbody>
       </Tbl>
 
       {/* Drawer: Nueva OC */}
       <Drawer title="Nueva Orden de Compra" open={drawerOpen} onClose={() => setDrawerOpen(false)} wide>
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Número OC" required><input className={inp} placeholder="OC-2025-092" /></Field>
-          <Field label="Fecha de emisión" required><input className={inp} type="date" defaultValue="2025-06-19" /></Field>
-          <div className="col-span-2"><Field label="Proveedor" required><select className={sel}><option value="">Seleccionar proveedor...</option>{PROVEEDORES.map(p => <option key={p.id}>{p.nombre}</option>)}</select></Field></div>
-          <Field label="Fecha de entrega esperada" required><input className={inp} type="date" /></Field>
+          <Field label="Número OC"><input className={inp + ' bg-gray-50'} placeholder="Automático" readOnly /></Field>
+          <Field label="Fecha de emisión" required><input className={inp} type="date" value={form.issuedAt} onChange={e => setForm(f => ({ ...f, issuedAt: e.target.value }))} /></Field>
+          <div className="col-span-2"><Field label="Proveedor" required><select className={sel} value={form.supplier} onChange={e => setForm(f => ({ ...f, supplier: e.target.value }))}><option value="">Seleccionar proveedor...</option>{(data?.suppliers ?? []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field></div>
+          <Field label="Fecha de entrega esperada" required><input className={inp} type="date" value={form.expectedAt} onChange={e => setForm(f => ({ ...f, expectedAt: e.target.value }))} /></Field>
           <Field label="Condiciones de pago"><select className={sel}><option>Contado</option><option>30 días</option><option>60 días</option><option>Crédito bancario</option></select></Field>
-          <div className="col-span-2"><Field label="Dirección de entrega"><input className={inp} placeholder="Dirección de la bodega receptora" /></Field></div>
+          <div className="col-span-2"><Field label="Ubicación de entrega"><select className={sel} value={form.destinationLocation} onChange={e => setForm(f => ({ ...f, destinationLocation: e.target.value }))}><option value="">Sin ubicación</option>{(data?.locations ?? []).map(l => <option key={l.id} value={l.id}>{locationName(data, l.id)}</option>)}</select></Field></div>
         </div>
         <div className="mt-5">
           <div className="flex items-center justify-between mb-3"><p className="text-xs font-bold uppercase tracking-wider text-gray-500">Líneas de la OC</p><button className="text-xs text-[#2a4038] font-semibold flex items-center gap-1"><Plus size={12} /> Agregar artículo</button></div>
@@ -934,15 +1161,13 @@ function ModuloCompras() {
             <div className="grid grid-cols-12 gap-2 text-[10px] font-bold uppercase tracking-wider text-gray-400 px-2">
               <div className="col-span-5">Artículo</div><div className="col-span-2">Cantidad</div><div className="col-span-2">Precio Unit.</div><div className="col-span-2">Total</div><div className="col-span-1" />
             </div>
-            {[1, 2].map(i => (
-              <div key={i} className="grid grid-cols-12 gap-2 items-center bg-white rounded-lg p-2">
-                <div className="col-span-5"><select className={sel + ' text-xs py-2'}><option>Seleccionar artículo...</option>{ARTICULOS.slice(0, 5).map(a => <option key={a.id}>{a.nombre}</option>)}</select></div>
-                <div className="col-span-2"><input className={inp + ' text-xs py-2'} type="number" placeholder="0" /></div>
-                <div className="col-span-2"><input className={inp + ' text-xs py-2'} type="number" placeholder="$0" /></div>
-                <div className="col-span-2"><input className={inp + ' text-xs py-2 bg-gray-50'} readOnly placeholder="$0" /></div>
+              <div className="grid grid-cols-12 gap-2 items-center bg-white rounded-lg p-2">
+                <div className="col-span-5"><select className={sel + ' text-xs py-2'} value={form.item} onChange={e => setForm(f => ({ ...f, item: e.target.value }))}><option value="">Seleccionar artículo...</option>{(data?.items ?? []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
+                <div className="col-span-2"><input className={inp + ' text-xs py-2'} type="number" placeholder="0" value={form.quantity} onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))} /></div>
+                <div className="col-span-2"><input className={inp + ' text-xs py-2'} type="number" placeholder="$0" value={form.unitPrice} onChange={e => setForm(f => ({ ...f, unitPrice: e.target.value }))} /></div>
+                <div className="col-span-2"><input className={inp + ' text-xs py-2 bg-gray-50'} readOnly value={`$${((Number(form.quantity) || 0) * (Number(form.unitPrice) || 0)).toLocaleString('es-CO')}`} /></div>
                 <div className="col-span-1 flex justify-center"><button className="p-1 text-red-400 hover:text-red-600"><X size={14} /></button></div>
               </div>
-            ))}
           </div>
         </div>
         <div className="flex justify-end gap-4 mt-4 pr-2">
@@ -951,11 +1176,14 @@ function ModuloCompras() {
           <div className="text-right"><p className="text-xs text-gray-500">Total OC</p><p className="text-lg font-bold text-[#2a4038]">$0</p></div>
         </div>
         <div className="col-span-2 mt-3"><Field label="Observaciones"><textarea className={inp + ' resize-none h-14'} placeholder="Condiciones especiales, notas de entrega..." /></Field></div>
-        <DrawerFooter onClose={() => setDrawerOpen(false)} />
+        <div className="flex gap-3 mt-8 pt-5 border-t border-gray-100">
+          <button onClick={() => setDrawerOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancelar</button>
+          <button onClick={handleCreate} disabled={saving} className="flex-1 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold hover:bg-[#3d5c4e] flex items-center justify-center gap-2 disabled:opacity-50">{saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Guardar</button>
+        </div>
       </Drawer>
 
       {/* Drawer: Recepción de OC */}
-      <Drawer title={`Recepción — ${recepcionOC?.numero ?? ''}`} open={!!recepcionOC} onClose={() => setRecepcionOC(null)} wide>
+      <Drawer title={`Recepción — ${recepcionOC?.number ?? ''}`} open={!!recepcionOC} onClose={() => setRecepcionOC(null)} wide>
         {recepcionOC && (
           <>
             <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 mb-5 flex gap-2">
@@ -963,25 +1191,25 @@ function ModuloCompras() {
               <p className="text-xs text-blue-700">Al registrar la recepción se generará automáticamente un movimiento <strong>Entrada por Compra</strong> y se asignará el lote correspondiente en inventario.</p>
             </div>
             <div className="grid grid-cols-2 gap-4 mb-5">
-              <Field label="Fecha de recepción" required><input className={inp} type="date" defaultValue="2025-06-19" /></Field>
+              <Field label="Fecha de recepción" required><input className={inp} type="date" defaultValue={currentDateInput()} /></Field>
               <Field label="Número de factura proveedor"><input className={inp} placeholder="Factura / Remisión" /></Field>
               <Field label="Responsable de recepción" required><input className={inp} placeholder="Nombre del receptor" /></Field>
-              <Field label="Bodega de ingreso" required><select className={sel}>{BODEGAS.map(b => <option key={b.id}>{b.nombre}</option>)}</select></Field>
+              <Field label="Bodega de ingreso" required><select className={sel}>{(data?.locations ?? []).map(l => <option key={l.id}>{locationName(data, l.id)}</option>)}</select></Field>
             </div>
             <p className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">Artículos recibidos</p>
             <div className="space-y-3">
-              {recepcionOC.lineas.map(l => (
-                <div key={l.id} className="bg-gray-50 border border-gray-100 rounded-xl p-4">
+              {recepcionOC.lines.map((l, index) => (
+                <div key={l.id ?? index} className="bg-gray-50 border border-gray-100 rounded-xl p-4">
                   <div className="flex items-center justify-between mb-3">
-                    <p className="font-semibold text-gray-900">{l.articulo}</p>
-                    <div className="text-right"><p className="text-[10px] text-gray-400">Pedido</p><p className="font-bold">{l.cantidad}</p></div>
+                    <p className="font-semibold text-gray-900">{itemName(data, l.item)}</p>
+                    <div className="text-right"><p className="text-[10px] text-gray-400">Pedido</p><p className="font-bold">{numeric(l.quantity)}</p></div>
                   </div>
                   <div className="grid grid-cols-3 gap-3">
-                    <Field label="Cantidad recibida" required><input className={inp} type="number" defaultValue={l.recibido} /></Field>
+                    <Field label="Cantidad recibida" required><input className={inp} type="number" defaultValue={numeric(l.received_quantity)} /></Field>
                     <Field label="Lote asignado" required><input className={inp} placeholder="Ej: L2025-010" /></Field>
                     <Field label="Fecha vencimiento"><input className={inp} type="date" /></Field>
                   </div>
-                  {l.recibido < l.cantidad && <div className="mt-2 text-xs text-amber-600 flex items-center gap-1"><AlertTriangle size={11} /> Recepción incompleta: quedan {l.cantidad - l.recibido} unidades pendientes</div>}
+                  {numeric(l.received_quantity) < numeric(l.quantity) && <div className="mt-2 text-xs text-amber-600 flex items-center gap-1"><AlertTriangle size={11} /> Recepción incompleta: quedan {numeric(l.quantity) - numeric(l.received_quantity)} unidades pendientes</div>}
                 </div>
               ))}
             </div>
@@ -1001,17 +1229,21 @@ function ModuloCompras() {
    MÓDULO EXISTENCIAS
 ═══════════════════════════════════════════════════════ */
 function ModuloExistencias() {
+  const { data, loading } = useInventoryWorkspace();
   const [tab, setTab] = useState<TabExistencias>('por-bodega');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [filterBodega, setFilterBodega] = useState('');
   const [filterTipo, setFilterTipo] = useState('');
   const [search, setSearch] = useState('');
 
-  const filteredStocks = useMemo(() => STOCKS.filter(s =>
-    (!filterBodega || s.bodega === filterBodega) &&
-    (!filterTipo || s.tipo === filterTipo) &&
-    (!search || s.articulo.toLowerCase().includes(search.toLowerCase()) || s.lote.toLowerCase().includes(search.toLowerCase()))
-  ), [filterBodega, filterTipo, search]);
+  const variantCost = useMemo(() => new Map((data?.variants ?? []).map(variant => [variant.id, variant.cost])), [data]);
+  const filteredStocks = useMemo(() => (data?.stocks ?? []).filter(s => {
+    const location = data?.locations.find(l => l.id === s.location);
+    const variant = variantName(data, s.variant).toLowerCase();
+    return (!filterBodega || location?.warehouse === filterBodega) &&
+      (!filterTipo || s.variant === filterTipo) &&
+      (!search || variant.includes(search.toLowerCase()) || locationName(data, s.location).toLowerCase().includes(search.toLowerCase()));
+  }), [data, filterBodega, filterTipo, search]);
 
   const tabs = ['por-bodega', 'por-lote', 'valorizado', 'ajustes'] as const;
   const tabLabels = { 'por-bodega': 'Por Bodega', 'por-lote': 'Por Lote', valorizado: 'Valorizado', ajustes: 'Ajustes' };
@@ -1027,10 +1259,10 @@ function ModuloExistencias() {
           <Hdr title="Existencias por Bodega" subtitle="Stock disponible, reservado y en proceso por ubicación" />
           <div className="grid grid-cols-4 gap-4 mb-5">
             {[
-              { label: 'Artículos activos', value: STOCKS.length, icon: Package, color: 'bg-blue-50 text-blue-600' },
-              { label: 'Stock disponible', value: STOCKS.reduce((a, s) => a + s.cantidad, 0).toLocaleString(), icon: CheckCircle, color: 'bg-emerald-50 text-emerald-600' },
-              { label: 'Stock reservado', value: STOCKS.reduce((a, s) => a + s.reservado, 0).toLocaleString(), icon: Clock, color: 'bg-amber-50 text-amber-600' },
-              { label: 'Bajo mínimo', value: ARTICULOS.filter(a => stockAlert(a.id) !== 'ok').length, icon: AlertTriangle, color: 'bg-red-50 text-red-600' },
+              { label: 'Stocks activos', value: data?.stocks.length ?? 0, icon: Package, color: 'bg-blue-50 text-blue-600' },
+              { label: 'Stock disponible', value: (data?.stocks ?? []).reduce((a, s) => a + numeric(s.quantity) - numeric(s.reserved_quantity), 0).toLocaleString(), icon: CheckCircle, color: 'bg-emerald-50 text-emerald-600' },
+              { label: 'Stock reservado', value: (data?.stocks ?? []).reduce((a, s) => a + numeric(s.reserved_quantity), 0).toLocaleString(), icon: Clock, color: 'bg-amber-50 text-amber-600' },
+              { label: 'Bajo mínimo', value: (data?.stocks ?? []).filter(s => stockLevel(s) !== 'ok').length, icon: AlertTriangle, color: 'bg-red-50 text-red-600' },
             ].map(s => (
               <div key={s.label} className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
                 <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-3 ${s.color}`}><s.icon size={16} /></div>
@@ -1040,33 +1272,34 @@ function ModuloExistencias() {
             ))}
           </div>
           <div className="flex gap-3 mb-4">
-            <select className={sel + ' w-52'} value={filterBodega} onChange={e => setFilterBodega(e.target.value)}><option value="">Todas las bodegas</option>{BODEGAS.map(b => <option key={b.id}>{b.nombre}</option>)}</select>
-            <select className={sel + ' w-48'} value={filterTipo} onChange={e => setFilterTipo(e.target.value)}><option value="">Todos los tipos</option>{TIPOS_ARTICULO.filter(t => t.inventariable).map(t => <option key={t.id}>{t.nombre}</option>)}</select>
-            <div className="flex-1"><SBar value={search} onChange={setSearch} placeholder="Buscar artículo o lote..." /></div>
+            <select className={sel + ' w-52'} value={filterBodega} onChange={e => setFilterBodega(e.target.value)}><option value="">Todas las bodegas</option>{(data?.warehouses ?? []).map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select>
+            <select className={sel + ' w-48'} value={filterTipo} onChange={e => setFilterTipo(e.target.value)}><option value="">Todas las variantes</option>{(data?.variants ?? []).map(v => <option key={v.id} value={v.id}>{data?.productNameByVariantId.get(v.id) ?? v.sku}</option>)}</select>
+            <div className="flex-1"><SBar value={search} onChange={setSearch} placeholder="Buscar variante o ubicación..." /></div>
           </div>
           <Tbl>
             <thead><tr><Th>Artículo</Th><Th>Bodega</Th><Th>Lote</Th><Th>Disponible</Th><Th>Reservado</Th><Th>En Proceso</Th><Th>Total Físico</Th><Th>Costo Unit.</Th><Th>Vencimiento</Th><Th>Alerta</Th></tr></thead>
             <tbody>
-              {filteredStocks.map(s => {
-                const total = s.cantidad + s.reservado + s.enProceso;
-                const lb = loteBadge(s.vencimiento);
-                const alert = stockAlert(s.articuloId);
+              {loading && <LoadingRow colSpan={10} />}
+              {!loading && filteredStocks.map(s => {
+                const total = numeric(s.quantity);
+                const reserved = numeric(s.reserved_quantity);
+                const available = total - reserved;
                 return (
                   <tr key={s.id} className="hover:bg-gray-50/50">
-                    <Td><span className="font-medium text-gray-900">{s.articulo}</span></Td>
-                    <Td><span className="text-xs text-gray-500">{s.bodega}</span></Td>
-                    <Td><span className="font-mono text-xs text-gray-500">{s.lote}</span></Td>
-                    <Td><span className={`font-bold ${s.cantidad === 0 ? 'text-red-600' : s.cantidad < 20 ? 'text-amber-600' : 'text-emerald-600'}`}>{s.cantidad.toLocaleString()}</span></Td>
-                    <Td className="text-amber-600 font-semibold">{s.reservado}</Td>
-                    <Td className="text-blue-600 font-semibold">{s.enProceso}</Td>
+                    <Td><span className="font-medium text-gray-900">{variantName(data, s.variant)}</span></Td>
+                    <Td><span className="text-xs text-gray-500">{locationName(data, s.location)}</span></Td>
+                    <Td><span className="font-mono text-xs text-gray-500">N/A</span></Td>
+                    <Td><span className={`font-bold ${available === 0 ? 'text-red-600' : available < numeric(s.minimum_quantity) ? 'text-amber-600' : 'text-emerald-600'}`}>{available.toLocaleString()}</span></Td>
+                    <Td className="text-amber-600 font-semibold">{reserved}</Td>
+                    <Td className="text-blue-600 font-semibold">0</Td>
                     <Td className="font-semibold text-gray-900">{total.toLocaleString()}</Td>
-                    <Td>${s.costo.toLocaleString('es-CO')}</Td>
-                    <Td>{s.vencimiento ? <span className={lb.color === 'red' ? 'text-red-600 font-semibold' : lb.color === 'yellow' ? 'text-amber-600 font-semibold' : 'text-gray-600'}>{s.vencimiento}</span> : <span className="text-gray-300">—</span>}</Td>
-                    <Td>{alert !== 'ok' && <Badge label={alert === 'critical' ? 'Crítico' : 'Bajo'} color={alert === 'critical' ? 'red' : 'yellow'} />}{lb.color !== 'gray' && lb.color !== 'green' && <Badge label={`Vence ${lb.label}`} color={lb.color} />}</Td>
+                    <Td>${(variantCost.get(s.variant) ?? 0).toLocaleString('es-CO')}</Td>
+                    <Td><span className="text-gray-300">—</span></Td>
+                    <Td>{stockLevel(s) !== 'ok' ? <Badge label={stockLevel(s) === 'critical' ? 'Crítico' : 'Bajo'} color={stockLevel(s) === 'critical' ? 'red' : 'yellow'} /> : <Badge label="OK" color="green" />}</Td>
                   </tr>
                 );
               })}
-              {filteredStocks.length === 0 && <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-400 text-sm">Sin resultados para los filtros aplicados</td></tr>}
+              {!loading && filteredStocks.length === 0 && <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-400 text-sm">Sin resultados para los filtros aplicados</td></tr>}
             </tbody>
           </Tbl>
         </>
@@ -1079,17 +1312,16 @@ function ModuloExistencias() {
           <Tbl>
             <thead><tr><Th>Lote</Th><Th>Artículo</Th><Th>Bodega</Th><Th>Cantidad</Th><Th>F. Ingreso</Th><Th>F. Vencimiento</Th><Th>Estado</Th></tr></thead>
             <tbody>
-              {STOCKS.filter(s => !search || s.lote.toLowerCase().includes(search.toLowerCase()) || s.articulo.toLowerCase().includes(search.toLowerCase())).map(s => {
-                const lb = loteBadge(s.vencimiento);
+              {(data?.items ?? []).filter(item => item.tracks_batches && (!search || item.name.toLowerCase().includes(search.toLowerCase()) || item.code.toLowerCase().includes(search.toLowerCase()))).map(item => {
                 return (
-                  <tr key={s.id} className="hover:bg-gray-50/50">
-                    <Td><span className="font-mono text-xs font-semibold text-[#2a4038]">{s.lote}</span></Td>
-                    <Td className="font-medium">{s.articulo}</Td>
-                    <Td className="text-gray-500 text-xs">{s.bodega}</Td>
-                    <Td className="font-bold">{s.cantidad.toLocaleString()}</Td>
-                    <Td className="text-gray-500 text-xs">2025-06-01</Td>
-                    <Td>{s.vencimiento || <span className="text-gray-300">N/A</span>}</Td>
-                    <Td><Badge label={lb.label} color={lb.color} /></Td>
+                  <tr key={item.id} className="hover:bg-gray-50/50">
+                    <Td><span className="font-mono text-xs font-semibold text-[#2a4038]">{item.code}</span></Td>
+                    <Td className="font-medium">{item.name}</Td>
+                    <Td className="text-gray-500 text-xs">Según recepción</Td>
+                    <Td className="font-bold">—</Td>
+                    <Td className="text-gray-500 text-xs">—</Td>
+                    <Td><span className="text-gray-300">N/A</span></Td>
+                    <Td><Badge label="Maneja lote" color="yellow" /></Td>
                   </tr>
                 );
               })}
@@ -1103,7 +1335,7 @@ function ModuloExistencias() {
           <Hdr title="Inventario Valorizado" subtitle="Valorización financiera del inventario" />
           <div className="flex gap-3 mb-4">
             <select className={sel + ' w-56'}><option>Costo Unitario sin IVA</option><option>Costo con IVA incluido</option><option>Precio de Venta con IVA</option></select>
-            <select className={sel + ' w-48'} value={filterBodega} onChange={e => setFilterBodega(e.target.value)}><option value="">Todas las bodegas</option>{BODEGAS.map(b => <option key={b.id}>{b.nombre}</option>)}</select>
+            <select className={sel + ' w-48'} value={filterBodega} onChange={e => setFilterBodega(e.target.value)}><option value="">Todas las bodegas</option>{(data?.warehouses ?? []).map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select>
             <input type="date" className={inp + ' w-44'} defaultValue="2025-06-19" />
             <button className="flex items-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white text-xs rounded-xl"><Download size={13} /> Exportar</button>
           </div>
@@ -1111,26 +1343,27 @@ function ModuloExistencias() {
             <thead><tr><Th>Artículo</Th><Th>Tipo</Th><Th>Cantidad</Th><Th>Costo Unit.</Th><Th>Total Costo</Th><Th>IVA</Th><Th>Total + IVA</Th></tr></thead>
             <tbody>
               {filteredStocks.map(s => {
-                const art = ARTICULOS.find(a => a.id === s.articuloId);
-                const tc = s.cantidad * s.costo;
-                const tiva = tc * (art?.iva ?? 0) / 100;
+                const cost = variantCost.get(s.variant) ?? 0;
+                const quantity = numeric(s.quantity);
+                const tc = quantity * cost;
+                const tiva = 0;
                 return (
                   <tr key={s.id} className="hover:bg-gray-50/50">
-                    <Td className="font-medium">{s.articulo}</Td>
-                    <Td><Badge label={art?.tipo ?? '—'} color="gray" /></Td>
-                    <Td className="font-semibold">{s.cantidad.toLocaleString()}</Td>
-                    <Td>${s.costo.toLocaleString('es-CO')}</Td>
+                    <Td className="font-medium">{variantName(data, s.variant)}</Td>
+                    <Td><Badge label="Catálogo" color="gray" /></Td>
+                    <Td className="font-semibold">{quantity.toLocaleString()}</Td>
+                    <Td>${cost.toLocaleString('es-CO')}</Td>
                     <Td className="font-bold text-gray-900">${tc.toLocaleString('es-CO')}</Td>
-                    <Td className="text-gray-500">{art?.iva ?? 0}%</Td>
+                    <Td className="text-gray-500">0%</Td>
                     <Td className="font-bold text-[#2a4038]">${(tc + tiva).toLocaleString('es-CO', { maximumFractionDigits: 0 })}</Td>
                   </tr>
                 );
               })}
               <tr className="bg-gray-50">
                 <Td colSpan={4}><span className="font-bold text-gray-900">TOTAL GENERAL</span></Td>
-                <Td className="font-bold text-gray-900">${filteredStocks.reduce((a, s) => a + s.cantidad * s.costo, 0).toLocaleString('es-CO')}</Td>
+                <Td className="font-bold text-gray-900">${filteredStocks.reduce((a, s) => a + numeric(s.quantity) * (variantCost.get(s.variant) ?? 0), 0).toLocaleString('es-CO')}</Td>
                 <Td />
-                <Td className="font-bold text-[#2a4038]">${filteredStocks.reduce((a, s) => { const art = ARTICULOS.find(x => x.id === s.articuloId); return a + s.cantidad * s.costo * (1 + (art?.iva ?? 0) / 100); }, 0).toLocaleString('es-CO', { maximumFractionDigits: 0 })}</Td>
+                <Td className="font-bold text-[#2a4038]">${filteredStocks.reduce((a, s) => a + numeric(s.quantity) * (variantCost.get(s.variant) ?? 0), 0).toLocaleString('es-CO', { maximumFractionDigits: 0 })}</Td>
               </tr>
             </tbody>
           </Tbl>
@@ -1177,14 +1410,18 @@ function ModuloExistencias() {
    MÓDULO MOVIMIENTOS
 ═══════════════════════════════════════════════════════ */
 function ModuloMovimientos() {
+  const toast = useToast();
+  const { data, loading, reload } = useInventoryWorkspace();
   const [tab, setTab] = useState<TabMovimientos>('todos');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [trasladoDrawer, setTrasladoDrawer] = useState(false);
   const [tipoFilter, setTipoFilter] = useState('');
   const [bodegaFilter, setBodegaFilter] = useState('');
   const [search, setSearch] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ movementType: 'ENTRY' as MovementType, variant: '', location: '', quantity: '', reason: '', reference: '' });
 
-  const tiposMovimiento = ['Entrada por Compra', 'Salida a Producción', 'Entrada PT', 'Salida por Venta', 'Traslado entre Bodegas', 'Ajuste Positivo', 'Ajuste Negativo', 'Devolución Cliente', 'Devolución Proveedor', 'Deterioro', 'Bonificación', 'Merma', 'Sobrante'];
+  const tiposMovimiento: MovementType[] = ['ENTRY', 'EXIT', 'LOSS', 'ADJUSTMENT_IN', 'ADJUSTMENT_OUT'];
   const movColor = (tipo: string): 'green' | 'red' | 'blue' | 'yellow' | 'gray' => {
     if (tipo.includes('Entrada') || tipo.includes('Sobrante') || tipo.includes('Positivo') || tipo.includes('Devolución')) return tipo.includes('Proveedor') ? 'green' : tipo.includes('Cliente') ? 'yellow' : 'green';
     if (tipo.includes('Salida') || tipo.includes('Negativo') || tipo.includes('Deterioro') || tipo.includes('Merma')) return 'red';
@@ -1192,11 +1429,38 @@ function ModuloMovimientos() {
     return 'gray';
   };
 
-  const filteredMovs = useMemo(() => MOVIMIENTOS.filter(m =>
-    (!tipoFilter || m.tipo === tipoFilter) &&
-    (!bodegaFilter || m.bodega === bodegaFilter) &&
-    (!search || m.articulo.toLowerCase().includes(search.toLowerCase()) || m.motivo.toLowerCase().includes(search.toLowerCase()) || m.lote.toLowerCase().includes(search.toLowerCase()))
-  ), [tipoFilter, bodegaFilter, search]);
+  const filteredMovs = useMemo(() => (data?.movements ?? []).filter(m => {
+    const location = data?.locations.find(l => l.id === m.location);
+    return (!tipoFilter || m.movement_type === tipoFilter) &&
+      (!bodegaFilter || location?.warehouse === bodegaFilter) &&
+      (!search || variantName(data, m.variant).toLowerCase().includes(search.toLowerCase()) || m.reason.toLowerCase().includes(search.toLowerCase()) || m.reference.toLowerCase().includes(search.toLowerCase()));
+  }), [data, tipoFilter, bodegaFilter, search]);
+
+  const handleCreate = async () => {
+    if (!form.variant || !form.location || !Number(form.quantity)) {
+      toast.warning('Variante, ubicación y cantidad son obligatorias.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await createInventoryMovement({
+        variant: form.variant,
+        location: form.location,
+        movement_type: form.movementType,
+        quantity: Number(form.quantity),
+        reason: form.reason,
+        reference: form.reference,
+      });
+      toast.success('Movimiento registrado');
+      setForm({ movementType: 'ENTRY', variant: '', location: '', quantity: '', reason: '', reference: '' });
+      setDrawerOpen(false);
+      await reload();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No fue posible registrar el movimiento');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const estadoTrf: Record<string, 'green' | 'yellow' | 'red'> = { confirmado: 'green', pendiente: 'yellow', anulado: 'red' };
 
@@ -1211,8 +1475,8 @@ function ModuloMovimientos() {
         <>
           <Hdr title="Movimientos de Inventario" subtitle="Todos los cambios de stock con trazabilidad completa" onNew={() => setDrawerOpen(true)} newLabel="Registrar Movimiento" />
           <div className="flex gap-3 mb-4 flex-wrap">
-            <select className={sel + ' w-60'} value={tipoFilter} onChange={e => setTipoFilter(e.target.value)}><option value="">Todos los tipos</option>{tiposMovimiento.map(t => <option key={t}>{t}</option>)}</select>
-            <select className={sel + ' w-48'} value={bodegaFilter} onChange={e => setBodegaFilter(e.target.value)}><option value="">Todas las bodegas</option>{BODEGAS.map(b => <option key={b.id}>{b.nombre}</option>)}</select>
+            <select className={sel + ' w-60'} value={tipoFilter} onChange={e => setTipoFilter(e.target.value)}><option value="">Todos los tipos</option>{tiposMovimiento.map(t => <option key={t} value={t}>{movementLabel(t)}</option>)}</select>
+            <select className={sel + ' w-48'} value={bodegaFilter} onChange={e => setBodegaFilter(e.target.value)}><option value="">Todas las bodegas</option>{(data?.warehouses ?? []).map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select>
             <input type="date" className={inp + ' w-40'} />
             <div className="flex-1"><SBar value={search} onChange={setSearch} placeholder="Buscar artículo, lote, motivo..." /></div>
             <button className="flex items-center gap-2 px-3 py-2.5 border border-gray-200 rounded-xl text-xs text-gray-600 hover:bg-gray-50"><Download size={13} /> Exportar</button>
@@ -1220,36 +1484,42 @@ function ModuloMovimientos() {
           <Tbl>
             <thead><tr><Th>Fecha</Th><Th>Tipo</Th><Th>Artículo</Th><Th>Bodega</Th><Th>Cantidad</Th><Th>Lote</Th><Th>Motivo / Ref.</Th><Th>Usuario</Th></tr></thead>
             <tbody>
-              {filteredMovs.map(m => (
+              {loading && <LoadingRow colSpan={8} />}
+              {!loading && filteredMovs.map(m => {
+                const qty = movementSignedQuantity(m);
+                return (
                 <tr key={m.id} className="hover:bg-gray-50/50">
-                  <Td className="text-gray-500 text-xs">{m.fecha}</Td>
-                  <Td><Badge label={m.tipo} color={movColor(m.tipo)} /></Td>
-                  <Td className="font-medium text-gray-900">{m.articulo}</Td>
-                  <Td className="text-xs text-gray-500">{m.bodega}</Td>
-                  <Td><span className={`font-bold ${m.cantidad > 0 ? 'text-emerald-600' : 'text-red-600'}`}>{m.cantidad > 0 ? '+' : ''}{m.cantidad.toLocaleString()}</span></Td>
-                  <Td><span className="font-mono text-xs text-gray-400">{m.lote}</span></Td>
-                  <Td className="text-xs text-gray-500">{m.motivo}</Td>
-                  <Td className="text-xs text-gray-500">{m.usuario}</Td>
+                  <Td className="text-gray-500 text-xs">{m.created_at?.slice(0, 10)}</Td>
+                  <Td><Badge label={movementLabel(m.movement_type)} color={movColor(movementLabel(m.movement_type))} /></Td>
+                  <Td className="font-medium text-gray-900">{variantName(data, m.variant)}</Td>
+                  <Td className="text-xs text-gray-500">{locationName(data, m.location)}</Td>
+                  <Td><span className={`font-bold ${qty > 0 ? 'text-emerald-600' : 'text-red-600'}`}>{qty > 0 ? '+' : ''}{qty.toLocaleString()}</span></Td>
+                  <Td><span className="font-mono text-xs text-gray-400">N/A</span></Td>
+                  <Td className="text-xs text-gray-500">{m.reference || m.reason}</Td>
+                  <Td className="text-xs text-gray-500">{m.created_by ?? 'Sistema'}</Td>
                 </tr>
-              ))}
-              {filteredMovs.length === 0 && <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400 text-sm">Sin movimientos para los filtros aplicados</td></tr>}
+              );})}
+              {!loading && filteredMovs.length === 0 && <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400 text-sm">Sin movimientos para los filtros aplicados</td></tr>}
             </tbody>
           </Tbl>
           <Drawer title="Registrar Movimiento" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
             <div className="grid grid-cols-2 gap-4">
-              <Field label="Tipo de movimiento" required><select className={sel}><option value="">Seleccionar...</option>{tiposMovimiento.map(t => <option key={t}>{t}</option>)}</select></Field>
-              <Field label="Fecha" required><input className={inp} type="date" defaultValue="2025-06-19" /></Field>
-              <div className="col-span-2"><Field label="Artículo" required><select className={sel}><option value="">Buscar artículo...</option>{ARTICULOS.map(a => <option key={a.id}>{a.codigo} — {a.nombre}</option>)}</select></Field></div>
-              <Field label="Bodega origen" required><select className={sel}><option value="">Seleccionar...</option>{BODEGAS.map(b => <option key={b.id}>{b.nombre}</option>)}</select></Field>
-              <Field label="Bodega destino"><select className={sel}><option value="">N/A</option>{BODEGAS.map(b => <option key={b.id}>{b.nombre}</option>)}</select></Field>
-              <Field label="Lote"><input className={inp} placeholder="Número de lote" /></Field>
-              <Field label="Cantidad" required><input className={inp} type="number" placeholder="0.00" step="0.01" /></Field>
+              <Field label="Tipo de movimiento" required><select className={sel} value={form.movementType} onChange={e => setForm(f => ({ ...f, movementType: e.target.value as MovementType }))}>{tiposMovimiento.map(t => <option key={t} value={t}>{movementLabel(t)}</option>)}</select></Field>
+              <Field label="Fecha"><input className={inp + ' bg-gray-50'} type="date" value={currentDateInput()} readOnly /></Field>
+              <div className="col-span-2"><Field label="Variante" required><select className={sel} value={form.variant} onChange={e => setForm(f => ({ ...f, variant: e.target.value }))}><option value="">Buscar variante...</option>{(data?.variants ?? []).map(v => <option key={v.id} value={v.id}>{variantName(data, v.id)}</option>)}</select></Field></div>
+              <Field label="Ubicación" required><select className={sel} value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))}><option value="">Seleccionar...</option>{(data?.locations ?? []).map(l => <option key={l.id} value={l.id}>{locationName(data, l.id)}</option>)}</select></Field>
+              <Field label="Bodega destino"><select className={sel}><option value="">N/A</option>{(data?.locations ?? []).map(l => <option key={l.id}>{locationName(data, l.id)}</option>)}</select></Field>
+              <Field label="Lote"><input className={inp + ' bg-gray-50'} placeholder="No parametrizado" readOnly /></Field>
+              <Field label="Cantidad" required><input className={inp} type="number" placeholder="0.00" step="0.01" value={form.quantity} onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))} /></Field>
               <Field label="Costo unitario"><input className={inp} type="number" placeholder="0.00" /></Field>
-              <Field label="Referencia documental"><input className={inp} placeholder="OC, OP, Factura..." /></Field>
-              <div className="col-span-2"><Field label="Motivo" required><select className={sel}><option>Compra a proveedor</option><option>Consumo en producción</option><option>Venta ecommerce</option><option>Traslado interno</option><option>Ajuste conteo</option><option>Deterioro</option><option>Merma proceso</option><option>Devolución</option><option>Otro</option></select></Field></div>
+              <Field label="Referencia documental"><input className={inp} placeholder="OC, OP, Factura..." value={form.reference} onChange={e => setForm(f => ({ ...f, reference: e.target.value }))} /></Field>
+              <div className="col-span-2"><Field label="Motivo" required><input className={inp} placeholder="Motivo del movimiento" value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))} /></Field></div>
               <div className="col-span-2"><Field label="Observaciones"><textarea className={inp + ' resize-none h-14'} placeholder="Notas adicionales..." /></Field></div>
             </div>
-            <DrawerFooter onClose={() => setDrawerOpen(false)} />
+            <div className="flex gap-3 mt-8 pt-5 border-t border-gray-100">
+              <button onClick={() => setDrawerOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancelar</button>
+              <button onClick={handleCreate} disabled={saving} className="flex-1 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold hover:bg-[#3d5c4e] flex items-center justify-center gap-2 disabled:opacity-50">{saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Guardar</button>
+            </div>
           </Drawer>
         </>
       )}
@@ -1305,9 +1575,15 @@ function ModuloMovimientos() {
    MÓDULO PRODUCCIÓN
 ═══════════════════════════════════════════════════════ */
 function ModuloProduccion() {
+  const toast = useToast();
+  const { data, loading, reload } = useInventoryWorkspace();
   const [tab, setTab] = useState<TabProduccion>('ordenes');
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [cierreOP, setCierreOP] = useState<OrdenProduccion | null>(null);
+  const [cierreOP, setCierreOP] = useState<ProductionOrderRecord | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [orderForm, setOrderForm] = useState({ formula: '', outputItem: '', plannedQuantity: '', batchCode: '', startedAt: currentDateInput(), responsible: '', notes: '' });
+  const [formulaForm, setFormulaForm] = useState({ code: '', name: '', outputItem: '', yieldQuantity: '', yieldUnit: '', item: '', quantity: '' });
+  const maps = useMemo(() => buildInventoryMaps(data), [data]);
 
   const tabs = [
     { id: 'ordenes' as TabProduccion, label: 'Órdenes de Producción' },
@@ -1317,8 +1593,61 @@ function ModuloProduccion() {
     { id: 'mermas' as TabProduccion, label: 'Mermas / Sobrantes' },
   ];
 
-  const estadoColor: Record<string, 'yellow' | 'blue' | 'green' | 'red'> = { pendiente: 'yellow', 'en-proceso': 'blue', cerrada: 'green', anulada: 'red' };
-  const estadoLabel: Record<string, string> = { pendiente: 'Pendiente', 'en-proceso': 'En Proceso', cerrada: 'Cerrada', anulada: 'Anulada' };
+  const estadoApiColor: Record<string, 'yellow' | 'blue' | 'green' | 'red'> = { PENDING: 'yellow', IN_PROGRESS: 'blue', CLOSED: 'green', VOIDED: 'red' };
+  const estadoApiLabel: Record<string, string> = { PENDING: 'Pendiente', IN_PROGRESS: 'En Proceso', CLOSED: 'Cerrada', VOIDED: 'Anulada' };
+
+  const handleCreateOrder = async () => {
+    if (!orderForm.formula || !orderForm.outputItem || !Number(orderForm.plannedQuantity)) {
+      toast.warning('Fórmula, producto y cantidad planificada son obligatorios.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await createProductionOrder({
+        formula: orderForm.formula,
+        output_item: orderForm.outputItem,
+        planned_quantity: Number(orderForm.plannedQuantity),
+        batch_code: orderForm.batchCode,
+        started_at: orderForm.startedAt || null,
+        responsible: orderForm.responsible,
+        notes: orderForm.notes,
+      });
+      toast.success('Orden de producción creada');
+      setOrderForm({ formula: '', outputItem: '', plannedQuantity: '', batchCode: '', startedAt: currentDateInput(), responsible: '', notes: '' });
+      setDrawerOpen(false);
+      await reload();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No fue posible crear la OP');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCreateFormula = async () => {
+    if (!formulaForm.code || !formulaForm.name || !formulaForm.outputItem || !formulaForm.yieldUnit || !Number(formulaForm.yieldQuantity) || !formulaForm.item || !Number(formulaForm.quantity)) {
+      toast.warning('Completa la fórmula y al menos un ingrediente.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await createFormula({
+        code: formulaForm.code,
+        name: formulaForm.name,
+        output_item: formulaForm.outputItem,
+        yield_quantity: Number(formulaForm.yieldQuantity),
+        yield_unit: formulaForm.yieldUnit,
+        lines: [{ item: formulaForm.item, quantity: Number(formulaForm.quantity) }],
+      });
+      toast.success('Fórmula creada');
+      setFormulaForm({ code: '', name: '', outputItem: '', yieldQuantity: '', yieldUnit: '', item: '', quantity: '' });
+      setDrawerOpen(false);
+      await reload();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No fue posible crear la fórmula');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div>
@@ -1332,35 +1661,37 @@ function ModuloProduccion() {
           <Hdr title="Órdenes de Producción" subtitle="Planificación y control del proceso productivo" onNew={() => setDrawerOpen(true)} newLabel="Nueva Orden" />
           <div className="grid grid-cols-4 gap-4 mb-5">
             {[
-              { label: 'Pendientes', value: ORDENES_PRODUCCION.filter(o => o.estado === 'pendiente').length, color: 'bg-amber-50 text-amber-600 border-amber-100' },
-              { label: 'En Proceso', value: ORDENES_PRODUCCION.filter(o => o.estado === 'en-proceso').length, color: 'bg-blue-50 text-blue-600 border-blue-100' },
-              { label: 'Cerradas (mes)', value: ORDENES_PRODUCCION.filter(o => o.estado === 'cerrada').length, color: 'bg-emerald-50 text-emerald-600 border-emerald-100' },
-              { label: 'Sin Recepción PT', value: ORDENES_PRODUCCION.filter(o => o.dispensada && !o.ptRecibido && o.estado !== 'pendiente').length, color: 'bg-red-50 text-red-600 border-red-100' },
+              { label: 'Pendientes', value: (data?.productionOrders ?? []).filter(o => o.status === 'PENDING').length, color: 'bg-amber-50 text-amber-600 border-amber-100' },
+              { label: 'En Proceso', value: (data?.productionOrders ?? []).filter(o => o.status === 'IN_PROGRESS').length, color: 'bg-blue-50 text-blue-600 border-blue-100' },
+              { label: 'Cerradas (mes)', value: (data?.productionOrders ?? []).filter(o => o.status === 'CLOSED').length, color: 'bg-emerald-50 text-emerald-600 border-emerald-100' },
+              { label: 'Sin Recepción PT', value: (data?.productionOrders ?? []).filter(o => o.is_dispensed && !o.is_output_received && o.status !== 'PENDING').length, color: 'bg-red-50 text-red-600 border-red-100' },
             ].map(s => <div key={s.label} className={`border rounded-2xl p-4 ${s.color}`}><p className="text-3xl font-bold">{s.value}</p><p className="text-xs font-medium mt-0.5">{s.label}</p></div>)}
           </div>
           <Tbl>
             <thead><tr><Th>Número</Th><Th>Producto</Th><Th>Plan</Th><Th>Real</Th><Th>Estado</Th><Th>Dispensada</Th><Th>PT Recibido</Th><Th>Responsable</Th><Th>Acciones</Th></tr></thead>
             <tbody>
-              {ORDENES_PRODUCCION.map(op => (
+              {loading && <LoadingRow colSpan={9} />}
+              {!loading && (data?.productionOrders ?? []).map(op => (
                 <tr key={op.id} className="hover:bg-gray-50/50">
-                  <Td><span className="font-mono text-xs font-semibold text-[#2a4038]">{op.numero}</span></Td>
-                  <Td className="font-medium text-gray-900">{op.producto}</Td>
-                  <Td className="font-bold">{op.cantidadPlan.toLocaleString()}</Td>
-                  <Td className={op.cantidadReal > 0 ? 'font-bold text-emerald-600' : 'text-gray-400'}>{op.cantidadReal > 0 ? op.cantidadReal.toLocaleString() : '—'}</Td>
-                  <Td><Badge label={estadoLabel[op.estado]} color={estadoColor[op.estado]} /></Td>
-                  <Td>{op.dispensada ? <CheckCircle size={14} className="text-emerald-500" /> : <Clock size={14} className="text-gray-300" />}</Td>
-                  <Td>{op.ptRecibido ? <CheckCircle size={14} className="text-emerald-500" /> : <Clock size={14} className="text-gray-300" />}</Td>
-                  <Td className="text-xs text-gray-500">{op.responsable}</Td>
+                  <Td><span className="font-mono text-xs font-semibold text-[#2a4038]">{op.number}</span></Td>
+                  <Td className="font-medium text-gray-900">{itemName(data, op.output_item)}</Td>
+                  <Td className="font-bold">{numeric(op.planned_quantity).toLocaleString()}</Td>
+                  <Td className={numeric(op.actual_quantity) > 0 ? 'font-bold text-emerald-600' : 'text-gray-400'}>{numeric(op.actual_quantity) > 0 ? numeric(op.actual_quantity).toLocaleString() : '—'}</Td>
+                  <Td><Badge label={estadoApiLabel[op.status]} color={estadoApiColor[op.status]} /></Td>
+                  <Td>{op.is_dispensed ? <CheckCircle size={14} className="text-emerald-500" /> : <Clock size={14} className="text-gray-300" />}</Td>
+                  <Td>{op.is_output_received ? <CheckCircle size={14} className="text-emerald-500" /> : <Clock size={14} className="text-gray-300" />}</Td>
+                  <Td className="text-xs text-gray-500">{op.responsible || '—'}</Td>
                   <Td>
                     <div className="flex gap-1">
                       <button className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600"><Eye size={13} /></button>
-                      {op.estado === 'en-proceso' && op.dispensada && op.ptRecibido && (
+                      {op.status === 'IN_PROGRESS' && op.is_dispensed && op.is_output_received && (
                         <button onClick={() => setCierreOP(op)} className="p-1.5 rounded-lg hover:bg-emerald-50 text-gray-400 hover:text-emerald-600" title="Cerrar orden"><ClipboardCheck size={13} /></button>
                       )}
                     </div>
                   </Td>
                 </tr>
               ))}
+              {!loading && (data?.productionOrders ?? []).length === 0 && <EmptyRow colSpan={9} label="Sin órdenes de producción registradas" />}
             </tbody>
           </Tbl>
 
@@ -1370,12 +1701,12 @@ function ModuloProduccion() {
               <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setCierreOP(null)} />
               <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
                 <h3 className="font-bold text-gray-900 text-lg mb-1">Cerrar Orden de Producción</h3>
-                <p className="text-xs text-gray-500 mb-5">{cierreOP.numero} · {cierreOP.producto}</p>
+                <p className="text-xs text-gray-500 mb-5">{cierreOP.number} · {itemName(data, cierreOP.output_item)}</p>
                 <div className="space-y-3 mb-6">
                   {[
-                    { label: 'Dispensación verificada', ok: cierreOP.dispensada },
-                    { label: 'Recepción PT registrada', ok: cierreOP.ptRecibido },
-                    { label: 'Mermas y sobrantes documentados', ok: MERMAS_SOBRANTES.some(m => m.ordenProduccion === cierreOP.numero) },
+                    { label: 'Dispensación verificada', ok: cierreOP.is_dispensed },
+                    { label: 'Recepción PT registrada', ok: cierreOP.is_output_received },
+                    { label: 'Mermas y sobrantes documentados', ok: true },
                   ].map(item => (
                     <div key={item.label} className={`flex items-center gap-3 p-3 rounded-xl ${item.ok ? 'bg-emerald-50 border border-emerald-100' : 'bg-red-50 border border-red-100'}`}>
                       {item.ok ? <CheckCircle size={16} className="text-emerald-600 flex-shrink-0" /> : <AlertTriangle size={16} className="text-red-500 flex-shrink-0" />}
@@ -1383,7 +1714,7 @@ function ModuloProduccion() {
                     </div>
                   ))}
                 </div>
-                <div className="mb-4"><Field label="Cantidad real producida" required><input className={inp} type="number" defaultValue={cierreOP.cantidadPlan} /></Field></div>
+                <div className="mb-4"><Field label="Cantidad real producida" required><input className={inp} type="number" defaultValue={numeric(cierreOP.planned_quantity)} /></Field></div>
                 <div className="mb-5"><Field label="Observaciones de cierre"><textarea className={inp + ' resize-none h-14'} placeholder="Notas finales de la orden..." /></Field></div>
                 <div className="flex gap-3">
                   <button onClick={() => setCierreOP(null)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">Cancelar</button>
@@ -1395,18 +1726,21 @@ function ModuloProduccion() {
 
           <Drawer title="Nueva Orden de Producción" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
             <div className="grid grid-cols-2 gap-4">
-              <Field label="Número de orden" required><input className={inp} placeholder="OP-2025-044" /></Field>
-              <Field label="Fecha programada" required><input className={inp} type="date" defaultValue="2025-06-20" /></Field>
-              <div className="col-span-2"><Field label="Producto a fabricar" required><select className={sel}><option value="">Seleccionar producto terminado...</option>{ARTICULOS.filter(a => a.tipo === 'Producto Terminado').map(a => <option key={a.id}>{a.nombre}</option>)}</select></Field></div>
-              <div className="col-span-2"><Field label="Fórmula / Receta" required><select className={sel}><option value="">Seleccionar fórmula...</option>{FORMULAS.map(f => <option key={f.id}>{f.codigo} — {f.nombre}</option>)}</select></Field></div>
-              <Field label="Cantidad planificada" required><input className={inp} type="number" placeholder="0" /></Field>
-              <Field label="Lote asignado" required><input className={inp} placeholder="Ej: PT2025-022" /></Field>
+              <Field label="Número de orden"><input className={inp + ' bg-gray-50'} placeholder="Automático" readOnly /></Field>
+              <Field label="Fecha programada" required><input className={inp} type="date" value={orderForm.startedAt} onChange={e => setOrderForm(f => ({ ...f, startedAt: e.target.value }))} /></Field>
+              <div className="col-span-2"><Field label="Producto a fabricar" required><select className={sel} value={orderForm.outputItem} onChange={e => setOrderForm(f => ({ ...f, outputItem: e.target.value }))}><option value="">Seleccionar producto terminado...</option>{(data?.items ?? []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field></div>
+              <div className="col-span-2"><Field label="Fórmula / Receta" required><select className={sel} value={orderForm.formula} onChange={e => { const formula = maps.formulas.get(e.target.value); setOrderForm(f => ({ ...f, formula: e.target.value, outputItem: formula?.output_item ?? f.outputItem })); }}><option value="">Seleccionar fórmula...</option>{(data?.formulas ?? []).map(f => <option key={f.id} value={f.id}>{f.code} — {f.name}</option>)}</select></Field></div>
+              <Field label="Cantidad planificada" required><input className={inp} type="number" placeholder="0" value={orderForm.plannedQuantity} onChange={e => setOrderForm(f => ({ ...f, plannedQuantity: e.target.value }))} /></Field>
+              <Field label="Lote asignado" required><input className={inp} placeholder="Ej: PT2025-022" value={orderForm.batchCode} onChange={e => setOrderForm(f => ({ ...f, batchCode: e.target.value }))} /></Field>
               <Field label="Fecha vencimiento del lote"><input className={inp} type="date" /></Field>
-              <div className="col-span-2"><Field label="Responsable" required><select className={sel}><option>Ana González</option><option>Pedro Vásquez</option><option>Luis Herrera</option></select></Field></div>
-              <div className="col-span-2"><Field label="Observaciones"><textarea className={inp + ' resize-none h-14'} placeholder="Instrucciones especiales..." /></Field></div>
+              <div className="col-span-2"><Field label="Responsable" required><input className={inp} placeholder="Responsable" value={orderForm.responsible} onChange={e => setOrderForm(f => ({ ...f, responsible: e.target.value }))} /></Field></div>
+              <div className="col-span-2"><Field label="Observaciones"><textarea className={inp + ' resize-none h-14'} placeholder="Instrucciones especiales..." value={orderForm.notes} onChange={e => setOrderForm(f => ({ ...f, notes: e.target.value }))} /></Field></div>
             </div>
             <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 mt-4"><p className="text-xs text-blue-700 font-medium">Al crear la orden se generará automáticamente la Orden de Dispensación con las materias primas de la fórmula seleccionada.</p></div>
-            <DrawerFooter onClose={() => setDrawerOpen(false)} />
+            <div className="flex gap-3 mt-8 pt-5 border-t border-gray-100">
+              <button onClick={() => setDrawerOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancelar</button>
+              <button onClick={handleCreateOrder} disabled={saving} className="flex-1 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold hover:bg-[#3d5c4e] flex items-center justify-center gap-2 disabled:opacity-50">{saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Guardar</button>
+            </div>
           </Drawer>
         </>
       )}
@@ -1415,29 +1749,30 @@ function ModuloProduccion() {
       {tab === 'formulas' && (
         <>
           <Hdr title="Fórmulas y Recetas" subtitle="Composición de ingredientes por producto" onNew={() => setDrawerOpen(true)} newLabel="Nueva Fórmula" />
-          {FORMULAS.map(f => (
+          {loading && <div className="bg-white border border-gray-100 rounded-2xl p-6 text-center text-sm text-gray-400"><Loader2 size={16} className="inline animate-spin mr-2" /> Cargando fórmulas...</div>}
+          {!loading && (data?.formulas ?? []).map(f => (
             <div key={f.id} className="bg-white border border-gray-100 rounded-2xl shadow-sm mb-4">
               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-                <div><div className="flex items-center gap-2 mb-1"><span className="font-mono text-xs text-gray-400">{f.codigo}</span><Badge label={f.producto} color="green" /></div><h3 className="font-semibold text-gray-900">{f.nombre}</h3></div>
-                <div className="text-right"><p className="text-xs text-gray-500">Rendimiento base</p><p className="text-xl font-bold text-[#2a4038]">{f.rendimiento} {f.unidad}</p></div>
+                <div><div className="flex items-center gap-2 mb-1"><span className="font-mono text-xs text-gray-400">{f.code}</span><Badge label={itemName(data, f.output_item)} color="green" /></div><h3 className="font-semibold text-gray-900">{f.name}</h3></div>
+                <div className="text-right"><p className="text-xs text-gray-500">Rendimiento base</p><p className="text-xl font-bold text-[#2a4038]">{numeric(f.yield_quantity)} {unitLabel(data, f.yield_unit)}</p></div>
               </div>
               <div className="px-5 py-3">
                 <table className="w-full text-sm">
                   <thead><tr className="text-[10px] font-bold uppercase tracking-wider text-gray-400"><th className="py-2 text-left">Ingrediente</th><th className="py-2 text-right">Cantidad</th><th className="py-2 text-right">Und</th><th className="py-2 text-right">%</th><th className="py-2 text-right">Stock disp.</th></tr></thead>
                   <tbody>
-                    {f.lineas.map(l => {
-                      const stockDisp = STOCKS.filter(s => s.articulo.toLowerCase().includes(l.materia.toLowerCase())).reduce((a, s) => a + s.cantidad, 0);
+                    {f.lines.map((l, index) => {
+                      const stockDisp = 0;
                       return (
-                        <tr key={l.id} className="border-t border-gray-50">
-                          <td className="py-2.5 font-medium text-gray-800">{l.materia}</td>
-                          <td className="py-2.5 text-right font-bold">{l.cantidad}</td>
-                          <td className="py-2.5 text-right text-gray-500">{l.unidad}</td>
-                          <td className="py-2.5 text-right text-gray-500">{((l.cantidad / f.rendimiento) * 100).toFixed(1)}%</td>
-                          <td className="py-2.5 text-right"><span className={stockDisp > l.cantidad ? 'text-emerald-600 font-semibold' : 'text-red-600 font-semibold'}>{stockDisp > 0 ? stockDisp : 'Sin stock'}</span></td>
+                        <tr key={l.id ?? index} className="border-t border-gray-50">
+                          <td className="py-2.5 font-medium text-gray-800">{itemName(data, l.item)}</td>
+                          <td className="py-2.5 text-right font-bold">{numeric(l.quantity)}</td>
+                          <td className="py-2.5 text-right text-gray-500">{unitLabel(data, maps.items.get(l.item)?.unit)}</td>
+                          <td className="py-2.5 text-right text-gray-500">{numeric(f.yield_quantity) > 0 ? ((numeric(l.quantity) / numeric(f.yield_quantity)) * 100).toFixed(1) : '0.0'}%</td>
+                          <td className="py-2.5 text-right"><span className={stockDisp > numeric(l.quantity) ? 'text-emerald-600 font-semibold' : 'text-red-600 font-semibold'}>{stockDisp > 0 ? stockDisp : 'Sin stock'}</span></td>
                         </tr>
                       );
                     })}
-                    <tr className="border-t-2 border-gray-200"><td className="py-2.5 font-bold">Total</td><td className="py-2.5 text-right font-bold">{f.lineas.reduce((a, l) => a + l.cantidad, 0).toFixed(1)}</td><td className="py-2.5 text-right text-gray-500">{f.unidad}</td><td className="py-2.5 text-right text-[#2a4038] font-bold">{((f.lineas.reduce((a, l) => a + l.cantidad, 0) / f.rendimiento) * 100).toFixed(1)}%</td><td /></tr>
+                    <tr className="border-t-2 border-gray-200"><td className="py-2.5 font-bold">Total</td><td className="py-2.5 text-right font-bold">{f.lines.reduce((a, l) => a + numeric(l.quantity), 0).toFixed(1)}</td><td className="py-2.5 text-right text-gray-500">{unitLabel(data, f.yield_unit)}</td><td className="py-2.5 text-right text-[#2a4038] font-bold">{numeric(f.yield_quantity) > 0 ? ((f.lines.reduce((a, l) => a + numeric(l.quantity), 0) / numeric(f.yield_quantity)) * 100).toFixed(1) : '0.0'}%</td><td /></tr>
                   </tbody>
                 </table>
               </div>
@@ -1445,26 +1780,27 @@ function ModuloProduccion() {
           ))}
           <Drawer title="Nueva Fórmula / Receta" open={drawerOpen} onClose={() => setDrawerOpen(false)} wide>
             <div className="grid grid-cols-2 gap-4">
-              <Field label="Código" required><input className={inp} placeholder="FM-XXX-000" /></Field>
-              <div className="col-span-2"><Field label="Nombre de la fórmula" required><input className={inp} placeholder="Nombre descriptivo" /></Field></div>
-              <div className="col-span-2"><Field label="Producto resultante" required><select className={sel}><option value="">Seleccionar producto terminado...</option>{ARTICULOS.filter(a => a.tipo === 'Producto Terminado').map(a => <option key={a.id}>{a.nombre}</option>)}</select></Field></div>
-              <Field label="Rendimiento base" required><input className={inp} type="number" placeholder="100" /></Field>
-              <Field label="Unidad del rendimiento"><select className={sel}>{UNIDADES.map(u => <option key={u.id}>{u.nombre}</option>)}</select></Field>
+              <Field label="Código" required><input className={inp} placeholder="FM-XXX-000" value={formulaForm.code} onChange={e => setFormulaForm(f => ({ ...f, code: e.target.value }))} /></Field>
+              <div className="col-span-2"><Field label="Nombre de la fórmula" required><input className={inp} placeholder="Nombre descriptivo" value={formulaForm.name} onChange={e => setFormulaForm(f => ({ ...f, name: e.target.value }))} /></Field></div>
+              <div className="col-span-2"><Field label="Producto resultante" required><select className={sel} value={formulaForm.outputItem} onChange={e => setFormulaForm(f => ({ ...f, outputItem: e.target.value }))}><option value="">Seleccionar producto terminado...</option>{(data?.items ?? []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field></div>
+              <Field label="Rendimiento base" required><input className={inp} type="number" placeholder="100" value={formulaForm.yieldQuantity} onChange={e => setFormulaForm(f => ({ ...f, yieldQuantity: e.target.value }))} /></Field>
+              <Field label="Unidad del rendimiento"><select className={sel} value={formulaForm.yieldUnit} onChange={e => setFormulaForm(f => ({ ...f, yieldUnit: e.target.value }))}><option value="">Seleccionar...</option>{(data?.units ?? []).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}</select></Field>
             </div>
             <div className="mt-5">
               <div className="flex items-center justify-between mb-3"><p className="text-xs font-bold uppercase tracking-wider text-gray-500">Ingredientes</p><button className="text-xs text-[#2a4038] font-semibold flex items-center gap-1"><Plus size={12} /> Agregar línea</button></div>
               <div className="space-y-2">
-                {[1, 2, 3].map(i => (
-                  <div key={i} className="grid grid-cols-12 gap-2 items-center bg-gray-50 rounded-lg p-2">
-                    <div className="col-span-5"><select className={sel + ' text-xs py-2'}><option>Seleccionar materia prima...</option>{ARTICULOS.map(a => <option key={a.id}>{a.nombre}</option>)}</select></div>
-                    <div className="col-span-3"><input className={inp + ' text-xs py-2'} type="number" placeholder="Cantidad" /></div>
-                    <div className="col-span-2"><select className={sel + ' text-xs py-2'}>{UNIDADES.map(u => <option key={u.id}>{u.abreviatura}</option>)}</select></div>
+                  <div className="grid grid-cols-12 gap-2 items-center bg-gray-50 rounded-lg p-2">
+                    <div className="col-span-5"><select className={sel + ' text-xs py-2'} value={formulaForm.item} onChange={e => setFormulaForm(f => ({ ...f, item: e.target.value }))}><option value="">Seleccionar materia prima...</option>{(data?.items ?? []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
+                    <div className="col-span-3"><input className={inp + ' text-xs py-2'} type="number" placeholder="Cantidad" value={formulaForm.quantity} onChange={e => setFormulaForm(f => ({ ...f, quantity: e.target.value }))} /></div>
+                    <div className="col-span-2"><select className={sel + ' text-xs py-2'} value={maps.items.get(formulaForm.item)?.unit ?? ''} disabled>{(data?.units ?? []).map(u => <option key={u.id} value={u.id}>{u.abbreviation}</option>)}</select></div>
                     <div className="col-span-2 flex justify-center"><button className="p-1 text-red-400 hover:text-red-600"><X size={14} /></button></div>
                   </div>
-                ))}
               </div>
             </div>
-            <DrawerFooter onClose={() => setDrawerOpen(false)} />
+            <div className="flex gap-3 mt-8 pt-5 border-t border-gray-100">
+              <button onClick={() => setDrawerOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancelar</button>
+              <button onClick={handleCreateFormula} disabled={saving} className="flex-1 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold hover:bg-[#3d5c4e] flex items-center justify-center gap-2 disabled:opacity-50">{saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Guardar</button>
+            </div>
           </Drawer>
         </>
       )}
@@ -1624,10 +1960,44 @@ function ModuloProduccion() {
    MÓDULO CONVERSIÓN
 ═══════════════════════════════════════════════════════ */
 function ModuloConversion() {
+  const toast = useToast();
+  const { data, loading, reload } = useInventoryWorkspace();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [cantSalida, setCantSalida] = useState('');
   const [cantEntrada, setCantEntrada] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ occurredOn: currentDateInput(), sourceItem: '', sourceLocation: '', targetItem: '', targetLocation: '', reason: '' });
   const factor = cantSalida && cantEntrada ? (parseFloat(cantEntrada) / parseFloat(cantSalida)).toFixed(3) : '—';
+
+  const handleCreate = async () => {
+    if (!form.sourceItem || !form.sourceLocation || !Number(cantSalida) || !form.targetItem || !form.targetLocation || !Number(cantEntrada)) {
+      toast.warning('Completa origen, destino y cantidades.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await createStockConversion({
+        occurred_on: form.occurredOn,
+        source_item: form.sourceItem,
+        source_location: form.sourceLocation,
+        source_quantity: Number(cantSalida),
+        target_item: form.targetItem,
+        target_location: form.targetLocation,
+        target_quantity: Number(cantEntrada),
+        reason: form.reason,
+      });
+      toast.success('Conversión registrada');
+      setForm({ occurredOn: currentDateInput(), sourceItem: '', sourceLocation: '', targetItem: '', targetLocation: '', reason: '' });
+      setCantSalida('');
+      setCantEntrada('');
+      setDrawerOpen(false);
+      await reload();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No fue posible registrar la conversión');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div>
@@ -1639,35 +2009,37 @@ function ModuloConversion() {
       <Tbl>
         <thead><tr><Th>Número</Th><Th>Fecha</Th><Th>Artículo Salida</Th><Th>Cant. Salida</Th><Th>Artículo Entrada</Th><Th>Cant. Entrada</Th><Th>Factor</Th><Th>Motivo</Th><Th>Usuario</Th></tr></thead>
         <tbody>
-          {CONVERSIONES.map(c => {
-            const factor = (c.cantidadEntrada / c.cantidadSalida).toFixed(2);
+          {loading && <LoadingRow colSpan={9} />}
+          {!loading && (data?.conversions ?? []).map(c => {
+            const factor = numeric(c.source_quantity) > 0 ? (numeric(c.target_quantity) / numeric(c.source_quantity)).toFixed(2) : '0.00';
             return (
               <tr key={c.id} className="hover:bg-gray-50/50">
-                <Td><span className="font-mono text-xs font-semibold text-[#2a4038]">{c.numero}</span></Td>
-                <Td className="text-xs text-gray-500">{c.fecha}</Td>
-                <Td className="font-medium text-red-700">{c.articuloSalida}</Td>
-                <Td><span className="text-red-600 font-bold">-{c.cantidadSalida} Kg</span></Td>
-                <Td className="font-medium text-emerald-700">{c.articuloEntrada}</Td>
-                <Td><span className="text-emerald-600 font-bold">+{c.cantidadEntrada} Und</span></Td>
-                <Td><span className="font-mono text-xs font-semibold text-gray-600">{factor} und/Kg</span></Td>
-                <Td className="text-xs text-gray-500">{c.motivo}</Td>
-                <Td className="text-xs text-gray-500">{c.usuario}</Td>
+                <Td><span className="font-mono text-xs font-semibold text-[#2a4038]">{c.number}</span></Td>
+                <Td className="text-xs text-gray-500">{c.occurred_on}</Td>
+                <Td className="font-medium text-red-700">{itemName(data, c.source_item)}</Td>
+                <Td><span className="text-red-600 font-bold">-{numeric(c.source_quantity)}</span></Td>
+                <Td className="font-medium text-emerald-700">{itemName(data, c.target_item)}</Td>
+                <Td><span className="text-emerald-600 font-bold">+{numeric(c.target_quantity)}</span></Td>
+                <Td><span className="font-mono text-xs font-semibold text-gray-600">{factor}</span></Td>
+                <Td className="text-xs text-gray-500">{c.reason}</Td>
+                <Td className="text-xs text-gray-500">{c.created_by ?? 'Sistema'}</Td>
               </tr>
             );
           })}
+          {!loading && (data?.conversions ?? []).length === 0 && <EmptyRow colSpan={9} label="Sin conversiones registradas" />}
         </tbody>
       </Tbl>
 
       <Drawer title="Nueva Conversión de Producto" open={drawerOpen} onClose={() => setDrawerOpen(false)} wide>
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Número de conversión" required><input className={inp} placeholder="CV-2025-002" /></Field>
-          <Field label="Fecha" required><input className={inp} type="date" defaultValue="2025-06-19" /></Field>
+          <Field label="Número de conversión"><input className={inp + ' bg-gray-50'} placeholder="Automático" readOnly /></Field>
+          <Field label="Fecha" required><input className={inp} type="date" value={form.occurredOn} onChange={e => setForm(f => ({ ...f, occurredOn: e.target.value }))} /></Field>
         </div>
         <div className="mt-4 bg-red-50 border border-red-100 rounded-xl p-4">
           <p className="text-[10px] font-bold uppercase tracking-wider text-red-500 mb-3">🔴 Artículo que SALE del inventario</p>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Artículo de salida" required><select className={sel}><option value="">Seleccionar...</option>{ARTICULOS.map(a => <option key={a.id}>{a.nombre}</option>)}</select></Field>
-            <Field label="Bodega origen" required><select className={sel}><option value="">Seleccionar...</option>{BODEGAS.map(b => <option key={b.id}>{b.nombre}</option>)}</select></Field>
+            <Field label="Artículo de salida" required><select className={sel} value={form.sourceItem} onChange={e => setForm(f => ({ ...f, sourceItem: e.target.value }))}><option value="">Seleccionar...</option>{(data?.items ?? []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>
+            <Field label="Bodega origen" required><select className={sel} value={form.sourceLocation} onChange={e => setForm(f => ({ ...f, sourceLocation: e.target.value }))}><option value="">Seleccionar...</option>{(data?.locations ?? []).map(l => <option key={l.id} value={l.id}>{locationName(data, l.id)}</option>)}</select></Field>
             <Field label="Lote origen"><input className={inp} placeholder="Lote del artículo de salida" /></Field>
             <Field label="Cantidad a transformar" required><input className={inp} type="number" placeholder="0.00" step="0.01" value={cantSalida} onChange={e => setCantSalida(e.target.value)} /></Field>
           </div>
@@ -1676,17 +2048,20 @@ function ModuloConversion() {
         <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4">
           <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 mb-3">🟢 Artículo que ENTRA al inventario</p>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Artículo de entrada" required><select className={sel}><option value="">Seleccionar...</option>{ARTICULOS.map(a => <option key={a.id}>{a.nombre}</option>)}</select></Field>
-            <Field label="Bodega destino" required><select className={sel}><option value="">Seleccionar...</option>{BODEGAS.map(b => <option key={b.id}>{b.nombre}</option>)}</select></Field>
+            <Field label="Artículo de entrada" required><select className={sel} value={form.targetItem} onChange={e => setForm(f => ({ ...f, targetItem: e.target.value }))}><option value="">Seleccionar...</option>{(data?.items ?? []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>
+            <Field label="Bodega destino" required><select className={sel} value={form.targetLocation} onChange={e => setForm(f => ({ ...f, targetLocation: e.target.value }))}><option value="">Seleccionar...</option>{(data?.locations ?? []).map(l => <option key={l.id} value={l.id}>{locationName(data, l.id)}</option>)}</select></Field>
             <Field label="Nuevo lote"><input className={inp} placeholder="Lote del artículo resultante" /></Field>
             <Field label="Cantidad resultante" required><input className={inp} type="number" placeholder="0" value={cantEntrada} onChange={e => setCantEntrada(e.target.value)} /></Field>
           </div>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-4">
-          <Field label="Motivo de la conversión" required><select className={sel}><option>Granel a unidades envasadas</option><option>MP a presentación fraccionada</option><option>En proceso a terminado</option><option>Ajuste de costos</option><option>Otro</option></select></Field>
+          <Field label="Motivo de la conversión" required><input className={inp} placeholder="Motivo" value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))} /></Field>
           <div className="col-span-1"><Field label="Observaciones"><textarea className={inp + ' resize-none h-[42px]'} placeholder="Notas..." /></Field></div>
         </div>
-        <DrawerFooter onClose={() => setDrawerOpen(false)} />
+        <div className="flex gap-3 mt-8 pt-5 border-t border-gray-100">
+          <button onClick={() => setDrawerOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancelar</button>
+          <button onClick={handleCreate} disabled={saving} className="flex-1 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold hover:bg-[#3d5c4e] flex items-center justify-center gap-2 disabled:opacity-50">{saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Guardar</button>
+        </div>
       </Drawer>
     </div>
   );
@@ -1820,7 +2195,7 @@ export function AdminInventarioProduccion() {
     },
     {
       group: 'Compras',
-      items: [{ id: 'compras', label: 'Órdenes de Compra', icon: ShoppingCart, desc: 'OC y recepción de mercancía', badge: ORDENES_COMPRA.filter(oc => oc.estado === 'parcial').length || undefined }],
+      items: [{ id: 'compras', label: 'Órdenes de Compra', icon: ShoppingCart, desc: 'OC y recepción de mercancía' }],
     },
     {
       group: 'Catálogos',
