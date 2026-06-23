@@ -32,6 +32,8 @@ export interface ShippingAddress {
   postal_code?: string;
   phone: string;
   country: string;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 export interface OrderItem {
@@ -118,6 +120,20 @@ interface BackendPayment {
   created_at: string;
 }
 
+interface BackendShippingAddressDetails {
+  full_name?: string;
+  email?: string;
+  phone?: string;
+  address_line1?: string;
+  address_line2?: string;
+  city?: string;
+  department?: string;
+  postal_code?: string;
+  country?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+}
+
 interface BackendOrder {
   id: string;
   number: string;
@@ -127,6 +143,7 @@ interface BackendOrder {
   shipping_cost: string | number;
   total: string | number;
   shipping_address: string;
+  shipping_address_details: BackendShippingAddressDetails | null;
   tracking_number: string;
   payment_reference: string;
   items: BackendOrderItem[];
@@ -185,12 +202,16 @@ function normalizeOrder(order: BackendOrder): Order {
     shipping_cost: parseNumber(order.shipping_cost),
     discount_amount: 0,
     shipping_address: {
-      full_name: '',
-      address_line1: order.shipping_address,
-      city: '',
-      department: '',
-      phone: '',
-      country: 'CO',
+      full_name: order.shipping_address_details?.full_name ?? '',
+      address_line1: order.shipping_address_details?.address_line1 ?? order.shipping_address,
+      address_line2: order.shipping_address_details?.address_line2,
+      city: order.shipping_address_details?.city ?? '',
+      department: order.shipping_address_details?.department ?? '',
+      postal_code: order.shipping_address_details?.postal_code,
+      phone: order.shipping_address_details?.phone ?? '',
+      country: order.shipping_address_details?.country || 'CO',
+      latitude: order.shipping_address_details?.latitude ?? null,
+      longitude: order.shipping_address_details?.longitude ?? null,
     },
     payment_method: latestPayment?.provider.toLowerCase() ?? '',
     payment_status: paymentStatus,

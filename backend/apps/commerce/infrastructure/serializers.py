@@ -1,3 +1,4 @@
+import json
 from decimal import Decimal
 
 from rest_framework import serializers
@@ -160,6 +161,7 @@ class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
     status_history = OrderStatusHistorySerializer(many=True, read_only=True)
     payments = PaymentSerializer(many=True, read_only=True)
+    shipping_address_details = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
@@ -174,6 +176,18 @@ class OrderSerializer(serializers.ModelSerializer):
             "inventory_consumed_at",
             "inventory_released_at",
         )
+
+    def get_shipping_address_details(self, order):
+        """El checkout guarda shipping_address como un JSON serializado en texto
+        (full_name, address_line1, city, department, country, latitude, longitude).
+        Lo parseamos aquí para exponerlo estructurado sin tocar el TextField original."""
+        try:
+            data = json.loads(order.shipping_address)
+        except (TypeError, ValueError):
+            return None
+        if not isinstance(data, dict):
+            return None
+        return data
 
     def validate_status(self, value):
         payment_managed_statuses = {

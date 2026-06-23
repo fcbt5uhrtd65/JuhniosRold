@@ -1,9 +1,12 @@
 import { useAdmin } from '../../contexts/AdminContext';
-import { Package, Clock, Check, X, Truck } from 'lucide-react';
+import { Package, Clock, Check, X, Truck, MapPin } from 'lucide-react';
 import { format } from 'date-fns';
 import type { Order } from '../../types/admin';
 import { AdminRegistrarGuia } from './AdminRegistrarGuia';
 import { KpiCard, Card, Badge, type BadgeColor } from './AdminUI';
+import { InteractiveLocationMap } from '../ui/InteractiveLocationMap';
+
+const noop = () => {};
 
 export function AdminOrders() {
   const { orders, customers, updateOrderStatus } = useAdmin();
@@ -110,6 +113,27 @@ export function AdminOrders() {
                 <p className="text-xs text-gray-400">{customer?.email}</p>
                 <p className="text-xs text-gray-400">{customer?.ciudad}</p>
               </div>
+
+              {(order.direccionEnvio || (order.latitudEnvio && order.longitudEnvio)) && (
+                <div className="mb-4 pb-4 border-b border-gray-100">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2 flex items-center gap-1.5">
+                    <MapPin size={12} /> Dirección de envío
+                  </p>
+                  <p className="text-xs text-gray-700 mb-1">{order.direccionEnvio}</p>
+                  <p className="text-xs text-gray-400 mb-3">
+                    {[order.ciudadEnvio, order.departamentoEnvio, order.paisEnvio].filter(Boolean).join(', ')}
+                  </p>
+                  {order.latitudEnvio != null && order.longitudEnvio != null && (
+                    <InteractiveLocationMap
+                      lat={order.latitudEnvio}
+                      lng={order.longitudEnvio}
+                      onMarkerMove={noop}
+                      readOnly
+                      className="h-48 rounded-xl overflow-hidden border border-gray-200"
+                    />
+                  )}
+                </div>
+              )}
 
               <div className="mb-4">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">

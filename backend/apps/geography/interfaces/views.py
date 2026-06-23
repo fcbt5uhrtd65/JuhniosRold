@@ -42,35 +42,48 @@ class CityViewSet(ReadOnlyModelViewSet):
     filterset_fields = ("state", "country", "is_active")
 
 
+LOCATIONIQ_API_KEY = getattr(settings, "LOCATIONIQ_API_KEY", "")
+LOCATIONIQ_BASE_URL = "https://us1.locationiq.com/v1"
 NOMINATIM_BASE_URL = "https://nominatim.openstreetmap.org"
 NOMINATIM_CONTACT = getattr(settings, "NOMINATIM_CONTACT_EMAIL", "") or "no-reply@juhniosrold.com"
 NOMINATIM_HEADERS = {
     "Accept-Language": "es",
     "User-Agent": f"JuhniosRoldApp/1.0 ({NOMINATIM_CONTACT})",
 }
-NOMINATIM_CACHE_TTL_SECONDS = 60 * 60
+GEOCODING_CACHE_TTL_SECONDS = 60 * 60
 
 
-def _nominatim_get(path: str, params: dict[str, str]) -> tuple[object, int]:
-    cache_key = f"nominatim:{path}:{urlencode(sorted(params.items()))}"
+def _geocoding_get(path: str, params: dict[str, str]) -> tuple[object, int]:
+    cache_key = f"geocoding:{path}:{urlencode(sorted(params.items()))}"
     cached = cache.get(cache_key)
     if cached is not None:
         return cached, 200
 
-    url = f"{NOMINATIM_BASE_URL}{path}?{urlencode(params)}"
-    request = Request(url, headers=NOMINATIM_HEADERS)
+    if LOCATIONIQ_API_KEY:
+        base_url = LOCATIONIQ_BASE_URL
+        request_params = {**params, "key": LOCATIONIQ_API_KEY, "accept-language": "es"}
+        headers = {}
+        provider = "LocationIQ"
+    else:
+        base_url = NOMINATIM_BASE_URL
+        request_params = params
+        headers = NOMINATIM_HEADERS
+        provider = "Nominatim"
+
+    url = f"{base_url}{path}?{urlencode(request_params)}"
+    request = Request(url, headers=headers)
     try:
         with urlopen(request, timeout=8) as response:
             payload = json.loads(response.read().decode("utf-8"))
-            cache.set(cache_key, payload, NOMINATIM_CACHE_TTL_SECONDS)
+            cache.set(cache_key, payload, GEOCODING_CACHE_TTL_SECONDS)
             return payload, response.status
     except HTTPError as exc:
-        logger.warning("Nominatim respondio %s para %s", exc.code, url)
+        logger.warning("%s respondio %s para %s", provider, exc.code, url)
         if exc.code == 429:
             return {"detail": "Demasiadas solicitudes al servicio de geocodificacion. Intenta de nuevo en un momento."}, 503
         return {"detail": "No fue posible consultar el servicio de geocodificacion."}, 502
     except (URLError, TimeoutError) as exc:
-        logger.warning("Error de red consultando Nominatim: %s", exc)
+        logger.warning("Error de red consultando %s: %s", provider, exc)
         return {"detail": "No fue posible consultar el servicio de geocodificacion."}, 502
 
 
@@ -108,7 +121,7 @@ class GeocodingSearchView(APIView):
         if country_codes:
             params["countrycodes"] = country_codes
 
-        payload, upstream_status = _nominatim_get("/search", params)
+        payload, upstream_status = _geocoding_get("/search", params)
         return Response(payload, status=upstream_status)
 
 
@@ -124,7 +137,7 @@ class GeocodingReverseView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        payload, upstream_status = _nominatim_get(
+        payload, upstream_status = _geocoding_get(
             "/reverse",
             {
                 "format": "json",

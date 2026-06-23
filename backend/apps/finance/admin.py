@@ -40,11 +40,13 @@ class SalesInvoiceAdmin(admin.ModelAdmin):
         "subtotal",
         "shipping_cost",
         "total",
+        "tax_rate",
         "customer_name",
         "customer_email",
         "customer_document",
         "billing_address",
         "issued_at",
+        "dian_resolution",
         "created_at",
         "updated_at",
     )

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import {
@@ -16,8 +16,10 @@ import {
 } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
 import { LocationPicker } from './ui/LocationPicker';
+import { DeliveryLocationSection } from './ui/DeliveryLocationSection';
 import { EMPTY_LOCATION, type LocationValue } from '../services/geography.types';
-import { geographyService } from '../services/geography.service';
+import { EMPTY_DELIVERY_LOCATION, type DeliveryLocationValue } from '../services/delivery-location.types';
+import { geographyService, type City } from '../services/geography.service';
 
 interface UserProfileProps {
   isOpen: boolean;
@@ -40,12 +42,14 @@ export function UserProfile({ isOpen, onClose }: UserProfileProps) {
   const { currentUser, updateProfile } = useUser();
 
   const [formData, setFormData] = useState({
-    nombre: '',
+    firstName: '',
+    lastName: '',
     telefono: '',
-    direccion: '',
-    referencia: '',
   });
   const [profileLocation, setProfileLocation] = useState<LocationValue>(EMPTY_LOCATION);
+  const [deliveryLocation, setDeliveryLocation] = useState<DeliveryLocationValue>(EMPTY_DELIVERY_LOCATION);
+  const [profileCities, setProfileCities] = useState<City[]>([]);
+  const profileCityNames = useMemo(() => profileCities.map((city) => city.name), [profileCities]);
 
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -60,10 +64,20 @@ export function UserProfile({ isOpen, onClose }: UserProfileProps) {
     setError('');
     setSuccess(false);
     setFormData({
-      nombre: currentUser.nombre || '',
+      firstName: currentUser.firstName || '',
+      lastName: currentUser.lastName || '',
       telefono: currentUser.telefono || '',
-      direccion: currentUser.direccion || '',
-      referencia: currentUser.referencia || '',
+    });
+    setDeliveryLocation({
+      ...EMPTY_DELIVERY_LOCATION,
+      address: currentUser.direccion || '',
+      reference: currentUser.referencia || '',
+      city: currentUser.ciudad || '',
+      state: currentUser.departamento || '',
+      country: currentUser.pais || '',
+      lat: currentUser.latitud ?? null,
+      lng: currentUser.longitud ?? null,
+      confirmed: Boolean(currentUser.latitud && currentUser.longitud),
     });
 
     if (!currentUser.pais && !currentUser.departamento && !currentUser.ciudad) {
@@ -99,24 +113,60 @@ export function UserProfile({ isOpen, onClose }: UserProfileProps) {
     return () => {
       active = false;
     };
-  }, [isOpen, currentUser]);
+    // Solo se sincroniza al abrir el modal: si dependiera de currentUser, guardar
+    // cambios dispararía este efecto de nuevo (currentUser cambia de referencia tras
+    // updateProfile) y el setSuccess(false) de aquí pisaría el aviso de éxito.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!profileLocation.stateId) {
+      setProfileCities([]);
+      return;
+    }
+
+    let cancelled = false;
+    geographyService
+      .getCities(profileLocation.stateId)
+      .then((cities) => {
+        if (!cancelled) setProfileCities(cities);
+      })
+      .catch(() => {
+        if (!cancelled) setProfileCities([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [profileLocation.stateId]);
 
   if (!isOpen || !currentUser) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    if (!formData.firstName.trim()) {
+      setError('Por favor ingresa tus nombres.');
+      return;
+    }
+    if (!formData.lastName.trim()) {
+      setError('Por favor ingresa tus apellidos.');
+      return;
+    }
+
     setIsSaving(true);
     const result = await updateProfile({
-      nombre: formData.nombre,
+      firstName: formData.firstName,
+      lastName: formData.lastName,
       telefono: formData.telefono,
-      direccion: formData.direccion,
-      referencia: formData.referencia,
-      ciudad: profileLocation.cityName || undefined,
-      departamento: profileLocation.stateName || undefined,
-      pais: profileLocation.countryName || undefined,
-      latitud: currentUser.latitud ?? null,
-      longitud: currentUser.longitud ?? null,
+      direccion: deliveryLocation.address || undefined,
+      referencia: deliveryLocation.reference || undefined,
+      ciudad: profileLocation.cityName || deliveryLocation.city || undefined,
+      departamento: profileLocation.stateName || deliveryLocation.state || undefined,
+      pais: deliveryLocation.country || profileLocation.countryName || undefined,
+      latitud: deliveryLocation.lat,
+      longitud: deliveryLocation.lng,
     });
     setIsSaving(false);
 
@@ -224,12 +274,24 @@ export function UserProfile({ isOpen, onClose }: UserProfileProps) {
                   <div className="grid gap-4 md:grid-cols-2">
                     <label>
                       <span className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-stone-500">
-                        <UserIcon className="h-3.5 w-3.5" /> Nombre completo *
+                        <UserIcon className="h-3.5 w-3.5" /> Nombres *
                       </span>
                       <input
                         type="text"
-                        value={formData.nombre}
-                        onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+                        value={formData.firstName}
+                        onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                        className={inputBaseClass}
+                        required
+                      />
+                    </label>
+                    <label>
+                      <span className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-stone-500">
+                        <UserIcon className="h-3.5 w-3.5" /> Apellidos *
+                      </span>
+                      <input
+                        type="text"
+                        value={formData.lastName}
+                        onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
                         className={inputBaseClass}
                         required
                       />
@@ -281,42 +343,31 @@ export function UserProfile({ isOpen, onClose }: UserProfileProps) {
                     <MapPin className="h-5 w-5 text-[#2D3A1F]" strokeWidth={1.7} />
                     <h3 className="text-lg font-semibold text-stone-950">Dirección de envío</h3>
                   </div>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <label className="md:col-span-2">
-                      <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-stone-500">Dirección</span>
-                      <input
-                        type="text"
-                        value={formData.direccion}
-                        onChange={(e) => setFormData({ ...formData, direccion: e.target.value })}
-                        className={inputBaseClass}
-                        placeholder="Calle 123 #45-67"
-                      />
-                    </label>
-                    <label className="md:col-span-2">
-                      <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-stone-500">Referencia adicional</span>
-                      <input
-                        type="text"
-                        value={formData.referencia}
-                        onChange={(e) => setFormData({ ...formData, referencia: e.target.value })}
-                        className={inputBaseClass}
-                        placeholder="Apartamento, torre, barrio o indicaciones"
-                      />
-                    </label>
 
-                    <div className="rounded-3xl border border-stone-200 bg-[#F8F7F4] p-4 md:col-span-2">
-                      <div className="mb-3 flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 text-sm font-semibold text-stone-900">
-                          <MapPin className="h-4 w-4 text-[#2D3A1F]" strokeWidth={1.7} />
-                          Ubicación
-                        </div>
-                        {isLoadingProfile && (
-                          <span className="flex items-center gap-1.5 text-xs text-stone-400">
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            Cargando ubicación guardada…
-                          </span>
-                        )}
+                  <div className="rounded-3xl border border-stone-200 bg-[#F8F7F4] p-4">
+                    <div className="mb-3 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 text-sm font-semibold text-stone-900">
+                        <MapPin className="h-4 w-4 text-[#2D3A1F]" strokeWidth={1.7} />
+                        Ubicación
                       </div>
+                      {isLoadingProfile && (
+                        <span className="flex items-center gap-1.5 text-xs text-stone-400">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          Cargando ubicación guardada…
+                        </span>
+                      )}
+                    </div>
+                    <div className="space-y-3">
                       <LocationPicker value={profileLocation} onChange={setProfileLocation} />
+                      <DeliveryLocationSection
+                        value={deliveryLocation}
+                        onChange={setDeliveryLocation}
+                        searchScope={{ state: profileLocation.stateName, country: profileLocation.countryName }}
+                        cityOptions={profileCityNames}
+                        onCityResolved={(cityName) =>
+                          setProfileLocation((prev) => ({ ...prev, cityId: null, cityName }))
+                        }
+                      />
                     </div>
                   </div>
                 </section>

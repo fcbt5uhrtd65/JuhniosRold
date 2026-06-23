@@ -1,4 +1,5 @@
 import uuid
+from decimal import Decimal
 
 from django.conf import settings
 from django.db import models
@@ -56,11 +57,17 @@ class SalesInvoice(BaseModel):
     subtotal = models.DecimalField(max_digits=14, decimal_places=2)
     shipping_cost = models.DecimalField(max_digits=14, decimal_places=2)
     total = models.DecimalField(max_digits=14, decimal_places=2)
+    tax_rate = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("19.00"))
     customer_name = models.CharField(max_length=240)
     customer_email = models.EmailField()
     customer_document = models.CharField(max_length=80)
     billing_address = models.TextField(blank=True)
     issued_at = models.DateTimeField(default=timezone.now)
+    dian_resolution = models.CharField(
+        max_length=240,
+        blank=True,
+        help_text="Texto de la resolución de facturación DIAN vigente al momento de emisión.",
+    )
 
     def save(self, *args, **kwargs):
         if not self.number:

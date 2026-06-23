@@ -46,7 +46,10 @@ import {
 // ---- Normalised customer profile (compatible with legacy mock) ----
 export interface CustomerUser {
   id: string;
+  /** Nombre completo, derivado de firstName + lastName. Mantenido por compatibilidad con vistas de solo lectura. */
   nombre: string;
+  firstName: string;
+  lastName: string;
   email: string;
   telefono?: string;
   direccion?: string;
@@ -195,6 +198,8 @@ function mapAuthUser(u: AuthUser): CustomerUser {
   return {
     id: u.id,
     nombre: parts || u.email.split('@')[0],
+    firstName: u.first_name || '',
+    lastName: u.last_name || '',
     email: u.email,
     telefono: u.phone,
     role: u.role,
@@ -207,6 +212,8 @@ function mapCustomerProfile(p: MyCustomerProfile): Partial<CustomerUser> {
   const parts = `${p.first_name} ${p.last_name}`.trim();
   return {
     nombre: parts || undefined,
+    firstName: p.first_name || undefined,
+    lastName: p.last_name || undefined,
     telefono: p.phone || undefined,
     direccion: p.address || undefined,
     ciudad: p.city || undefined,
@@ -650,14 +657,15 @@ export function UserProvider({ children }: { children: ReactNode }) {
     if (!currentUser) return { ok: false, message: 'No hay una sesión activa.' };
 
     if (!currentUser.fromApi || !backendOnline) {
-      setCurrentUser({ ...currentUser, ...updates });
+      const merged = { ...currentUser, ...updates };
+      merged.nombre = `${merged.firstName} ${merged.lastName}`.trim() || merged.nombre;
+      setCurrentUser(merged);
       return { ok: true };
     }
 
-    const [firstName, ...rest] = (updates.nombre ?? currentUser.nombre ?? '').trim().split(/\s+/);
     const payload: UpdateMyCustomerProfilePayload = {
-      first_name: firstName || undefined,
-      last_name: rest.join(' ') || undefined,
+      first_name: updates.firstName?.trim() || undefined,
+      last_name: updates.lastName?.trim() || undefined,
       phone: updates.telefono,
       address: updates.direccion,
       city: updates.ciudad,

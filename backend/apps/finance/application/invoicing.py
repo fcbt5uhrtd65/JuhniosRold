@@ -1,6 +1,7 @@
 from django.db import transaction
 from django.utils import timezone
 
+from ..infrastructure.issuer import DIAN_RESOLUTION
 from ..infrastructure.models import (
     FinancialTransaction,
     SalesInvoice,
@@ -37,6 +38,7 @@ class GenerateSalesInvoice:
             customer_email=customer.email,
             customer_document=f"{customer.document_type} {customer.document_number}",
             billing_address=order.shipping_address,
+            dian_resolution=DIAN_RESOLUTION,
         )
         SalesInvoiceLine.objects.bulk_create(
             [

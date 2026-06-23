@@ -51,6 +51,7 @@ services:
       EMAIL_PROVIDER: ${EMAIL_PROVIDER:-django}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-Juhnios Rold <onboarding@resend.dev>}
+      LOCATIONIQ_API_KEY: ${LOCATIONIQ_API_KEY:-}
       DB_HOST: db
       DB_PORT: "5432"
       DB_USER: postgres

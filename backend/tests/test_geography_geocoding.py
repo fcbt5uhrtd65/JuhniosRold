@@ -1,6 +1,7 @@
 import json
 from unittest.mock import patch
 
+from django.core.cache import cache
 from django.test import TestCase
 from rest_framework.test import APIClient
 
@@ -24,7 +25,9 @@ class FakeUrlopenResponse:
 class GeographyGeocodingApiTests(TestCase):
     def setUp(self):
         self.client = APIClient()
+        cache.clear()
 
+    @patch("apps.geography.interfaces.views.LOCATIONIQ_API_KEY", "")
     def test_search_proxies_nominatim_without_browser_cors(self):
         payload = [
             {
@@ -50,6 +53,31 @@ class GeographyGeocodingApiTests(TestCase):
         self.assertIn("nominatim.openstreetmap.org/search", request.full_url)
         self.assertIn("Carrera+17%2C+Atlantico%2C+Colombia", request.full_url)
 
+    def test_search_proxies_locationiq_when_api_key_configured(self):
+        payload = [
+            {
+                "place_id": 1,
+                "lat": "10.9878",
+                "lon": "-74.7889",
+                "display_name": "Carrera 17, Barranquilla, Atlantico, Colombia",
+                "address": {"city": "Barranquilla", "state": "Atlantico", "country": "Colombia"},
+            }
+        ]
+        with patch("apps.geography.interfaces.views.LOCATIONIQ_API_KEY", "test-key"), patch(
+            "apps.geography.interfaces.views.urlopen",
+            return_value=FakeUrlopenResponse(payload),
+        ) as urlopen_mock:
+            response = self.client.get(
+                "/api/v1/geography/geocoding/search/",
+                {"q": "Carrera 17", "state": "Atlantico", "country": "Colombia"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, payload)
+        request = urlopen_mock.call_args.args[0]
+        self.assertIn("us1.locationiq.com/v1/search", request.full_url)
+        self.assertIn("key=test-key", request.full_url)
+
     def test_reverse_requires_lat_and_lon(self):
         response = self.client.get(
             "/api/v1/geography/geocoding/reverse/",
@@ -59,6 +87,7 @@ class GeographyGeocodingApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("detail", response.data)
 
+    @patch("apps.geography.interfaces.views.LOCATIONIQ_API_KEY", "")
     def test_reverse_proxies_nominatim(self):
         payload = {
             "place_id": 1,
