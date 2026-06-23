@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pip install pymupdf -q)",
+      "Bash(python -c ' *)",
+      "Bash(docker exec juhnios-backend python manage.py shell -c \"exec\\(open\\('/tmp/test_invoice.py'\\).read\\(\\)\\)\" 2>&1 | tail -5 *)",
+      "Bash(docker exec juhnios-backend python manage.py shell -c \" *)",
+      "Bash(docker restart *)"
+    ],
+    "additionalDirectories": [
+      "\\tmp",
+      "D:\\Descargas\\_extract_docx"
+    ]
+  }
+}
