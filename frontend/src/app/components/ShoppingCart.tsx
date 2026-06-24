@@ -85,7 +85,7 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [couponCode, setCouponCode] = useState('');
   const [couponMessage, setCouponMessage] = useState('');
-  const { items, updateQuantity, removeItem, total, itemCount, reloadCart, isLoading } = useCart();
+  const { items, updateQuantity, removeItem, subtotal, total, wholesaleDiscount, itemCount, reloadCart, isLoading } = useCart();
   const { setSearchQuery } = useSearch();
 
   const shippingProgress = Math.min((total / SHIPPING_THRESHOLD) * 100, 100);
@@ -123,6 +123,14 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
     const code = couponCode.trim();
     if (!code) {
       setCouponMessage('Ingresa un código de cupón para validarlo.');
+      return;
+    }
+    if (code === wholesaleDiscount.settings.minimumPurchase.toString() || code.toUpperCase().startsWith('JR-MAY')) {
+      setCouponMessage(
+        wholesaleDiscount.isActive
+          ? 'Descuento mayorista aplicado.'
+          : `Te faltan ${formatMoney(wholesaleDiscount.remaining)} para activar tu descuento mayorista.`,
+      );
       return;
     }
     setCouponMessage('El cupón se validará antes del pago. No modifica el total hasta ser aprobado.');
@@ -394,6 +402,15 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
                           <Tag className="w-4 h-4 text-[#2D3A1F]" strokeWidth={1.7} />
                           <h3 className="text-[13px] font-bold text-stone-900">Cupón de descuento</h3>
                         </div>
+                        <div className={`mb-3 rounded-2xl border px-3 py-2 text-[11px] ${
+                          wholesaleDiscount.isActive
+                            ? 'border-emerald-100 bg-emerald-50 text-emerald-700'
+                            : 'border-amber-100 bg-amber-50 text-amber-700'
+                        }`}>
+                          {wholesaleDiscount.isActive
+                            ? 'Ya activaste tu descuento mayorista.'
+                            : `Te faltan ${formatMoney(wholesaleDiscount.remaining)} para activar tu descuento mayorista.`}
+                        </div>
                         <div className="flex gap-2">
                           <input
                             value={couponCode}
@@ -428,6 +445,16 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
                         <div className="space-y-2">
                           <div className="flex justify-between text-sm">
                             <span className="text-stone-500">Subtotal</span>
+                            <span className="font-medium text-stone-900">{formatMoney(subtotal)}</span>
+                          </div>
+                          {wholesaleDiscount.discount > 0 && (
+                            <div className="flex justify-between text-sm text-emerald-700">
+                              <span>Descuento mayorista aplicado</span>
+                              <span className="font-semibold">-{formatMoney(wholesaleDiscount.discount)}</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between text-sm">
+                            <span className="text-stone-500">Subtotal con descuento</span>
                             <span className="font-medium text-stone-900">{formatMoney(total)}</span>
                           </div>
                           <div className="flex justify-between text-sm">

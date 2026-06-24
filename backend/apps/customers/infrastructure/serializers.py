@@ -39,5 +39,7 @@ class MyCustomerProfileSerializer(serializers.ModelSerializer):
             "phone",
             "address",
             "city",
+            "purchase_mode",
+            "wholesale_code",
         )
-        read_only_fields = ("id", "email")
+        read_only_fields = ("id", "email", "wholesale_code")

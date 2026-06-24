@@ -9,12 +9,24 @@ from shared.domain.exceptions import BusinessRuleViolation
 from apps.catalog.infrastructure.models import ProductVariant
 
 from ..services import OrderInventoryService
-from ...infrastructure.models import Cart, Order, OrderItem, OrderStatusHistory
+from ...infrastructure.models import Cart, Order, OrderItem, OrderStatusHistory, WholesaleSettings
+
+
+def _presentation_label(variant):
+    label = getattr(variant, "presentation_label", "")
+    return label or variant.name
+
+
+def _wholesale_discount(subtotal):
+    settings = WholesaleSettings.current()
+    if not settings.is_active or subtotal < settings.minimum_purchase:
+        return Decimal("0")
+    return (subtotal * (settings.discount_percentage / Decimal("100"))).quantize(Decimal("0.01"))
 
 
 class CheckoutCart:
     @transaction.atomic
-    def execute(self, *, cart, location, shipping_address, actor=None):
+    def execute(self, *, cart, location, shipping_address, actor=None, wholesale_code=""):
         cart = Cart.objects.select_for_update().get(pk=cart.pk)
         if cart.checked_out_at:
             raise BusinessRuleViolation("El carrito ya fue procesado.")
@@ -46,23 +58,30 @@ class CheckoutCart:
                 variant=cart_item.variant,
                 product_name=cart_item.variant.product.name,
                 sku=cart_item.variant.sku,
+                presentation=_presentation_label(cart_item.variant),
                 quantity=cart_item.quantity,
                 unit_price=price.amount,
                 subtotal=line_total,
             )
 
+        discount_amount = _wholesale_discount(total)
+        payable_subtotal = max(Decimal("0"), total - discount_amount)
         shipping_cost = (
             Decimal("0")
-            if total >= settings.ECOMMERCE_FREE_SHIPPING_THRESHOLD
+            if payable_subtotal >= settings.ECOMMERCE_FREE_SHIPPING_THRESHOLD
             else settings.ECOMMERCE_SHIPPING_COST
         )
         order.subtotal = total
+        order.discount_amount = discount_amount
         order.shipping_cost = shipping_cost
-        order.total = total + shipping_cost
+        order.total = payable_subtotal + shipping_cost
+        order.wholesale_code = wholesale_code or getattr(cart.customer, "wholesale_code", "")
         OrderInventoryService.reserve(order)
         order.save(
             update_fields=(
                 "subtotal",
+                "discount_amount",
+                "wholesale_code",
                 "shipping_cost",
                 "total",
                 "inventory_reserved_at",
@@ -78,7 +97,7 @@ class CheckoutCart:
 
 class CreateOrder:
     @transaction.atomic
-    def execute(self, *, customer, location, shipping_address, items, actor=None):
+    def execute(self, *, customer, location, shipping_address, items, actor=None, wholesale_code=""):
         if not items:
             raise BusinessRuleViolation("El pedido debe contener al menos un producto.")
 
@@ -112,23 +131,30 @@ class CreateOrder:
                 variant=variant,
                 product_name=variant.product.name,
                 sku=variant.sku,
+                presentation=_presentation_label(variant),
                 quantity=quantity,
                 unit_price=price.amount,
                 subtotal=line_total,
             )
 
+        discount_amount = _wholesale_discount(subtotal)
+        payable_subtotal = max(Decimal("0"), subtotal - discount_amount)
         shipping_cost = (
             Decimal("0")
-            if subtotal >= settings.ECOMMERCE_FREE_SHIPPING_THRESHOLD
+            if payable_subtotal >= settings.ECOMMERCE_FREE_SHIPPING_THRESHOLD
             else settings.ECOMMERCE_SHIPPING_COST
         )
         order.subtotal = subtotal
+        order.discount_amount = discount_amount
         order.shipping_cost = shipping_cost
-        order.total = subtotal + shipping_cost
+        order.total = payable_subtotal + shipping_cost
+        order.wholesale_code = wholesale_code or getattr(customer, "wholesale_code", "")
         OrderInventoryService.reserve(order)
         order.save(
             update_fields=(
                 "subtotal",
+                "discount_amount",
+                "wholesale_code",
                 "shipping_cost",
                 "total",
                 "inventory_reserved_at",

@@ -46,6 +46,7 @@ class GenerateSalesInvoice:
                     invoice=invoice,
                     product_name=item.product_name,
                     sku=item.sku,
+                    presentation=item.presentation,
                     quantity=item.quantity,
                     unit_price=item.unit_price,
                     subtotal=item.subtotal,

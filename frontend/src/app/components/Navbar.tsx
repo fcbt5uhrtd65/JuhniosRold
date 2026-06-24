@@ -38,6 +38,7 @@ const LeafIcon = () => (
 const mainNavLinks = [
   { href: '#',            label: 'Inicio',         hasDropdown: false },
   { href: '#productos',   label: 'Productos',      hasDropdown: true  },
+  { href: '/catalogo',    label: 'Catálogo',       hasDropdown: false },
   { href: '#diagnostico', label: 'Diagnóstico',    hasDropdown: false },
   { href: '#resultados',  label: 'Antes y Después',hasDropdown: false },
   { href: '#pro',         label: 'Modo PRO',       hasDropdown: false },
@@ -45,6 +46,7 @@ const mainNavLinks = [
 
 const allNavLinks = [
   { href: '#',          label: 'Inicio',     sub: 'Volver al inicio' },
+  { href: '/catalogo',  label: 'Catálogo',   sub: 'Flipbook comercial' },
   { href: '#productos', label: 'Productos',  sub: 'Colección completa' },
   { href: '#aceites',   label: 'Aceites',    sub: 'Naturales & premium' },
   { href: '#bebe',      label: 'Bebé',       sub: 'Cuidado especial' },
@@ -110,6 +112,10 @@ export function Navbar({ onLoginClick }: NavbarProps = {}) {
   };
 
   const handleNavClick = (href: string, e: React.MouseEvent) => {
+    if (href.startsWith('/')) {
+      setMenuOpen(false);
+      return;
+    }
     if (href === '#') { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
     setActiveLink(href);
     setMenuOpen(false);

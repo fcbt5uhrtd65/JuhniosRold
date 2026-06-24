@@ -96,6 +96,7 @@ class SalesInvoiceLine(BaseModel):
     )
     product_name = models.CharField(max_length=180)
     sku = models.CharField(max_length=80)
+    presentation = models.CharField(max_length=40, blank=True)
     quantity = models.DecimalField(max_digits=12, decimal_places=3)
     unit_price = models.DecimalField(max_digits=14, decimal_places=2)
     subtotal = models.DecimalField(max_digits=14, decimal_places=2)

@@ -13,6 +13,10 @@ class CustomerSegment(BaseModel):
 
 
 class Customer(BaseModel):
+    class PurchaseMode(models.TextChoices):
+        RETAIL = "RETAIL", "Compra personal / minorista"
+        WHOLESALE = "WHOLESALE", "Compra mayorista"
+
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -28,12 +32,25 @@ class Customer(BaseModel):
     phone = models.CharField(max_length=30, blank=True)
     address = models.TextField(blank=True)
     city = models.CharField(max_length=100, blank=True)
+    purchase_mode = models.CharField(
+        max_length=20,
+        choices=PurchaseMode.choices,
+        default=PurchaseMode.RETAIL,
+    )
+    wholesale_code = models.CharField(max_length=40, unique=True, blank=True)
     segments = models.ManyToManyField(CustomerSegment, blank=True, related_name="customers")
     is_active = models.BooleanField(default=True)
     notes = models.TextField(blank=True)
 
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
+
+    def save(self, *args, **kwargs):
+        if not self.wholesale_code:
+            seed = self.document_number or self.email or str(self.id)
+            clean = "".join(ch for ch in seed.upper() if ch.isalnum())[:8] or str(self.id).replace("-", "")[:8].upper()
+            self.wholesale_code = f"JR-MAY-{clean}"
+        super().save(*args, **kwargs)
 
 
 class CustomerAddress(BaseModel):

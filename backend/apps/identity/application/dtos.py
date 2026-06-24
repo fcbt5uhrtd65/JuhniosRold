@@ -17,3 +17,4 @@ class RegisterUserDTO:
     latitude: float | None = None
     longitude: float | None = None
     reference: str = ""
+    purchase_mode: str = "RETAIL"

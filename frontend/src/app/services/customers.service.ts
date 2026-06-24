@@ -17,6 +17,8 @@ export interface BackendCustomer {
   phone: string;
   address: string;
   city: string;
+  purchase_mode?: 'RETAIL' | 'WHOLESALE';
+  wholesale_code?: string;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -31,6 +33,7 @@ export interface CreateCustomerPayload {
   phone?: string;
   address?: string;
   city?: string;
+  purchase_mode?: 'RETAIL' | 'WHOLESALE';
   is_active?: boolean;
 }
 

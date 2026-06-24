@@ -17,6 +17,7 @@ class PriceSerializer(serializers.ModelSerializer):
 
 class ProductVariantSerializer(serializers.ModelSerializer):
     prices = PriceSerializer(many=True, read_only=True)
+    presentation_label = serializers.CharField(read_only=True)
 
     class Meta:
         model = ProductVariant

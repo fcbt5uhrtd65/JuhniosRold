@@ -6,7 +6,7 @@ from .models import Category, Price, Product, ProductImage, ProductVariant
 class ProductVariantInline(admin.TabularInline):
     model = ProductVariant
     extra = 0
-    fields = ("sku", "name", "cost", "is_active")
+    fields = ("sku", "name", "presentation_number", "presentation_unit", "cost", "is_active")
 
 
 class ProductImageInline(admin.TabularInline):
@@ -42,7 +42,7 @@ class ProductAdmin(admin.ModelAdmin):
 
 @admin.register(ProductVariant)
 class ProductVariantAdmin(admin.ModelAdmin):
-    list_display = ("sku", "product", "name", "cost", "is_active", "updated_at")
+    list_display = ("sku", "product", "name", "presentation_number", "presentation_unit", "cost", "is_active", "updated_at")
     list_filter = ("is_active", "product__category")
     search_fields = ("sku", "name", "product__name")
     list_select_related = ("product", "product__category")

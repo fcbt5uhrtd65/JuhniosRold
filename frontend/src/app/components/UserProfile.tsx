@@ -246,6 +246,39 @@ export function UserProfile({ isOpen, onClose }: UserProfileProps) {
                 </div>
               </section>
 
+              <section className="rounded-[28px] border border-emerald-100 bg-white p-5 shadow-sm md:p-6">
+                <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#2D3A1F]">
+                      Beneficios mayoristas
+                    </div>
+                    <h3 className="text-lg font-semibold text-stone-950">Tu acceso para compras por volumen</h3>
+                    <p className="mt-1 text-sm text-stone-500">
+                      El descuento se activa automáticamente cuando tu carrito supera la compra mínima configurada.
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-stone-200 bg-[#F8F7F4] px-4 py-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-stone-400">Código mayorista</p>
+                    <p className="mt-1 font-mono text-sm font-bold text-stone-950">
+                      {currentUser.codigoMayorista || 'JR-MAY-PENDIENTE'}
+                    </p>
+                  </div>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {[
+                    'Descuento especial por compras al por mayor.',
+                    'El descuento se activa automáticamente al superar la compra mínima.',
+                    'Acceso a promociones especiales.',
+                    'Atención para compras por volumen.',
+                  ].map(item => (
+                    <div key={item} className="flex items-start gap-2 rounded-2xl bg-emerald-50 px-3 py-3 text-sm text-emerald-800">
+                      <Check className="mt-0.5 h-4 w-4 flex-shrink-0" strokeWidth={2} />
+                      <span>{item}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
               {success && (
                 <motion.div
                   initial={{ opacity: 0, y: -8 }}

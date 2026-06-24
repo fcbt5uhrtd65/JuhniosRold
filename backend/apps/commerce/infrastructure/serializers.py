@@ -3,14 +3,14 @@ from decimal import Decimal
 
 from rest_framework import serializers
 
-from .models import Cart, CartItem, Order, OrderItem, OrderStatusHistory, Payment
+from .models import Cart, CartItem, Order, OrderItem, OrderStatusHistory, Payment, WholesaleSettings
 
 
 class CartItemSerializer(serializers.ModelSerializer):
     variant_id = serializers.UUIDField(source="variant.id", read_only=True)
     product_name = serializers.CharField(source="variant.product.name", read_only=True)
     sku = serializers.CharField(source="variant.sku", read_only=True)
-    presentation = serializers.CharField(source="variant.name", read_only=True)
+    presentation = serializers.CharField(source="variant.presentation_label", read_only=True)
     category = serializers.CharField(
         source="variant.product.category.name",
         read_only=True,
@@ -205,6 +205,7 @@ class OrderSerializer(serializers.ModelSerializer):
 class CheckoutSerializer(serializers.Serializer):
     location_id = serializers.UUIDField(required=False)
     shipping_address = serializers.CharField()
+    wholesale_code = serializers.CharField(required=False, allow_blank=True)
 
 
 class AddCartItemSerializer(serializers.Serializer):
@@ -237,6 +238,14 @@ class DirectCheckoutSerializer(serializers.Serializer):
     items = DirectCheckoutItemSerializer(many=True, allow_empty=False)
     shipping_address = serializers.CharField()
     location_id = serializers.UUIDField(required=False)
+    wholesale_code = serializers.CharField(required=False, allow_blank=True)
+
+
+class WholesaleSettingsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WholesaleSettings
+        fields = ("id", "minimum_purchase", "discount_percentage", "is_active", "updated_at")
+        read_only_fields = ("id", "updated_at")
 
 
 class InitiateWompiPaymentSerializer(serializers.Serializer):

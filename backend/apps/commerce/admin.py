@@ -8,6 +8,7 @@ from .models import (
     OrderStatusHistory,
     Payment,
     PaymentWebhookEvent,
+    WholesaleSettings,
 )
 
 
@@ -20,7 +21,7 @@ class CartItemInline(admin.TabularInline):
 class OrderItemInline(admin.TabularInline):
     model = OrderItem
     extra = 0
-    fields = ("variant", "product_name", "sku", "quantity", "unit_price", "subtotal")
+    fields = ("variant", "product_name", "sku", "presentation", "quantity", "unit_price", "subtotal")
 
 
 class OrderStatusHistoryInline(admin.TabularInline):
@@ -64,7 +65,7 @@ class CartItemAdmin(admin.ModelAdmin):
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-    list_display = ("number", "customer", "status", "subtotal", "shipping_cost", "total", "created_at")
+    list_display = ("number", "customer", "status", "subtotal", "discount_amount", "shipping_cost", "total", "created_at")
     list_filter = ("status", "created_at")
     search_fields = (
         "number",
@@ -81,7 +82,7 @@ class OrderAdmin(admin.ModelAdmin):
 
 @admin.register(OrderItem)
 class OrderItemAdmin(admin.ModelAdmin):
-    list_display = ("order", "product_name", "sku", "quantity", "unit_price", "subtotal")
+    list_display = ("order", "product_name", "sku", "presentation", "quantity", "unit_price", "subtotal")
     search_fields = ("order__number", "product_name", "sku")
     list_select_related = ("order", "variant")
 
@@ -136,6 +137,12 @@ class PaymentWebhookEventAdmin(admin.ModelAdmin):
         "processed",
         "created_at",
     )
+
+
+@admin.register(WholesaleSettings)
+class WholesaleSettingsAdmin(admin.ModelAdmin):
+    list_display = ("minimum_purchase", "discount_percentage", "is_active", "updated_at")
+    fields = ("minimum_purchase", "discount_percentage", "is_active")
     list_filter = ("event_type", "environment", "transaction_status", "processed")
     search_fields = ("checksum", "reference", "transaction_id")
     readonly_fields = (

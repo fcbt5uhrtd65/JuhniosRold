@@ -46,6 +46,7 @@ class RegisterUser:
             phone=data.phone,
             address=data.address,
             city=data.city,
+            purchase_mode=data.purchase_mode or Customer.PurchaseMode.RETAIL,
         )
         _create_customer_address(customer, data)
         return user
@@ -73,6 +74,7 @@ class RegisterUser:
             phone=data.phone,
             address=data.address,
             city=data.city,
+            purchase_mode=data.purchase_mode or Customer.PurchaseMode.RETAIL,
         )
         _create_customer_address(customer, data)
         return user

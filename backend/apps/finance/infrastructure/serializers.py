@@ -21,6 +21,7 @@ class SalesInvoiceLineSerializer(serializers.ModelSerializer):
             "id",
             "product_name",
             "sku",
+            "presentation",
             "quantity",
             "unit_price",
             "subtotal",

@@ -61,6 +61,8 @@ export interface CustomerUser {
   longitud?: number | null;
   tipoDocumento?: string;
   numeroDocumento?: string;
+  modoCompra?: 'RETAIL' | 'WHOLESALE';
+  codigoMayorista?: string;
   role?: AuthUser['role'];
   /** true when session comes from real backend JWT */
   fromApi?: boolean;
@@ -128,6 +130,7 @@ interface UserContextType {
       reference?: string;
       document_type?: string;
       document_number?: string;
+      purchase_mode?: 'RETAIL' | 'WHOLESALE';
     },
   ) => Promise<RegistrationActionResult>;
   verifyRegistration: (
@@ -224,6 +227,8 @@ function mapCustomerProfile(p: MyCustomerProfile): Partial<CustomerUser> {
     longitud: p.longitude,
     tipoDocumento: p.document_type || undefined,
     numeroDocumento: p.document_number || undefined,
+    modoCompra: p.purchase_mode,
+    codigoMayorista: p.wholesale_code,
   };
 }
 
@@ -414,6 +419,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       reference?: string;
       document_type?: string;
       document_number?: string;
+      purchase_mode?: 'RETAIL' | 'WHOLESALE';
     },
   ): Promise<AuthActionResult> => {
     try {
@@ -434,6 +440,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         reference: extra?.reference,
         document_type: extra?.document_type,
         document_number: extra?.document_number,
+        purchase_mode: extra?.purchase_mode ?? 'RETAIL',
       });
       setBackendOnline(true);
       return {
@@ -674,6 +681,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       reference: updates.referencia,
       latitude: updates.latitud,
       longitude: updates.longitud,
+      purchase_mode: updates.modoCompra,
     };
 
     try {

@@ -18,6 +18,7 @@ import {
 } from '../services/cart.service';
 import { useToast } from './ToastContext';
 import { useUser } from './UserContext';
+import { calculateWholesaleDiscount, type WholesaleDiscountSummary } from '../utils/wholesale';
 
 export interface CartItem {
   id: string;
@@ -44,6 +45,9 @@ interface CartContextType {
   reloadCart: () => Promise<void>;
   isLoading: boolean;
   total: number;
+  subtotal: number;
+  wholesaleDiscount: WholesaleDiscountSummary;
+  totalBeforeShipping: number;
   itemCount: number;
 }
 
@@ -176,10 +180,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
   }, [canUseApiCart, toast]);
 
-  const total = useMemo(
+  const subtotal = useMemo(
     () => items.reduce((sum, item) => sum + item.price * item.quantity, 0),
     [items],
   );
+  const wholesaleDiscount = useMemo(() => calculateWholesaleDiscount(subtotal), [subtotal]);
+  const total = wholesaleDiscount.totalAfterDiscount;
   const itemCount = useMemo(
     () => items.reduce((sum, item) => sum + item.quantity, 0),
     [items],
@@ -195,6 +201,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
         clearCart,
         reloadCart,
         isLoading,
+        subtotal,
+        wholesaleDiscount,
+        totalBeforeShipping: subtotal,
         total,
         itemCount,
       }}

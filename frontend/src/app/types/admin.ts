@@ -15,6 +15,8 @@ export interface Product {
   categoria: string;
   tipo: string;
   presentacion: string;
+  presentacionNumero?: number;
+  presentacionUnidad?: 'ML' | 'LT' | 'GR' | 'KG' | 'UND';
   precio: number;
   precioCosto?: number;
   descripcion: string;
@@ -99,6 +101,8 @@ export interface Customer {
   ciudad: string;
   totalCompras: number;
   ultimaCompra?: string;
+  modoCompra?: 'RETAIL' | 'WHOLESALE';
+  codigoMayorista?: string;
 }
 
 export interface DashboardMetrics {

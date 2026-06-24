@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { useAdmin } from '../../contexts/AdminContext';
 import {
   Plus, Edit2, Trash2, Eye, EyeOff, Grid3x3, List, ArrowUpDown,
@@ -15,8 +15,10 @@ import {
   DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent,
 } from '../ui/dropdown-menu';
 import { requestProductsExport, type ExportFormat, type PdfLayout } from '../../services/products.service';
+import { getWholesaleSettingsApi, updateWholesaleSettingsApi } from '../../services/cart.service';
 import { pollExportStatus } from '../../utils/pollExportStatus';
 import { resolveBackendUrl } from '../../services/api';
+import { getWholesaleSettings, saveWholesaleSettings } from '../../utils/wholesale';
 import { Card, Badge, type BadgeColor, Table, Th, Td, Modal, EmptyState, inputCls, selectCls } from './AdminUI';
 
 type ViewMode = 'grid' | 'table';
@@ -26,13 +28,15 @@ type ModalMode = 'create' | 'edit' | 'view' | null;
 
 const CATEGORIAS = ['Capilar', 'Facial', 'Corporal', 'Barbería', 'Baby', 'Personal'];
 const TIPOS = ['Aceite', 'Gel', 'Silicona', 'Shampoo', 'Tratamiento', 'Acondicionador', 'Crema', 'Sérum', 'Mascarilla'];
-const PRESENTACIONES = ['30 ml', '50 ml', '120 ml', '250 ml', '500 ml', '1 L', '30 gr', '50 gr', '120 gr', '250 gr', '500 gr'];
+const PRESENTATION_UNITS: NonNullable<Product['presentacionUnidad']>[] = ['ML', 'LT', 'GR', 'KG', 'UND'];
 
 const EMPTY_FORM: Omit<Product, 'id'> = {
   nombre: '',
   categoria: 'capilar',
   tipo: '',
   presentacion: '',
+  presentacionNumero: undefined,
+  presentacionUnidad: 'ML',
   precio: 0,
   precioCosto: undefined,
   descripcion: '',
@@ -230,8 +234,36 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
   const [itemsPerPage, setItemsPerPage] = useState(12);
 
   const [formData, setFormData] = useState<Omit<Product, 'id'>>(EMPTY_FORM);
+  const [wholesaleSettings, setWholesaleSettings] = useState(getWholesaleSettings);
 
   const set = (patch: Partial<Omit<Product, 'id'>>) => setFormData(prev => ({ ...prev, ...patch }));
+
+  useEffect(() => {
+    getWholesaleSettingsApi()
+      .then(settings => {
+        const normalized = {
+          minimumPurchase: Number(settings.minimum_purchase),
+          discountPercentage: Number(settings.discount_percentage),
+        };
+        setWholesaleSettings(normalized);
+        saveWholesaleSettings(normalized);
+      })
+      .catch(() => undefined);
+  }, []);
+
+  const saveWholesale = async () => {
+    saveWholesaleSettings(wholesaleSettings);
+    try {
+      await updateWholesaleSettingsApi({
+        minimum_purchase: wholesaleSettings.minimumPurchase,
+        discount_percentage: wholesaleSettings.discountPercentage,
+        is_active: true,
+      });
+      toast.success('Regla mayorista actualizada');
+    } catch {
+      toast.success('Regla mayorista guardada localmente');
+    }
+  };
 
   const openCreate = () => {
     setFormData(EMPTY_FORM);
@@ -247,6 +279,8 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
       categoria: product.categoria,
       tipo: product.tipo,
       presentacion: product.presentacion,
+      presentacionNumero: product.presentacionNumero,
+      presentacionUnidad: product.presentacionUnidad ?? 'ML',
       precio: product.precio,
       precioCosto: product.precioCosto,
       descripcion: product.descripcion,
@@ -457,6 +491,47 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
         </button>
       </div>
 
+      <Card className="p-4 mb-6">
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_160px_140px_auto] lg:items-end">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Regla de descuento mayorista</p>
+            <p className="mt-1 text-xs text-gray-500">
+              Se aplica automáticamente cuando el carrito supera la compra mínima configurada.
+            </p>
+          </div>
+          <div>
+            <FormLabel>Compra mínima</FormLabel>
+            <input
+              type="number"
+              min="0"
+              step="1000"
+              value={wholesaleSettings.minimumPurchase}
+              onChange={e => setWholesaleSettings(prev => ({ ...prev, minimumPurchase: Number(e.target.value) }))}
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <FormLabel>Descuento %</FormLabel>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="0.1"
+              value={wholesaleSettings.discountPercentage}
+              onChange={e => setWholesaleSettings(prev => ({ ...prev, discountPercentage: Number(e.target.value) }))}
+              className={inputCls}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={saveWholesale}
+            className="h-10 rounded-lg bg-[#2a4038] px-4 text-xs font-semibold text-white transition-colors hover:bg-[#3d5c4e]"
+          >
+            Guardar regla
+          </button>
+        </div>
+      </Card>
+
       {/* Toolbar */}
       <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 mb-6">
         <SearchBar
@@ -538,7 +613,7 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
 
       {/* Grid View */}
       {viewMode === 'grid' && paginatedProducts.length > 0 && (
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
           {paginatedProducts.map(product => {
             const inv = inventory.find(i => i.productoId === product.id);
             const stockActual = inv?.stockActual;
@@ -546,12 +621,12 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
 
             return (
               <Card key={product.id} className="overflow-hidden">
-                <div className="aspect-square bg-gray-50 overflow-hidden relative">
+                <div className="aspect-[4/3] bg-gray-50 overflow-hidden relative">
                   {product.imagen ? (
                     <img src={product.imagen} alt={product.nombre} className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
-                      <Package size={40} className="text-gray-300" />
+                      <Package size={32} className="text-gray-300" />
                     </div>
                   )}
                   {product.marca && (
@@ -560,13 +635,13 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
                     </span>
                   )}
                 </div>
-                <div className="p-4">
+                <div className="p-3">
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex-1 min-w-0">
                       <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">
                         {product.categoria}{product.codigo ? ` · ${product.codigo}` : ''}
                       </p>
-                      <h3 className="text-sm font-semibold text-gray-900 mb-1 truncate">{product.nombre}</h3>
+                      <h3 className="text-[13px] font-semibold text-gray-900 mb-1 truncate">{product.nombre}</h3>
                       <p className="text-[11px] text-gray-400">{product.tipo} · {product.presentacion}</p>
                     </div>
                     <div className="ml-2 flex-shrink-0">
@@ -590,7 +665,7 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 mt-3">
+                  <div className="flex items-center gap-1.5 mt-3">
                     <button
                       onClick={() => openView(product)}
                       className="flex-1 py-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors flex items-center justify-center"
@@ -919,14 +994,45 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
                     </div>
 
                     <div>
-                      <FormLabel required>Presentación</FormLabel>
-                      <Combobox
-                        value={formData.presentacion}
-                        onChange={v => set({ presentacion: v })}
-                        options={PRESENTACIONES}
-                        placeholder="120 ml, 50 gr..."
+                      <FormLabel required>Número de presentación</FormLabel>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.001"
+                        value={formData.presentacionNumero ?? ''}
+                        onChange={e => {
+                          const number = e.target.value ? Number(e.target.value) : undefined;
+                          const unit = formData.presentacionUnidad ?? 'ML';
+                          set({
+                            presentacionNumero: number,
+                            presentacionUnidad: unit,
+                            presentacion: number ? `${number} ${unit}` : '',
+                          });
+                        }}
+                        className={inputCls}
+                        placeholder="60, 120, 250, 1"
                         required
                       />
+                    </div>
+
+                    <div>
+                      <FormLabel required>Unidad</FormLabel>
+                      <select
+                        value={formData.presentacionUnidad ?? 'ML'}
+                        onChange={e => {
+                          const unit = e.target.value as NonNullable<Product['presentacionUnidad']>;
+                          set({
+                            presentacionUnidad: unit,
+                            presentacion: formData.presentacionNumero ? `${formData.presentacionNumero} ${unit}` : '',
+                          });
+                        }}
+                        className={selectCls}
+                        required
+                      >
+                        {PRESENTATION_UNITS.map(unit => (
+                          <option key={unit} value={unit}>{unit}</option>
+                        ))}
+                      </select>
                     </div>
 
                     <div>

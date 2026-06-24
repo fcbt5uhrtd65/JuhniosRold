@@ -62,7 +62,7 @@ function formatMoney(value: number): string {
 }
 
 export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
-  const { items, total, reloadCart } = useCart();
+  const { items, subtotal, total, wholesaleDiscount, reloadCart } = useCart();
   const { currentUser } = useUser();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -237,7 +237,7 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
     const wompiTab = window.open('about:blank', '_blank');
 
     try {
-      const order = await checkoutActiveCart(shippingAddress());
+      const order = await checkoutActiveCart(shippingAddress(), currentUser?.codigoMayorista);
       const payment = await initiatePayment(order.id);
       await reloadCart();
       if (payment.requires_redirect) {
@@ -604,6 +604,20 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
                     <div className="space-y-2">
                       <div className="flex justify-between text-sm">
                         <span className="text-stone-500">Subtotal</span>
+                        <span className="font-medium text-stone-900">{formatMoney(subtotal)}</span>
+                      </div>
+                      {wholesaleDiscount.isActive ? (
+                        <div className="flex justify-between text-sm text-emerald-700">
+                          <span>Descuento mayorista aplicado</span>
+                          <span className="font-semibold">-{formatMoney(wholesaleDiscount.discount)}</span>
+                        </div>
+                      ) : (
+                        <div className="rounded-2xl bg-amber-50 px-3 py-2 text-[11px] text-amber-700">
+                          Te faltan {formatMoney(wholesaleDiscount.remaining)} para activar tu descuento mayorista.
+                        </div>
+                      )}
+                      <div className="flex justify-between text-sm">
+                        <span className="text-stone-500">Subtotal con descuento</span>
                         <span className="font-medium text-stone-900">{formatMoney(total)}</span>
                       </div>
                       <div className="flex justify-between text-sm">

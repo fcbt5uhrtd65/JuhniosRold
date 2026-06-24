@@ -49,6 +49,7 @@ export interface RegisterPayload {
   latitude?: number | null;
   longitude?: number | null;
   reference?: string;
+  purchase_mode?: 'RETAIL' | 'WHOLESALE';
 }
 
 export interface LoginPayload {

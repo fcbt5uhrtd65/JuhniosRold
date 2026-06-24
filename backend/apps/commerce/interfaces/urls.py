@@ -8,6 +8,7 @@ from .views import (
     ActiveCartView,
     OrderViewSet,
     PaymentListView,
+    WholesaleSettingsView,
 )
 from .webhooks import (
     InitiatePaymentView,
@@ -29,6 +30,7 @@ urlpatterns = router.urls + [
         name="cart-item-detail",
     ),
     path("cart/checkout/", ActiveCartCheckoutView.as_view(), name="cart-checkout"),
+    path("wholesale-settings/", WholesaleSettingsView.as_view(), name="wholesale-settings"),
     path("payments/", PaymentListView.as_view(), name="payments-list"),
     path("payments/start/", InitiatePaymentView.as_view(), name="payment-start"),
     path(

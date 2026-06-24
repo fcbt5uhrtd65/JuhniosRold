@@ -215,6 +215,8 @@ function mapApiProduct(p: ApiProduct): Product {
     categoria: p.category_slug || p.category,
     tipo: typeof productType === 'string' ? productType : p.category_name,
     presentacion: p.sizes[0] ?? '',
+    presentacionNumero: primaryVariant?.presentation_number ?? undefined,
+    presentacionUnidad: primaryVariant?.presentation_unit || undefined,
     precio: p.price ?? 0,
     precioCosto: primaryVariant?.cost ?? undefined,
     descripcion: p.description,
@@ -288,6 +290,8 @@ function mapApiCustomer(customer: BackendCustomer): Customer {
     ciudad: customer.city,
     totalCompras: 0,
     ultimaCompra: customer.updated_at || customer.created_at,
+    modoCompra: customer.purchase_mode ?? 'RETAIL',
+    codigoMayorista: customer.wholesale_code,
   };
 }
 
@@ -564,6 +568,8 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         cost: product.precioCosto,
         image_url: product.imagen,
         variant_name: product.presentacion,
+        presentation_number: product.presentacionNumero,
+        presentation_unit: product.presentacionUnidad,
         sku: product.codigo,
         variant_attributes: {
           type: product.tipo,
@@ -620,6 +626,8 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         cost: updates.precioCosto,
         image_url: updates.imagen,
         variant_name: updates.presentacion,
+        presentation_number: updates.presentacionNumero,
+        presentation_unit: updates.presentacionUnidad,
         sku: updates.codigo,
         variant_attributes: hasAttrUpdate ? {
           ...(updates.tipo !== undefined ? { type: updates.tipo } : {}),
@@ -719,6 +727,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         phone: customer.telefono,
         address: customer.direccion,
         city: customer.ciudad,
+        purchase_mode: customer.modoCompra,
         is_active: true,
       });
       setCustomers(prev => [...prev, mapApiCustomer(created)]);

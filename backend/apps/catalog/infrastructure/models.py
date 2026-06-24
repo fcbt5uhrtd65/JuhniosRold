@@ -28,15 +28,31 @@ class Product(BaseModel):
 
 
 class ProductVariant(BaseModel):
+    class PresentationUnit(models.TextChoices):
+        ML = "ML", "ML"
+        LT = "LT", "LT"
+        GR = "GR", "GR"
+        KG = "KG", "KG"
+        UND = "UND", "UND"
+
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="variants")
     sku = models.CharField(max_length=80, unique=True)
     name = models.CharField(max_length=150)
+    presentation_number = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True)
+    presentation_unit = models.CharField(max_length=3, choices=PresentationUnit.choices, blank=True)
     attributes = models.JSONField(default=dict, blank=True)
     cost = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     is_active = models.BooleanField(default=True)
 
+    @property
+    def presentation_label(self):
+        if self.presentation_number is not None and self.presentation_unit:
+            number = f"{self.presentation_number.normalize():f}".rstrip("0").rstrip(".")
+            return f"{number} {self.presentation_unit}"
+        return self.name
+
     def __str__(self):
-        return f"{self.product.name} - {self.name}"
+        return f"{self.product.name} - {self.presentation_label}"
 
 
 class Price(BaseModel):

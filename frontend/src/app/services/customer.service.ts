@@ -20,6 +20,8 @@ export interface MyCustomerProfile {
   latitude: number | null;
   longitude: number | null;
   reference: string;
+  purchase_mode: 'RETAIL' | 'WHOLESALE';
+  wholesale_code: string;
 }
 
 export interface UpdateMyCustomerProfilePayload {
@@ -33,6 +35,7 @@ export interface UpdateMyCustomerProfilePayload {
   reference?: string;
   latitude?: number | null;
   longitude?: number | null;
+  purchase_mode?: 'RETAIL' | 'WHOLESALE';
 }
 
 export async function getMyCustomerProfile(): Promise<MyCustomerProfile> {

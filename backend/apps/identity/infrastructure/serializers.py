@@ -141,6 +141,11 @@ class RegisterSerializer(serializers.Serializer):
     latitude = serializers.FloatField(required=False, allow_null=True, default=None)
     longitude = serializers.FloatField(required=False, allow_null=True, default=None)
     reference = serializers.CharField(required=False, allow_blank=True)
+    purchase_mode = serializers.ChoiceField(
+        choices=("RETAIL", "WHOLESALE"),
+        required=False,
+        default="RETAIL",
+    )
 
     def validate(self, attrs):
         latitude = attrs.get("latitude")
@@ -181,6 +186,7 @@ class RegisterSerializer(serializers.Serializer):
             "latitude": validated_data.get("latitude"),
             "longitude": validated_data.get("longitude"),
             "reference": validated_data.get("reference", ""),
+            "purchase_mode": validated_data.get("purchase_mode", "RETAIL"),
         }
 
         EmailVerificationCode.objects.filter(

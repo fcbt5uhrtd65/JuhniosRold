@@ -802,7 +802,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.3 }}
               className={viewMode === 'grid'
-                ? 'grid grid-cols-2 md:grid-cols-3 gap-4'
+                ? 'grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3'
                 : 'flex flex-col gap-3'
               }
             >
@@ -882,7 +882,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                     className="group flex flex-col bg-white rounded-2xl border border-stone-100 overflow-hidden hover:border-stone-200 hover:shadow-sm transition-all duration-300"
                   >
                     {/* Imagen */}
-                    <div className="relative overflow-hidden bg-[#FAFAF8] aspect-[3/4]">
+                    <div className="relative overflow-hidden bg-[#FAFAF8] aspect-[4/5]">
                       <motion.img
                         whileHover={{ scale: 1.06 }}
                         transition={{ duration: 0.55 }}
@@ -935,7 +935,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                     </div>
 
                     {/* Info */}
-                    <div className="flex flex-col flex-1 p-4">
+                    <div className="flex flex-col flex-1 p-3">
                       <p className="text-[9px] tracking-[0.2em] uppercase text-stone-400 mb-1">
                         {product.category_name}
                       </p>

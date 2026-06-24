@@ -10,7 +10,16 @@ import { KpiCard, Table, Th, Td, Modal, Field, inputCls, selectCls } from './Adm
 export function AdminCustomers() {
   const { customers, orders, addCustomer } = useAdmin();
   const [showModal, setShowModal] = useState(false);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    tipoDocumento: string;
+    documento: string;
+    nombre: string;
+    telefono: string;
+    email: string;
+    direccion: string;
+    ciudad: string;
+    modoCompra: 'RETAIL' | 'WHOLESALE';
+  }>({
     tipoDocumento: 'CC',
     documento: '',
     nombre: '',
@@ -18,13 +27,14 @@ export function AdminCustomers() {
     email: '',
     direccion: '',
     ciudad: '',
+    modoCompra: 'RETAIL',
   });
   const [customerLocation, setCustomerLocation] = useState<LocationValue>(EMPTY_LOCATION);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     await addCustomer({ ...formData, ciudad: customerLocation.cityName || formData.ciudad });
-    setFormData({ tipoDocumento: 'CC', documento: '', nombre: '', telefono: '', email: '', direccion: '', ciudad: '' });
+    setFormData({ tipoDocumento: 'CC', documento: '', nombre: '', telefono: '', email: '', direccion: '', ciudad: '', modoCompra: 'RETAIL' });
     setCustomerLocation(EMPTY_LOCATION);
     setShowModal(false);
   };
@@ -167,6 +177,17 @@ export function AdminCustomers() {
                 className={inputCls}
                 required
               />
+            </Field>
+
+            <Field label="¿Cómo deseas comprar?">
+              <select
+                value={formData.modoCompra}
+                onChange={(e) => setFormData({ ...formData, modoCompra: e.target.value as 'RETAIL' | 'WHOLESALE' })}
+                className={selectCls}
+              >
+                <option value="RETAIL">Compra personal / minorista</option>
+                <option value="WHOLESALE">Compra mayorista</option>
+              </select>
             </Field>
 
             <div className="sm:col-span-2">

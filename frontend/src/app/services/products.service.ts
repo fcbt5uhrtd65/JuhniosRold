@@ -51,6 +51,9 @@ interface BackendVariant {
   product: UUID;
   sku: string;
   name: string;
+  presentation_number?: string | number | null;
+  presentation_unit?: 'ML' | 'LT' | 'GR' | 'KG' | 'UND' | '';
+  presentation_label?: string;
   attributes: Record<string, unknown>;
   cost: string;
   is_active: boolean;
@@ -116,6 +119,8 @@ export interface ProductVariant {
   product: UUID;
   sku: string;
   name: string;
+  presentation_number?: number | null;
+  presentation_unit?: 'ML' | 'LT' | 'GR' | 'KG' | 'UND' | '';
   attributes: Record<string, unknown>;
   cost: number;
   is_active: boolean;
@@ -197,6 +202,8 @@ export interface CreateProductPayload {
   image_url?: string;
   variant_name?: string;
   variant_attributes?: Record<string, unknown>;
+  presentation_number?: number;
+  presentation_unit?: 'ML' | 'LT' | 'GR' | 'KG' | 'UND';
   cost?: number;
   ingredients?: string[];
   benefits?: string[];
@@ -239,6 +246,15 @@ function getCurrentPrice(prices: BackendPrice[]): ProductPrice | null {
 }
 
 function buildPresentation(variant: BackendVariant): string {
+  if (variant.presentation_label?.trim()) {
+    return variant.presentation_label.trim();
+  }
+
+  const presentationNumber = parseAmount(variant.presentation_number);
+  if (presentationNumber !== null && variant.presentation_unit) {
+    return `${presentationNumber.toLocaleString('es-CO', { maximumFractionDigits: 3 })} ${variant.presentation_unit}`;
+  }
+
   if (variant.name.trim()) {
     return variant.name.trim();
   }
@@ -260,6 +276,8 @@ function normalizeVariant(variant: BackendVariant): ProductVariant {
   return {
     ...variant,
     cost: parseAmount(variant.cost) ?? 0,
+    presentation_number: parseAmount(variant.presentation_number),
+    presentation_unit: variant.presentation_unit ?? '',
     prices: variant.prices.map(normalizePrice),
     current_price: currentPrice?.amount ?? null,
     presentation: buildPresentation(variant),
@@ -539,7 +557,11 @@ export async function createProduct(payload: CreateProductPayload): Promise<Prod
       product: res.data.id,
       sku: payload.sku || `JR-${Date.now()}`,
       name: payload.variant_name ||
-        (payload.weight_ml ? `${payload.weight_ml} ml` : 'Presentación única'),
+        (payload.presentation_number && payload.presentation_unit
+          ? `${payload.presentation_number} ${payload.presentation_unit}`
+          : payload.weight_ml ? `${payload.weight_ml} ml` : 'Presentación única'),
+      ...(payload.presentation_number !== undefined ? { presentation_number: String(payload.presentation_number) } : {}),
+      ...(payload.presentation_unit !== undefined ? { presentation_unit: payload.presentation_unit } : {}),
       attributes: payload.variant_attributes ??
         (payload.weight_ml ? { weight_ml: payload.weight_ml } : {}),
       cost: String(payload.cost ?? 0),
@@ -587,9 +609,19 @@ export async function updateProduct(id: string, payload: UpdateProductPayload): 
   }
 
   const variant = res.data.variants.find((item) => item.is_active) ?? res.data.variants[0];
-  if (variant && (payload.variant_name !== undefined || payload.variant_attributes !== undefined)) {
+  if (
+    variant &&
+    (
+      payload.variant_name !== undefined ||
+      payload.variant_attributes !== undefined ||
+      payload.presentation_number !== undefined ||
+      payload.presentation_unit !== undefined
+    )
+  ) {
     await api.patch<BackendVariant>(`${VARIANTS_PATH}${variant.id}/`, {
       ...(payload.variant_name !== undefined ? { name: payload.variant_name } : {}),
+      ...(payload.presentation_number !== undefined ? { presentation_number: String(payload.presentation_number) } : {}),
+      ...(payload.presentation_unit !== undefined ? { presentation_unit: payload.presentation_unit } : {}),
       ...(payload.variant_attributes !== undefined
         ? { attributes: { ...variant.attributes, ...payload.variant_attributes } }
         : {}),

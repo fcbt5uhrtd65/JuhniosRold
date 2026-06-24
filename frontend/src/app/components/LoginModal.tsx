@@ -147,6 +147,7 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
   const [tipoDocumento, setTipoDocumento] = useState('CC');
   const [documento, setDocumento] = useState('');
   const [telefono, setTelefono] = useState('');
+  const [purchaseMode, setPurchaseMode] = useState<'RETAIL' | 'WHOLESALE'>('RETAIL');
   const [regLocation, setRegLocation] = useState<LocationValue>(EMPTY_LOCATION);
   const [deliveryLocation, setDeliveryLocation] = useState<DeliveryLocationValue>(EMPTY_DELIVERY_LOCATION);
   const [regCities, setRegCities] = useState<City[]>([]);
@@ -160,6 +161,7 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
     setNombre(''); setApellidos(''); setEmail(''); setPassword(''); setConfirm('');
     setShowPass(false); setShowConfirm(false); setTerms(false);
     setTipoDocumento('CC'); setDocumento(''); setTelefono('');
+    setPurchaseMode('RETAIL');
     setRegLocation(EMPTY_LOCATION);
     setDeliveryLocation(EMPTY_DELIVERY_LOCATION);
     setRegCities([]);
@@ -291,6 +293,7 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
           city: regLocation.cityName || deliveryLocation.city || undefined,
           document_type: tipoDocumento || undefined,
           document_number: documento || undefined,
+          purchase_mode: purchaseMode,
           state: deliveryLocation.state || undefined,
           country: deliveryLocation.country || regLocation.countryName || undefined,
           latitude: deliveryLocation.lat,
@@ -668,6 +671,31 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
                           placeholder="3001234567"
                           icon={Phone}
                         />
+                        <div>
+                          <label className="block text-[9px] tracking-[0.28em] uppercase text-stone-400 font-medium mb-1.5">
+                            ¿Cómo deseas comprar?
+                          </label>
+                          <div className="grid grid-cols-2 gap-2">
+                            {[
+                              { value: 'RETAIL' as const, label: 'Compra personal', detail: 'Minorista' },
+                              { value: 'WHOLESALE' as const, label: 'Compra mayorista', detail: 'Volumen' },
+                            ].map(option => (
+                              <button
+                                key={option.value}
+                                type="button"
+                                onClick={() => setPurchaseMode(option.value)}
+                                className={`rounded-xl border px-3 py-3 text-left transition-colors ${
+                                  purchaseMode === option.value
+                                    ? 'border-[#2D3A1F] bg-[#2D3A1F]/5 text-stone-900'
+                                    : 'border-stone-200 text-stone-500 hover:bg-stone-50'
+                                }`}
+                              >
+                                <span className="block text-[11px] font-semibold">{option.label}</span>
+                                <span className="block text-[10px] text-stone-400">{option.detail}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                       </>
                     )}
 

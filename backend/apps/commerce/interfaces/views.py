@@ -13,7 +13,7 @@ from apps.inventory.infrastructure.models import Location
 
 from ..application.services import OrderStatusService
 from ..application.use_cases import ActiveCartService, CancelOrder, CheckoutCart
-from ..infrastructure.models import Cart, Order, Payment
+from ..infrastructure.models import Cart, Order, Payment, WholesaleSettings
 from ..infrastructure.serializers import (
     AddCartItemSerializer,
     CartSerializer,
@@ -21,6 +21,7 @@ from ..infrastructure.serializers import (
     OrderSerializer,
     PaymentAdminSerializer,
     UpdateCartItemSerializer,
+    WholesaleSettingsSerializer,
 )
 
 
@@ -130,8 +131,26 @@ class ActiveCartCheckoutView(APIView):
             location=location,
             shipping_address=serializer.validated_data["shipping_address"],
             actor=request.user,
+            wholesale_code=serializer.validated_data.get("wholesale_code", ""),
         )
         return Response(OrderSerializer(order).data, status=status.HTTP_201_CREATED)
+
+
+class WholesaleSettingsView(APIView):
+    permission_classes = (permissions.IsAuthenticatedOrReadOnly,)
+
+    def get(self, request):
+        return Response(WholesaleSettingsSerializer(WholesaleSettings.current()).data)
+
+    def patch(self, request):
+        has_access = getattr(request.user, "has_component_access", lambda *_args, **_kwargs: False)
+        if not has_access("commerce.orders", "edit"):
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        instance = WholesaleSettings.current()
+        serializer = WholesaleSettingsSerializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
 
 
 class OrderViewSet(SoftDeleteModelViewSet):

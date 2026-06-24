@@ -319,12 +319,15 @@ def render_invoice_pdf(invoice):
 
     for line in lines:
         cx = table_x
+        product_description = _safe(line.product_name, "")
+        if getattr(line, "presentation", ""):
+            product_description = f"{product_description} - {line.presentation}"
 
         values = [
             _safe(line.sku, ""),
             str(line.quantity),
             "UND",
-            _safe(line.product_name, ""),
+            product_description,
             f"{tax_rate:.0f}%",
             _money(line.unit_price),
             _money(line.subtotal),
