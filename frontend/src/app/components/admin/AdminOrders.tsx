@@ -30,6 +30,35 @@ import { useToast } from '../../contexts/ToastContext';
 
 const noop = () => {};
 
+// Workflow states visible to the admin, in order.
+const WORKFLOW: Order['estado'][] = ['pagado', 'procesando', 'empacado', 'enviado', 'entregado'];
+
+// The only allowed next state for each workflow state.
+const NEXT_STATE: Partial<Record<Order['estado'], Order['estado']>> = {
+  pagado: 'procesando',
+  procesando: 'empacado',
+  empacado: 'enviado',
+  enviado: 'entregado',
+};
+
+const STATUS_LABEL: Partial<Record<Order['estado'], string>> = {
+  pagado: 'Pagado',
+  procesando: 'Procesando',
+  empacado: 'Empacado',
+  enviado: 'Enviado',
+  entregado: 'Entregado',
+  pendiente: 'Pendiente',
+  fallido: 'Fallido',
+  cancelado: 'Cancelado',
+  devuelto: 'Devuelto',
+  confirmado: 'Confirmado',
+  en_camino: 'En camino',
+};
+
+function isWorkflowState(estado: Order['estado']): boolean {
+  return WORKFLOW.includes(estado);
+}
+
 export function AdminOrders() {
   const { orders, customers, updateOrderStatus } = useAdmin();
   const toast = useToast();
@@ -44,6 +73,8 @@ export function AdminOrders() {
   const [loadingTrackingId, setLoadingTrackingId] = useState<string | null>(null);
   const [showTrackingId, setShowTrackingId] = useState<string | null>(null);
   const [loadingInvoiceId, setLoadingInvoiceId] = useState<string | null>(null);
+  // Which order is showing the "Registrar guía" modal
+  const [guiaOrderId, setGuiaOrderId] = useState<string | null>(null);
 
   const loadTracking = async (orderId: string) => {
     if (trackingData[orderId]) return;
@@ -154,13 +185,20 @@ export function AdminOrders() {
     }
   };
 
-  const statusOptions: Order['estado'][] = ['pendiente', 'pagado', 'enviado', 'entregado', 'cancelado'];
-
   const stats = {
-    pendientes: orders.filter(o => o.estado === 'pendiente').length,
-    enviados: orders.filter(o => o.estado === 'enviado').length,
+    porProcesar: orders.filter(o => o.estado === 'pagado' || o.estado === 'procesando' || o.estado === 'empacado').length,
+    enviados: orders.filter(o => o.estado === 'enviado' || o.estado === 'en_camino').length,
     entregados: orders.filter(o => o.estado === 'entregado').length,
     total: orders.reduce((sum, o) => o.estado !== 'cancelado' ? sum + o.total : sum, 0),
+  };
+
+  const handleStatusClick = (order: Order, targetStatus: Order['estado']) => {
+    if (targetStatus === 'enviado') {
+      // Open the "Registrar guía" form instead of directly updating status
+      setGuiaOrderId(order.id);
+      return;
+    }
+    void updateOrderStatus(order.id, targetStatus);
   };
 
   return (
@@ -184,7 +222,7 @@ export function AdminOrders() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <KpiCard label="Pendientes" value={String(stats.pendientes)} icon={Clock} color="text-amber-600 bg-amber-50" />
+        <KpiCard label="Por procesar" value={String(stats.porProcesar)} icon={Clock} color="text-amber-600 bg-amber-50" />
         <KpiCard label="Enviados" value={String(stats.enviados)} icon={Truck} color="text-blue-600 bg-blue-50" />
         <KpiCard label="Entregados" value={String(stats.entregados)} icon={Package} color="text-emerald-600 bg-emerald-50" />
         <KpiCard label="Ingresos" value={`$${(stats.total / 1000).toFixed(0)}k`} icon={Check} color="text-[#2a4038] bg-[#2a4038]/10" />
@@ -244,6 +282,11 @@ export function AdminOrders() {
           const destination = [order.ciudadEnvio, order.departamentoEnvio, order.paisEnvio].filter(Boolean).join(', ');
           const canShowShipping = Boolean(order.direccionEnvio || (order.latitudEnvio && order.longitudEnvio));
           const isExpanded = showAllDetails || expandedOrderId === order.id;
+          const inWorkflow = isWorkflowState(order.estado);
+          const currentIndex = WORKFLOW.indexOf(order.estado);
+          const nextState = NEXT_STATE[order.estado];
+          const td = trackingData[order.id];
+          const envio = td?.envio;
 
           return (
             <Card key={order.id} className="p-0 overflow-hidden">
@@ -255,7 +298,7 @@ export function AdminOrders() {
                       label={
                         <span className="flex items-center gap-1 capitalize">
                           {getStatusIcon(order.estado)}
-                          {order.estado}
+                          {STATUS_LABEL[order.estado] ?? order.estado}
                         </span>
                       }
                       color={getStatusColor(order.estado)}
@@ -301,175 +344,209 @@ export function AdminOrders() {
                 </div>
               </div>
 
-              {isExpanded && (() => {
-                const td = trackingData[order.id];
-                const envio = td?.envio;
-                return (
-                  <div className="border-t border-gray-100 p-4 space-y-4">
+              {isExpanded && (
+                <div className="border-t border-gray-100 p-4 space-y-4">
 
-                    {/* Resumen cliente / dirección / pago */}
-                    <div className="grid gap-3 rounded-lg bg-gray-50 p-3 sm:grid-cols-3">
-                      <div className="min-w-0">
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Cliente</p>
-                        <p className="truncate text-xs font-medium text-gray-900">{customer?.nombre || 'Cliente'}</p>
-                        <p className="truncate text-xs text-gray-500">{customer?.email || 'Sin correo'}</p>
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Dirección</p>
-                        <p className="truncate text-xs text-gray-700">{order.direccionEnvio || 'Sin dirección'}</p>
-                        <p className="truncate text-xs text-gray-500">{destination || customer?.ciudad || 'Sin ciudad'}</p>
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Pago</p>
-                        <p className="text-xs font-medium text-gray-900">${order.total.toLocaleString()}</p>
-                        <p className="truncate text-xs uppercase text-gray-500">{order.metodoPago || 'Sin método'}</p>
+                  {/* Resumen cliente / dirección / pago */}
+                  <div className="grid gap-3 rounded-lg bg-gray-50 p-3 sm:grid-cols-3">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Cliente</p>
+                      <p className="truncate text-xs font-medium text-gray-900">{customer?.nombre || 'Cliente'}</p>
+                      <p className="truncate text-xs text-gray-500">{customer?.email || 'Sin correo'}</p>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Dirección</p>
+                      <p className="truncate text-xs text-gray-700">{order.direccionEnvio || 'Sin dirección'}</p>
+                      <p className="truncate text-xs text-gray-500">{destination || customer?.ciudad || 'Sin ciudad'}</p>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Pago</p>
+                      <p className="text-xs font-medium text-gray-900">${order.total.toLocaleString()}</p>
+                      <p className="truncate text-xs uppercase text-gray-500">{order.metodoPago || 'Sin método'}</p>
+                    </div>
+                  </div>
+
+                  {/* Info de guía / envío */}
+                  {loadingTrackingId === order.id && (
+                    <div className="flex items-center gap-2 text-xs text-gray-400">
+                      <Loader2 size={12} className="animate-spin" /> Cargando info de envío…
+                    </div>
+                  )}
+                  {envio && (
+                    <div className="rounded-lg border border-gray-200 bg-white p-3">
+                      <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-gray-400">Envío</p>
+                      <div className="grid gap-2 sm:grid-cols-3 text-xs">
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wider text-gray-400">Transportadora</p>
+                          <p className="font-medium text-gray-800">{envio.transportadora?.nombre ?? '—'}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wider text-gray-400 flex items-center gap-1">
+                            <Hash size={9} /> Guía
+                          </p>
+                          <p className="font-mono font-semibold text-gray-800">{envio.numero_guia || 'Sin asignar'}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wider text-gray-400 flex items-center gap-1">
+                            <Calendar size={9} /> Entrega estimada
+                          </p>
+                          <p className="font-medium text-gray-800">
+                            {envio.fecha_entrega_estimada
+                              ? new Date(envio.fecha_entrega_estimada).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })
+                              : 'Por confirmar'}
+                          </p>
+                        </div>
                       </div>
                     </div>
+                  )}
 
-                    {/* Info de guía / envío */}
-                    {loadingTrackingId === order.id && (
-                      <div className="flex items-center gap-2 text-xs text-gray-400">
-                        <Loader2 size={12} className="animate-spin" /> Cargando info de envío…
-                      </div>
-                    )}
-                    {envio && (
-                      <div className="rounded-lg border border-gray-200 bg-white p-3">
-                        <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-gray-400">Envío</p>
-                        <div className="grid gap-2 sm:grid-cols-3 text-xs">
-                          <div>
-                            <p className="text-[10px] uppercase tracking-wider text-gray-400">Transportadora</p>
-                            <p className="font-medium text-gray-800">{envio.transportadora?.nombre ?? '—'}</p>
-                          </div>
-                          <div>
-                            <p className="text-[10px] uppercase tracking-wider text-gray-400 flex items-center gap-1">
-                              <Hash size={9} /> Guía
-                            </p>
-                            <p className="font-mono font-semibold text-gray-800">{envio.numero_guia || 'Sin asignar'}</p>
-                          </div>
-                          <div>
-                            <p className="text-[10px] uppercase tracking-wider text-gray-400 flex items-center gap-1">
-                              <Calendar size={9} /> Entrega estimada
-                            </p>
-                            <p className="font-medium text-gray-800">
-                              {envio.fecha_entrega_estimada
-                                ? new Date(envio.fecha_entrega_estimada).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })
-                                : 'Por confirmar'}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(300px,0.85fr)]">
-                      <div className="space-y-4">
-                        {/* Productos */}
-                        <div>
-                          <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                            Productos ({order.productos.length})
-                          </p>
-                          <div className="space-y-2">
-                            {order.productos.map((item, index) => (
-                              <div key={index} className="flex items-center justify-between gap-3 text-xs">
-                                <div className="flex min-w-0 items-center gap-2">
-                                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-gray-100 bg-gray-50 text-[10px] text-gray-500">
-                                    {item.cantidad}x
-                                  </span>
-                                  <span className="truncate text-gray-700">{item.nombre}</span>
-                                </div>
-                                <span className="shrink-0 font-medium text-gray-900">${(item.precio * item.cantidad).toLocaleString()}</span>
+                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(300px,0.85fr)]">
+                    <div className="space-y-4">
+                      {/* Productos */}
+                      <div>
+                        <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                          Productos ({order.productos.length})
+                        </p>
+                        <div className="space-y-2">
+                          {order.productos.map((item, index) => (
+                            <div key={index} className="flex items-center justify-between gap-3 text-xs">
+                              <div className="flex min-w-0 items-center gap-2">
+                                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-gray-100 bg-gray-50 text-[10px] text-gray-500">
+                                  {item.cantidad}x
+                                </span>
+                                <span className="truncate text-gray-700">{item.nombre}</span>
                               </div>
-                            ))}
-                          </div>
+                              <span className="shrink-0 font-medium text-gray-900">${(item.precio * item.cantidad).toLocaleString()}</span>
+                            </div>
+                          ))}
                         </div>
+                      </div>
 
-                        {/* Acciones: estado + guía + factura */}
+                      {/* Flujo de estados */}
+                      {inWorkflow && (
                         <div>
-                          <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-gray-400">Cambiar estado</p>
-                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-                            {statusOptions.map((status) => (
-                              <button
-                                key={status}
-                                onClick={() => updateOrderStatus(order.id, status)}
-                                className={`h-9 rounded-lg px-2 text-[11px] font-semibold capitalize transition-colors ${
-                                  order.estado === status
-                                    ? 'bg-[#2a4038] text-white'
-                                    : 'border border-gray-200 text-gray-600 hover:bg-gray-50'
-                                }`}
-                              >
-                                {status}
-                              </button>
-                            ))}
+                          <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-gray-400">Flujo de pedido</p>
+                          <div className="flex flex-wrap gap-2">
+                            {WORKFLOW.map((step, index) => {
+                              const isCompleted = index < currentIndex;
+                              const isCurrent = step === order.estado;
+                              const isNext = nextState === step;
+                              const isDisabled = !isCompleted && !isCurrent && !isNext;
+
+                              return (
+                                <button
+                                  key={step}
+                                  disabled={isDisabled || isCurrent || isCompleted}
+                                  onClick={() => handleStatusClick(order, step)}
+                                  className={`h-9 rounded-lg px-3 text-[11px] font-semibold transition-colors ${
+                                    isCurrent
+                                      ? 'bg-[#2a4038] text-white cursor-default'
+                                      : isCompleted
+                                        ? 'bg-gray-100 text-gray-400 cursor-default line-through'
+                                        : isNext
+                                          ? 'border border-[#2a4038] text-[#2a4038] hover:bg-[#2a4038]/5'
+                                          : 'border border-gray-200 text-gray-300 cursor-not-allowed'
+                                  }`}
+                                >
+                                  {isCompleted && <span className="mr-1">✓</span>}
+                                  {STATUS_LABEL[step]}
+                                </button>
+                              );
+                            })}
                           </div>
-                          <div className="mt-3 flex flex-wrap gap-2">
+
+                          {/* Modal de guía: aparece al hacer clic en "Enviado" */}
+                          {guiaOrderId === order.id && (
                             <AdminRegistrarGuia
                               pedidoId={order.id}
                               onSaved={() => {
-                                void updateOrderStatus(order.id, 'enviado');
+                                setGuiaOrderId(null);
                                 setTrackingData(prev => { const next = { ...prev }; delete next[order.id]; return next; });
                                 void loadTracking(order.id);
                               }}
+                              onCancel={() => setGuiaOrderId(null)}
                             />
-                            {!['pendiente', 'cancelado', 'fallido'].includes(order.estado) && (
-                              <button
-                                onClick={() => handleViewInvoice(order.id)}
-                                disabled={loadingInvoiceId === order.id}
-                                className="mt-3 inline-flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-40"
-                              >
-                                {loadingInvoiceId === order.id
-                                  ? <Loader2 size={14} className="animate-spin" />
-                                  : <FileText size={14} />}
-                                Ver factura
-                              </button>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Tracking completo toggle */}
-                        <div>
-                          <button
-                            type="button"
-                            onClick={() => setShowTrackingId(cur => cur === order.id ? null : order.id)}
-                            className="inline-flex items-center gap-2 text-[11px] font-semibold text-[#2a4038] hover:underline"
-                          >
-                            <Truck size={12} />
-                            {showTrackingId === order.id ? 'Ocultar seguimiento' : 'Ver seguimiento completo'}
-                          </button>
-                          {showTrackingId === order.id && (
-                            <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50 p-4">
-                              <TrackingPedidoPage
-                                pedidoId={order.id}
-                                onClose={() => setShowTrackingId(null)}
-                              />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Mapa */}
-                      {canShowShipping && (
-                        <div>
-                          <p className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                            <MapPin size={12} /> Mapa de entrega
-                          </p>
-                          {order.latitudEnvio != null && order.longitudEnvio != null ? (
-                            <InteractiveLocationMap
-                              lat={order.latitudEnvio}
-                              lng={order.longitudEnvio}
-                              onMarkerMove={noop}
-                              readOnly
-                              className="h-48 overflow-hidden rounded-lg border border-gray-200 xl:h-full xl:min-h-56"
-                            />
-                          ) : (
-                            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-500">
-                              {order.direccionEnvio}
-                            </div>
                           )}
                         </div>
                       )}
+
+                      {/* Estado interno (Pendiente, Fallido, Cancelado, etc.) — solo lectura */}
+                      {!inWorkflow && (
+                        <div>
+                          <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-gray-400">Estado</p>
+                          <Badge
+                            label={
+                              <span className="flex items-center gap-1">
+                                {getStatusIcon(order.estado)}
+                                {STATUS_LABEL[order.estado] ?? order.estado}
+                              </span>
+                            }
+                            color={getStatusColor(order.estado)}
+                          />
+                        </div>
+                      )}
+
+                      {/* Ver factura */}
+                      {!['pendiente', 'cancelado', 'fallido'].includes(order.estado) && (
+                        <div>
+                          <button
+                            onClick={() => handleViewInvoice(order.id)}
+                            disabled={loadingInvoiceId === order.id}
+                            className="inline-flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-40"
+                          >
+                            {loadingInvoiceId === order.id
+                              ? <Loader2 size={14} className="animate-spin" />
+                              : <FileText size={14} />}
+                            Ver factura
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Seguimiento completo */}
+                      <div>
+                        <button
+                          type="button"
+                          onClick={() => setShowTrackingId(cur => cur === order.id ? null : order.id)}
+                          className="inline-flex items-center gap-2 text-[11px] font-semibold text-[#2a4038] hover:underline"
+                        >
+                          <Truck size={12} />
+                          {showTrackingId === order.id ? 'Ocultar seguimiento' : 'Ver seguimiento completo'}
+                        </button>
+                        {showTrackingId === order.id && (
+                          <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50 p-4">
+                            <TrackingPedidoPage
+                              pedidoId={order.id}
+                              onClose={() => setShowTrackingId(null)}
+                            />
+                          </div>
+                        )}
+                      </div>
                     </div>
+
+                    {/* Mapa */}
+                    {canShowShipping && (
+                      <div>
+                        <p className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                          <MapPin size={12} /> Mapa de entrega
+                        </p>
+                        {order.latitudEnvio != null && order.longitudEnvio != null ? (
+                          <InteractiveLocationMap
+                            lat={order.latitudEnvio}
+                            lng={order.longitudEnvio}
+                            onMarkerMove={noop}
+                            readOnly
+                            className="h-48 overflow-hidden rounded-lg border border-gray-200 xl:h-full xl:min-h-56"
+                          />
+                        ) : (
+                          <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-500">
+                            {order.direccionEnvio}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                );
-              })()}
+                </div>
+              )}
             </Card>
           );
         })}
