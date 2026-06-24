@@ -22,6 +22,8 @@ export interface BackendCustomer {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  total_compras?: number;
+  ultima_compra?: string | null;
 }
 
 export interface CreateCustomerPayload {

@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.db.models import Sum, Max, Q
 
 from .models import Customer, CustomerContact, CustomerSegment
 
@@ -17,6 +18,21 @@ class CustomerContactSerializer(serializers.ModelSerializer):
 
 class CustomerSerializer(serializers.ModelSerializer):
     contacts = CustomerContactSerializer(many=True, read_only=True)
+    total_compras = serializers.SerializerMethodField()
+    ultima_compra = serializers.SerializerMethodField()
+
+    def get_total_compras(self, obj):
+        result = obj.orders.filter(
+            ~Q(status='CANCELLED')
+        ).aggregate(total=Sum('total'))
+        return float(result['total'] or 0)
+
+    def get_ultima_compra(self, obj):
+        result = obj.orders.filter(
+            ~Q(status='CANCELLED')
+        ).aggregate(ultima=Max('created_at'))
+        dt = result['ultima']
+        return dt.isoformat() if dt else None
 
     class Meta:
         model = Customer

@@ -289,8 +289,8 @@ function mapApiCustomer(customer: BackendCustomer): Customer {
     email: customer.email,
     direccion: customer.address,
     ciudad: customer.city,
-    totalCompras: 0,
-    ultimaCompra: customer.updated_at || customer.created_at,
+    totalCompras: customer.total_compras ?? 0,
+    ultimaCompra: customer.ultima_compra ?? customer.updated_at ?? customer.created_at,
     modoCompra: customer.purchase_mode ?? 'RETAIL',
     codigoMayorista: customer.wholesale_code,
   };
