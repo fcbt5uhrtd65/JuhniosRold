@@ -216,6 +216,6 @@ class PaymentListView(generics.ListAPIView):
     serializer_class = PaymentAdminSerializer
     permission_classes = (HasComponentAccess,)
     required_component = "commerce.orders"
-    filterset_fields = ("status", "provider")
+    filterset_fields = ("status", "provider", "order")
     search_fields = ("reference", "order__number", "order__customer__first_name", "order__customer__last_name")
     ordering_fields = ("created_at", "amount_in_cents")

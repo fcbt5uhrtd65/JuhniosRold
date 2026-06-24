@@ -71,15 +71,17 @@ export interface OrderInvoice {
 export async function getInvoiceByOrder(orderId: string): Promise<OrderInvoice | null> {
   const token = getAccessToken();
   if (!token) return null;
-  const response = await fetch(`${API_BASE_URL}/finance/invoices/?search=${orderId}`, {
+  // Buscar los pagos del pedido — PaymentAdminSerializer incluye invoice_id e invoice_number
+  const response = await fetch(`${API_BASE_URL}/commerce/payments/?order=${orderId}&page_size=10`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!response.ok) return null;
   const data = await response.json();
-  const results: Array<{ id: string; number: string; order: string }> = data.results ?? data;
-  const match = results.find(r => r.order === orderId);
-  if (!match) return null;
-  return { id: match.id, number: match.number, orderId: match.order };
+  const results: Array<{ id: string; order_id: string; invoice_id: string | null; invoice_number: string | null; status: string }> = data.results ?? data;
+  // Preferir el pago aprobado con factura
+  const match = results.find(p => p.status === 'APPROVED' && p.invoice_id) ?? results.find(p => p.invoice_id);
+  if (!match?.invoice_id) return null;
+  return { id: match.invoice_id, number: match.invoice_number ?? '', orderId };
 }
 
 export async function openInvoicePdf(invoiceId: string): Promise<void> {
