@@ -1,17 +1,132 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAdmin } from '../../contexts/AdminContext';
-import { Users, TrendingUp, DollarSign, Plus, Search, ChevronDown, ChevronUp } from 'lucide-react';
+import { Users, TrendingUp, DollarSign, Plus, Search, ChevronDown, ChevronUp, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { LocationPicker } from '../ui/LocationPicker';
 import { AddressMap } from '../ui/AddressMap';
 import { EMPTY_LOCATION, type LocationValue } from '../../services/geography.types';
 import { KpiCard, Card, Badge, type BadgeColor, Modal, Field, inputCls, selectCls } from './AdminUI';
 import { Pagination } from './Pagination';
+import type { Order, Customer } from '../../types/admin';
+
+function CustomerOrdersModal({ customer, orders, onClose }: {
+  customer: Customer;
+  orders: Order[];
+  onClose: () => void;
+}) {
+  const [numberFilter, setNumberFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [dateFilter, setDateFilter] = useState('');
+  const [page, setPage] = useState(1);
+  const perPage = 8;
+
+  const filtered = useMemo(() => {
+    return orders.filter(o => {
+      const matchNum = !numberFilter || (o.numero ?? o.id).toLowerCase().includes(numberFilter.toLowerCase());
+      const matchStatus = !statusFilter || o.estado === statusFilter;
+      const matchDate = !dateFilter || o.fecha.startsWith(dateFilter);
+      return matchNum && matchStatus && matchDate;
+    });
+  }, [orders, numberFilter, statusFilter, dateFilter]);
+
+  useEffect(() => { setPage(1); }, [numberFilter, statusFilter, dateFilter]);
+
+  const totalPages = Math.ceil(filtered.length / perPage);
+  const paginated = filtered.slice((page - 1) * perPage, page * perPage);
+
+  const statusLabel: Record<Order['estado'], string> = {
+    pendiente: 'Pendiente', confirmado: 'Confirmado', procesando: 'Procesando',
+    empacado: 'Empacado', pagado: 'Pagado', enviado: 'Enviado',
+    en_camino: 'En camino', entregado: 'Entregado', cancelado: 'Cancelado',
+    devuelto: 'Devuelto', fallido: 'Fallido',
+  };
+
+  const statusColor: Record<Order['estado'], BadgeColor> = {
+    pendiente: 'yellow', confirmado: 'blue', procesando: 'blue', empacado: 'blue',
+    pagado: 'purple', enviado: 'blue', en_camino: 'blue', entregado: 'green',
+    cancelado: 'red', devuelto: 'red', fallido: 'red',
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+      <div className="relative w-full max-w-2xl max-h-[90vh] flex flex-col bg-white rounded-2xl shadow-2xl">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-900">Pedidos de {customer.nombre}</h2>
+            <p className="text-xs text-gray-400 mt-0.5">{orders.length} pedido{orders.length !== 1 ? 's' : ''} en total</p>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 transition-colors">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="px-6 py-3 border-b border-gray-100 grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <div className="relative">
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              value={numberFilter}
+              onChange={e => setNumberFilter(e.target.value)}
+              placeholder="Número de pedido..."
+              className="w-full pl-8 pr-3 py-2 text-xs border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#2a4038]/20 focus:border-[#2a4038]"
+            />
+          </div>
+          <select
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value)}
+            className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#2a4038]/20 focus:border-[#2a4038]"
+          >
+            <option value="">Todos los estados</option>
+            {(Object.keys(statusLabel) as Order['estado'][]).map(s => (
+              <option key={s} value={s}>{statusLabel[s]}</option>
+            ))}
+          </select>
+          <input
+            type="date"
+            value={dateFilter}
+            onChange={e => setDateFilter(e.target.value)}
+            className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#2a4038]/20 focus:border-[#2a4038]"
+          />
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 py-3 space-y-2">
+          {paginated.map(order => (
+            <div key={order.id} className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-gray-900 font-mono">#{order.numero ?? order.id.slice(0, 8)}</p>
+                <p className="text-[11px] text-gray-400 mt-0.5">{format(new Date(order.fecha), "dd/MM/yyyy 'a las' HH:mm")}</p>
+              </div>
+              <Badge label={statusLabel[order.estado]} color={statusColor[order.estado]} />
+              <p className="text-sm font-bold text-gray-900">${order.total.toLocaleString()}</p>
+            </div>
+          ))}
+          {paginated.length === 0 && (
+            <p className="py-8 text-center text-sm text-gray-400">No hay pedidos con esos filtros.</p>
+          )}
+        </div>
+
+        {totalPages > 1 && (
+          <div className="px-6 py-3 border-t border-gray-100">
+            <Pagination
+              currentPage={page}
+              totalPages={totalPages}
+              totalItems={filtered.length}
+              itemsPerPage={perPage}
+              itemsPerPageOptions={[8]}
+              onPageChange={setPage}
+              onItemsPerPageChange={() => {}}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export function AdminCustomers() {
   const { customers, orders, addCustomer } = useAdmin();
   const [showModal, setShowModal] = useState(false);
   const [expandedCustomerId, setExpandedCustomerId] = useState<string | null>(null);
+  const [ordersModalCustomer, setOrdersModalCustomer] = useState<Customer | null>(null);
   const [formData, setFormData] = useState<{
     tipoDocumento: string;
     documento: string;
@@ -239,27 +354,28 @@ export function AdminCustomers() {
                     </div>
                   </div>
 
-                  {customerOrders.length > 0 && (
-                    <div className="mt-4">
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">
-                        Pedidos ({customerOrders.length})
-                      </p>
-                      <div className="space-y-1.5">
-                        {customerOrders.slice(0, 5).map(order => (
-                          <div key={order.id} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-xs">
-                            <span className="text-gray-500 font-mono">#{order.numero ?? order.id.slice(0, 8)}</span>
-                            <span className="text-gray-500">{format(new Date(order.fecha), 'dd/MM/yyyy')}</span>
-                            <span className="font-semibold text-gray-900">${order.total.toLocaleString()}</span>
-                          </div>
-                        ))}
-                        {customerOrders.length > 5 && (
-                          <p className="text-[11px] text-gray-400 text-right pt-1">
-                            +{customerOrders.length - 5} pedidos más
-                          </p>
-                        )}
+                  {customerOrders.length > 0 && (() => {
+                    const latest = [...customerOrders].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())[0];
+                    return (
+                      <div className="mt-4">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">
+                          Último pedido
+                        </p>
+                        <div className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-xs">
+                          <span className="text-gray-700 font-mono font-medium">#{latest.numero ?? latest.id.slice(0, 8)}</span>
+                          <span className="text-gray-400">{format(new Date(latest.fecha), 'dd/MM/yyyy')}</span>
+                          <span className="font-semibold text-gray-900">${latest.total.toLocaleString()}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setOrdersModalCustomer(customer)}
+                          className="mt-2 w-full text-center text-[11px] font-semibold text-[#2a4038] hover:underline"
+                        >
+                          Ver todos los pedidos ({customerOrders.length})
+                        </button>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
               )}
             </Card>
@@ -399,6 +515,14 @@ export function AdminCustomers() {
           </div>
         </form>
       </Modal>
+
+      {ordersModalCustomer && (
+        <CustomerOrdersModal
+          customer={ordersModalCustomer}
+          orders={orders.filter(o => o.clienteId === ordersModalCustomer.id)}
+          onClose={() => setOrdersModalCustomer(null)}
+        />
+      )}
     </div>
   );
 }
