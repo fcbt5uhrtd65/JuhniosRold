@@ -3,6 +3,7 @@ from django.urls import path
 from .views import (
     DashboardView,
     ReportExportView,
+    ReportExportStatusView,
     SalesReportExportStatusView,
     SalesReportExportView,
     SalesReportView,
@@ -18,4 +19,5 @@ urlpatterns = [
         name="sales-report-export-status",
     ),
     path("exports/", ReportExportView.as_view(), name="report-export"),
+    path("exports/<str:task_id>/", ReportExportStatusView.as_view(), name="report-export-status"),
 ]

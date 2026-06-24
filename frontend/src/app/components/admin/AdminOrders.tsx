@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAdmin } from '../../contexts/AdminContext';
 import {
   Package,
@@ -11,12 +11,14 @@ import {
   ChevronUp,
   LayoutList,
   Maximize2,
+  Search,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import type { Order } from '../../types/admin';
 import { AdminRegistrarGuia } from './AdminRegistrarGuia';
 import { KpiCard, Card, Badge, type BadgeColor } from './AdminUI';
 import { InteractiveLocationMap } from '../ui/InteractiveLocationMap';
+import { Pagination } from './Pagination';
 
 const noop = () => {};
 
@@ -24,6 +26,50 @@ export function AdminOrders() {
   const { orders, customers, updateOrderStatus } = useAdmin();
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [showAllDetails, setShowAllDetails] = useState(false);
+  const [cityFilter, setCityFilter] = useState('');
+  const [customerFilter, setCustomerFilter] = useState('');
+  const [orderNumberFilter, setOrderNumberFilter] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(5);
+
+  const normalizeText = (value: string | undefined | null) => value?.toLowerCase().trim() ?? '';
+
+  const filteredOrders = useMemo(() => {
+    const cityQuery = normalizeText(cityFilter);
+    const customerQuery = normalizeText(customerFilter);
+    const orderQuery = normalizeText(orderNumberFilter);
+
+    return orders.filter((order) => {
+      const customer = customers.find(c => c.id === order.clienteId);
+      const cityText = normalizeText(`${order.ciudadEnvio ?? ''} ${customer?.ciudad ?? ''}`);
+      const customerText = normalizeText(`${customer?.nombre ?? ''} ${customer?.email ?? ''} ${customer?.telefono ?? ''}`);
+      const orderText = normalizeText(`${order.numero ?? ''} ${order.id}`);
+
+      return (!cityQuery || cityText.includes(cityQuery)) &&
+        (!customerQuery || customerText.includes(customerQuery)) &&
+        (!orderQuery || orderText.includes(orderQuery));
+    });
+  }, [orders, customers, cityFilter, customerFilter, orderNumberFilter]);
+
+  const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
+  const paginatedOrders = filteredOrders.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage,
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [cityFilter, customerFilter, orderNumberFilter]);
+
+  useEffect(() => {
+    setCurrentPage(page => Math.min(page, Math.max(1, totalPages)));
+  }, [totalPages]);
+
+  const clearFilters = () => {
+    setCityFilter('');
+    setCustomerFilter('');
+    setOrderNumberFilter('');
+  };
 
   const getStatusIcon = (estado: Order['estado']) => {
     switch (estado) {
@@ -83,7 +129,7 @@ export function AdminOrders() {
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Pedidos</h2>
-          <p className="text-xs text-gray-500 mt-0.5">{orders.length} pedidos totales</p>
+          <p className="text-xs text-gray-500 mt-0.5">{filteredOrders.length} de {orders.length} pedidos</p>
         </div>
         <button
           type="button"
@@ -105,8 +151,56 @@ export function AdminOrders() {
         <KpiCard label="Ingresos" value={`$${(stats.total / 1000).toFixed(0)}k`} icon={Check} color="text-[#2a4038] bg-[#2a4038]/10" />
       </div>
 
+      <Card className="p-4 mb-5">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1.5">Número de pedido</label>
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                value={orderNumberFilter}
+                onChange={e => setOrderNumberFilter(e.target.value)}
+                placeholder="Buscar por ID o número..."
+                className="w-full pl-9 pr-3 py-2.5 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#2a4038]/20 focus:border-[#2a4038]"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1.5">Cliente</label>
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                value={customerFilter}
+                onChange={e => setCustomerFilter(e.target.value)}
+                placeholder="Nombre, correo o teléfono..."
+                className="w-full pl-9 pr-3 py-2.5 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#2a4038]/20 focus:border-[#2a4038]"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1.5">Ciudad</label>
+            <div className="relative">
+              <MapPin size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                value={cityFilter}
+                onChange={e => setCityFilter(e.target.value)}
+                placeholder="Ciudad de envío o cliente..."
+                className="w-full pl-9 pr-3 py-2.5 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#2a4038]/20 focus:border-[#2a4038]"
+              />
+            </div>
+          </div>
+        </div>
+        {(cityFilter || customerFilter || orderNumberFilter) && (
+          <div className="flex justify-end mt-3">
+            <button onClick={clearFilters} className="text-xs font-semibold text-gray-500 hover:text-[#2a4038]">
+              Limpiar filtros
+            </button>
+          </div>
+        )}
+      </Card>
+
       <div className="space-y-3">
-        {orders.map((order) => {
+        {paginatedOrders.map((order) => {
           const customer = customers.find(c => c.id === order.clienteId);
           const destination = [order.ciudadEnvio, order.departamentoEnvio, order.paisEnvio].filter(Boolean).join(', ');
           const canShowShipping = Boolean(order.direccionEnvio || (order.latitudEnvio && order.longitudEnvio));
@@ -117,7 +211,7 @@ export function AdminOrders() {
               <div className="grid gap-3 p-4 lg:grid-cols-[minmax(220px,1.15fr)_minmax(260px,1fr)_auto] lg:items-center">
                 <div className="min-w-0">
                   <div className="mb-1.5 flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-semibold text-gray-900">Pedido #{order.id}</p>
+                    <p className="text-sm font-semibold text-gray-900">Pedido #{order.numero ?? order.id}</p>
                     <Badge
                       label={
                         <span className="flex items-center gap-1 capitalize">
@@ -255,6 +349,24 @@ export function AdminOrders() {
             </Card>
           );
         })}
+        {paginatedOrders.length === 0 && (
+          <Card className="p-8 text-center">
+            <p className="text-sm font-medium text-gray-700">No hay pedidos con esos filtros.</p>
+            <p className="text-xs text-gray-400 mt-1">Prueba con otro cliente, ciudad o número de pedido.</p>
+          </Card>
+        )}
+      </div>
+
+      <div className="mt-4">
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={filteredOrders.length}
+          itemsPerPage={itemsPerPage}
+          itemsPerPageOptions={[5, 10, 20]}
+          onPageChange={setCurrentPage}
+          onItemsPerPageChange={count => { setItemsPerPage(count); setCurrentPage(1); }}
+        />
       </div>
     </div>
   );

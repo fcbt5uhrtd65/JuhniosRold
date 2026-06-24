@@ -55,6 +55,7 @@ export interface OrderItem {
 
 export interface Order {
   id: string;
+  numero?: string;
   clienteId: string;
   productos: OrderItem[];
   total: number;
