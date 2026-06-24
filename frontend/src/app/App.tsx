@@ -27,6 +27,7 @@ import { ApiStatus } from './components/ApiStatus';
 import { ScrollToTop } from './components/ScrollToTop';
 import { PaymentResult } from './components/PaymentResult';
 import { CatalogPage } from './components/CatalogPage';
+import { ProfilePage } from './components/ProfilePage';
 
 
 function PublicSite({ onLoginClick }: { onLoginClick: () => void }) {
@@ -102,6 +103,7 @@ function AppContent() {
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
   const isPaymentResult = currentPath === '/pago/resultado';
   const isCatalogPage = currentPath === '/catalogo';
+  const isProfilePage = currentPath === '/perfil';
 
   useEffect(() => {
     const handlePathChange = () => setCurrentPath(window.location.pathname);
@@ -132,6 +134,19 @@ function AppContent() {
     return (
       <>
         <CatalogPage onLoginClick={() => setShowLoginModal(true)} />
+        <LoginModal
+          isOpen={showLoginModal}
+          onClose={() => setShowLoginModal(false)}
+          onAdminAccess={handleAdminAccess}
+        />
+      </>
+    );
+  }
+
+  if (isProfilePage) {
+    return (
+      <>
+        <ProfilePage onLoginClick={() => setShowLoginModal(true)} />
         <LoginModal
           isOpen={showLoginModal}
           onClose={() => setShowLoginModal(false)}

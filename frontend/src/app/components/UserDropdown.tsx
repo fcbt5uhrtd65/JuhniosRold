@@ -2,39 +2,32 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { User, Package, Heart, LogOut, ChevronDown, Settings } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
-import { MyOrders } from './MyOrders';
-import { SavedProducts } from './SavedProducts';
-import { UserProfile } from './UserProfile';
 
 export function UserDropdown() {
   const { currentUser, logout, savedProducts, orders } = useUser();
   const [isOpen, setIsOpen] = useState(false);
-  const [showOrders, setShowOrders] = useState(false);
-  const [showSaved, setShowSaved] = useState(false);
-  const [showProfile, setShowProfile] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsOpen(false);
       }
     };
-
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
+    if (isOpen) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen]);
 
   if (!currentUser) return null;
 
-  // Extract first name
   const firstName = currentUser.nombre.split(' ')[0];
+
+  const navigate = (section?: string) => {
+    setIsOpen(false);
+    const url = section ? `/perfil?s=${section}` : '/perfil';
+    window.history.pushState({}, '', url);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  };
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -46,10 +39,7 @@ export function UserDropdown() {
       >
         <div className="hidden md:flex items-center gap-2">
           <span className="text-[10px] tracking-[0.15em] uppercase">{firstName}</span>
-          <motion.div
-            animate={{ rotate: isOpen ? 180 : 0 }}
-            transition={{ duration: 0.2 }}
-          >
+          <motion.div animate={{ rotate: isOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
             <ChevronDown className="w-3 h-3" strokeWidth={1} />
           </motion.div>
         </div>
@@ -67,7 +57,7 @@ export function UserDropdown() {
             transition={{ duration: 0.2 }}
             className="absolute right-0 mt-4 w-64 bg-background border border-border shadow-2xl z-50"
           >
-            {/* User Info Header */}
+            {/* User Info */}
             <div className="p-5 border-b border-border">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-secondary border border-border flex items-center justify-center">
@@ -80,16 +70,10 @@ export function UserDropdown() {
               </div>
             </div>
 
-            {/* Menu Items */}
+            {/* Menu */}
             <div className="p-2">
-              <motion.button
-                whileHover={{ x: 4 }}
-                onClick={() => {
-                  setIsOpen(false);
-                  setShowOrders(true);
-                }}
-                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-secondary transition-colors text-left"
-              >
+              <motion.button whileHover={{ x: 4 }} onClick={() => navigate('pedidos')}
+                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-secondary transition-colors text-left">
                 <Package className="w-4 h-4" strokeWidth={1} />
                 <div className="flex-1">
                   <div className="text-xs">Mis Pedidos</div>
@@ -106,14 +90,8 @@ export function UserDropdown() {
                 )}
               </motion.button>
 
-              <motion.button
-                whileHover={{ x: 4 }}
-                onClick={() => {
-                  setIsOpen(false);
-                  setShowSaved(true);
-                }}
-                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-secondary transition-colors text-left"
-              >
+              <motion.button whileHover={{ x: 4 }} onClick={() => navigate('guardados')}
+                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-secondary transition-colors text-left">
                 <Heart className="w-4 h-4" strokeWidth={1} />
                 <div className="flex-1">
                   <div className="text-xs">Guardados</div>
@@ -125,43 +103,25 @@ export function UserDropdown() {
                 </div>
               </motion.button>
 
-              <motion.button
-                whileHover={{ x: 4 }}
-                onClick={() => {
-                  setIsOpen(false);
-                  setShowProfile(true);
-                }}
-                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-secondary transition-colors text-left"
-              >
+              <motion.button whileHover={{ x: 4 }} onClick={() => navigate()}
+                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-secondary transition-colors text-left">
                 <Settings className="w-4 h-4" strokeWidth={1} />
                 <div className="text-xs">Mi Perfil</div>
               </motion.button>
 
               <div className="h-px bg-border my-2" />
 
-              <motion.button
-                whileHover={{ x: 4 }}
-                onClick={() => {
-                  logout();
-                  setIsOpen(false);
-                }}
-                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-secondary transition-colors text-left text-muted-foreground hover:text-foreground"
-              >
+              <motion.button whileHover={{ x: 4 }} onClick={() => { logout(); setIsOpen(false); }}
+                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-secondary transition-colors text-left text-muted-foreground hover:text-foreground">
                 <LogOut className="w-4 h-4" strokeWidth={1} />
                 <div className="text-xs">Cerrar Sesión</div>
               </motion.button>
             </div>
 
-            {/* Decorative Footer */}
             <div className="h-1 bg-gradient-to-r from-transparent via-foreground/10 to-transparent" />
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Modals */}
-      <MyOrders isOpen={showOrders} onClose={() => setShowOrders(false)} />
-      <SavedProducts isOpen={showSaved} onClose={() => setShowSaved(false)} />
-      <UserProfile isOpen={showProfile} onClose={() => setShowProfile(false)} />
     </div>
   );
 }
