@@ -154,9 +154,24 @@ function CustomerOrdersModal({ customer, orders, onClose }: {
 
 export function AdminCustomers() {
   const { customers, orders, addCustomer } = useAdmin();
+  const toast = useToast();
   const [showModal, setShowModal] = useState(false);
   const [expandedCustomerId, setExpandedCustomerId] = useState<string | null>(null);
   const [ordersModalCustomer, setOrdersModalCustomer] = useState<Customer | null>(null);
+  const [loadingInvoiceId, setLoadingInvoiceId] = useState<string | null>(null);
+
+  const handleViewInvoice = async (orderId: string) => {
+    setLoadingInvoiceId(orderId);
+    try {
+      const invoice = await getInvoiceByOrder(orderId);
+      if (!invoice) { toast.warning('No hay factura disponible para este pedido.'); return; }
+      await openInvoicePdf(invoice.id);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo abrir la factura.');
+    } finally {
+      setLoadingInvoiceId(null);
+    }
+  };
   const [formData, setFormData] = useState<{
     tipoDocumento: string;
     documento: string;
@@ -391,10 +406,23 @@ export function AdminCustomers() {
                         <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">
                           Último pedido
                         </p>
-                        <div className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-xs">
+                        <div className="flex items-center justify-between gap-3 rounded-lg bg-gray-50 px-3 py-2 text-xs">
                           <span className="text-gray-700 font-mono font-medium">#{latest.numero ?? latest.id.slice(0, 8)}</span>
                           <span className="text-gray-400">{format(new Date(latest.fecha), 'dd/MM/yyyy')}</span>
                           <span className="font-semibold text-gray-900">${latest.total.toLocaleString()}</span>
+                          {!['pendiente', 'cancelado', 'devuelto', 'fallido'].includes(latest.estado) && (
+                            <button
+                              onClick={() => handleViewInvoice(latest.id)}
+                              disabled={loadingInvoiceId === latest.id}
+                              className="flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 text-[11px] font-medium text-gray-500 hover:border-gray-300 hover:text-gray-700 transition-colors disabled:opacity-40"
+                              title="Ver factura"
+                            >
+                              {loadingInvoiceId === latest.id
+                                ? <Loader2 size={11} className="animate-spin" />
+                                : <FileText size={11} />}
+                              Factura
+                            </button>
+                          )}
                         </div>
                         <button
                           type="button"

@@ -37,6 +37,7 @@ class SalesInvoiceViewSet(viewsets.ReadOnlyModelViewSet):
         "payment",
     ).prefetch_related("lines")
     serializer_class = SalesInvoiceSerializer
+    filterset_fields = ("order",)
     search_fields = ("number", "order__number", "customer_document", "customer_email")
     ordering_fields = ("issued_at", "total")
 
