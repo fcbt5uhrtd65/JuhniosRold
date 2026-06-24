@@ -140,6 +140,19 @@ export async function registrarGuiaManual(
   return response.data;
 }
 
+export interface CrearTransportadoraPayload {
+  codigo: string;
+  nombre: string;
+  sitio_web?: string;
+  tracking_url_template?: string;
+}
+
+export async function crearTransportadora(payload: CrearTransportadoraPayload): Promise<Transportadora> {
+  const response = await api.post<Transportadora>('/transportadoras/', payload);
+  if (!response.data) throw new Error(response.message);
+  return response.data;
+}
+
 export async function actualizarEstadoEnvio(
   envioId: string,
   estado: EstadoEnvio,
