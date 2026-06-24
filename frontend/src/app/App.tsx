@@ -105,10 +105,18 @@ function AppContent() {
   const isCatalogPage = currentPath === '/catalogo';
   const isProfilePage = currentPath === '/perfil';
 
+  const syncPath = () => setCurrentPath(window.location.pathname);
+
   useEffect(() => {
-    const handlePathChange = () => setCurrentPath(window.location.pathname);
-    window.addEventListener('popstate', handlePathChange);
-    return () => window.removeEventListener('popstate', handlePathChange);
+    window.addEventListener('popstate', syncPath);
+    return () => window.removeEventListener('popstate', syncPath);
+  }, []);
+
+  // Central navigate helper used by sub-pages via window events
+  useEffect(() => {
+    const handler = () => syncPath();
+    window.addEventListener('app:navigate', handler);
+    return () => window.removeEventListener('app:navigate', handler);
   }, []);
 
   const handleAdminAccess = async (email: string, password: string) => {

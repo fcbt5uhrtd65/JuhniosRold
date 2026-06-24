@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { User, Package, Heart, LogOut, ChevronDown, Settings } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
+import { navigateTo } from '../services/navigate';
 
 export function UserDropdown() {
   const { currentUser, logout, savedProducts, orders } = useUser();
@@ -24,9 +25,7 @@ export function UserDropdown() {
 
   const navigate = (section?: string) => {
     setIsOpen(false);
-    const url = section ? `/perfil?s=${section}` : '/perfil';
-    window.history.pushState({}, '', url);
-    window.dispatchEvent(new PopStateEvent('popstate'));
+    navigateTo(section ? `/perfil?s=${section}` : '/perfil');
   };
 
   return (

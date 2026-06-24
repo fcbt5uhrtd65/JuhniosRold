@@ -156,6 +156,13 @@ export function Hero({ onLoginClick }: HeroProps = {}) {
   }, []);
 
   const handleNavClick = (href: string, e: React.MouseEvent) => {
+    if (href.startsWith('/') && href !== '/') {
+      e.preventDefault();
+      window.history.pushState({}, '', href);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      window.dispatchEvent(new Event('app:navigate'));
+      return;
+    }
     if (href === '#') { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
     setActiveLink(href);
   };

@@ -1,6 +1,8 @@
+import { ArrowLeft, BookOpen } from 'lucide-react';
 import { Navbar } from './Navbar';
 import { Footer } from './Footer';
 import { WhatsAppButton } from './WhatsAppButton';
+import { navigateBack } from '../services/navigate';
 
 const FLIPBOOK_URL = 'https://heyzine.com/flip-book/a6b0e5b2d6.html';
 
@@ -10,13 +12,34 @@ export function CatalogPage({ onLoginClick }: { onLoginClick: () => void }) {
       <Navbar onLoginClick={onLoginClick} />
       <main className="px-4 pb-16 pt-28 md:px-8 lg:px-14">
         <section className="mx-auto max-w-6xl">
-          <div className="mb-6">
-            <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.28em] text-[#8B7355]">
-              Productos Juhnios Rold SAS
-            </p>
-            <h1 className="max-w-4xl text-2xl font-semibold leading-tight text-stone-950 md:text-4xl">
-              Catálogo de aceites, body splash, relajación corporal y tono sobre tono
-            </h1>
+
+          {/* Breadcrumb / back */}
+          <button
+            onClick={() => navigateBack('/')}
+            className="mb-6 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-widest text-stone-400 transition-colors hover:text-stone-900"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            Volver al inicio
+          </button>
+
+          <div className="mb-6 flex items-end justify-between gap-4 flex-wrap">
+            <div>
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.28em] text-[#8B7355]">
+                Productos Juhnios Rold SAS
+              </p>
+              <h1 className="max-w-2xl text-2xl font-semibold leading-tight text-stone-950 md:text-3xl">
+                Catálogo de productos
+              </h1>
+            </div>
+            <a
+              href={FLIPBOOK_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-xs font-semibold text-stone-700 shadow-sm transition-colors hover:bg-stone-50"
+            >
+              <BookOpen className="w-3.5 h-3.5" strokeWidth={1.6} />
+              Abrir en pantalla completa
+            </a>
           </div>
 
           <div className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
@@ -24,7 +47,7 @@ export function CatalogPage({ onLoginClick }: { onLoginClick: () => void }) {
               <iframe
                 title="Catálogo Productos Juhnios Rold SAS"
                 src={FLIPBOOK_URL}
-                className="h-[72vh] w-full"
+                className="h-[78vh] w-full min-h-[480px]"
                 allowFullScreen
               />
             ) : (
@@ -33,7 +56,7 @@ export function CatalogPage({ onLoginClick }: { onLoginClick: () => void }) {
                   Campo listo para pegar el link del flipbook
                 </div>
                 <p className="max-w-lg text-sm leading-6 text-stone-500">
-                  Pega el enlace en la constante <span className="font-mono text-stone-700">FLIPBOOK_URL</span> de esta página para embeber el catálogo.
+                  Pega el enlace en la constante <span className="font-mono text-stone-700">FLIPBOOK_URL</span> de esta página.
                 </p>
               </div>
             )}

@@ -113,7 +113,11 @@ export function Navbar({ onLoginClick }: NavbarProps = {}) {
 
   const handleNavClick = (href: string, e: React.MouseEvent) => {
     if (href.startsWith('/')) {
+      e.preventDefault();
       setMenuOpen(false);
+      window.history.pushState({}, '', href);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      window.dispatchEvent(new Event('app:navigate'));
       return;
     }
     if (href === '#') { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }); }

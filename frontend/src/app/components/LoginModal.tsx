@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Lock, Mail, User as UserIcon, Eye, EyeOff, Shield, Phone, CreditCard, MapPin } from 'lucide-react';
+import {
+  Check, ChevronRight, CreditCard, Eye, EyeOff, Lock, Mail,
+  MapPin, Phone, Shield, User as UserIcon, X,
+} from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
 import { LocationPicker } from './ui/LocationPicker';
 import { DeliveryLocationSection } from './ui/DeliveryLocationSection';
@@ -10,86 +13,61 @@ import { EMPTY_DELIVERY_LOCATION, type DeliveryLocationValue } from '../services
 
 const OLIVE = '#2D3A1F';
 
-// Logo SVG botánico inline
-const BrandLogo = () => (
-  <div className="flex flex-col items-center gap-1 mb-6">
-    
-    
-  </div>
-);
+/* ─── imágenes por pantalla ─── */
+const IMAGES = {
+  login:    'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?w=900&q=85&fit=crop',   // aceite / gotero natural
+  register: 'https://images.unsplash.com/photo-1526045612212-70caf35c14df?w=900&q=85&fit=crop',  // hierbas / ingredientes
+  step2:    'https://images.unsplash.com/photo-1599305090598-fe179d501227?w=900&q=85&fit=crop',   // flores / botanico
+};
 
-// Campo de input reutilizable
+/* ─── input compacto ─── */
+const inp = (focused: boolean) =>
+  `w-full pl-8 pr-8 py-2 bg-transparent text-[13px] text-stone-800 placeholder:text-stone-300 focus:outline-none rounded-lg`;
+
 function Field({
-  label,
-  type = 'text',
-  value,
-  onChange,
-  placeholder,
-  icon: Icon,
-  required,
-  minLength,
-  extra,
+  label, type = 'text', value, onChange, placeholder, icon: Icon,
+  required, minLength, extra, sm,
 }: {
-  label: string;
-  type?: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder: string;
-  icon: React.ElementType;
-  required?: boolean;
-  minLength?: number;
-  extra?: React.ReactNode;
+  label: string; type?: string; value: string; onChange: (v: string) => void;
+  placeholder: string; icon: React.ElementType; required?: boolean;
+  minLength?: number; extra?: React.ReactNode; sm?: boolean;
 }) {
   const [focused, setFocused] = useState(false);
   return (
-    <div>
-      <label className="block text-[9px] tracking-[0.28em] uppercase text-stone-400 font-medium mb-1.5">
+    <div className="flex flex-col gap-1 flex-1 min-w-0">
+      <label className="text-[9px] tracking-[0.22em] uppercase text-stone-400 font-semibold leading-none">
         {label}
       </label>
-      <div
-        className="relative flex items-center rounded-xl border transition-all duration-200"
-        style={{
-          borderColor: focused ? OLIVE : '#E7E3DC',
-          backgroundColor: focused ? '#FAFAF8' : 'white',
-        }}
-      >
-        <Icon
-          className="absolute left-3.5 w-4 h-4 flex-shrink-0 transition-colors"
-          strokeWidth={1.3}
-          style={{ color: focused ? OLIVE : '#C4BDB4' }}
-        />
-        <input
-          type={type}
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          placeholder={placeholder}
-          required={required}
-          minLength={minLength}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          className="w-full pl-10 pr-10 py-3 bg-transparent text-sm text-stone-800 placeholder:text-stone-300 focus:outline-none rounded-xl"
-        />
+      <div className="relative flex items-center rounded-lg border transition-all duration-150"
+        style={{ borderColor: focused ? OLIVE : '#E5E0D8', background: focused ? '#FAFAF8' : '#fff' }}>
+        <Icon className="absolute left-2.5 w-3 h-3 flex-shrink-0" strokeWidth={1.5}
+          style={{ color: focused ? OLIVE : '#C4BDB4' }} />
+        <input type={type} value={value} onChange={e => onChange(e.target.value)}
+          placeholder={placeholder} required={required} minLength={minLength}
+          onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+          className={inp(focused)} />
         {extra}
       </div>
     </div>
   );
 }
 
-// Botones sociales
-function SocialButton({ children }: { children: React.ReactNode }) {
+/* ─── panel imagen ─── */
+function ImagePanel({ src }: { src: string; tab: 'login' | 'register' | 'step2' }) {
   return (
-    <button
-      type="button"
-      className="w-full flex items-center justify-center gap-3 py-3 border border-stone-200 rounded-xl text-sm text-stone-700 font-medium hover:bg-stone-50 transition-colors"
-    >
-      {children}
-    </button>
+    <div className="hidden md:flex flex-col relative overflow-hidden flex-shrink-0" style={{ width: '42%' }}>
+      {/* imagen */}
+      <img src={src} alt="" className="absolute inset-0 w-full h-full object-cover" />
+      {/* overlay sutil */}
+      <div className="absolute inset-0" style={{ background: 'rgba(10,14,6,0.18)' }} />
+
+    </div>
   );
 }
 
-// Google G
+/* ─── Google ─── */
 const GoogleG = () => (
-  <svg width="18" height="18" viewBox="0 0 18 18">
+  <svg width="14" height="14" viewBox="0 0 18 18">
     <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
     <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/>
     <path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
@@ -97,14 +75,7 @@ const GoogleG = () => (
   </svg>
 );
 
-// Apple logo
-const AppleLogo = () => (
-  <svg width="17" height="17" viewBox="0 0 814 1000" fill="currentColor">
-    <path d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155.5 123.1s-85.5-39.5-164-39.5c-76 0-103.7 40.8-165.9 40.8s-105-43.4-150.3-109.2c-52.1-73.1-96.2-187.6-96.2-295.1C172 151.1 359.4 75 542.8 75c81.1 0 148.1 32.1 200.8 84.4 30.4 29.7 60.4 65.2 63.5 181.5z" />
-    <path d="M554.2 0c2.6 27.2-7.7 55.8-21.6 76.1-15.2 22.5-42.5 40.7-71.3 38.3-3.7-28.4 9.2-58.1 24-77.2 16.4-21.2 43.6-38.9 68.9-37.2z" />
-  </svg>
-);
-
+/* ══════════════════════════════════════════════════════ */
 interface LoginModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -112,868 +83,515 @@ interface LoginModalProps {
 }
 
 export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) {
-  const {
-    login: customerLogin,
-    register: customerRegister,
-    verifyRegistration,
-    resendRegistrationCode,
-    resetPassword,
-    verifyPasswordReset,
-    confirmPasswordReset,
-  } = useUser();
+  const { login: customerLogin, register: customerRegister, verifyRegistration,
+    resendRegistrationCode, resetPassword, verifyPasswordReset, confirmPasswordReset } = useUser();
 
-  const [tab, setTab] = useState<'login' | 'register'>('login');
-  const [isForgot, setIsForgot] = useState(false);
-  // common
-  const [nombre, setNombre] = useState('');
+  type Screen = 'login' | 'reg1' | 'reg2' | 'verify' | 'forgot';
+  const [screen, setScreen] = useState<Screen>('login');
+
+  /* campos */
+  const [nombre,    setNombre]    = useState('');
   const [apellidos, setApellidos] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirm, setConfirm] = useState('');
-  const [showPass, setShowPass] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [terms, setTerms] = useState(false);
-  const [verificationId, setVerificationId] = useState('');
-  const [verificationEmail, setVerificationEmail] = useState('');
-  const [verificationCode, setVerificationCode] = useState('');
-  const [debugCode, setDebugCode] = useState('');
-  const [resetVerificationId, setResetVerificationId] = useState('');
-  const [resetCode, setResetCode] = useState('');
-  const [resetDebugCode, setResetDebugCode] = useState('');
-  const [resetToken, setResetToken] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmNewPassword, setConfirmNewPassword] = useState('');
-  // extra registro
-  const [tipoDocumento, setTipoDocumento] = useState('CC');
+  const [email,     setEmail]     = useState('');
+  const [password,  setPassword]  = useState('');
+  const [confirm,   setConfirm]   = useState('');
+  const [showPass,  setShowPass]  = useState(false);
+  const [showConf,  setShowConf]  = useState(false);
+  const [terms,     setTerms]     = useState(false);
+  const [tipoDoc,   setTipoDoc]   = useState('CC');
   const [documento, setDocumento] = useState('');
-  const [telefono, setTelefono] = useState('');
-  const [purchaseMode, setPurchaseMode] = useState<'RETAIL' | 'WHOLESALE'>('RETAIL');
-  const [regLocation, setRegLocation] = useState<LocationValue>(EMPTY_LOCATION);
-  const [deliveryLocation, setDeliveryLocation] = useState<DeliveryLocationValue>(EMPTY_DELIVERY_LOCATION);
-  const [regCities, setRegCities] = useState<City[]>([]);
-  const regCityNames = useMemo(() => regCities.map(city => city.name), [regCities]);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const [telefono,  setTelefono]  = useState('');
+  const [mode,      setMode]      = useState<'RETAIL' | 'WHOLESALE'>('RETAIL');
+
+  /* dirección */
+  const [regLoc, setRegLoc] = useState<LocationValue>(EMPTY_LOCATION);
+  const [delLoc, setDelLoc] = useState<DeliveryLocationValue>(EMPTY_DELIVERY_LOCATION);
+  const [cities, setCities] = useState<City[]>([]);
+  const cityNames = useMemo(() => cities.map(c => c.name), [cities]);
+
+  /* flujo */
+  const [verificationId,    setVerificationId]    = useState('');
+  const [verificationEmail, setVerificationEmail] = useState('');
+  const [verificationCode,  setVerificationCode]  = useState('');
+  const [debugCode,         setDebugCode]         = useState('');
+  const [resetVid,          setResetVid]          = useState('');
+  const [resetCode,         setResetCode]         = useState('');
+  const [resetDbg,          setResetDbg]          = useState('');
+  const [resetToken,        setResetToken]        = useState('');
+  const [newPass,           setNewPass]           = useState('');
+  const [confNewPass,       setConfNewPass]       = useState('');
+
+  const [error,      setError]      = useState('');
+  const [success,    setSuccess]    = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const reset = () => {
+  const clear = () => {
     setError(''); setSuccess('');
     setNombre(''); setApellidos(''); setEmail(''); setPassword(''); setConfirm('');
-    setShowPass(false); setShowConfirm(false); setTerms(false);
-    setTipoDocumento('CC'); setDocumento(''); setTelefono('');
-    setPurchaseMode('RETAIL');
-    setRegLocation(EMPTY_LOCATION);
-    setDeliveryLocation(EMPTY_DELIVERY_LOCATION);
-    setRegCities([]);
+    setShowPass(false); setShowConf(false); setTerms(false);
+    setTipoDoc('CC'); setDocumento(''); setTelefono(''); setMode('RETAIL');
+    setRegLoc(EMPTY_LOCATION); setDelLoc(EMPTY_DELIVERY_LOCATION); setCities([]);
     setVerificationId(''); setVerificationEmail(''); setVerificationCode(''); setDebugCode('');
-    setResetVerificationId(''); setResetCode(''); setResetDebugCode('');
-    setResetToken(''); setNewPassword(''); setConfirmNewPassword('');
-    setIsForgot(false);
+    setResetVid(''); setResetCode(''); setResetDbg(''); setResetToken(''); setNewPass(''); setConfNewPass('');
   };
 
-  const handleClose = () => { reset(); onClose(); };
+  const handleClose = () => { clear(); setScreen('login'); onClose(); };
+  const goScreen = (s: Screen) => { setError(''); setSuccess(''); setScreen(s); };
 
   useEffect(() => {
-    if (!regLocation.stateId) {
-      setRegCities([]);
-      return;
-    }
+    if (!regLoc.stateId) { setCities([]); return; }
+    let c = true;
+    geographyService.getCities(regLoc.stateId)
+      .then(r => { if (c) setCities(r); })
+      .catch(() => { if (c) setCities([]); });
+    return () => { c = false; };
+  }, [regLoc.stateId]);
 
-    let cancelled = false;
-    geographyService.getCities(regLocation.stateId)
-      .then(cities => {
-        if (!cancelled) setRegCities(cities);
-      })
-      .catch(() => {
-        if (!cancelled) setRegCities([]);
-      });
-
-    return () => { cancelled = true; };
-  }, [regLocation.stateId]);
-
-  const switchTab = (t: 'login' | 'register') => {
-    setTab(t);
-    setIsForgot(false);
+  /* ── paso 1 registro: validar antes de avanzar ── */
+  const handleReg1Next = (e: React.FormEvent) => {
+    e.preventDefault();
     setError('');
-    setSuccess('');
-    setVerificationId('');
-    setVerificationEmail('');
-    setVerificationCode('');
-    setDebugCode('');
-    setResetVerificationId('');
-    setResetCode('');
-    setResetDebugCode('');
-    setResetToken('');
-    setNewPassword('');
-    setConfirmNewPassword('');
+    if (!nombre.trim())    { setError('Ingresa tu nombre.'); return; }
+    if (!apellidos.trim()) { setError('Ingresa tus apellidos.'); return; }
+    if (!email.trim())     { setError('Ingresa tu email.'); return; }
+    if (password.length < 8) { setError('Mínimo 8 caracteres.'); return; }
+    if (password !== confirm) { setError('Las contraseñas no coinciden.'); return; }
+    if (!terms) { setError('Acepta los términos para continuar.'); return; }
+    goScreen('reg2');
   };
 
+  /* ── submit final ── */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(''); setSuccess('');
-    setSubmitting(true);
+    setError(''); setSuccess(''); setSubmitting(true);
     try {
-      if (isForgot) {
+      /* recuperar contraseña */
+      if (screen === 'forgot') {
         if (resetToken) {
-          if (newPassword.length < 8) { setError('La nueva contraseña debe tener al menos 8 caracteres.'); return; }
-          if (newPassword !== confirmNewPassword) { setError('Las contraseñas no coinciden.'); return; }
-          const result = await confirmPasswordReset(resetToken, newPassword);
-          if (result.ok) {
-            setSuccess('La contraseña fue actualizada. Ya puedes iniciar sesión.');
-            setTimeout(() => {
-              setIsForgot(false);
-              setResetVerificationId('');
-              setResetCode('');
-              setResetDebugCode('');
-              setResetToken('');
-              setPassword('');
-              setNewPassword('');
-              setConfirmNewPassword('');
-              setSuccess('');
-            }, 2000);
-          } else {
-            setError(result.message || 'No fue posible restablecer la contraseña.');
-          }
+          if (newPass.length < 8) { setError('Mínimo 8 caracteres.'); return; }
+          if (newPass !== confNewPass) { setError('Las contraseñas no coinciden.'); return; }
+          const r = await confirmPasswordReset(resetToken, newPass);
+          if (r.ok) { setSuccess('Contraseña actualizada.'); setTimeout(() => { clear(); goScreen('login'); }, 1800); }
+          else setError(r.message || 'Error al restablecer.');
           return;
         }
-        if (resetVerificationId) {
-          if (!resetCode.trim()) { setError('Ingresa el codigo de verificacion.'); return; }
-          const result = await verifyPasswordReset(resetVerificationId, resetCode.trim());
-          if (result.ok && result.resetToken) {
-            setResetToken(result.resetToken);
-            setResetCode('');
-            setResetDebugCode('');
-            setSuccess(result.message || 'Codigo verificado. Ingresa tu nueva contraseña.');
-          } else {
-            setError(result.message || 'No fue posible verificar el codigo.');
-          }
+        if (resetVid) {
+          if (!resetCode.trim()) { setError('Ingresa el código.'); return; }
+          const r = await verifyPasswordReset(resetVid, resetCode.trim());
+          if (r.ok && r.resetToken) { setResetToken(r.resetToken); setResetCode(''); setSuccess('Código verificado. Crea tu contraseña.'); }
+          else setError(r.message || 'Código inválido.');
           return;
         }
         if (!email.trim()) { setError('Ingresa tu email.'); return; }
-        const result = await resetPassword(email);
-        if (result.ok) {
-          if (result.verificationId) {
-            setResetVerificationId(result.verificationId);
-            setResetDebugCode(result.debugCode || '');
-            setSuccess(result.message || 'Enviamos un codigo de recuperacion a tu correo.');
-          } else {
-            setSuccess(result.message || 'Si el correo existe, recibiras un codigo de recuperacion.');
-          }
-        } else {
-          setError(result.message || 'No fue posible solicitar la recuperación.');
-        }
+        const r = await resetPassword(email);
+        if (r.ok && r.verificationId) { setResetVid(r.verificationId); setResetDbg(r.debugCode || ''); setSuccess(r.message || 'Código enviado.'); }
+        else setError(r.message || 'Error al enviar.');
         return;
       }
-      if (verificationId) {
-        if (!verificationCode.trim()) { setError('Ingresa el codigo de verificacion.'); return; }
-        const result = await verifyRegistration(verificationId, verificationCode.trim());
-        if (result.ok) { reset(); onClose(); }
-        else setError(result.message || 'No fue posible verificar el codigo. Usa el codigo mas reciente que recibiste por correo.');
+      /* verificar código de registro */
+      if (screen === 'verify') {
+        if (!verificationCode.trim()) { setError('Ingresa el código.'); return; }
+        const r = await verifyRegistration(verificationId, verificationCode.trim());
+        if (r.ok) { clear(); setScreen('login'); onClose(); }
+        else setError(r.message || 'Código inválido.');
         return;
       }
-      if (tab === 'login') {
+      /* login */
+      if (screen === 'login') {
         const isAdmin = await onAdminAccess(email, password);
         if (isAdmin) return;
-        const result = await customerLogin(email, password);
-        if (result.ok) { reset(); onClose(); }
-        else setError(result.message || 'Email o contraseña incorrectos.');
-      } else {
-        if (!nombre.trim()) { setError('Por favor ingresa tus nombres.'); return; }
-        if (!apellidos.trim()) { setError('Por favor ingresa tus apellidos.'); return; }
-        if (password.length < 8) { setError('La contraseña debe tener al menos 8 caracteres.'); return; }
-        if (password !== confirm) { setError('Las contraseñas no coinciden.'); return; }
-        if (!terms) { setError('Debes aceptar los términos y condiciones.'); return; }
-        if (!deliveryLocation.confirmed || deliveryLocation.lat === null || deliveryLocation.lng === null) {
-          setError('Debes confirmar tu ubicación de entrega antes de continuar.');
-          return;
-        }
-        const result = await customerRegister(nombre, apellidos, email, password, {
-          phone: telefono || undefined,
-          address: deliveryLocation.address || undefined,
-          city: regLocation.cityName || deliveryLocation.city || undefined,
-          document_type: tipoDocumento || undefined,
-          document_number: documento || undefined,
-          purchase_mode: purchaseMode,
-          state: deliveryLocation.state || undefined,
-          country: deliveryLocation.country || regLocation.countryName || undefined,
-          latitude: deliveryLocation.lat,
-          longitude: deliveryLocation.lng,
-          reference: deliveryLocation.reference || undefined,
-        });
-        if (result.ok && result.verificationId) {
-          setVerificationId(result.verificationId);
-          setVerificationEmail(result.email || email.trim().toLowerCase());
-          setVerificationCode('');
-          setDebugCode(result.debugCode || '');
-          setSuccess(result.message || 'Enviamos un codigo de verificacion a tu correo.');
-        }
-        else setError(result.message || 'No fue posible crear la cuenta.');
+        const r = await customerLogin(email, password);
+        if (r.ok) { clear(); setScreen('login'); onClose(); }
+        else setError(r.message || 'Email o contraseña incorrectos.');
+        return;
       }
-    } finally {
-      setSubmitting(false);
-    }
+      /* registro paso 2 (dirección) */
+      if (screen === 'reg2') {
+        if (!delLoc.confirmed || delLoc.lat === null || delLoc.lng === null) {
+          setError('Confirma tu ubicación de entrega.'); return;
+        }
+        const r = await customerRegister(nombre, apellidos, email, password, {
+          phone: telefono || undefined, address: delLoc.address || undefined,
+          city: regLoc.cityName || delLoc.city || undefined,
+          document_type: tipoDoc || undefined, document_number: documento || undefined,
+          purchase_mode: mode, state: delLoc.state || undefined,
+          country: delLoc.country || regLoc.countryName || undefined,
+          latitude: delLoc.lat, longitude: delLoc.lng,
+          reference: delLoc.reference || undefined,
+        });
+        if (r.ok && r.verificationId) {
+          setVerificationId(r.verificationId);
+          setVerificationEmail(r.email || email.trim().toLowerCase());
+          setVerificationCode(''); setDebugCode(r.debugCode || '');
+          setSuccess(r.message || 'Código enviado a tu correo.');
+          goScreen('verify');
+        } else setError(r.message || 'No fue posible crear la cuenta.');
+      }
+    } finally { setSubmitting(false); }
   };
 
-  const handleResendCode = async () => {
+  const handleResend = async () => {
     if (!verificationId) return;
-    setError('');
-    setSuccess('');
-    setSubmitting(true);
+    setError(''); setSuccess(''); setSubmitting(true);
     try {
-      const result = await resendRegistrationCode(verificationId);
-      if (result.ok) {
-        setVerificationId(result.verificationId || verificationId);
-        setVerificationEmail(result.email || verificationEmail);
-        setVerificationCode('');
-        setDebugCode(result.debugCode || '');
-        setSuccess(result.message || 'Enviamos un nuevo codigo de verificacion.');
-      } else {
-        setError(result.message || 'No fue posible reenviar el codigo.');
-      }
-    } finally {
-      setSubmitting(false);
-    }
+      const r = await resendRegistrationCode(verificationId);
+      if (r.ok) {
+        setVerificationId(r.verificationId || verificationId);
+        setVerificationEmail(r.email || verificationEmail);
+        setVerificationCode(''); setDebugCode(r.debugCode || '');
+        setSuccess(r.message || 'Nuevo código enviado.');
+      } else setError(r.message || 'No fue posible reenviar.');
+    } finally { setSubmitting(false); }
   };
+
+  /* ── imagen según pantalla ── */
+  const imgSrc = screen === 'login' || screen === 'forgot' ? IMAGES.login
+    : screen === 'reg2' ? IMAGES.step2
+    : IMAGES.register;
+
+  const imgTab: 'login' | 'register' | 'step2' =
+    screen === 'login' || screen === 'forgot' ? 'login'
+    : screen === 'reg2' ? 'step2'
+    : 'register';
+
+  /* ── ancho del modal ── */
+  const modalMaxW = (screen === 'reg1' || screen === 'reg2') ? 820 : 660;
+
+  /* ── botón submit label ── */
+  const submitLabel = submitting ? 'Procesando…'
+    : screen === 'verify' ? 'Verificar código'
+    : screen === 'forgot' ? (resetToken ? 'Restablecer contraseña' : resetVid ? 'Verificar código' : 'Enviar código')
+    : screen === 'login' ? 'Iniciar sesión'
+    : screen === 'reg2' ? 'Crear cuenta'
+    : ''; // reg1 tiene su propio handler
 
   return (
     <AnimatePresence>
       {isOpen && (
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.22 }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ backgroundColor: 'rgba(30,28,24,0.75)', backdropFilter: 'blur(8px)' }}
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5"
+          style={{ backgroundColor: 'rgba(14,12,8,0.82)', backdropFilter: 'blur(12px)' }}
+          onClick={handleClose}
         >
           <motion.div
-            initial={{ opacity: 0, scale: 0.96, y: 16 }}
+            initial={{ opacity: 0, scale: 0.97, y: 12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96, y: 12 }}
-            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+            exit={{ opacity: 0, scale: 0.97 }}
+            transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
             onClick={e => e.stopPropagation()}
-            className="relative w-full max-w-[440px] rounded-3xl overflow-y-auto max-h-[95vh]"
-            style={{ backgroundColor: 'white' }}
+            className="relative flex w-full overflow-hidden rounded-3xl bg-white shadow-2xl"
+            style={{ maxWidth: modalMaxW, height: 'min(94dvh, 580px)' }}
           >
-            {/* Botón cerrar */}
-            <button
-              onClick={handleClose}
-              className="absolute top-5 right-5 z-10 p-1.5 rounded-full hover:bg-stone-100 transition-colors"
-            >
-              <X className="w-4 h-4 text-stone-400" strokeWidth={1.5} />
-            </button>
+            {/* imagen izquierda */}
+            <ImagePanel src={imgSrc} tab={imgTab} />
 
-            <div className="px-8 pt-10 pb-8">
+            {/* formulario derecho */}
+            <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
 
-              {/* Logo */}
-              <BrandLogo />
+              {/* cerrar */}
+              <button onClick={handleClose}
+                className="absolute top-3.5 right-3.5 z-20 p-1.5 rounded-full bg-white/80 backdrop-blur-sm hover:bg-stone-100 transition-colors shadow-sm">
+                <X className="w-3.5 h-3.5 text-stone-400" strokeWidth={1.6} />
+              </button>
 
-              {/* ── TÍTULO ── */}
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={verificationId ? 'verify' : isForgot ? 'forgot' : tab}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -8 }}
-                  transition={{ duration: 0.22 }}
-                  className="text-center mb-6"
-                >
-                  {verificationId ? (
-                    <>
-                      <p className="text-xs text-stone-400 mb-1">Verifica tu correo</p>
-                      <h2
-                        className="text-3xl font-light text-stone-900"
-                        style={{ fontFamily: "'Playfair Display', serif" }}
-                      >
-                        Codigo de{' '}
-                        <em className="not-italic font-semibold" style={{ fontStyle: 'italic', color: OLIVE }}>
-                          seguridad
-                        </em>
-                      </h2>
-                      <p className="text-xs text-stone-400 mt-2 leading-relaxed">
-                        Enviamos un codigo de 6 digitos a {verificationEmail || email}.
-                        Si pediste reenviarlo, usa el correo mas reciente.
-                      </p>
-                    </>
-                  ) : isForgot ? (
-                    <>
-                      <p className="text-xs text-stone-400 mb-1">
-                        {resetToken
-                          ? 'Nueva contraseña'
-                          : resetVerificationId
-                            ? 'Verifica tu correo'
-                            : 'Recuperar acceso'}
-                      </p>
-                      <h2
-                        className="text-3xl font-light text-stone-900"
-                        style={{ fontFamily: "'Playfair Display', serif" }}
-                      >
-                        {resetToken ? 'Restablecer ' : resetVerificationId ? 'Codigo de ' : '¿Olvidaste tu '}
-                        <em className="not-italic font-semibold" style={{ fontStyle: 'italic', color: OLIVE }}>
-                          {resetToken ? 'contraseña' : resetVerificationId ? 'seguridad' : 'contraseña?'}
-                        </em>
-                      </h2>
-                      <p className="text-xs text-stone-400 mt-2 leading-relaxed">
-                        {resetToken
-                          ? 'El codigo fue verificado. Crea una nueva contraseña segura.'
-                          : resetVerificationId
-                            ? `Enviamos un codigo de 6 digitos a ${email}.`
-                            : 'Ingresa tu email y te enviaremos un codigo de verificacion.'}
-                      </p>
-                    </>
-                  ) : tab === 'login' ? (
-                    <>
-                      <p className="text-xs text-stone-400 mb-1">Bienvenido de nuevo</p>
-                      <h2
-                        className="text-3xl font-light text-stone-900"
-                        style={{ fontFamily: "'Playfair Display', serif" }}
-                      >
-                        Iniciar{' '}
-                        <em className="not-italic font-semibold" style={{ fontStyle: 'italic', color: OLIVE }}>
-                          sesión
-                        </em>
-                      </h2>
-                      <p className="text-xs text-stone-400 mt-2">Ingresa para continuar con tu experiencia.</p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-xs text-stone-400 mb-1">Bienvenida</p>
-                      <h2
-                        className="text-3xl font-light text-stone-900"
-                        style={{ fontFamily: "'Playfair Display', serif" }}
-                      >
-                        Crear{' '}
-                        <em className="not-italic font-semibold" style={{ fontStyle: 'italic', color: OLIVE }}>
-                          tu cuenta
-                        </em>
-                      </h2>
-                      <p className="text-xs text-stone-400 mt-2 leading-relaxed">
-                        Únete a Juhnios Rold y descubre lo mejor para tu cabello.
-                      </p>
-                    </>
-                  )}
-                </motion.div>
-              </AnimatePresence>
+              {/* contenido scrollable solo si hace falta */}
+              <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 pt-6 pb-5 sm:px-7 flex flex-col gap-4">
 
-              {/* ── TABS ── */}
-              {!isForgot && !verificationId && (
-                <div className="flex border-b border-stone-100 mb-6">
-                  {(['login', 'register'] as const).map(t => (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => switchTab(t)}
-                      className="relative flex-1 pb-3 text-[10px] tracking-[0.22em] uppercase font-semibold transition-colors"
-                      style={{ color: tab === t ? OLIVE : '#C4BDB4' }}
-                    >
-                      {t === 'login' ? 'Ingresar' : 'Registrarse'}
-                      {tab === t && (
-                        <motion.div
-                          layoutId="modal-tab"
-                          className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full"
-                          style={{ backgroundColor: OLIVE }}
-                        />
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
+                {/* ── tabs login/register ── */}
+                {(screen === 'login' || screen === 'reg1') && (
+                  <div className="flex gap-0.5 p-0.5 rounded-lg bg-stone-100 w-fit">
+                    {(['login', 'reg1'] as const).map(s => (
+                      <button key={s} type="button" onClick={() => goScreen(s)}
+                        className={`px-3.5 py-1.5 rounded-md text-[11px] font-semibold tracking-wide transition-all ${screen === s ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-400 hover:text-stone-600'}`}>
+                        {s === 'login' ? 'Ingresar' : 'Registrarse'}
+                      </button>
+                    ))}
+                  </div>
+                )}
 
-              {/* ── FORMULARIO ── */}
-              <form onSubmit={handleSubmit} className="space-y-4">
+                {/* ── paso indicador (registro) ── */}
+                {(screen === 'reg1' || screen === 'reg2') && (
+                  <div className="flex items-center gap-2">
+                    {[1, 2].map(n => (
+                      <div key={n} className="flex items-center gap-2">
+                        <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold transition-all ${
+                          (n === 1 && screen === 'reg1') || (n === 2 && screen === 'reg2')
+                            ? 'text-white' : n < (screen === 'reg2' ? 2 : 1) ? 'text-white' : 'bg-stone-100 text-stone-400'
+                        }`} style={{ backgroundColor: n === 1 ? (screen === 'reg2' ? OLIVE : OLIVE) : screen === 'reg2' ? OLIVE : '#e5e0d8' }}>
+                          {n < (screen === 'reg2' ? 2 : 0) ? <Check className="w-3 h-3" strokeWidth={2.5} /> : n}
+                        </div>
+                        {n < 2 && <div className="w-6 h-px bg-stone-200" />}
+                      </div>
+                    ))}
+                    <span className="text-[10px] text-stone-400 ml-1">
+                      {screen === 'reg1' ? 'Datos personales' : 'Dirección de entrega'}
+                    </span>
+                  </div>
+                )}
 
-                {/* Error / éxito */}
-                <AnimatePresence>
-                  {error && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="px-4 py-3 bg-rose-50 border border-rose-100 rounded-xl text-xs text-rose-700 leading-relaxed"
-                    >
-                      {error}
-                    </motion.div>
-                  )}
-                  {success && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="px-4 py-3 bg-emerald-50 border border-emerald-100 rounded-xl text-xs text-emerald-700 leading-relaxed"
-                    >
-                      {success}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-
+                {/* ── título ── */}
                 <AnimatePresence mode="wait">
-                  <motion.div
-                    key={verificationId ? 'verify' : isForgot ? 'forgot' : tab}
-                    initial={{ opacity: 0, x: tab === 'login' || isForgot ? -12 : 12 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.25 }}
-                    className="space-y-4"
-                  >
-                    {verificationId ? (
-                      <div className="space-y-3">
-                        <Field
-                          label="Codigo de verificacion"
-                          value={verificationCode}
-                          onChange={(value) => setVerificationCode(value.replace(/\D/g, '').slice(0, 6))}
-                          placeholder="000000"
-                          icon={Shield}
-                          required
-                        />
-                        <button
-                          type="button"
-                          onClick={handleResendCode}
-                          disabled={submitting}
-                          className="w-full text-[11px] text-stone-400 hover:text-stone-700 transition-colors"
-                        >
-                          Reenviar codigo
-                        </button>
-                        {debugCode && (
-                          <div className="px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-600 text-center">
-                            Codigo de desarrollo: <span className="font-mono text-stone-900">{debugCode}</span>
-                          </div>
-                        )}
-                      </div>
-                    ) : isForgot ? (
-                      <div className="space-y-3">
-                        {resetToken ? (
-                          <>
-                            <Field
-                              label="Nueva contraseña"
-                              type={showPass ? 'text' : 'password'}
-                              value={newPassword}
-                              onChange={setNewPassword}
-                              placeholder="Mínimo 8 caracteres"
-                              icon={Lock}
-                              required
-                              minLength={8}
-                              extra={
-                                <button
-                                  type="button"
-                                  onClick={() => setShowPass(p => !p)}
-                                  className="absolute right-3.5 text-stone-300 hover:text-stone-500 transition-colors"
-                                >
-                                  {showPass
-                                    ? <EyeOff className="w-4 h-4" strokeWidth={1.3} />
-                                    : <Eye className="w-4 h-4" strokeWidth={1.3} />
-                                  }
-                                </button>
-                              }
-                            />
-                            <Field
-                              label="Confirmar contraseña"
-                              type={showConfirm ? 'text' : 'password'}
-                              value={confirmNewPassword}
-                              onChange={setConfirmNewPassword}
-                              placeholder="Repite tu nueva contraseña"
-                              icon={Lock}
-                              required
-                              minLength={8}
-                              extra={
-                                <button
-                                  type="button"
-                                  onClick={() => setShowConfirm(p => !p)}
-                                  className="absolute right-3.5 text-stone-300 hover:text-stone-500 transition-colors"
-                                >
-                                  {showConfirm
-                                    ? <EyeOff className="w-4 h-4" strokeWidth={1.3} />
-                                    : <Eye className="w-4 h-4" strokeWidth={1.3} />
-                                  }
-                                </button>
-                              }
-                            />
-                          </>
-                        ) : resetVerificationId ? (
-                          <>
-                            <Field
-                              label="Codigo de verificacion"
-                              value={resetCode}
-                              onChange={(value) => setResetCode(value.replace(/\D/g, '').slice(0, 6))}
-                              placeholder="000000"
-                              icon={Shield}
-                              required
-                            />
-                            {resetDebugCode && (
-                              <div className="px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-600 text-center">
-                                Codigo de desarrollo: <span className="font-mono text-stone-900">{resetDebugCode}</span>
-                              </div>
-                            )}
-                          </>
-                        ) : (
-                          <Field
-                            label="Email"
-                            type="email"
-                            value={email}
-                            onChange={setEmail}
-                            placeholder="tu@email.com"
-                            icon={Mail}
-                            required
-                          />
-                        )}
-                      </div>
-                    ) : (
-                      <>
-                    {/* Campos solo registro */}
-                    {tab === 'register' && !isForgot && (
-                      <>
-                        <Field
-                          label="Nombres"
-                          value={nombre} onChange={setNombre}
-                          placeholder="Ej: Maria Alejandra"
-                          icon={UserIcon}
-                          required
-                        />
-                        <Field
-                          label="Apellidos"
-                          value={apellidos} onChange={setApellidos}
-                          placeholder="Ej: Gonzalez Perez"
-                          icon={UserIcon}
-                          required
-                        />
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-[9px] tracking-[0.28em] uppercase text-stone-400 font-medium mb-1.5">
-                              Tipo de documento
-                            </label>
-                            <select
-                              value={tipoDocumento}
-                              onChange={e => setTipoDocumento(e.target.value)}
-                              className="w-full pl-3.5 pr-9 py-3 rounded-xl border border-[#E7E3DC] bg-white text-sm text-stone-800 focus:outline-none focus:border-[#2D3A1F] transition-all duration-200 appearance-none bg-no-repeat"
-                              style={{
-                                backgroundImage:
-                                  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23A8A29E' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")",
-                                backgroundPosition: 'right 0.875rem center',
-                              }}
-                            >
-                              <option value="CC">Cédula de Ciudadanía</option>
-                              <option value="CE">Cédula de Extranjería</option>
-                              <option value="PASSPORT">Pasaporte</option>
-                              <option value="NIT">NIT</option>
-                              <option value="OTHER">Otro</option>
-                            </select>
-                          </div>
-                          <Field
-                            label="Número de documento"
-                            value={documento} onChange={setDocumento}
-                            placeholder="Ej: 1000000001"
-                            icon={CreditCard}
-                          />
-                        </div>
-                        <Field
-                          label="Teléfono"
-                          type="tel"
-                          value={telefono} onChange={setTelefono}
-                          placeholder="3001234567"
-                          icon={Phone}
-                        />
-                        <div>
-                          <label className="block text-[9px] tracking-[0.28em] uppercase text-stone-400 font-medium mb-1.5">
-                            ¿Cómo deseas comprar?
-                          </label>
-                          <div className="grid grid-cols-2 gap-2">
-                            {[
-                              { value: 'RETAIL' as const, label: 'Compra personal', detail: 'Minorista' },
-                              { value: 'WHOLESALE' as const, label: 'Compra mayorista', detail: 'Volumen' },
-                            ].map(option => (
-                              <button
-                                key={option.value}
-                                type="button"
-                                onClick={() => setPurchaseMode(option.value)}
-                                className={`rounded-xl border px-3 py-3 text-left transition-colors ${
-                                  purchaseMode === option.value
-                                    ? 'border-[#2D3A1F] bg-[#2D3A1F]/5 text-stone-900'
-                                    : 'border-stone-200 text-stone-500 hover:bg-stone-50'
-                                }`}
-                              >
-                                <span className="block text-[11px] font-semibold">{option.label}</span>
-                                <span className="block text-[10px] text-stone-400">{option.detail}</span>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      </>
-                    )}
-
-                    {/* Email */}
-                    <Field
-                      label="Email"
-                      type="email"
-                      value={email} onChange={setEmail}
-                      placeholder="tu@email.com"
-                      icon={Mail}
-                      required
-                    />
-
-                    {/* Contraseña */}
-                    {!isForgot && (
-                      <Field
-                        label="Contraseña"
-                        type={showPass ? 'text' : 'password'}
-                        value={password} onChange={setPassword}
-                        placeholder={tab === 'register' ? 'Mínimo 8 caracteres' : '••••••••'}
-                        icon={Lock}
-                        required
-                        minLength={tab === 'register' ? 8 : undefined}
-                        extra={
-                          <button
-                            type="button"
-                            onClick={() => setShowPass(p => !p)}
-                            className="absolute right-3.5 text-stone-300 hover:text-stone-500 transition-colors"
-                          >
-                            {showPass
-                              ? <EyeOff className="w-4 h-4" strokeWidth={1.3} />
-                              : <Eye className="w-4 h-4" strokeWidth={1.3} />
-                            }
-                          </button>
-                        }
-                      />
-                    )}
-
-                    {/* Confirmar contraseña (solo registro) */}
-                    {tab === 'register' && !isForgot && (
-                      <Field
-                        label="Confirmar contraseña"
-                        type={showConfirm ? 'text' : 'password'}
-                        value={confirm} onChange={setConfirm}
-                        placeholder="Repite tu contraseña"
-                        icon={Lock}
-                        required
-                        extra={
-                          <button
-                            type="button"
-                            onClick={() => setShowConfirm(p => !p)}
-                            className="absolute right-3.5 text-stone-300 hover:text-stone-500 transition-colors"
-                          >
-                            {showConfirm
-                              ? <EyeOff className="w-4 h-4" strokeWidth={1.3} />
-                              : <Eye className="w-4 h-4" strokeWidth={1.3} />
-                            }
-                          </button>
-                        }
-                      />
-                    )}
-                      </>
-                    )}
+                  <motion.div key={screen} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
+                    <h2 className="text-lg font-semibold text-stone-900 leading-tight">
+                      {screen === 'login'  && 'Bienvenida de nuevo'}
+                      {screen === 'reg1'  && 'Crea tu cuenta'}
+                      {screen === 'reg2'  && 'Tu dirección de entrega'}
+                      {screen === 'verify' && 'Verifica tu correo'}
+                      {screen === 'forgot' && (resetToken ? 'Nueva contraseña' : resetVid ? 'Ingresa el código' : '¿Olvidaste tu contraseña?')}
+                    </h2>
+                    <p className="mt-0.5 text-xs text-stone-400">
+                      {screen === 'login'  && 'Ingresa para continuar.'}
+                      {screen === 'reg1'  && 'Paso 1 de 2 · Información básica'}
+                      {screen === 'reg2'  && 'Paso 2 de 2 · ¿Dónde te enviamos?'}
+                      {screen === 'verify' && `Código enviado a ${verificationEmail || email}`}
+                      {screen === 'forgot' && (resetToken ? 'Crea una nueva contraseña segura.' : resetVid ? `Código enviado a ${email}` : 'Te enviamos un código de recuperación.')}
+                    </p>
                   </motion.div>
                 </AnimatePresence>
 
-                {/* ¿Olvidaste? */}
-                {tab === 'login' && !isForgot && !verificationId && (
-                  <div className="text-right">
-                    <button
-                      type="button"
-                      onClick={() => { setIsForgot(true); setError(''); setSuccess(''); }}
-                      className="text-[11px] text-stone-400 hover:text-stone-700 transition-colors"
-                    >
-                      ¿Olvidaste tu contraseña?
-                    </button>
-                  </div>
-                )}
+                {/* ── alertas ── */}
+                <AnimatePresence>
+                  {error && (
+                    <motion.p key="err" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                      className="rounded-xl border border-rose-100 bg-rose-50 px-3.5 py-2 text-xs text-rose-700 leading-relaxed flex-shrink-0">
+                      {error}
+                    </motion.p>
+                  )}
+                  {success && (
+                    <motion.div key="ok" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                      className="flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3.5 py-2 text-xs text-emerald-700 flex-shrink-0">
+                      <Check className="w-3 h-3 flex-shrink-0" strokeWidth={2.5} /> {success}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
 
-                {/* Dirección de entrega (solo registro) */}
-                {tab === 'register' && !isForgot && !verificationId && (
-                  <div className="space-y-3">
-                    <div className="rounded-xl border border-stone-200 overflow-hidden p-4 space-y-3">
-                      <div className="flex items-center gap-1.5">
-                        <MapPin className="w-3.5 h-3.5" style={{ color: OLIVE }} strokeWidth={1.5} />
-                        <span className="text-[10px] tracking-[0.22em] uppercase font-semibold" style={{ color: OLIVE }}>
-                          Dirección de entrega
-                        </span>
-                      </div>
+                {/* ════ PANTALLAS ════ */}
 
-                      {/* LocationPicker adapts to the LoginModal style */}
-                      <div className="[&_span]:text-[9px] [&_span]:tracking-[0.2em] [&_span]:uppercase [&_span]:text-stone-400 [&_input]:text-sm [&_input]:rounded-xl [&_input]:border-stone-200 [&_input]:py-3 [&_input]:pl-4 [&_input]:bg-white [&_.hover\\:bg-secondary\\/60]:hover:bg-stone-50">
-                        <LocationPicker
-                          value={regLocation}
-                          onChange={setRegLocation}
-                        />
-                      </div>
-
-                      <DeliveryLocationSection
-                        value={deliveryLocation}
-                        onChange={setDeliveryLocation}
-                        searchScope={{ state: regLocation.stateName, country: regLocation.countryName }}
-                        cityOptions={regCityNames}
-                        onCityResolved={cityName => setRegLocation(prev => ({ ...prev, cityId: null, cityName }))}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Términos (solo registro) */}
-                {tab === 'register' && !isForgot && !verificationId && (
-                  <label className="flex items-start gap-2.5 cursor-pointer">
-                    <div className="relative flex-shrink-0 mt-0.5">
-                      <input
-                        type="checkbox"
-                        checked={terms}
-                        onChange={e => setTerms(e.target.checked)}
-                        className="sr-only"
-                      />
-                      <div
-                        className="w-4 h-4 rounded border-2 flex items-center justify-center transition-all"
-                        style={{
-                          borderColor: terms ? OLIVE : '#D6D0C8',
-                          backgroundColor: terms ? OLIVE : 'transparent',
-                        }}
-                      >
-                        {terms && (
-                          <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
-                            <path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                        )}
-                      </div>
-                    </div>
-                    <span className="text-[11px] text-stone-500 leading-relaxed">
-                      Acepto los{' '}
-                      <a href="#" className="underline hover:text-stone-800 transition-colors" onClick={e => e.preventDefault()}>
-                        Términos y Condiciones
-                      </a>{' '}
-                      y la{' '}
-                      <a href="#" className="underline hover:text-stone-800 transition-colors" onClick={e => e.preventDefault()}>
-                        Política de Privacidad
-                      </a>
-                    </span>
-                  </label>
-                )}
-
-                {/* Botón principal */}
-                <motion.button
-                  type="submit"
-                  disabled={submitting}
-                  whileHover={{ opacity: submitting ? 0.5 : 0.88 }}
-                  whileTap={{ scale: 0.98 }}
-                  className="w-full py-3.5 rounded-xl text-white text-[11px] tracking-[0.28em] uppercase font-semibold transition-opacity disabled:opacity-50"
-                  style={{ backgroundColor: OLIVE }}
-                >
-                  {submitting
-                    ? 'Procesando...'
-                    : verificationId
-                      ? 'Verificar codigo'
-                    : isForgot
-                      ? resetToken
-                        ? 'Restablecer contraseña'
-                        : resetVerificationId
-                          ? 'Verificar codigo'
-                          : 'Enviar codigo'
-                      : tab === 'login'
-                        ? 'Iniciar sesión'
-                        : 'Crear cuenta'
-                  }
-                </motion.button>
-
-                {/* Volver (olvidé contraseña) */}
-                {isForgot && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsForgot(false);
-                      setError('');
-                      setSuccess('');
-                      setResetVerificationId('');
-                      setResetCode('');
-                      setResetDebugCode('');
-                      setResetToken('');
-                      setNewPassword('');
-                      setConfirmNewPassword('');
-                    }}
-                    className="w-full text-[11px] text-stone-400 hover:text-stone-700 transition-colors pt-1"
-                  >
-                    ← Volver a iniciar sesión
-                  </button>
-                )}
-                {verificationId && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setVerificationId('');
-                      setVerificationEmail('');
-                      setVerificationCode('');
-                      setDebugCode('');
-                      setError('');
-                      setSuccess('');
-                    }}
-                    className="w-full text-[11px] text-stone-400 hover:text-stone-700 transition-colors pt-1"
-                  >
-                    Cambiar datos de registro
-                  </button>
-                )}
-              </form>
-
-              {/* ── SOCIALES ── */}
-              {!isForgot && !verificationId && (
-                <div className="mt-6">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="flex-1 h-px bg-stone-100" />
-                    <span className="text-[10px] text-stone-400">o continúa con</span>
-                    <div className="flex-1 h-px bg-stone-100" />
-                  </div>
-                  <div className="space-y-2.5">
-                    <SocialButton>
-                      <GoogleG />
-                      <span>Continuar con Google</span>
-                    </SocialButton>
-                    <SocialButton>
-                      <AppleLogo />
-                      <span>Continuar con Apple</span>
-                    </SocialButton>
-                  </div>
-                </div>
-              )}
-
-              {/* Pie */}
-              {tab === 'login' && !isForgot && !verificationId && (
-                <div className="mt-6 flex items-center justify-center gap-1 text-[11px] text-stone-400">
-                  <Shield className="w-3 h-3 text-stone-300" strokeWidth={1.5} />
-                  Tu información está protegida y encriptada
-                </div>
-              )}
-
-              {tab === 'register' && !isForgot && !verificationId && (
-                <p className="mt-5 text-center text-[11px] text-stone-400">
-                  ¿Ya tienes una cuenta?{' '}
-                  <button
-                    type="button"
-                    onClick={() => switchTab('login')}
-                    className="font-semibold hover:text-stone-700 transition-colors underline underline-offset-2"
-                    style={{ color: OLIVE }}
-                  >
-                    Iniciar sesión
-                  </button>
-                </p>
-              )}
-
-              {/* Acceso admin demo (login) */}
-              {tab === 'login' && !isForgot && !verificationId && (
-                <div className="mt-6 pt-5 border-t border-stone-100">
-                  <div className="text-[9px] tracking-[0.22em] uppercase text-stone-300 mb-2 text-center">
-                    Demo Admin
-                  </div>
-                  <div className="space-y-1.5">
-                    {[
-                      { label: 'Admin principal', email: 'admin@juhnios.com' },
-                      { label: 'Admin 2', email: 'administrador2@juhnios.com' },
-                    ].map(({ label, email: adminEmail }) => (
-                      <button
-                        key={adminEmail}
-                        type="button"
-                        onClick={() => { setEmail(adminEmail); }}
-                        className="w-full text-left px-3 py-2 rounded-lg border border-stone-100 hover:bg-stone-50 transition-colors"
-                      >
-                        <span className="text-[10px] text-stone-500">
-                          <strong className="text-stone-700">{label}:</strong> {adminEmail}
-                        </span>
+                {/* LOGIN */}
+                {screen === 'login' && (
+                  <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+                    <Field label="Email" type="email" value={email} onChange={setEmail} placeholder="tu@email.com" icon={Mail} required />
+                    <Field label="Contraseña" type={showPass ? 'text' : 'password'} value={password} onChange={setPassword} placeholder="••••••••" icon={Lock} required
+                      extra={<button type="button" onClick={() => setShowPass(p => !p)} className="absolute right-2.5 text-stone-300 hover:text-stone-500">{showPass ? <EyeOff className="w-3.5 h-3.5" strokeWidth={1.3} /> : <Eye className="w-3.5 h-3.5" strokeWidth={1.3} />}</button>} />
+                    <div className="flex justify-end -mt-1">
+                      <button type="button" onClick={() => goScreen('forgot')} className="text-[11px] text-stone-400 hover:text-stone-700 transition-colors">
+                        ¿Olvidaste tu contraseña?
                       </button>
-                    ))}
-                    <p className="text-[9px] text-stone-300 text-center pt-1">Contraseña demo: Admin123!</p>
-                  </div>
-                </div>
-              )}
+                    </div>
+                    <button type="submit" disabled={submitting}
+                      className="w-full py-2.5 rounded-xl text-white text-[11px] tracking-[0.2em] uppercase font-bold transition-opacity disabled:opacity-50 mt-1"
+                      style={{ backgroundColor: OLIVE }}>
+                      {submitting ? 'Procesando…' : 'Iniciar sesión'}
+                    </button>
+
+                    {/* sociales */}
+                    <div className="flex items-center gap-2 my-0.5">
+                      <div className="flex-1 h-px bg-stone-100" />
+                      <span className="text-[10px] text-stone-400">o continúa con</span>
+                      <div className="flex-1 h-px bg-stone-100" />
+                    </div>
+                    <div className="flex gap-2">
+                      {[
+                        { icon: <GoogleG />, label: 'Google' },
+                        { icon: <svg width="13" height="13" viewBox="0 0 814 1000" fill="currentColor"><path d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155.5 123.1s-85.5-39.5-164-39.5c-76 0-103.7 40.8-165.9 40.8s-105-43.4-150.3-109.2c-52.1-73.1-96.2-187.6-96.2-295.1C172 151.1 359.4 75 542.8 75c81.1 0 148.1 32.1 200.8 84.4 30.4 29.7 60.4 65.2 63.5 181.5z"/><path d="M554.2 0c2.6 27.2-7.7 55.8-21.6 76.1-15.2 22.5-42.5 40.7-71.3 38.3-3.7-28.4 9.2-58.1 24-77.2 16.4-21.2 43.6-38.9 68.9-37.2z"/></svg>, label: 'Apple' },
+                      ].map(({ icon, label }) => (
+                        <button key={label} type="button" className="flex-1 flex items-center justify-center gap-1.5 py-2 border border-stone-200 rounded-lg text-xs text-stone-600 font-medium hover:bg-stone-50 transition-colors">
+                          {icon} {label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <p className="text-center text-[11px] text-stone-400">
+                      ¿Sin cuenta?{' '}
+                      <button type="button" onClick={() => goScreen('reg1')} className="font-semibold underline underline-offset-2 transition-colors" style={{ color: OLIVE }}>
+                        Regístrate gratis
+                      </button>
+                    </p>
+
+                    {/* demo admin */}
+                    <div className="border-t border-stone-100 pt-3 mt-auto">
+                      <p className="text-[9px] tracking-[0.2em] uppercase text-stone-300 mb-1.5 text-center">Demo Admin</p>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {[{ label: 'Admin 1', email: 'admin@juhnios.com' }, { label: 'Admin 2', email: 'administrador2@juhnios.com' }].map(({ label, email: ae }) => (
+                          <button key={ae} type="button" onClick={() => setEmail(ae)} className="px-2.5 py-1.5 rounded-lg border border-stone-100 hover:bg-stone-50 transition-colors text-left">
+                            <span className="block text-[9px] text-stone-400">{label}</span>
+                            <span className="block text-[10px] font-medium text-stone-600 truncate">{ae}</span>
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[9px] text-stone-300 text-center mt-1">Pass: Admin123!</p>
+                    </div>
+                  </form>
+                )}
+
+                {/* REGISTRO PASO 1 */}
+                {screen === 'reg1' && (
+                  <form onSubmit={handleReg1Next} className="flex flex-col gap-3">
+                    {/* nombre + apellidos */}
+                    <div className="flex gap-2.5">
+                      <Field label="Nombre *" value={nombre} onChange={setNombre} placeholder="María" icon={UserIcon} required />
+                      <Field label="Apellidos *" value={apellidos} onChange={setApellidos} placeholder="García" icon={UserIcon} required />
+                    </div>
+                    {/* email + teléfono */}
+                    <div className="flex gap-2.5">
+                      <Field label="Email *" type="email" value={email} onChange={setEmail} placeholder="tu@email.com" icon={Mail} required />
+                      <Field label="Teléfono" type="tel" value={telefono} onChange={setTelefono} placeholder="3001234567" icon={Phone} />
+                    </div>
+                    {/* contraseñas */}
+                    <div className="flex gap-2.5">
+                      <Field label="Contraseña * (mín. 8)" type={showPass ? 'text' : 'password'} value={password} onChange={setPassword} placeholder="••••••••" icon={Lock} required minLength={8}
+                        extra={<button type="button" onClick={() => setShowPass(p => !p)} className="absolute right-2.5 text-stone-300 hover:text-stone-500">{showPass ? <EyeOff className="w-3 h-3" strokeWidth={1.3} /> : <Eye className="w-3 h-3" strokeWidth={1.3} />}</button>} />
+                      <Field label="Confirmar contraseña *" type={showConf ? 'text' : 'password'} value={confirm} onChange={setConfirm} placeholder="Repite" icon={Lock} required
+                        extra={<button type="button" onClick={() => setShowConf(p => !p)} className="absolute right-2.5 text-stone-300 hover:text-stone-500">{showConf ? <EyeOff className="w-3 h-3" strokeWidth={1.3} /> : <Eye className="w-3 h-3" strokeWidth={1.3} />}</button>} />
+                    </div>
+                    {/* documento */}
+                    <div className="flex gap-2.5">
+                      <div className="flex flex-col gap-1 flex-1 min-w-0">
+                        <label className="text-[9px] tracking-[0.22em] uppercase text-stone-400 font-semibold">Tipo doc.</label>
+                        <select value={tipoDoc} onChange={e => setTipoDoc(e.target.value)}
+                          className="w-full px-2.5 py-2 rounded-lg border border-[#E5E0D8] bg-white text-[13px] text-stone-800 focus:outline-none focus:border-[#2D3A1F] transition appearance-none"
+                          style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23A8A29E' stroke-width='1.5'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.5rem center' }}>
+                          <option value="CC">Cédula</option>
+                          <option value="CE">Cédula Ext.</option>
+                          <option value="PASSPORT">Pasaporte</option>
+                          <option value="NIT">NIT</option>
+                          <option value="OTHER">Otro</option>
+                        </select>
+                      </div>
+                      <Field label="N° de documento" value={documento} onChange={setDocumento} placeholder="1000000001" icon={CreditCard} />
+                    </div>
+                    {/* modo compra */}
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[9px] tracking-[0.22em] uppercase text-stone-400 font-semibold">¿Cómo deseas comprar?</label>
+                      <div className="flex gap-2">
+                        {[
+                          { v: 'RETAIL' as const, l: 'Personal', s: 'Minorista' },
+                          { v: 'WHOLESALE' as const, l: 'Por volumen', s: 'Mayorista' },
+                        ].map(o => (
+                          <button key={o.v} type="button" onClick={() => setMode(o.v)}
+                            className={`flex-1 rounded-lg border px-3 py-2 text-left transition-all ${mode === o.v ? 'border-[#2D3A1F] bg-[#2D3A1F]/5' : 'border-stone-200 hover:bg-stone-50'}`}>
+                            <span className={`block text-[11px] font-semibold leading-none ${mode === o.v ? 'text-stone-900' : 'text-stone-500'}`}>{o.l}</span>
+                            <span className="block text-[10px] text-stone-400 mt-0.5">{o.s}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    {/* términos */}
+                    <label className="flex items-start gap-2 cursor-pointer select-none">
+                      <div className="relative flex-shrink-0 mt-0.5" onClick={() => setTerms(t => !t)}>
+                        <div className="w-3.5 h-3.5 rounded border-2 flex items-center justify-center transition-all"
+                          style={{ borderColor: terms ? OLIVE : '#D6D0C8', backgroundColor: terms ? OLIVE : 'transparent' }}>
+                          {terms && <svg width="8" height="6" viewBox="0 0 9 7" fill="none"><path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                        </div>
+                      </div>
+                      <span className="text-[11px] text-stone-500 leading-tight">
+                        Acepto los <a href="#" className="underline" onClick={e => e.preventDefault()}>Términos</a> y la <a href="#" className="underline" onClick={e => e.preventDefault()}>Política de privacidad</a>
+                      </span>
+                    </label>
+                    {/* siguiente */}
+                    <button type="submit" disabled={submitting}
+                      className="w-full py-2.5 rounded-xl text-white text-[11px] tracking-[0.2em] uppercase font-bold transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
+                      style={{ backgroundColor: OLIVE }}>
+                      Siguiente <ChevronRight className="w-3.5 h-3.5" strokeWidth={2} />
+                    </button>
+                    <p className="text-center text-[11px] text-stone-400">
+                      ¿Ya tienes cuenta?{' '}
+                      <button type="button" onClick={() => goScreen('login')} className="font-semibold underline underline-offset-2" style={{ color: OLIVE }}>
+                        Ingresar
+                      </button>
+                    </p>
+                  </form>
+                )}
+
+                {/* REGISTRO PASO 2 — dirección */}
+                {screen === 'reg2' && (
+                  <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+                    <div className="rounded-xl border border-stone-200 p-3.5 space-y-3">
+                      <LocationPicker value={regLoc} onChange={setRegLoc} />
+                      <DeliveryLocationSection
+                        value={delLoc} onChange={setDelLoc}
+                        searchScope={{ state: regLoc.stateName, country: regLoc.countryName }}
+                        cityOptions={cityNames}
+                        onCityResolved={cn => setRegLoc(p => ({ ...p, cityId: null, cityName: cn }))}
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => goScreen('reg1')}
+                        className="flex-1 py-2.5 rounded-xl border border-stone-200 text-[11px] font-semibold text-stone-600 tracking-wide hover:bg-stone-50 transition-colors">
+                        ← Atrás
+                      </button>
+                      <button type="submit" disabled={submitting}
+                        className="flex-2 flex-1 py-2.5 rounded-xl text-white text-[11px] tracking-[0.2em] uppercase font-bold transition-opacity disabled:opacity-50"
+                        style={{ backgroundColor: OLIVE, flexGrow: 2 }}>
+                        {submitting ? 'Creando…' : 'Crear cuenta'}
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {/* VERIFICAR CÓDIGO */}
+                {screen === 'verify' && (
+                  <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+                    <Field label="Código de 6 dígitos" value={verificationCode}
+                      onChange={v => setVerificationCode(v.replace(/\D/g, '').slice(0, 6))}
+                      placeholder="000000" icon={Shield} required />
+                    {debugCode && (
+                      <div className="rounded-xl border border-stone-200 bg-stone-50 px-3.5 py-2 text-xs text-stone-600 text-center">
+                        Dev: <span className="font-mono font-bold text-stone-800">{debugCode}</span>
+                      </div>
+                    )}
+                    <button type="submit" disabled={submitting}
+                      className="w-full py-2.5 rounded-xl text-white text-[11px] tracking-[0.2em] uppercase font-bold disabled:opacity-50"
+                      style={{ backgroundColor: OLIVE }}>
+                      {submitting ? 'Verificando…' : 'Verificar código'}
+                    </button>
+                    <button type="button" onClick={handleResend} disabled={submitting}
+                      className="text-[11px] text-stone-400 hover:text-stone-700 transition-colors text-center">
+                      Reenviar código
+                    </button>
+                    <button type="button" onClick={() => { setVerificationId(''); setVerificationCode(''); setDebugCode(''); goScreen('reg1'); }}
+                      className="text-[11px] text-stone-400 hover:text-stone-700 transition-colors text-center">
+                      ← Cambiar datos de registro
+                    </button>
+                  </form>
+                )}
+
+                {/* RECUPERAR CONTRASEÑA */}
+                {screen === 'forgot' && (
+                  <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+                    {resetToken ? (
+                      <>
+                        <Field label="Nueva contraseña" type={showPass ? 'text' : 'password'} value={newPass} onChange={setNewPass} placeholder="Mín. 8 caracteres" icon={Lock} required minLength={8}
+                          extra={<button type="button" onClick={() => setShowPass(p => !p)} className="absolute right-2.5 text-stone-300 hover:text-stone-500">{showPass ? <EyeOff className="w-3.5 h-3.5" strokeWidth={1.3} /> : <Eye className="w-3.5 h-3.5" strokeWidth={1.3} />}</button>} />
+                        <Field label="Confirmar contraseña" type={showConf ? 'text' : 'password'} value={confNewPass} onChange={setConfNewPass} placeholder="Repite" icon={Lock} required
+                          extra={<button type="button" onClick={() => setShowConf(p => !p)} className="absolute right-2.5 text-stone-300 hover:text-stone-500">{showConf ? <EyeOff className="w-3.5 h-3.5" strokeWidth={1.3} /> : <Eye className="w-3.5 h-3.5" strokeWidth={1.3} />}</button>} />
+                      </>
+                    ) : resetVid ? (
+                      <>
+                        <Field label="Código de verificación" value={resetCode} onChange={v => setResetCode(v.replace(/\D/g, '').slice(0, 6))} placeholder="000000" icon={Shield} required />
+                        {resetDbg && (
+                          <div className="rounded-xl border border-stone-200 bg-stone-50 px-3.5 py-2 text-xs text-stone-600 text-center">
+                            Dev: <span className="font-mono font-bold text-stone-800">{resetDbg}</span>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <Field label="Email" type="email" value={email} onChange={setEmail} placeholder="tu@email.com" icon={Mail} required />
+                    )}
+                    <button type="submit" disabled={submitting}
+                      className="w-full py-2.5 rounded-xl text-white text-[11px] tracking-[0.2em] uppercase font-bold disabled:opacity-50"
+                      style={{ backgroundColor: OLIVE }}>
+                      {submitting ? 'Procesando…' : resetToken ? 'Restablecer contraseña' : resetVid ? 'Verificar código' : 'Enviar código'}
+                    </button>
+                    <button type="button" onClick={() => { setError(''); setSuccess(''); setResetVid(''); setResetToken(''); setResetCode(''); setNewPass(''); setConfNewPass(''); goScreen('login'); }}
+                      className="text-[11px] text-stone-400 hover:text-stone-700 transition-colors text-center">
+                      ← Volver a iniciar sesión
+                    </button>
+                  </form>
+                )}
+
+              </div>
             </div>
           </motion.div>
         </motion.div>
