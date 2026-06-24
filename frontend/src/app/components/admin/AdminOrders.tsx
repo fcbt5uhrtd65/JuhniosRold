@@ -12,6 +12,10 @@ import {
   LayoutList,
   Maximize2,
   Search,
+  Calendar,
+  Hash,
+  FileText,
+  Loader2,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import type { Order } from '../../types/admin';
@@ -19,11 +23,16 @@ import { AdminRegistrarGuia } from './AdminRegistrarGuia';
 import { KpiCard, Card, Badge, type BadgeColor } from './AdminUI';
 import { InteractiveLocationMap } from '../ui/InteractiveLocationMap';
 import { Pagination } from './Pagination';
+import { TrackingPedidoPage } from '../TrackingPedidoPage';
+import { getTrackingPedido, type TrackingPedido } from '../../services/enviosApi';
+import { getInvoiceByOrder, openInvoicePdf } from '../../services/payments.service';
+import { useToast } from '../../contexts/ToastContext';
 
 const noop = () => {};
 
 export function AdminOrders() {
   const { orders, customers, updateOrderStatus } = useAdmin();
+  const toast = useToast();
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [showAllDetails, setShowAllDetails] = useState(false);
   const [cityFilter, setCityFilter] = useState('');
@@ -31,6 +40,36 @@ export function AdminOrders() {
   const [orderNumberFilter, setOrderNumberFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(5);
+  const [trackingData, setTrackingData] = useState<Record<string, TrackingPedido>>({});
+  const [loadingTrackingId, setLoadingTrackingId] = useState<string | null>(null);
+  const [showTrackingId, setShowTrackingId] = useState<string | null>(null);
+  const [loadingInvoiceId, setLoadingInvoiceId] = useState<string | null>(null);
+
+  const loadTracking = async (orderId: string) => {
+    if (trackingData[orderId]) return;
+    setLoadingTrackingId(orderId);
+    try {
+      const data = await getTrackingPedido(orderId);
+      setTrackingData(prev => ({ ...prev, [orderId]: data }));
+    } catch {
+      // silencioso — el componente de tracking maneja su propio error
+    } finally {
+      setLoadingTrackingId(null);
+    }
+  };
+
+  const handleViewInvoice = async (orderId: string) => {
+    setLoadingInvoiceId(orderId);
+    try {
+      const invoice = await getInvoiceByOrder(orderId);
+      if (!invoice) { toast.warning('No hay factura para este pedido.'); return; }
+      await openInvoicePdf(invoice.id);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo abrir la factura.');
+    } finally {
+      setLoadingInvoiceId(null);
+    }
+  };
 
   const normalizeText = (value: string | undefined | null) => value?.toLowerCase().trim() ?? '';
 
@@ -248,7 +287,11 @@ export function AdminOrders() {
                   {!showAllDetails && (
                     <button
                       type="button"
-                      onClick={() => setExpandedOrderId(current => current === order.id ? null : order.id)}
+                      onClick={() => {
+                        const next = expandedOrderId === order.id ? null : order.id;
+                        setExpandedOrderId(next);
+                        if (next) void loadTracking(next);
+                      }}
                       className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-3 text-[11px] font-semibold text-gray-700 transition-colors hover:bg-gray-50"
                     >
                       {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -258,94 +301,175 @@ export function AdminOrders() {
                 </div>
               </div>
 
-              {isExpanded && (
-                <div className="border-t border-gray-100 p-4">
-                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
-                    <div className="space-y-4">
-                      <div className="grid gap-3 rounded-lg bg-gray-50 p-3 sm:grid-cols-3">
-                        <div className="min-w-0">
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Cliente</p>
-                          <p className="truncate text-xs font-medium text-gray-900">{customer?.nombre || 'Cliente'}</p>
-                          <p className="truncate text-xs text-gray-500">{customer?.email || 'Sin correo'}</p>
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Ubicacion</p>
-                          <p className="truncate text-xs text-gray-700">{order.direccionEnvio || 'Sin direccion registrada'}</p>
-                          <p className="truncate text-xs text-gray-500">{destination || customer?.ciudad || 'Sin ciudad'}</p>
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Pago</p>
-                          <p className="text-xs font-medium text-gray-900">${order.total.toLocaleString()}</p>
-                          <p className="truncate text-xs uppercase text-gray-500">{order.metodoPago || 'Sin metodo'}</p>
-                        </div>
-                      </div>
+              {isExpanded && (() => {
+                const td = trackingData[order.id];
+                const envio = td?.envio;
+                return (
+                  <div className="border-t border-gray-100 p-4 space-y-4">
 
-                      <div>
-                        <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                          Productos ({order.productos.length})
-                        </p>
-                        <div className="space-y-2">
-                          {order.productos.map((item, index) => (
-                            <div key={index} className="flex items-center justify-between gap-3 text-xs">
-                              <div className="flex min-w-0 items-center gap-2">
-                                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-gray-100 bg-gray-50 text-[10px] text-gray-500">
-                                  {item.cantidad}x
-                                </span>
-                                <span className="truncate text-gray-700">{item.nombre}</span>
-                              </div>
-                              <span className="shrink-0 font-medium text-gray-900">${(item.precio * item.cantidad).toLocaleString()}</span>
-                            </div>
-                          ))}
-                        </div>
+                    {/* Resumen cliente / dirección / pago */}
+                    <div className="grid gap-3 rounded-lg bg-gray-50 p-3 sm:grid-cols-3">
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Cliente</p>
+                        <p className="truncate text-xs font-medium text-gray-900">{customer?.nombre || 'Cliente'}</p>
+                        <p className="truncate text-xs text-gray-500">{customer?.email || 'Sin correo'}</p>
                       </div>
-
-                      <div>
-                        <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-gray-400">Cambiar estado</p>
-                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-                          {statusOptions.map((status) => (
-                            <button
-                              key={status}
-                              onClick={() => updateOrderStatus(order.id, status)}
-                              className={`h-9 rounded-lg px-2 text-[11px] font-semibold capitalize transition-colors ${
-                                order.estado === status
-                                  ? 'bg-[#2a4038] text-white'
-                                  : 'border border-gray-200 text-gray-600 hover:bg-gray-50'
-                              }`}
-                            >
-                              {status}
-                            </button>
-                          ))}
-                        </div>
-                        <AdminRegistrarGuia
-                          pedidoId={order.id}
-                          onSaved={() => void updateOrderStatus(order.id, 'enviado')}
-                        />
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Dirección</p>
+                        <p className="truncate text-xs text-gray-700">{order.direccionEnvio || 'Sin dirección'}</p>
+                        <p className="truncate text-xs text-gray-500">{destination || customer?.ciudad || 'Sin ciudad'}</p>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Pago</p>
+                        <p className="text-xs font-medium text-gray-900">${order.total.toLocaleString()}</p>
+                        <p className="truncate text-xs uppercase text-gray-500">{order.metodoPago || 'Sin método'}</p>
                       </div>
                     </div>
 
-                    {canShowShipping && (
-                      <div>
-                        <p className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                          <MapPin size={12} /> Mapa de entrega
-                        </p>
-                        {order.latitudEnvio != null && order.longitudEnvio != null ? (
-                          <InteractiveLocationMap
-                            lat={order.latitudEnvio}
-                            lng={order.longitudEnvio}
-                            onMarkerMove={noop}
-                            readOnly
-                            className="h-48 overflow-hidden rounded-lg border border-gray-200 xl:h-full xl:min-h-56"
-                          />
-                        ) : (
-                          <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-500">
-                            {order.direccionEnvio}
-                          </div>
-                        )}
+                    {/* Info de guía / envío */}
+                    {loadingTrackingId === order.id && (
+                      <div className="flex items-center gap-2 text-xs text-gray-400">
+                        <Loader2 size={12} className="animate-spin" /> Cargando info de envío…
                       </div>
                     )}
+                    {envio && (
+                      <div className="rounded-lg border border-gray-200 bg-white p-3">
+                        <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-gray-400">Envío</p>
+                        <div className="grid gap-2 sm:grid-cols-3 text-xs">
+                          <div>
+                            <p className="text-[10px] uppercase tracking-wider text-gray-400">Transportadora</p>
+                            <p className="font-medium text-gray-800">{envio.transportadora?.nombre ?? '—'}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] uppercase tracking-wider text-gray-400 flex items-center gap-1">
+                              <Hash size={9} /> Guía
+                            </p>
+                            <p className="font-mono font-semibold text-gray-800">{envio.numero_guia || 'Sin asignar'}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] uppercase tracking-wider text-gray-400 flex items-center gap-1">
+                              <Calendar size={9} /> Entrega estimada
+                            </p>
+                            <p className="font-medium text-gray-800">
+                              {envio.fecha_entrega_estimada
+                                ? new Date(envio.fecha_entrega_estimada).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })
+                                : 'Por confirmar'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(300px,0.85fr)]">
+                      <div className="space-y-4">
+                        {/* Productos */}
+                        <div>
+                          <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                            Productos ({order.productos.length})
+                          </p>
+                          <div className="space-y-2">
+                            {order.productos.map((item, index) => (
+                              <div key={index} className="flex items-center justify-between gap-3 text-xs">
+                                <div className="flex min-w-0 items-center gap-2">
+                                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-gray-100 bg-gray-50 text-[10px] text-gray-500">
+                                    {item.cantidad}x
+                                  </span>
+                                  <span className="truncate text-gray-700">{item.nombre}</span>
+                                </div>
+                                <span className="shrink-0 font-medium text-gray-900">${(item.precio * item.cantidad).toLocaleString()}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Acciones: estado + guía + factura */}
+                        <div>
+                          <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-gray-400">Cambiar estado</p>
+                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                            {statusOptions.map((status) => (
+                              <button
+                                key={status}
+                                onClick={() => updateOrderStatus(order.id, status)}
+                                className={`h-9 rounded-lg px-2 text-[11px] font-semibold capitalize transition-colors ${
+                                  order.estado === status
+                                    ? 'bg-[#2a4038] text-white'
+                                    : 'border border-gray-200 text-gray-600 hover:bg-gray-50'
+                                }`}
+                              >
+                                {status}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <AdminRegistrarGuia
+                              pedidoId={order.id}
+                              onSaved={() => {
+                                void updateOrderStatus(order.id, 'enviado');
+                                setTrackingData(prev => { const next = { ...prev }; delete next[order.id]; return next; });
+                                void loadTracking(order.id);
+                              }}
+                            />
+                            {!['pendiente', 'cancelado', 'fallido'].includes(order.estado) && (
+                              <button
+                                onClick={() => handleViewInvoice(order.id)}
+                                disabled={loadingInvoiceId === order.id}
+                                className="mt-3 inline-flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-40"
+                              >
+                                {loadingInvoiceId === order.id
+                                  ? <Loader2 size={14} className="animate-spin" />
+                                  : <FileText size={14} />}
+                                Ver factura
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Tracking completo toggle */}
+                        <div>
+                          <button
+                            type="button"
+                            onClick={() => setShowTrackingId(cur => cur === order.id ? null : order.id)}
+                            className="inline-flex items-center gap-2 text-[11px] font-semibold text-[#2a4038] hover:underline"
+                          >
+                            <Truck size={12} />
+                            {showTrackingId === order.id ? 'Ocultar seguimiento' : 'Ver seguimiento completo'}
+                          </button>
+                          {showTrackingId === order.id && (
+                            <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50 p-4">
+                              <TrackingPedidoPage
+                                pedidoId={order.id}
+                                onClose={() => setShowTrackingId(null)}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Mapa */}
+                      {canShowShipping && (
+                        <div>
+                          <p className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                            <MapPin size={12} /> Mapa de entrega
+                          </p>
+                          {order.latitudEnvio != null && order.longitudEnvio != null ? (
+                            <InteractiveLocationMap
+                              lat={order.latitudEnvio}
+                              lng={order.longitudEnvio}
+                              onMarkerMove={noop}
+                              readOnly
+                              className="h-48 overflow-hidden rounded-lg border border-gray-200 xl:h-full xl:min-h-56"
+                            />
+                          ) : (
+                            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-500">
+                              {order.direccionEnvio}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
             </Card>
           );
         })}

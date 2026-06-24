@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAdmin } from '../../contexts/AdminContext';
-import { Users, TrendingUp, DollarSign, Plus, Search, ChevronDown, ChevronUp, X } from 'lucide-react';
+import { Users, TrendingUp, DollarSign, Plus, Search, ChevronDown, ChevronUp, X, FileText, Loader2 } from 'lucide-react';
+import { getInvoiceByOrder, openInvoicePdf } from '../../services/payments.service';
+import { useToast } from '../../contexts/ToastContext';
 import { format } from 'date-fns';
 import { LocationPicker } from '../ui/LocationPicker';
 import { AddressMap } from '../ui/AddressMap';
@@ -14,10 +16,25 @@ function CustomerOrdersModal({ customer, orders, onClose }: {
   orders: Order[];
   onClose: () => void;
 }) {
+  const toast = useToast();
   const [numberFilter, setNumberFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [dateFilter, setDateFilter] = useState('');
   const [page, setPage] = useState(1);
+  const [loadingInvoiceId, setLoadingInvoiceId] = useState<string | null>(null);
+
+  const handleViewInvoice = async (orderId: string) => {
+    setLoadingInvoiceId(orderId);
+    try {
+      const invoice = await getInvoiceByOrder(orderId);
+      if (!invoice) { toast.warning('No hay factura disponible para este pedido.'); return; }
+      await openInvoicePdf(invoice.id);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo abrir la factura.');
+    } finally {
+      setLoadingInvoiceId(null);
+    }
+  };
   const perPage = 8;
 
   const filtered = useMemo(() => {
@@ -90,13 +107,26 @@ function CustomerOrdersModal({ customer, orders, onClose }: {
 
         <div className="flex-1 overflow-y-auto px-6 py-3 space-y-2">
           {paginated.map(order => (
-            <div key={order.id} className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
-              <div className="min-w-0">
+            <div key={order.id} className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 gap-3">
+              <div className="min-w-0 flex-1">
                 <p className="text-xs font-semibold text-gray-900 font-mono">#{order.numero ?? order.id.slice(0, 8)}</p>
                 <p className="text-[11px] text-gray-400 mt-0.5">{format(new Date(order.fecha), "dd/MM/yyyy 'a las' HH:mm")}</p>
               </div>
               <Badge label={statusLabel[order.estado]} color={statusColor[order.estado]} />
               <p className="text-sm font-bold text-gray-900">${order.total.toLocaleString()}</p>
+              {!['pendiente','cancelado','devuelto','fallido'].includes(order.estado) && (
+                <button
+                  onClick={() => handleViewInvoice(order.id)}
+                  disabled={loadingInvoiceId === order.id}
+                  className="flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 text-[11px] font-medium text-gray-500 hover:border-gray-300 hover:text-gray-700 transition-colors disabled:opacity-40"
+                  title="Ver factura"
+                >
+                  {loadingInvoiceId === order.id
+                    ? <Loader2 size={11} className="animate-spin" />
+                    : <FileText size={11} />}
+                  Factura
+                </button>
+              )}
             </div>
           ))}
           {paginated.length === 0 && (

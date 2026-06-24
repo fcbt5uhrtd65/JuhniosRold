@@ -62,6 +62,26 @@ function normalizeAdminPayment(payment: BackendAdminPayment): AdminPayment {
   };
 }
 
+export interface OrderInvoice {
+  id: string;
+  number: string;
+  orderId: string;
+}
+
+export async function getInvoiceByOrder(orderId: string): Promise<OrderInvoice | null> {
+  const token = getAccessToken();
+  if (!token) return null;
+  const response = await fetch(`${API_BASE_URL}/finance/invoices/?search=${orderId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) return null;
+  const data = await response.json();
+  const results: Array<{ id: string; number: string; order: string }> = data.results ?? data;
+  const match = results.find(r => r.order === orderId);
+  if (!match) return null;
+  return { id: match.id, number: match.number, orderId: match.order };
+}
+
 export async function openInvoicePdf(invoiceId: string): Promise<void> {
   const token = getAccessToken();
   if (!token) {

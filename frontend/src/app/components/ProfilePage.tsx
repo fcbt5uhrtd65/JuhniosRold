@@ -8,6 +8,7 @@ import {
   Check,
   Clock,
   CreditCard,
+  FileText,
   Hash,
   Heart,
   Loader2,
@@ -33,7 +34,7 @@ import { EMPTY_LOCATION, type LocationValue } from '../services/geography.types'
 import { EMPTY_DELIVERY_LOCATION, type DeliveryLocationValue } from '../services/delivery-location.types';
 import { geographyService, type City } from '../services/geography.service';
 import { getProductById } from '../services/products.service';
-import { initiatePayment, resolveMockPayment } from '../services/payments.service';
+import { initiatePayment, resolveMockPayment, getInvoiceByOrder, openInvoicePdf } from '../services/payments.service';
 import { TrackingPedidoPage } from './TrackingPedidoPage';
 import { navigateBack, navigateTo } from '../services/navigate';
 
@@ -100,6 +101,7 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
   const [payingId, setPayingId] = useState<string | null>(null);
   const [mockPay, setMockPay] = useState<{ orderId: string; paymentId: string } | null>(null);
   const [trackingId, setTrackingId] = useState<string | null>(null);
+  const [loadingInvoiceId, setLoadingInvoiceId] = useState<string | null>(null);
 
   /* redirect si no logueado */
   useEffect(() => {
@@ -188,6 +190,19 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
     finally { setPayingId(null); }
   };
 
+  const handleViewInvoice = async (orderId: string) => {
+    setLoadingInvoiceId(orderId);
+    try {
+      const invoice = await getInvoiceByOrder(orderId);
+      if (!invoice) { toast.warning('No hay factura disponible para este pedido.'); return; }
+      await openInvoicePdf(invoice.id);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo abrir la factura.');
+    } finally {
+      setLoadingInvoiceId(null);
+    }
+  };
+
   /* carrito desde guardados */
   const handleAddToCart = async (product: any) => {
     try {
@@ -214,7 +229,7 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
 
       {/* ── top bar ── */}
       <header className="sticky top-0 z-30 border-b border-stone-200 bg-white/95 backdrop-blur-sm">
-        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4 sm:px-6">
+        <div className="flex h-14 items-center justify-between px-6">
           <button
             onClick={() => navigateBack('/')}
             className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-stone-400 transition hover:bg-stone-100 hover:text-stone-700"
@@ -222,54 +237,49 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
             <ArrowLeft className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Volver</span>
           </button>
-
-          {/* logo / título centrado */}
-          <span className="text-[11px] font-bold uppercase tracking-[0.24em] text-stone-400">
-            Mi cuenta
-          </span>
-
-          {/* avatar right */}
+          <span className="text-[11px] font-bold uppercase tracking-[0.24em] text-stone-400">Mi cuenta</span>
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-stone-900 text-white text-xs font-bold">
             {currentUser.firstName?.[0]?.toUpperCase() ?? currentUser.nombre?.[0]?.toUpperCase() ?? '?'}
           </div>
         </div>
       </header>
 
-      <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8 lg:flex lg:gap-8">
+      {/* ── layout principal: sidebar fijo izquierda + contenido ── */}
+      <div className="flex min-h-[calc(100vh-56px)]">
 
-        {/* ══ SIDEBAR ══ */}
-        <aside className="mb-4 lg:mb-0 lg:w-52 lg:flex-shrink-0">
+        {/* ══ SIDEBAR ══ — ancho fijo, pegado izquierda, fondo blanco, borde derecho */}
+        <aside className="hidden lg:flex lg:w-56 lg:flex-shrink-0 lg:flex-col border-r border-stone-200 bg-white px-4 pt-6 pb-8">
 
-          {/* Identity — visible solo desktop */}
-          <div className="mb-5 hidden lg:block">
-            <div className="mb-2.5 flex h-10 w-10 items-center justify-center rounded-full bg-stone-900 text-white text-sm font-bold">
+          {/* Identity */}
+          <div className="mb-6 px-1">
+            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-stone-900 text-white text-sm font-bold">
               {currentUser.firstName?.[0]?.toUpperCase() ?? currentUser.nombre?.[0]?.toUpperCase() ?? '?'}
             </div>
             <p className="text-sm font-semibold text-stone-900 leading-tight truncate">{currentUser.nombre}</p>
-            <p className="text-xs text-stone-400 truncate">{currentUser.email}</p>
+            <p className="text-xs text-stone-400 truncate mt-0.5">{currentUser.email}</p>
             {isWholesale && (
-              <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-stone-900 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-widest text-white">
+              <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-stone-900 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-white">
                 <Store className="w-2.5 h-2.5" /> Mayorista
               </span>
             )}
           </div>
 
-          {/* Nav — horizontal en mobile, vertical en desktop */}
-          <nav className="flex gap-1 overflow-x-auto pb-1 lg:flex-col lg:gap-0.5 lg:overflow-visible lg:pb-0">
+          {/* Nav */}
+          <nav className="flex flex-col gap-0.5">
             {navItems.map(item => (
               <button
                 key={item.id}
                 onClick={() => setSection(item.id)}
-                className={`flex flex-shrink-0 items-center gap-2 rounded-xl px-3.5 py-2.5 text-left text-sm font-medium transition-all lg:w-full ${
+                className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-all w-full ${
                   section === item.id
                     ? 'bg-stone-900 text-white'
                     : 'text-stone-500 hover:bg-stone-100 hover:text-stone-800'
                 }`}
               >
                 {item.icon}
-                <span className="whitespace-nowrap">{item.label}</span>
+                <span className="flex-1 whitespace-nowrap">{item.label}</span>
                 {item.badge !== undefined && item.badge > 0 && (
-                  <span className={`ml-auto rounded-full px-1.5 py-0.5 text-[9px] font-bold tabular-nums ${section === item.id ? 'bg-white/25 text-white' : 'bg-stone-200 text-stone-500'}`}>
+                  <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold tabular-nums ${section === item.id ? 'bg-white/25 text-white' : 'bg-stone-100 text-stone-500'}`}>
                     {item.badge}
                   </span>
                 )}
@@ -277,8 +287,8 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
             ))}
           </nav>
 
-          {/* Badges desktop */}
-          <div className="mt-6 hidden space-y-1.5 lg:block">
+          {/* Badges */}
+          <div className="mt-auto pt-6 space-y-1.5 px-1">
             <p className="flex items-center gap-1.5 text-[10px] text-stone-400">
               <BadgeCheck className="w-3 h-3 text-emerald-500" strokeWidth={2.5} /> Cuenta verificada
             </p>
@@ -290,8 +300,20 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
           </div>
         </aside>
 
-        {/* ══ MAIN ══ */}
-        <main className="min-w-0 flex-1">
+        {/* nav mobile: barra horizontal arriba del contenido */}
+        <div className="fixed bottom-0 left-0 right-0 z-20 flex border-t border-stone-200 bg-white lg:hidden">
+          {navItems.map(item => (
+            <button key={item.id} onClick={() => setSection(item.id)}
+              className={`flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[9px] font-semibold transition ${section === item.id ? 'text-stone-900' : 'text-stone-400'}`}>
+              {item.icon}
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        {/* ══ MAIN ══ — ocupa todo el ancho restante */}
+        <main className="min-w-0 flex-1 overflow-x-hidden">
+          <div className="px-6 py-6 pb-20 lg:pb-6">
           <AnimatePresence mode="wait">
 
             {/* ─── MIS DATOS ─── */}
@@ -393,13 +415,14 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
             {/* ─── PEDIDOS ─── */}
             {section === 'pedidos' && (
               <motion.div key="pedidos" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.16 }}>
+
                 <div className="mb-5 flex items-center justify-between">
                   <div>
-                    <h1 className="text-lg font-semibold text-stone-900">Pedidos</h1>
-                    <p className="text-sm text-stone-400">{orders.length} {orders.length === 1 ? 'pedido' : 'pedidos'}</p>
+                    <h1 className="text-lg font-semibold text-stone-900">Mis pedidos</h1>
+                    <p className="text-xs text-stone-400">{orders.length} {orders.length === 1 ? 'pedido' : 'pedidos'} en total</p>
                   </div>
-                  <button onClick={loadOrders} className="flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-500 transition hover:border-stone-300 hover:text-stone-800">
-                    <RefreshCw className="w-3.5 h-3.5" /> Actualizar
+                  <button onClick={loadOrders} className="flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-stone-500 transition hover:border-stone-300 hover:text-stone-800">
+                    <RefreshCw className="w-3 h-3" /> Actualizar
                   </button>
                 </div>
 
@@ -411,76 +434,177 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {orders.map(order => (
-                      <div key={order.id} className="overflow-hidden rounded-2xl border border-stone-200 bg-white">
-                        {/* Header */}
-                        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5 sm:px-5">
-                          <div>
-                            <p className="text-sm font-semibold text-stone-900">
-                              {order.order_number ? `#${order.order_number}` : `#${order.id.slice(0, 8).toUpperCase()}`}
-                            </p>
-                            <p className="mt-0.5 text-xs text-stone-400">
-                              {new Date(order.fecha).toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })}
-                            </p>
-                          </div>
-                          <span className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${STATUS_CLS[order.estado] ?? 'bg-stone-100 text-stone-600 border-stone-200'}`}>
-                            <StatusIcon s={order.estado} />
-                            {STATUS_LABEL[order.estado] ?? order.estado}
-                          </span>
-                        </div>
+                    {orders.map(order => {
+                      const subtotal = order.productos.reduce((s: number, p: { precio: number; cantidad: number }) => s + p.precio * p.cantidad, 0);
+                      const costoEnvio = order.total - subtotal;
+                      const showEnvioCost = costoEnvio > 0;
+                      const isTracking = trackingId === order.id;
+                      const isPaid = !canPay(order.estado);
 
-                        {/* Productos */}
-                        <div className="border-t border-stone-100 px-4 py-3 sm:px-5">
-                          {order.productos.map((p, i) => (
-                            <div key={i} className="flex justify-between py-1 text-sm">
-                              <span className="text-stone-700">{p.nombre} <span className="text-stone-400">×{p.cantidad}</span></span>
-                              <span className="font-medium text-stone-900">${(p.precio * p.cantidad).toLocaleString('es-CO')}</span>
+                      return (
+                        <div key={order.id} className="overflow-hidden rounded-2xl border border-stone-200 bg-white">
+
+                          {/* ══ CABECERA ══ */}
+                          <div className="flex items-center justify-between px-5 pt-4 pb-3">
+                            <div className="flex items-center gap-3">
+                              <div>
+                                <p className="font-mono text-sm font-bold text-stone-900">
+                                  #{order.order_number ?? order.id.slice(0, 8).toUpperCase()}
+                                </p>
+                                <p className="text-[11px] text-stone-400 mt-0.5">
+                                  {new Date(order.fecha).toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                </p>
+                              </div>
                             </div>
-                          ))}
-                        </div>
+                            <span className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${STATUS_CLS[order.estado] ?? 'bg-stone-100 text-stone-600 border-stone-200'}`}>
+                              <StatusIcon s={order.estado} />
+                              {STATUS_LABEL[order.estado] ?? order.estado}
+                            </span>
+                          </div>
 
-                        {/* Footer */}
-                        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-100 bg-stone-50/70 px-4 py-3 sm:px-5">
-                          <span className="text-sm font-semibold text-stone-900">
-                            Total: <span className="font-bold">${order.total.toLocaleString('es-CO')}</span>
-                          </span>
-                          <div className="flex flex-wrap gap-2">
+                          {/* ══ CUERPO: dos columnas en md+ ══ */}
+                          <div className="grid grid-cols-1 gap-0 md:grid-cols-[1fr_240px] border-t border-stone-100">
+
+                            {/* ── Col izquierda: productos + resumen ── */}
+                            <div className="px-5 py-3">
+                              {/* Productos */}
+                              <div className="space-y-2">
+                                {order.productos.map((p: { nombre: string; cantidad: number; precio: number }, i: number) => (
+                                  <div key={i} className="flex items-start gap-3">
+                                    <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-stone-100">
+                                      <Package className="h-3.5 w-3.5 text-stone-400" strokeWidth={1.5} />
+                                    </div>
+                                    <div className="flex flex-1 items-start justify-between gap-2 min-w-0">
+                                      <div className="min-w-0">
+                                        <p className="text-sm font-medium text-stone-800 leading-tight truncate">{p.nombre}</p>
+                                        <p className="text-[11px] text-stone-400 mt-0.5">Cantidad: {p.cantidad}</p>
+                                      </div>
+                                      <span className="text-sm font-semibold text-stone-900 flex-shrink-0">
+                                        ${(p.precio * p.cantidad).toLocaleString('es-CO')}
+                                      </span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+
+                              {/* Resumen de totales */}
+                              <div className="mt-3 border-t border-stone-100 pt-3 space-y-1">
+                                <div className="flex justify-between text-xs text-stone-400">
+                                  <span>Subtotal</span>
+                                  <span>${subtotal.toLocaleString('es-CO')}</span>
+                                </div>
+                                {showEnvioCost && (
+                                  <div className="flex justify-between text-xs text-stone-400">
+                                    <span>Costo de envío</span>
+                                    <span>${costoEnvio.toLocaleString('es-CO')}</span>
+                                  </div>
+                                )}
+                                <div className="flex justify-between border-t border-stone-100 pt-1.5 text-base font-bold text-stone-900">
+                                  <span>Total</span>
+                                  <span className="text-emerald-700">${order.total.toLocaleString('es-CO')}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* ── Col derecha: dirección + envío ── */}
+                            <div className="border-t border-stone-100 md:border-t-0 md:border-l px-5 py-4 space-y-4 bg-stone-50/40">
+
+                              {/* Dirección de entrega */}
+                              {order.direccionEnvio && (
+                                <div>
+                                  <div className="flex items-center gap-1.5 mb-1.5">
+                                    <MapPin className="w-3.5 h-3.5 text-stone-400" strokeWidth={1.5} />
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Dirección de entrega</p>
+                                  </div>
+                                  <p className="text-xs text-stone-600 leading-relaxed">{order.direccionEnvio}</p>
+                                </div>
+                              )}
+
+                              {/* Info de envío */}
+                              {isPaid && (
+                                <div>
+                                  <div className="flex items-center gap-1.5 mb-1.5">
+                                    <Truck className="w-3.5 h-3.5 text-stone-400" strokeWidth={1.5} />
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Información del envío</p>
+                                  </div>
+                                  <p className="text-xs text-stone-600">Transportadora: <span className="text-stone-400">Por asignar</span></p>
+                                  <p className="text-xs text-stone-500 mt-0.5">Tiempo estimado: 2 a 5 días hábiles</p>
+                                  <p className="mt-2 flex items-start gap-1.5 rounded-lg bg-emerald-50 border border-emerald-100 px-2.5 py-2 text-[11px] text-emerald-700 leading-relaxed">
+                                    <Check className="w-3 h-3 mt-0.5 flex-shrink-0" strokeWidth={2.5} />
+                                    Te notificaremos cuando tu pedido esté en camino.
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* ══ ACCIONES ══ */}
+                          <div className="border-t border-stone-100 px-5 py-3 flex flex-wrap items-center gap-2">
+                            {/* Pago pendiente */}
                             {backendOnline && canPay(order.estado) && (
                               mockPay?.orderId === order.id ? (
                                 <>
-                                  <button onClick={() => handleMock('approved')} disabled={payingId === order.id} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40">Aprobar</button>
-                                  <button onClick={() => handleMock('declined')} disabled={payingId === order.id} className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 disabled:opacity-40">Rechazar</button>
+                                  <button onClick={() => handleMock('approved')} disabled={payingId === order.id}
+                                    className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40">
+                                    Aprobar pago
+                                  </button>
+                                  <button onClick={() => handleMock('declined')} disabled={payingId === order.id}
+                                    className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 disabled:opacity-40">
+                                    Rechazar
+                                  </button>
                                 </>
                               ) : (
-                                <button onClick={() => handlePay(order.id)} disabled={payingId === order.id} className="flex items-center gap-1.5 rounded-lg bg-stone-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40">
+                                <button onClick={() => handlePay(order.id)} disabled={payingId === order.id}
+                                  className="flex items-center gap-1.5 rounded-lg bg-stone-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40">
                                   <CreditCard className="w-3.5 h-3.5" strokeWidth={1.5} />
-                                  {payingId === order.id ? 'Iniciando…' : 'Pagar'}
+                                  {payingId === order.id ? 'Iniciando…' : 'Completar pago'}
                                 </button>
                               )
                             )}
-                            {backendOnline && !canPay(order.estado) && (
-                              <button onClick={() => setTrackingId(trackingId === order.id ? null : order.id)} className="flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-stone-600 transition hover:border-stone-300">
+
+                            {/* Seguimiento */}
+                            {backendOnline && isPaid && (
+                              <button
+                                onClick={() => setTrackingId(isTracking ? null : order.id)}
+                                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
+                                  isTracking
+                                    ? 'border-stone-300 bg-stone-100 text-stone-700'
+                                    : 'border-stone-200 bg-white text-stone-600 hover:border-stone-300'
+                                }`}
+                              >
                                 <Truck className="w-3.5 h-3.5" strokeWidth={1.5} />
-                                {trackingId === order.id ? 'Ocultar' : 'Seguimiento'}
+                                {isTracking ? 'Ocultar seguimiento' : 'Ver seguimiento'}
+                              </button>
+                            )}
+
+                            {/* Factura */}
+                            {backendOnline && isPaid && (
+                              <button
+                                onClick={() => handleViewInvoice(order.id)}
+                                disabled={loadingInvoiceId === order.id}
+                                className="flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-stone-600 transition hover:border-stone-300 disabled:opacity-40"
+                              >
+                                {loadingInvoiceId === order.id
+                                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  : <FileText className="w-3.5 h-3.5" strokeWidth={1.5} />}
+                                Ver factura
                               </button>
                             )}
                           </div>
+
+                          {/* ══ TRACKING EXPANDIDO ══ */}
+                          {isTracking && (
+                            <div className="border-t-2 border-stone-100 bg-stone-50/60 px-5 py-5">
+                              <TrackingPedidoPage
+                                pedidoId={order.id}
+                                direccionEnvio={order.direccionEnvio}
+                                onClose={() => setTrackingId(null)}
+                              />
+                            </div>
+                          )}
                         </div>
-
-                        {trackingId === order.id && (
-                          <div className="border-t border-stone-100 p-4">
-                            <TrackingPedidoPage pedidoId={order.id} onClose={() => setTrackingId(null)} />
-                          </div>
-                        )}
-
-                        {order.direccionEnvio && (
-                          <div className="flex items-start gap-2 border-t border-stone-100 px-4 py-2.5 sm:px-5">
-                            <MapPin className="mt-0.5 w-3.5 h-3.5 flex-shrink-0 text-stone-300" strokeWidth={1.5} />
-                            <p className="text-xs text-stone-400">{order.direccionEnvio}</p>
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </motion.div>
@@ -641,6 +765,7 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
             )}
 
           </AnimatePresence>
+          </div>
         </main>
       </div>
     </div>

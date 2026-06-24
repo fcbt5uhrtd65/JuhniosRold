@@ -99,6 +99,8 @@ export interface CustomerOrder {
     | 'refunded';
   fecha: string;
   direccionEnvio: string;
+  invoiceId?: string | null;
+  invoiceNumber?: string | null;
 }
 
 export interface SavedProduct {
