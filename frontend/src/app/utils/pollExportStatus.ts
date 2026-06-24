@@ -10,6 +10,22 @@ interface ExportStatusResult {
   error?: string;
 }
 
+export async function downloadFile(url: string, filename?: string): Promise<void> {
+  // Siempre usar ruta relativa para pasar por el proxy de Vite (/media → backend)
+  const fetchUrl = url.startsWith('http') ? new URL(url).pathname : url;
+  const response = await fetch(fetchUrl, { credentials: 'include' });
+  if (!response.ok) throw new Error(`Error al descargar el archivo (${response.status})`);
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = objectUrl;
+  a.download = filename ?? fetchUrl.split('/').pop() ?? 'export';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(objectUrl);
+}
+
 export async function pollExportStatus(
   taskId: string,
   fetchStatus: (taskId: string) => Promise<ExportStatusResult> = getExportStatus,

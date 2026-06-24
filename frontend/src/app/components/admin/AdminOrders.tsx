@@ -67,6 +67,9 @@ export function AdminOrders() {
   const [cityFilter, setCityFilter] = useState('');
   const [customerFilter, setCustomerFilter] = useState('');
   const [orderNumberFilter, setOrderNumberFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState<Order['estado'] | ''>('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(5);
   const [trackingData, setTrackingData] = useState<Record<string, TrackingPedido>>({});
@@ -108,18 +111,24 @@ export function AdminOrders() {
     const cityQuery = normalizeText(cityFilter);
     const customerQuery = normalizeText(customerFilter);
     const orderQuery = normalizeText(orderNumberFilter);
+    const fromDate = dateFrom ? new Date(dateFrom) : null;
+    const toDate = dateTo ? new Date(`${dateTo}T23:59:59`) : null;
 
     return orders.filter((order) => {
       const customer = customers.find(c => c.id === order.clienteId);
       const cityText = normalizeText(`${order.ciudadEnvio ?? ''} ${customer?.ciudad ?? ''}`);
       const customerText = normalizeText(`${customer?.nombre ?? ''} ${customer?.email ?? ''} ${customer?.telefono ?? ''}`);
       const orderText = normalizeText(`${order.numero ?? ''} ${order.id}`);
+      const orderDate = new Date(order.fecha);
 
       return (!cityQuery || cityText.includes(cityQuery)) &&
         (!customerQuery || customerText.includes(customerQuery)) &&
-        (!orderQuery || orderText.includes(orderQuery));
+        (!orderQuery || orderText.includes(orderQuery)) &&
+        (!statusFilter || order.estado === statusFilter) &&
+        (!fromDate || orderDate >= fromDate) &&
+        (!toDate || orderDate <= toDate);
     });
-  }, [orders, customers, cityFilter, customerFilter, orderNumberFilter]);
+  }, [orders, customers, cityFilter, customerFilter, orderNumberFilter, statusFilter, dateFrom, dateTo]);
 
   const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
   const paginatedOrders = filteredOrders.slice(
@@ -129,7 +138,7 @@ export function AdminOrders() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [cityFilter, customerFilter, orderNumberFilter]);
+  }, [cityFilter, customerFilter, orderNumberFilter, statusFilter, dateFrom, dateTo]);
 
   useEffect(() => {
     setCurrentPage(page => Math.min(page, Math.max(1, totalPages)));
@@ -139,6 +148,9 @@ export function AdminOrders() {
     setCityFilter('');
     setCustomerFilter('');
     setOrderNumberFilter('');
+    setStatusFilter('');
+    setDateFrom('');
+    setDateTo('');
   };
 
   const getStatusIcon = (estado: Order['estado']) => {
@@ -228,48 +240,105 @@ export function AdminOrders() {
         <KpiCard label="Ingresos" value={`$${(stats.total / 1000).toFixed(0)}k`} icon={Check} color="text-[#2a4038] bg-[#2a4038]/10" />
       </div>
 
-      <Card className="p-4 mb-5">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div>
-            <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1.5">Número de pedido</label>
+      <Card className="p-5 mb-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-5 gap-y-4">
+          {/* Número de pedido */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Número de pedido</label>
             <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               <input
                 value={orderNumberFilter}
                 onChange={e => setOrderNumberFilter(e.target.value)}
-                placeholder="Buscar por ID o número..."
-                className="w-full pl-9 pr-3 py-2.5 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#2a4038]/20 focus:border-[#2a4038]"
+                placeholder="ID o número..."
+                className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#2a4038]/20 focus:border-[#2a4038] placeholder:text-gray-300"
               />
             </div>
           </div>
-          <div>
-            <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1.5">Cliente</label>
+
+          {/* Cliente */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Cliente</label>
             <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               <input
                 value={customerFilter}
                 onChange={e => setCustomerFilter(e.target.value)}
                 placeholder="Nombre, correo o teléfono..."
-                className="w-full pl-9 pr-3 py-2.5 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#2a4038]/20 focus:border-[#2a4038]"
+                className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#2a4038]/20 focus:border-[#2a4038] placeholder:text-gray-300"
               />
             </div>
           </div>
-          <div>
-            <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1.5">Ciudad</label>
+
+          {/* Ciudad */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Ciudad</label>
             <div className="relative">
-              <MapPin size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <MapPin size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               <input
                 value={cityFilter}
                 onChange={e => setCityFilter(e.target.value)}
                 placeholder="Ciudad de envío o cliente..."
-                className="w-full pl-9 pr-3 py-2.5 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#2a4038]/20 focus:border-[#2a4038]"
+                className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#2a4038]/20 focus:border-[#2a4038] placeholder:text-gray-300"
+              />
+            </div>
+          </div>
+
+          {/* Estado */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Estado</label>
+            <select
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value as Order['estado'] | '')}
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#2a4038]/20 focus:border-[#2a4038] text-gray-700"
+            >
+              <option value="">Todos los estados</option>
+              <option value="pendiente">Pendiente</option>
+              <option value="pagado">Pagado</option>
+              <option value="procesando">Procesando</option>
+              <option value="empacado">Empacado</option>
+              <option value="enviado">Enviado</option>
+              <option value="entregado">Entregado</option>
+              <option value="cancelado">Cancelado</option>
+            </select>
+          </div>
+
+          {/* Fecha desde */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Fecha desde</label>
+            <div className="relative">
+              <Calendar size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={e => setDateFrom(e.target.value)}
+                className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#2a4038]/20 focus:border-[#2a4038]"
+              />
+            </div>
+          </div>
+
+          {/* Fecha hasta */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Fecha hasta</label>
+            <div className="relative">
+              <Calendar size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <input
+                type="date"
+                value={dateTo}
+                min={dateFrom || undefined}
+                onChange={e => setDateTo(e.target.value)}
+                className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#2a4038]/20 focus:border-[#2a4038]"
               />
             </div>
           </div>
         </div>
-        {(cityFilter || customerFilter || orderNumberFilter) && (
-          <div className="flex justify-end mt-3">
-            <button onClick={clearFilters} className="text-xs font-semibold text-gray-500 hover:text-[#2a4038]">
+
+        {(cityFilter || customerFilter || orderNumberFilter || statusFilter || dateFrom || dateTo) && (
+          <div className="flex justify-end mt-4 pt-3 border-t border-gray-100">
+            <button
+              onClick={clearFilters}
+              className="text-xs font-semibold text-gray-400 hover:text-[#2a4038] transition-colors"
+            >
               Limpiar filtros
             </button>
           </div>

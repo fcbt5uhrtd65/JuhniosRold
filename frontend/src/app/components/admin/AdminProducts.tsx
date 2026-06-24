@@ -16,7 +16,7 @@ import {
 } from '../ui/dropdown-menu';
 import { requestProductsExport, type ExportFormat, type PdfLayout } from '../../services/products.service';
 import { getWholesaleSettingsApi, updateWholesaleSettingsApi } from '../../services/cart.service';
-import { pollExportStatus } from '../../utils/pollExportStatus';
+import { pollExportStatus, downloadFile } from '../../utils/pollExportStatus';
 import { resolveBackendUrl } from '../../services/api';
 import { getWholesaleSettings, saveWholesaleSettings } from '../../utils/wholesale';
 import { Card, Badge, type BadgeColor, Table, Th, Td, Modal, EmptyState, inputCls, selectCls } from './AdminUI';
@@ -440,7 +440,7 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
       const ids = processedProducts.map(p => p.id);
       const taskId = await requestProductsExport(format, ids, pdfLayout);
       const relativeUrl = await pollExportStatus(taskId);
-      window.open(resolveBackendUrl(relativeUrl), '_blank');
+      await downloadFile(resolveBackendUrl(relativeUrl));
       toast.success('Exportación lista.');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'No se pudo exportar los productos');

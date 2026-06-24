@@ -61,7 +61,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from '../ui/dropdown-menu';
-import { pollExportStatus } from '../../utils/pollExportStatus';
+import { pollExportStatus, downloadFile } from '../../utils/pollExportStatus';
 import { resolveBackendUrl } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 import { Card } from './AdminUI';
@@ -1094,7 +1094,7 @@ export function AdminReports() {
     try {
       const taskId = await requestSalesReportExport(format);
       const url = await pollExportStatus(taskId, getSalesReportExportStatus);
-      window.open(resolveBackendUrl(url), '_blank');
+      await downloadFile(resolveBackendUrl(url));
       toast.success('Exportación lista.');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Error al exportar');

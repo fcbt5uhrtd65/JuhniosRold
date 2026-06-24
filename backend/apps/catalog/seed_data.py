@@ -127,14 +127,72 @@ CATALOG_DATA = """
 94|GEL ANTIBACTERIAL PIMPINA|20000|1|291155
 """.strip()
 
+# Imágenes por id de producto (Unsplash, agrupadas por tipo)
+_BABY_OIL    = "https://images.unsplash.com/photo-1599305090598-fe179d501227?w=600&q=80"
+_HAIR_OIL    = "https://images.unsplash.com/photo-1526045612212-70caf35c14df?w=600&q=80"
+_BODY_OIL    = "https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?w=600&q=80"
+_BODY_SPLASH = "https://images.unsplash.com/photo-1541643600914-78b084683702?w=600&q=80"
+_BODY_CREAM  = "https://images.unsplash.com/photo-1556228720-195a672e8a03?w=600&q=80"
+_HAIR_TREAT  = "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=600&q=80"
+_HAIR_AMINO  = "https://images.unsplash.com/photo-1519415510236-718bdfcd89c8?w=600&q=80"
+_HAIR_GEL    = "https://images.unsplash.com/photo-1585745279647-60bbf4200e88?w=600&q=80"
+_LOTION      = "https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=600&q=80"
+_MENTHOL     = "https://images.unsplash.com/photo-1607631568010-a87245c0daf8?w=600&q=80"
+_POMADE      = "https://images.unsplash.com/photo-1585747860715-2ba37e788b70?w=600&q=80"
+_LAB         = "https://images.unsplash.com/photo-1582719471384-894fbb16e074?w=600&q=80"
+_SHAMPOO     = "https://images.unsplash.com/photo-1600857544200-b2f666a9a2ec?w=600&q=80"
+_CONDITIONER = "https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?w=600&q=80"
+_SILICONE    = "https://images.unsplash.com/photo-1526045612212-70caf35c14df?w=600&q=80"
+_DEODORANT   = "https://images.unsplash.com/photo-1585386959984-a4155224a1ad?w=600&q=80"
+_SOAP        = "https://images.unsplash.com/photo-1583947581924-860bda6a26df?w=600&q=80"
+_ALCOHOL     = "https://images.unsplash.com/photo-1584744982491-665216d95f8b?w=600&q=80"
+_AMMONIA     = "https://images.unsplash.com/photo-1563453392212-326f5e854473?w=600&q=80"
+_ANTIBAC     = "https://images.unsplash.com/photo-1584744982491-665216d95f8b?w=600&q=80"
+
+PRODUCT_IMAGES = {
+    1: _BABY_OIL, 2: _BABY_OIL, 3: _BABY_OIL, 4: _HAIR_OIL, 5: _HAIR_OIL,
+    6: _HAIR_OIL, 7: _HAIR_OIL,
+    8: _BODY_OIL, 9: _BODY_OIL,
+    10: _BODY_SPLASH,
+    11: _BODY_CREAM, 12: _BODY_CREAM, 13: _BODY_CREAM, 14: _BODY_CREAM,
+    15: _HAIR_TREAT, 16: _HAIR_TREAT,
+    17: _HAIR_AMINO,
+    18: _HAIR_GEL, 19: _HAIR_GEL, 20: _HAIR_GEL, 21: _HAIR_GEL,
+    22: _HAIR_GEL, 23: _HAIR_GEL, 24: _HAIR_GEL,
+    25: _LOTION, 26: _LOTION, 27: _LOTION, 28: _LOTION,
+    29: _MENTHOL, 30: _MENTHOL, 31: _MENTHOL, 32: _MENTHOL,
+    33: _MENTHOL, 34: _MENTHOL, 35: _MENTHOL,
+    36: _POMADE, 37: _POMADE, 38: _POMADE,
+    39: _LAB, 40: _LAB, 41: _LAB,
+    42: _HAIR_TREAT,
+    43: _SHAMPOO, 44: _CONDITIONER, 45: _HAIR_TREAT,
+    46: _SHAMPOO, 47: _CONDITIONER, 48: _HAIR_TREAT,
+    49: _SILICONE, 50: _SILICONE, 51: _SILICONE, 52: _SILICONE,
+    53: _HAIR_AMINO,
+    54: _HAIR_AMINO, 55: _HAIR_AMINO,
+    56: _BODY_CREAM, 57: _BODY_CREAM, 58: _BODY_CREAM,
+    59: _DEODORANT,
+    60: _SOAP, 61: _SOAP, 62: _SOAP, 63: _SOAP,
+    64: _SOAP, 65: _SOAP, 66: _SOAP, 67: _SOAP, 68: _SOAP,
+    69: _ALCOHOL, 70: _ALCOHOL, 71: _ALCOHOL, 72: _ALCOHOL,
+    73: _ALCOHOL, 74: _ALCOHOL, 75: _ALCOHOL, 76: _ALCOHOL,
+    77: _ALCOHOL, 78: _ALCOHOL, 79: _ALCOHOL, 80: _ALCOHOL, 81: _ALCOHOL,
+    82: _AMMONIA, 83: _AMMONIA, 84: _AMMONIA,
+    85: _ANTIBAC, 86: _ANTIBAC, 87: _ANTIBAC, 88: _ANTIBAC,
+    89: _ANTIBAC, 90: _ANTIBAC, 91: _ANTIBAC, 92: _ANTIBAC,
+    93: _ANTIBAC, 94: _ANTIBAC,
+}
+
 
 def iter_catalog_items():
     for line in CATALOG_DATA.splitlines():
         item_id, name, units_per_display, stock, price = line.split("|")
+        pid = int(item_id)
         yield {
-            "id": int(item_id),
+            "id": pid,
             "name": name,
             "units_per_display": units_per_display,
             "stock": int(stock),
             "price": int(price),
+            "image_url": PRODUCT_IMAGES.get(pid, ""),
         }

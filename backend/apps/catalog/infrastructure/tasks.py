@@ -1,10 +1,12 @@
 import base64
 import binascii
+import hashlib
 import io
 import logging
 import re
 import socket
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from urllib.parse import urlparse
 from uuid import uuid4
@@ -30,6 +32,8 @@ from reportlab.platypus import (
 from .models import Product
 
 logger = logging.getLogger(__name__)
+
+IMAGE_CACHE_DIR = Path(settings.MEDIA_ROOT) / "cache" / "images"
 
 COLUMNS = (
     ("nombre", "Nombre"),
@@ -100,13 +104,22 @@ def _load_image_bytes(image_ref):
     if image_ref.startswith(("http://", "https://")):
         if not _is_safe_public_url(image_ref):
             return None
+        cache_key = hashlib.sha256(image_ref.encode()).hexdigest()
+        IMAGE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        cache_path = IMAGE_CACHE_DIR / cache_key
+        if cache_path.exists():
+            data = cache_path.read_bytes()
+            return data if len(data) <= MAX_IMAGE_BYTES else None
         try:
             request = urllib.request.Request(image_ref, headers={"User-Agent": "JuhniosRold-Export/1.0"})
             with urllib.request.urlopen(request, timeout=IMAGE_DOWNLOAD_TIMEOUT) as response:
                 data = response.read(MAX_IMAGE_BYTES + 1)
         except Exception:
             return None
-        return data if len(data) <= MAX_IMAGE_BYTES else None
+        if len(data) <= MAX_IMAGE_BYTES:
+            cache_path.write_bytes(data)
+            return data
+        return None
 
     return None
 
@@ -213,17 +226,46 @@ def _write_xlsx(path, rows):
     workbook.save(path)
 
 
-def _pil_to_rlimage(image, max_size_cm=1.6):
-    buffer = io.BytesIO()
-    image.save(buffer, format="PNG")
-    buffer.seek(0)
-    width, height = image.size
+def _image_to_jpeg_bytes(image, max_size_cm=1.6):
+    max_px = int(max_size_cm * 40)
+    thumb = image.copy()
+    thumb.thumbnail((max_px, max_px), PILImage.LANCZOS)
+    buf = io.BytesIO()
+    thumb.save(buf, format="JPEG", quality=72, optimize=True)
+    return buf.getvalue(), thumb.size
+
+
+def _make_rlimage(jpeg_bytes, size, max_size_cm=1.6, **_):
+    w, h = size
     max_size = max_size_cm * cm
-    scale = min(max_size / width, max_size / height)
-    return RLImage(buffer, width=width * scale, height=height * scale)
+    scale = min(max_size / w, max_size / h)
+    return RLImage(io.BytesIO(jpeg_bytes), width=w * scale, height=h * scale)
+
+
+def _prefetch_images(rows, max_size_cm=1.6, max_workers=16):
+    urls = list({row["image_url"] for row in rows if row.get("image_url")})
+
+    def _fetch_and_encode(url):
+        image = _resolve_image(url)
+        if image is None:
+            return url, None
+        jpeg_bytes, size = _image_to_jpeg_bytes(image, max_size_cm)
+        return url, (jpeg_bytes, size)
+
+    cache = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_url = {executor.submit(_fetch_and_encode, url): url for url in urls}
+        for future in as_completed(future_to_url):
+            url = future_to_url[future]
+            try:
+                cache[url] = future.result()[1]
+            except Exception:
+                cache[url] = None
+    return cache
 
 
 def _write_pdf_table(path, rows):
+    image_cache = _prefetch_images(rows, max_size_cm=1.6)
     document = SimpleDocTemplate(str(path), pagesize=landscape(letter))
     styles = getSampleStyleSheet()
     elements = [Paragraph("Juhnios Rold - Exportación de productos", styles["Title"]), Spacer(1, 12)]
@@ -231,8 +273,8 @@ def _write_pdf_table(path, rows):
     header = ["Imagen"] + [label for _, label in COLUMNS]
     data = [header]
     for row in rows:
-        image = _resolve_image(row["image_url"])
-        cell = _pil_to_rlimage(image) if image else ""
+        cached = image_cache.get(row["image_url"])
+        cell = _make_rlimage(*cached) if cached else ""
         data.append([cell] + [str(row[key]) for key, _ in COLUMNS])
 
     table = Table(data, repeatRows=1)
@@ -249,6 +291,7 @@ def _write_pdf_table(path, rows):
 
 
 def _write_pdf_catalog(path, rows):
+    image_cache = _prefetch_images(rows, max_size_cm=3.5)
     document = SimpleDocTemplate(str(path), pagesize=letter, topMargin=36, bottomMargin=36)
     styles = getSampleStyleSheet()
     elements = [Paragraph("Juhnios Rold - Catálogo de productos", styles["Title"]), Spacer(1, 16)]
@@ -260,8 +303,8 @@ def _write_pdf_catalog(path, rows):
 
     cards = []
     for row in rows:
-        image = _resolve_image(row["image_url"])
-        image_cell = _pil_to_rlimage(image, max_size_cm=3.5) if image else Paragraph("Sin imagen", label_style)
+        cached = image_cache.get(row["image_url"])
+        image_cell = _make_rlimage(*cached, max_size_cm=3.5) if cached else Paragraph("Sin imagen", label_style)
         details = Paragraph(
             f"<b>{row['nombre']}</b><br/>"
             f"SKU: {row['sku']}<br/>"

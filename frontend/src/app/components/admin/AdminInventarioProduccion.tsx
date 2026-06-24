@@ -43,7 +43,7 @@ import {
   type InventoryReportExportFormat,
 } from '../../services/reports.service';
 import { getAuditLogs, type AuditLog } from '../../services/audit.service';
-import { pollExportStatus } from '../../utils/pollExportStatus';
+import { pollExportStatus, downloadFile } from '../../utils/pollExportStatus';
 import { resolveBackendUrl } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 
@@ -2113,7 +2113,7 @@ function ModuloReportes() {
         grupo,
       });
       const relativeUrl = await pollExportStatus(taskId, getGenericReportExportStatus);
-      window.open(resolveBackendUrl(relativeUrl), '_blank');
+      await downloadFile(resolveBackendUrl(relativeUrl));
       toast.success('Reporte listo.');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'No se pudo generar el reporte');

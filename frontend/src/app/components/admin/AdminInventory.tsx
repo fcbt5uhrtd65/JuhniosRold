@@ -13,7 +13,7 @@ import {
   DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent,
 } from '../ui/dropdown-menu';
 import { requestProductsExport, type ExportFormat, type PdfLayout } from '../../services/products.service';
-import { pollExportStatus } from '../../utils/pollExportStatus';
+import { pollExportStatus, downloadFile } from '../../utils/pollExportStatus';
 import { resolveBackendUrl } from '../../services/api';
 import { KpiCard, Table, Th, Td, Badge, inputCls } from './AdminUI';
 
@@ -179,7 +179,7 @@ export function AdminInventory({ initialSearch = '' }: AdminInventoryProps) {
     try {
       const taskId = await requestProductsExport(format, ids, pdfLayout);
       const relativeUrl = await pollExportStatus(taskId);
-      window.open(resolveBackendUrl(relativeUrl), '_blank');
+      await downloadFile(resolveBackendUrl(relativeUrl));
       toast.success('Exportación lista.');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'No se pudo exportar el inventario');

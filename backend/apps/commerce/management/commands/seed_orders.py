@@ -49,6 +49,7 @@ def _seed_customers(count):
             phone=f"300{random.randint(1000000, 9999999)}",
             address=f"Calle {random.randint(1, 150)} #{random.randint(1, 99)}-{random.randint(1, 99)}",
             city=random.choice(CITIES),
+            wholesale_code=f"JR-MAY-SC{index:04d}",
             is_active=True,
         )
         created.append(customer)
