@@ -5,6 +5,7 @@ interface PaginationProps {
   totalPages: number;
   totalItems: number;
   itemsPerPage: number;
+  itemsPerPageOptions?: number[];
   onPageChange: (page: number) => void;
   onItemsPerPageChange?: (count: number) => void;
 }
@@ -14,6 +15,7 @@ export function Pagination({
   totalPages,
   totalItems,
   itemsPerPage,
+  itemsPerPageOptions = [12, 24, 48, 96],
   onPageChange,
   onItemsPerPageChange,
 }: PaginationProps) {
@@ -66,10 +68,9 @@ export function Pagination({
             onChange={(e) => onItemsPerPageChange(Number(e.target.value))}
             className="px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#2a4038]/20 focus:border-[#2a4038]"
           >
-            <option value={12}>12 por página</option>
-            <option value={24}>24 por página</option>
-            <option value={48}>48 por página</option>
-            <option value={96}>96 por página</option>
+            {itemsPerPageOptions.map(option => (
+              <option key={option} value={option}>{option} por página</option>
+            ))}
           </select>
         )}
       </div>

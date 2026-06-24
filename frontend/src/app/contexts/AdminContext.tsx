@@ -234,7 +234,7 @@ function mapApiProduct(p: ApiProduct): Product {
 
 // ---- Map API order → admin Order ----
 function mapApiOrder(o: {
-  id: string; status: string; total_amount: number; created_at: string;
+  id: string; order_number?: string; status: string; total_amount: number; created_at: string;
   payment_method?: string; user_id?: string; items?: Array<{
     product_id: string; product_name: string; quantity: number; unit_price: number;
   }>;
@@ -258,6 +258,7 @@ function mapApiOrder(o: {
   };
   return {
     id: o.id,
+    numero: o.order_number,
     clienteId: o.user_id ?? '',
     productos: (o.items ?? []).map(i => ({
       productoId: i.product_id,

@@ -1,9 +1,19 @@
-import uuid
+import secrets
+import string
 
 from django.conf import settings
 from django.db import models
 
 from shared.infrastructure.models import BaseModel
+
+ORDER_NUMBER_PREFIX = "JR"
+ORDER_NUMBER_LENGTH = 6
+ORDER_NUMBER_ALPHABET = string.ascii_uppercase + string.digits
+
+
+def generate_order_number() -> str:
+    suffix = "".join(secrets.choice(ORDER_NUMBER_ALPHABET) for _ in range(ORDER_NUMBER_LENGTH))
+    return f"{ORDER_NUMBER_PREFIX}-{suffix}"
 
 
 class Cart(BaseModel):
@@ -78,7 +88,11 @@ class Order(BaseModel):
 
     def save(self, *args, **kwargs):
         if not self.number:
-            self.number = f"JR-{uuid.uuid4().hex[:12].upper()}"
+            while True:
+                candidate = generate_order_number()
+                if not Order.objects.filter(number=candidate).exists():
+                    self.number = candidate
+                    break
         super().save(*args, **kwargs)
 
 
