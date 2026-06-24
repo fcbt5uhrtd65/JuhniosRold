@@ -22,8 +22,23 @@ import { Pagination } from './Pagination';
 
 const noop = () => {};
 
+// Workflow states visible to the admin, in order.
+const WORKFLOW: Order['estado'][] = ['pagado', 'procesando', 'empacado', 'enviado', 'entregado'];
+
+// The only allowed next state for each workflow state.
+const NEXT_STATE: Partial<Record<Order['estado'], Order['estado']>> = {
+  pagado: 'procesando',
+  procesando: 'empacado',
+  empacado: 'enviado',
+  enviado: 'entregado',
+};
+
+function isWorkflowState(estado: Order['estado']): boolean {
+  return WORKFLOW.includes(estado);
+}
+
 export function AdminOrders() {
-  const { orders, customers, updateOrderStatus } = useAdmin();
+  const { orders, customers, updateOrderStatus, refreshData } = useAdmin();
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [showAllDetails, setShowAllDetails] = useState(false);
   const [cityFilter, setCityFilter] = useState('');
@@ -31,6 +46,8 @@ export function AdminOrders() {
   const [orderNumberFilter, setOrderNumberFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(5);
+  // Track which order is showing the "Registrar guía" modal
+  const [guiaOrderId, setGuiaOrderId] = useState<string | null>(null);
 
   const normalizeText = (value: string | undefined | null) => value?.toLowerCase().trim() ?? '';
 
@@ -115,13 +132,31 @@ export function AdminOrders() {
     }
   };
 
-  const statusOptions: Order['estado'][] = ['pendiente', 'pagado', 'enviado', 'entregado', 'cancelado'];
+  const getStatusLabel = (estado: Order['estado']): string => {
+    const labels: Partial<Record<Order['estado'], string>> = {
+      pagado: 'Pagado',
+      procesando: 'Procesando',
+      empacado: 'Empacado',
+      enviado: 'Enviado',
+      entregado: 'Entregado',
+    };
+    return labels[estado] ?? estado;
+  };
 
   const stats = {
-    pendientes: orders.filter(o => o.estado === 'pendiente').length,
-    enviados: orders.filter(o => o.estado === 'enviado').length,
+    pendientes: orders.filter(o => o.estado === 'pagado' || o.estado === 'procesando' || o.estado === 'empacado').length,
+    enviados: orders.filter(o => o.estado === 'enviado' || o.estado === 'en_camino').length,
     entregados: orders.filter(o => o.estado === 'entregado').length,
     total: orders.reduce((sum, o) => o.estado !== 'cancelado' ? sum + o.total : sum, 0),
+  };
+
+  const handleStatusClick = (order: Order, targetStatus: Order['estado']) => {
+    if (targetStatus === 'enviado') {
+      // Show the registrar guía modal instead of directly changing status
+      setGuiaOrderId(order.id);
+      return;
+    }
+    void updateOrderStatus(order.id, targetStatus);
   };
 
   return (
@@ -145,7 +180,7 @@ export function AdminOrders() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <KpiCard label="Pendientes" value={String(stats.pendientes)} icon={Clock} color="text-amber-600 bg-amber-50" />
+        <KpiCard label="Por procesar" value={String(stats.pendientes)} icon={Clock} color="text-amber-600 bg-amber-50" />
         <KpiCard label="Enviados" value={String(stats.enviados)} icon={Truck} color="text-blue-600 bg-blue-50" />
         <KpiCard label="Entregados" value={String(stats.entregados)} icon={Package} color="text-emerald-600 bg-emerald-50" />
         <KpiCard label="Ingresos" value={`$${(stats.total / 1000).toFixed(0)}k`} icon={Check} color="text-[#2a4038] bg-[#2a4038]/10" />
@@ -205,6 +240,8 @@ export function AdminOrders() {
           const destination = [order.ciudadEnvio, order.departamentoEnvio, order.paisEnvio].filter(Boolean).join(', ');
           const canShowShipping = Boolean(order.direccionEnvio || (order.latitudEnvio && order.longitudEnvio));
           const isExpanded = showAllDetails || expandedOrderId === order.id;
+          const inWorkflow = isWorkflowState(order.estado);
+          const nextState = NEXT_STATE[order.estado];
 
           return (
             <Card key={order.id} className="p-0 overflow-hidden">
@@ -216,7 +253,7 @@ export function AdminOrders() {
                       label={
                         <span className="flex items-center gap-1 capitalize">
                           {getStatusIcon(order.estado)}
-                          {order.estado}
+                          {getStatusLabel(order.estado)}
                         </span>
                       }
                       color={getStatusColor(order.estado)}
@@ -299,28 +336,66 @@ export function AdminOrders() {
                         </div>
                       </div>
 
-                      <div>
-                        <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-gray-400">Cambiar estado</p>
-                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-                          {statusOptions.map((status) => (
-                            <button
-                              key={status}
-                              onClick={() => updateOrderStatus(order.id, status)}
-                              className={`h-9 rounded-lg px-2 text-[11px] font-semibold capitalize transition-colors ${
-                                order.estado === status
-                                  ? 'bg-[#2a4038] text-white'
-                                  : 'border border-gray-200 text-gray-600 hover:bg-gray-50'
-                              }`}
-                            >
-                              {status}
-                            </button>
-                          ))}
+                      {inWorkflow && (
+                        <div>
+                          <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-gray-400">Flujo de pedido</p>
+                          <div className="flex flex-wrap gap-2">
+                            {WORKFLOW.map((step, index) => {
+                              const currentIndex = WORKFLOW.indexOf(order.estado);
+                              const isCompleted = index < currentIndex;
+                              const isCurrent = step === order.estado;
+                              const isNext = nextState === step;
+                              const isDisabled = !isCompleted && !isCurrent && !isNext;
+
+                              return (
+                                <button
+                                  key={step}
+                                  disabled={isDisabled || isCurrent || isCompleted}
+                                  onClick={() => handleStatusClick(order, step)}
+                                  className={`h-9 rounded-lg px-3 text-[11px] font-semibold capitalize transition-colors ${
+                                    isCurrent
+                                      ? 'bg-[#2a4038] text-white cursor-default'
+                                      : isCompleted
+                                        ? 'bg-gray-100 text-gray-400 cursor-default line-through'
+                                        : isNext
+                                          ? 'border border-[#2a4038] text-[#2a4038] hover:bg-[#2a4038]/5'
+                                          : 'border border-gray-200 text-gray-300 cursor-not-allowed'
+                                  }`}
+                                >
+                                  {isCompleted && <span className="mr-1">✓</span>}
+                                  {getStatusLabel(step)}
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {guiaOrderId === order.id && (
+                            <AdminRegistrarGuia
+                              pedidoId={order.id}
+                              onSaved={() => {
+                                setGuiaOrderId(null);
+                                void refreshData();
+                              }}
+                              onCancel={() => setGuiaOrderId(null)}
+                            />
+                          )}
                         </div>
-                        <AdminRegistrarGuia
-                          pedidoId={order.id}
-                          onSaved={() => void updateOrderStatus(order.id, 'enviado')}
-                        />
-                      </div>
+                      )}
+
+                      {!inWorkflow && (
+                        <div>
+                          <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-gray-400">Estado</p>
+                          <Badge
+                            label={
+                              <span className="flex items-center gap-1 capitalize">
+                                {getStatusIcon(order.estado)}
+                                {getStatusLabel(order.estado)}
+                              </span>
+                            }
+                            color={getStatusColor(order.estado)}
+                          />
+                        </div>
+                      )}
                     </div>
 
                     {canShowShipping && (
