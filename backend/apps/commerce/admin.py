@@ -143,18 +143,5 @@ class PaymentWebhookEventAdmin(admin.ModelAdmin):
 class WholesaleSettingsAdmin(admin.ModelAdmin):
     list_display = ("minimum_purchase", "discount_percentage", "is_active", "updated_at")
     fields = ("minimum_purchase", "discount_percentage", "is_active")
-    list_filter = ("event_type", "environment", "transaction_status", "processed")
-    search_fields = ("checksum", "reference", "transaction_id")
-    readonly_fields = (
-        "event_type",
-        "checksum",
-        "environment",
-        "event_timestamp",
-        "transaction_id",
-        "reference",
-        "transaction_status",
-        "processed",
-        "processing_error",
-        "created_at",
-        "updated_at",
-    )
+    list_filter = ("is_active",)
+    readonly_fields = ("created_at", "updated_at")

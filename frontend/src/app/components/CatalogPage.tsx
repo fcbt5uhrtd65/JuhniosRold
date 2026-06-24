@@ -2,7 +2,7 @@ import { Navbar } from './Navbar';
 import { Footer } from './Footer';
 import { WhatsAppButton } from './WhatsAppButton';
 
-const FLIPBOOK_URL = '';
+const FLIPBOOK_URL = 'https://heyzine.com/flip-book/a6b0e5b2d6.html';
 
 export function CatalogPage({ onLoginClick }: { onLoginClick: () => void }) {
   return (

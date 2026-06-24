@@ -6,6 +6,7 @@ from .infrastructure.models import (
     OrderStatusHistory,
     Payment,
     PaymentWebhookEvent,
+    WholesaleSettings,
 )
 
 __all__ = (
@@ -16,4 +17,5 @@ __all__ = (
     "OrderStatusHistory",
     "Payment",
     "PaymentWebhookEvent",
+    "WholesaleSettings",
 )
