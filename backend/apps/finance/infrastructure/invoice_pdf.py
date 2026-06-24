@@ -323,9 +323,12 @@ def render_invoice_pdf(invoice):
         if getattr(line, "presentation", ""):
             product_description = f"{product_description} - {line.presentation}"
 
+        qty = Decimal(line.quantity or 0)
+        qty_str = str(int(qty)) if qty == qty.to_integral_value() else str(qty.normalize())
+
         values = [
             _safe(line.sku, ""),
-            str(line.quantity),
+            qty_str,
             "UND",
             product_description,
             f"{tax_rate:.0f}%",
