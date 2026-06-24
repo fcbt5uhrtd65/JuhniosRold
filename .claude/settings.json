@@ -6,7 +6,10 @@
       "Bash(docker exec juhnios-backend python manage.py shell -c \"exec\\(open\\('/tmp/test_invoice.py'\\).read\\(\\)\\)\" 2>&1 | tail -5 *)",
       "Bash(docker exec juhnios-backend python manage.py shell -c \" *)",
       "Bash(docker restart *)",
-      "Bash(xargs grep -l \"catalog\\\\|Catalog\")"
+      "Bash(xargs grep -l \"catalog\\\\|Catalog\")",
+      "Bash(git checkout *)",
+      "Bash(git rm *)",
+      "Bash(git commit -m ' *)"
     ],
     "additionalDirectories": [
       "\\tmp",
