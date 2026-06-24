@@ -700,6 +700,19 @@ export function AdminHR() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
+
+  const generateBranchCode = (existingBranches: Branch[]): string => {
+    const used = new Set(existingBranches.map(b => b.code.toUpperCase()));
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    for (let i = 0; i < 36 * 36 * 36; i++) {
+      const a = chars[Math.floor(i / (36 * 36)) % 36];
+      const b = chars[Math.floor(i / 36) % 36];
+      const c = chars[i % 36];
+      const code = `SD-${a}${b}${c}`;
+      if (!used.has(code)) return code;
+    }
+    return `SD-${Date.now().toString(36).toUpperCase().slice(-3)}`;
+  };
   const [workDays, setWorkDays] = useState<WorkDay[]>([]);
   const [vacationRequests, setVacationRequests] = useState<VacationRequest[]>([]);
   const [notifications, setNotifications] = useState<HRNotification[]>([]);
@@ -1032,7 +1045,7 @@ export function AdminHR() {
     setSavingBranch(true);
     try {
       const payload = {
-        code: branchForm.code.trim(),
+        code: editingBranch ? branchForm.code.trim() : generateBranchCode(branches),
         name: branchForm.name.trim(),
         address: branchForm.address.trim(),
         city: (branchLocation.cityName || branchForm.city).trim(),
@@ -2162,7 +2175,6 @@ export function AdminHR() {
         <form onSubmit={handleBranchSubmit} className="space-y-4">
           <div className="grid sm:grid-cols-2 gap-4">
             <TextInput label="Nombre" required value={branchForm.name} onChange={(value) => setBranchForm((current) => ({ ...current, name: value }))} />
-            <TextInput label="Código" required value={branchForm.code} onChange={(value) => setBranchForm((current) => ({ ...current, code: value }))} />
             <TextInput label="Dirección" value={branchForm.address} onChange={(value) => setBranchForm((current) => ({ ...current, address: value }))} />
             <div className="sm:col-span-2">
               <LocationPicker value={branchLocation} onChange={setBranchLocation} />

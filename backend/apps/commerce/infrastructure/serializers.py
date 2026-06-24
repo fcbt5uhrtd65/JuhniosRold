@@ -202,6 +202,13 @@ class OrderSerializer(serializers.ModelSerializer):
         return value
 
 
+class AdminOrderSerializer(OrderSerializer):
+    """Igual que OrderSerializer pero permite cambiar cualquier estado manualmente."""
+
+    def validate_status(self, value):
+        return value
+
+
 class CheckoutSerializer(serializers.Serializer):
     location_id = serializers.UUIDField(required=False)
     shipping_address = serializers.CharField()

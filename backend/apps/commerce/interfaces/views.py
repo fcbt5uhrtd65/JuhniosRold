@@ -16,6 +16,7 @@ from ..application.use_cases import ActiveCartService, CancelOrder, CheckoutCart
 from ..infrastructure.models import Cart, Order, Payment, WholesaleSettings
 from ..infrastructure.serializers import (
     AddCartItemSerializer,
+    AdminOrderSerializer,
     CartSerializer,
     CheckoutSerializer,
     OrderSerializer,
@@ -163,6 +164,12 @@ class OrderViewSet(SoftDeleteModelViewSet):
     filterset_fields = ("customer", "status")
     search_fields = ("number", "customer__document_number", "tracking_number")
     ordering_fields = ("created_at", "total")
+
+    def get_serializer_class(self):
+        has_access = getattr(self.request.user, "has_component_access", lambda *_args, **_kwargs: False)
+        if self.action in ("update", "partial_update") and has_access("commerce.orders", "edit"):
+            return AdminOrderSerializer
+        return OrderSerializer
 
     def get_queryset(self):
         queryset = super().get_queryset()

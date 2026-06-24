@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAdmin } from '../../contexts/AdminContext';
-import { Users, TrendingUp, DollarSign, Plus, Search, MapPin } from 'lucide-react';
+import { Users, TrendingUp, DollarSign, Plus, Search, ChevronDown, ChevronUp } from 'lucide-react';
 import { format } from 'date-fns';
 import { LocationPicker } from '../ui/LocationPicker';
 import { AddressMap } from '../ui/AddressMap';
 import { EMPTY_LOCATION, type LocationValue } from '../../services/geography.types';
-import { KpiCard, Card, Table, Th, Td, Modal, Field, inputCls, selectCls } from './AdminUI';
+import { KpiCard, Card, Badge, type BadgeColor, Modal, Field, inputCls, selectCls } from './AdminUI';
 import { Pagination } from './Pagination';
 
 export function AdminCustomers() {
   const { customers, orders, addCustomer } = useAdmin();
   const [showModal, setShowModal] = useState(false);
+  const [expandedCustomerId, setExpandedCustomerId] = useState<string | null>(null);
   const [formData, setFormData] = useState<{
     tipoDocumento: string;
     documento: string;
@@ -61,10 +62,7 @@ export function AdminCustomers() {
     currentPage * itemsPerPage,
   );
 
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [nameFilter, cityFilter, docFilter]);
-
+  useEffect(() => { setCurrentPage(1); }, [nameFilter, cityFilter, docFilter]);
   useEffect(() => {
     setCurrentPage(page => Math.min(page, Math.max(1, totalPages)));
   }, [totalPages]);
@@ -95,6 +93,9 @@ export function AdminCustomers() {
 
   const getCustomerOrders = (customerId: string) =>
     orders.filter(o => o.clienteId === customerId && o.estado !== 'cancelado');
+
+  const getModoColor = (modo?: string): BadgeColor =>
+    modo === 'WHOLESALE' ? 'blue' : 'green';
 
   return (
     <div>
@@ -146,7 +147,7 @@ export function AdminCustomers() {
           <div>
             <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1.5">Ciudad</label>
             <div className="relative">
-              <MapPin size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 value={cityFilter}
                 onChange={e => setCityFilter(e.target.value)}
@@ -165,47 +166,113 @@ export function AdminCustomers() {
         )}
       </Card>
 
-      <Table>
-        <thead>
-          <tr>
-            <Th>Cliente</Th>
-            <Th>Documento</Th>
-            <Th>Contacto</Th>
-            <Th>Ciudad</Th>
-            <Th>Pedidos</Th>
-            <Th>Total Compras</Th>
-            <Th>Última Compra</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {paginatedCustomers.map((customer) => {
-            const customerOrders = getCustomerOrders(customer.id);
-            return (
-              <tr key={customer.id} className="hover:bg-gray-50/50">
-                <Td className="font-medium text-gray-900">{customer.nombre}</Td>
-                <Td>{customer.tipoDocumento} {customer.documento}</Td>
-                <Td>
-                  <div>{customer.email}</div>
-                  <div className="text-[11px] text-gray-400">{customer.telefono}</div>
-                </Td>
-                <Td>{customer.ciudad}</Td>
-                <Td>{customerOrders.length}</Td>
-                <Td className="font-semibold">${customer.totalCompras.toLocaleString()}</Td>
-                <Td className="text-gray-500">
-                  {customer.ultimaCompra ? format(new Date(customer.ultimaCompra), 'dd/MM/yyyy') : '-'}
-                </Td>
-              </tr>
-            );
-          })}
-          {paginatedCustomers.length === 0 && (
-            <tr>
-              <td colSpan={7} className="py-10 text-center text-sm text-gray-500">
-                No hay clientes con esos filtros.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </Table>
+      <div className="space-y-3">
+        {paginatedCustomers.map((customer) => {
+          const customerOrders = getCustomerOrders(customer.id);
+          const isExpanded = expandedCustomerId === customer.id;
+
+          return (
+            <Card key={customer.id} className="p-0 overflow-hidden">
+              <div className="grid gap-3 p-4 lg:grid-cols-[minmax(220px,1.15fr)_minmax(260px,1fr)_auto] lg:items-center">
+                <div className="min-w-0">
+                  <div className="mb-1 flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-semibold text-gray-900">{customer.nombre}</p>
+                    <Badge
+                      label={customer.modoCompra === 'WHOLESALE' ? 'Mayorista' : 'Minorista'}
+                      color={getModoColor(customer.modoCompra)}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-400">{customer.tipoDocumento} {customer.documento}</p>
+                </div>
+
+                <div className="grid min-w-0 gap-2 sm:grid-cols-2">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Contacto</p>
+                    <p className="truncate text-xs font-medium text-gray-900">{customer.email}</p>
+                    <p className="truncate text-xs text-gray-400">{customer.telefono}</p>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Ubicación</p>
+                    <p className="truncate text-xs text-gray-700">{customer.ciudad || 'Sin ciudad'}</p>
+                    <p className="truncate text-xs text-gray-400">{customer.direccion || 'Sin dirección'}</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-3 lg:justify-end">
+                  <div className="text-left lg:text-right">
+                    <p className="text-base font-bold text-gray-900">${customer.totalCompras.toLocaleString()}</p>
+                    <p className="text-[10px] uppercase tracking-wider text-gray-400">
+                      {customerOrders.length} pedido{customerOrders.length !== 1 ? 's' : ''}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedCustomerId(cur => cur === customer.id ? null : customer.id)}
+                    className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-3 text-[11px] font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+                  >
+                    {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    {isExpanded ? 'Menos' : 'Ver más'}
+                  </button>
+                </div>
+              </div>
+
+              {isExpanded && (
+                <div className="border-t border-gray-100 p-4">
+                  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Documento</p>
+                      <p className="text-xs text-gray-700">{customer.tipoDocumento} {customer.documento}</p>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Ciudad</p>
+                      <p className="text-xs text-gray-700">{customer.ciudad || '-'}</p>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Dirección</p>
+                      <p className="text-xs text-gray-700">{customer.direccion || '-'}</p>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">Última compra</p>
+                      <p className="text-xs text-gray-700">
+                        {customer.ultimaCompra ? format(new Date(customer.ultimaCompra), 'dd/MM/yyyy') : '-'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {customerOrders.length > 0 && (
+                    <div className="mt-4">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">
+                        Pedidos ({customerOrders.length})
+                      </p>
+                      <div className="space-y-1.5">
+                        {customerOrders.slice(0, 5).map(order => (
+                          <div key={order.id} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-xs">
+                            <span className="text-gray-500 font-mono">#{order.numero ?? order.id.slice(0, 8)}</span>
+                            <span className="text-gray-500">{format(new Date(order.fecha), 'dd/MM/yyyy')}</span>
+                            <span className="font-semibold text-gray-900">${order.total.toLocaleString()}</span>
+                          </div>
+                        ))}
+                        {customerOrders.length > 5 && (
+                          <p className="text-[11px] text-gray-400 text-right pt-1">
+                            +{customerOrders.length - 5} pedidos más
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </Card>
+          );
+        })}
+
+        {paginatedCustomers.length === 0 && (
+          <Card className="p-8 text-center">
+            <p className="text-sm font-medium text-gray-700">No hay clientes con esos filtros.</p>
+            <p className="text-xs text-gray-400 mt-1">Prueba con otro nombre, documento o ciudad.</p>
+          </Card>
+        )}
+      </div>
 
       <div className="mt-4">
         <Pagination
