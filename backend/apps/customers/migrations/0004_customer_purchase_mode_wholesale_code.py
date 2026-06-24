@@ -3,10 +3,20 @@ from django.db import migrations, models
 
 def fill_wholesale_codes(apps, schema_editor):
     Customer = apps.get_model("customers", "Customer")
-    for customer in Customer.objects.filter(wholesale_code=""):
-        seed = customer.document_number or customer.email or str(customer.id)
-        clean = "".join(ch for ch in seed.upper() if ch.isalnum())[:8] or str(customer.id).replace("-", "")[:8].upper()
-        customer.wholesale_code = f"JR-MAY-{clean}"
+    used = set(Customer.objects.exclude(wholesale_code="").values_list("wholesale_code", flat=True))
+    for customer in Customer.objects.filter(wholesale_code="").order_by("id"):
+        seed = customer.document_number or customer.email or ""
+        clean = "".join(ch for ch in seed.upper() if ch.isalnum())[:8]
+        if not clean:
+            clean = str(customer.id).replace("-", "")[:8].upper()
+        base = f"JR-MAY-{clean}"
+        code = base
+        suffix = 1
+        while code in used:
+            code = f"{base}-{suffix}"
+            suffix += 1
+        used.add(code)
+        customer.wholesale_code = code
         customer.save(update_fields=["wholesale_code"])
 
 
