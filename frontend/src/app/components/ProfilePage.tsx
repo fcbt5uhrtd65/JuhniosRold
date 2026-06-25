@@ -380,6 +380,66 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
                     </div>
                   )}
 
+                  {/* Datos de empresa — solo mayoristas */}
+                  {isWholesale && (
+                    <>
+                      <div className="flex items-center gap-3 pt-1">
+                        <div className="h-px flex-1 bg-stone-100" />
+                        <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-stone-300">
+                          <Store className="w-3 h-3" /> Empresa
+                        </span>
+                        <div className="h-px flex-1 bg-stone-100" />
+                      </div>
+                      <div className="rounded-2xl border border-stone-200 bg-white p-4 space-y-3">
+                        {currentUser.companyName && (
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-[10px] font-semibold uppercase tracking-wide text-stone-400">Razón social</span>
+                            <span className="text-sm font-semibold text-stone-800">{currentUser.companyName}</span>
+                          </div>
+                        )}
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          {currentUser.companyIdNumber && (
+                            <div className="flex items-center gap-2 rounded-xl border border-stone-100 bg-stone-50 px-3.5 py-2.5 text-sm text-stone-500">
+                              <Hash className="w-3.5 h-3.5 flex-shrink-0 text-stone-400" />
+                              <span>
+                                {currentUser.companyIdType === 'OTRO'
+                                  ? (currentUser.companyIdTypeOther || 'Otro')
+                                  : (currentUser.companyIdType || 'ID')}
+                                {' · '}
+                                <span className="font-mono font-semibold text-stone-700">{currentUser.companyIdNumber}</span>
+                              </span>
+                            </div>
+                          )}
+                          {currentUser.businessType && (
+                            <div className="flex items-center gap-2 rounded-xl border border-stone-100 bg-stone-50 px-3.5 py-2.5 text-sm text-stone-500">
+                              <Store className="w-3.5 h-3.5 flex-shrink-0 text-stone-400" />
+                              <span>{{
+                                TIENDA: 'Tienda',
+                                DISTRIBUIDOR: 'Distribuidor',
+                                RESTAURANTE: 'Restaurante',
+                                FARMACIA: 'Farmacia / Droguería',
+                                SPA: 'Spa / Estética',
+                                OTRO: 'Otro',
+                              }[currentUser.businessType] ?? currentUser.businessType}</span>
+                            </div>
+                          )}
+                        </div>
+                        {currentUser.businessType === 'DISTRIBUIDOR' && currentUser.isInternationalDistributor && (
+                          <div className="flex items-center gap-2 text-xs text-stone-500">
+                            <Check className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" strokeWidth={2.5} />
+                            Distribuidor internacional
+                          </div>
+                        )}
+                        {currentUser.companyPhone && (
+                          <div className="flex items-center gap-2 text-sm text-stone-500">
+                            <Phone className="w-3.5 h-3.5 flex-shrink-0 text-stone-400" />
+                            <span>{currentUser.companyPhone}</span>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+
                   {/* Separador */}
                   <div className="flex items-center gap-3 py-1">
                     <div className="h-px flex-1 bg-stone-100" />

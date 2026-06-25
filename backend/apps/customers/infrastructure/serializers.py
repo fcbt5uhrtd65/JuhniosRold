@@ -57,5 +57,12 @@ class MyCustomerProfileSerializer(serializers.ModelSerializer):
             "city",
             "purchase_mode",
             "wholesale_code",
+            "company_id_type",
+            "company_id_type_other",
+            "company_id_number",
+            "company_name",
+            "business_type",
+            "is_international_distributor",
+            "company_phone",
         )
         read_only_fields = ("id", "email", "wholesale_code")

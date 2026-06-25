@@ -63,6 +63,13 @@ export interface CustomerUser {
   numeroDocumento?: string;
   modoCompra?: 'RETAIL' | 'WHOLESALE';
   codigoMayorista?: string;
+  companyIdType?: string;
+  companyIdTypeOther?: string;
+  companyIdNumber?: string;
+  companyName?: string;
+  businessType?: string;
+  isInternationalDistributor?: boolean;
+  companyPhone?: string;
   role?: AuthUser['role'];
   /** true when session comes from real backend JWT */
   fromApi?: boolean;
@@ -238,6 +245,13 @@ function mapCustomerProfile(p: MyCustomerProfile): Partial<CustomerUser> {
     numeroDocumento: p.document_number || undefined,
     modoCompra: p.purchase_mode,
     codigoMayorista: p.wholesale_code,
+    companyIdType: p.company_id_type || undefined,
+    companyIdTypeOther: p.company_id_type_other || undefined,
+    companyIdNumber: p.company_id_number || undefined,
+    companyName: p.company_name || undefined,
+    businessType: p.business_type || undefined,
+    isInternationalDistributor: p.is_international_distributor,
+    companyPhone: p.company_phone || undefined,
   };
 }
 
