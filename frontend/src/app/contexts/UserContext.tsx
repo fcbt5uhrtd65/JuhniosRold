@@ -133,6 +133,13 @@ interface UserContextType {
       document_type?: string;
       document_number?: string;
       purchase_mode?: 'RETAIL' | 'WHOLESALE';
+      company_id_type?: string;
+      company_id_type_other?: string;
+      company_id_number?: string;
+      company_name?: string;
+      business_type?: string;
+      is_international_distributor?: boolean;
+      company_phone?: string;
     },
   ) => Promise<RegistrationActionResult>;
   verifyRegistration: (
@@ -422,6 +429,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
       document_type?: string;
       document_number?: string;
       purchase_mode?: 'RETAIL' | 'WHOLESALE';
+      company_id_type?: string;
+      company_id_type_other?: string;
+      company_id_number?: string;
+      company_name?: string;
+      business_type?: string;
+      is_international_distributor?: boolean;
+      company_phone?: string;
     },
   ): Promise<AuthActionResult> => {
     try {
@@ -443,6 +457,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
         document_type: extra?.document_type,
         document_number: extra?.document_number,
         purchase_mode: extra?.purchase_mode ?? 'RETAIL',
+        company_id_type: extra?.company_id_type,
+        company_id_type_other: extra?.company_id_type_other,
+        company_id_number: extra?.company_id_number,
+        company_name: extra?.company_name,
+        business_type: extra?.business_type,
+        is_international_distributor: extra?.is_international_distributor,
+        company_phone: extra?.company_phone,
       });
       setBackendOnline(true);
       return {

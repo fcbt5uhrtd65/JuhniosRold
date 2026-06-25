@@ -18,3 +18,10 @@ class RegisterUserDTO:
     longitude: float | None = None
     reference: str = ""
     purchase_mode: str = "RETAIL"
+    company_id_type: str = ""
+    company_id_type_other: str = ""
+    company_id_number: str = ""
+    company_name: str = ""
+    business_type: str = ""
+    is_international_distributor: bool = False
+    company_phone: str = ""

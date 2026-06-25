@@ -47,6 +47,13 @@ class RegisterUser:
             address=data.address,
             city=data.city,
             purchase_mode=data.purchase_mode or Customer.PurchaseMode.RETAIL,
+            company_id_type=data.company_id_type,
+            company_id_type_other=data.company_id_type_other,
+            company_id_number=data.company_id_number,
+            company_name=data.company_name,
+            business_type=data.business_type,
+            is_international_distributor=data.is_international_distributor,
+            company_phone=data.company_phone,
         )
         _create_customer_address(customer, data)
         return user
@@ -75,6 +82,13 @@ class RegisterUser:
             address=data.address,
             city=data.city,
             purchase_mode=data.purchase_mode or Customer.PurchaseMode.RETAIL,
+            company_id_type=data.company_id_type,
+            company_id_type_other=data.company_id_type_other,
+            company_id_number=data.company_id_number,
+            company_name=data.company_name,
+            business_type=data.business_type,
+            is_international_distributor=data.is_international_distributor,
+            company_phone=data.company_phone,
         )
         _create_customer_address(customer, data)
         return user

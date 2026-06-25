@@ -38,6 +38,16 @@ class Customer(BaseModel):
         default=PurchaseMode.RETAIL,
     )
     wholesale_code = models.CharField(max_length=40, unique=True, blank=True)
+
+    # campos de empresa (solo relevantes cuando purchase_mode=WHOLESALE)
+    company_id_type = models.CharField(max_length=30, blank=True)
+    company_id_type_other = models.CharField(max_length=80, blank=True)
+    company_id_number = models.CharField(max_length=60, blank=True)
+    company_name = models.CharField(max_length=200, blank=True)
+    business_type = models.CharField(max_length=40, blank=True)
+    is_international_distributor = models.BooleanField(default=False)
+    company_phone = models.CharField(max_length=30, blank=True)
+
     segments = models.ManyToManyField(CustomerSegment, blank=True, related_name="customers")
     is_active = models.BooleanField(default=True)
     notes = models.TextField(blank=True)

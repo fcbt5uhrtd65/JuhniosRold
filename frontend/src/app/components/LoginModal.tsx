@@ -121,6 +121,15 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
   const [newPass,           setNewPass]           = useState('');
   const [confNewPass,       setConfNewPass]       = useState('');
 
+  /* campos mayorista */
+  const [tipoIdEmpresa,     setTipoIdEmpresa]     = useState<'NIT' | 'OTRO'>('NIT');
+  const [otroTipoId,        setOtroTipoId]        = useState('');
+  const [numIdEmpresa,      setNumIdEmpresa]       = useState('');
+  const [razonSocial,       setRazonSocial]        = useState('');
+  const [tipoNegocio,       setTipoNegocio]        = useState('TIENDA');
+  const [esDistribIntl,     setEsDistribIntl]      = useState(false);
+  const [telefonoEmpresa,   setTelefonoEmpresa]    = useState('');
+
   const [error,      setError]      = useState('');
   const [success,    setSuccess]    = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -130,6 +139,8 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
     setNombre(''); setApellidos(''); setEmail(''); setPassword(''); setConfirm('');
     setShowPass(false); setShowConf(false); setTerms(false);
     setTipoDoc('CC'); setDocumento(''); setTelefono(''); setMode('RETAIL');
+    setTipoIdEmpresa('NIT'); setOtroTipoId(''); setNumIdEmpresa('');
+    setRazonSocial(''); setTipoNegocio('TIENDA'); setEsDistribIntl(false); setTelefonoEmpresa('');
     setRegLoc(EMPTY_LOCATION); setDelLoc(EMPTY_DELIVERY_LOCATION); setCities([]);
     setVerificationId(''); setVerificationEmail(''); setVerificationCode(''); setDebugCode('');
     setResetVid(''); setResetCode(''); setResetDbg(''); setResetToken(''); setNewPass(''); setConfNewPass('');
@@ -151,6 +162,11 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
   const handleReg1Next = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    if (mode === 'WHOLESALE') {
+      if (tipoIdEmpresa === 'OTRO' && !otroTipoId.trim()) { setError('Especifica el tipo de identificación de la empresa.'); return; }
+      if (!numIdEmpresa.trim()) { setError('Ingresa el número de identificación de la empresa.'); return; }
+      if (!razonSocial.trim())  { setError('Ingresa la razón social o nombre de la empresa.'); return; }
+    }
     if (!nombre.trim())    { setError('Ingresa tu nombre.'); return; }
     if (!apellidos.trim()) { setError('Ingresa tus apellidos.'); return; }
     if (!email.trim())     { setError('Ingresa tu email.'); return; }
@@ -218,6 +234,15 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
           country: delLoc.country || regLoc.countryName || undefined,
           latitude: delLoc.lat, longitude: delLoc.lng,
           reference: delLoc.reference || undefined,
+          ...(mode === 'WHOLESALE' && {
+            company_id_type: tipoIdEmpresa,
+            company_id_type_other: tipoIdEmpresa === 'OTRO' ? otroTipoId : undefined,
+            company_id_number: numIdEmpresa || undefined,
+            company_name: razonSocial || undefined,
+            business_type: tipoNegocio || undefined,
+            is_international_distributor: esDistribIntl,
+            company_phone: telefonoEmpresa || undefined,
+          }),
         });
         if (r.ok && r.verificationId) {
           setVerificationId(r.verificationId);
@@ -428,6 +453,86 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
                 {/* REGISTRO PASO 1 */}
                 {screen === 'reg1' && (
                   <form onSubmit={handleReg1Next} className="flex flex-col gap-3">
+                    {/* modo compra — primero */}
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[9px] tracking-[0.22em] uppercase text-stone-400 font-semibold">¿Cómo deseas comprar?</label>
+                      <div className="flex gap-2">
+                        {[
+                          { v: 'RETAIL' as const, l: 'Personal', s: 'Minorista' },
+                          { v: 'WHOLESALE' as const, l: 'Por volumen', s: 'Mayorista' },
+                        ].map(o => (
+                          <button key={o.v} type="button" onClick={() => setMode(o.v)}
+                            className={`flex-1 rounded-lg border px-3 py-2 text-left transition-all ${mode === o.v ? 'border-[#2D3A1F] bg-[#2D3A1F]/5' : 'border-stone-200 hover:bg-stone-50'}`}>
+                            <span className={`block text-[11px] font-semibold leading-none ${mode === o.v ? 'text-stone-900' : 'text-stone-500'}`}>{o.l}</span>
+                            <span className="block text-[10px] text-stone-400 mt-0.5">{o.s}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* ── SECCIÓN EMPRESA (solo mayorista) ── */}
+                    {mode === 'WHOLESALE' && (
+                      <div className="flex flex-col gap-3 rounded-xl border border-[#2D3A1F]/20 bg-[#2D3A1F]/[0.03] p-3">
+                        <p className="text-[9px] tracking-[0.22em] uppercase text-[#2D3A1F] font-bold">Información de la empresa</p>
+
+                        {/* tipo identificación empresa */}
+                        <div className="flex gap-2.5">
+                          <div className="flex flex-col gap-1 flex-1 min-w-0">
+                            <label className="text-[9px] tracking-[0.22em] uppercase text-stone-400 font-semibold">Tipo de identificación *</label>
+                            <select value={tipoIdEmpresa} onChange={e => setTipoIdEmpresa(e.target.value as 'NIT' | 'OTRO')}
+                              className="w-full px-2.5 py-2 rounded-lg border border-[#E5E0D8] bg-white text-[13px] text-stone-800 focus:outline-none focus:border-[#2D3A1F] transition appearance-none"
+                              style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23A8A29E' stroke-width='1.5'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.5rem center' }}>
+                              <option value="NIT">NIT</option>
+                              <option value="OTRO">Otro</option>
+                            </select>
+                          </div>
+                          {tipoIdEmpresa === 'OTRO' && (
+                            <Field label="Especifica el tipo *" value={otroTipoId} onChange={setOtroTipoId} placeholder="Ej: RUT, RFC…" icon={CreditCard} required />
+                          )}
+                        </div>
+
+                        {/* número id empresa + razón social */}
+                        <div className="flex gap-2.5">
+                          <Field label="N° de identificación *" value={numIdEmpresa} onChange={setNumIdEmpresa} placeholder="900123456-7" icon={CreditCard} required />
+                          <Field label="Nombre empresa / Razón social *" value={razonSocial} onChange={setRazonSocial} placeholder="Mi Empresa S.A.S." icon={UserIcon} required />
+                        </div>
+
+                        {/* tipo de negocio */}
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[9px] tracking-[0.22em] uppercase text-stone-400 font-semibold">Tipo de negocio *</label>
+                          <select value={tipoNegocio} onChange={e => { setTipoNegocio(e.target.value); if (e.target.value !== 'DISTRIBUIDOR') setEsDistribIntl(false); }}
+                            className="w-full px-2.5 py-2 rounded-lg border border-[#E5E0D8] bg-white text-[13px] text-stone-800 focus:outline-none focus:border-[#2D3A1F] transition appearance-none"
+                            style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23A8A29E' stroke-width='1.5'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.5rem center' }}>
+                            <option value="TIENDA">Tienda</option>
+                            <option value="DISTRIBUIDOR">Distribuidor</option>
+                            <option value="RESTAURANTE">Restaurante</option>
+                            <option value="FARMACIA">Farmacia / Droguería</option>
+                            <option value="SPA">Spa / Estética</option>
+                            <option value="OTRO">Otro</option>
+                          </select>
+                          {tipoNegocio === 'DISTRIBUIDOR' && (
+                            <label className="flex items-center gap-2 mt-1.5 cursor-pointer select-none">
+                              <div className="relative flex-shrink-0" onClick={() => setEsDistribIntl(v => !v)}>
+                                <div className="w-3.5 h-3.5 rounded border-2 flex items-center justify-center transition-all"
+                                  style={{ borderColor: esDistribIntl ? OLIVE : '#D6D0C8', backgroundColor: esDistribIntl ? OLIVE : 'transparent' }}>
+                                  {esDistribIntl && <svg width="8" height="6" viewBox="0 0 9 7" fill="none"><path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                                </div>
+                              </div>
+                              <span className="text-[11px] text-stone-500 leading-tight">¿Es distribuidor internacional?</span>
+                            </label>
+                          )}
+                        </div>
+
+                        {/* teléfono empresa */}
+                        <Field label="Teléfono empresa" type="tel" value={telefonoEmpresa} onChange={setTelefonoEmpresa} placeholder="6011234567" icon={Phone} />
+                      </div>
+                    )}
+
+                    {/* ── SECCIÓN REPRESENTANTE LEGAL / DATOS PERSONALES ── */}
+                    {mode === 'WHOLESALE' && (
+                      <p className="text-[9px] tracking-[0.22em] uppercase text-stone-500 font-bold -mb-1">Representante legal</p>
+                    )}
+
                     {/* nombre + apellidos */}
                     <div className="flex gap-2.5">
                       <Field label="Nombre *" value={nombre} onChange={setNombre} placeholder="María" icon={UserIcon} required />
@@ -460,22 +565,6 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
                         </select>
                       </div>
                       <Field label="N° de documento" value={documento} onChange={setDocumento} placeholder="1000000001" icon={CreditCard} />
-                    </div>
-                    {/* modo compra */}
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[9px] tracking-[0.22em] uppercase text-stone-400 font-semibold">¿Cómo deseas comprar?</label>
-                      <div className="flex gap-2">
-                        {[
-                          { v: 'RETAIL' as const, l: 'Personal', s: 'Minorista' },
-                          { v: 'WHOLESALE' as const, l: 'Por volumen', s: 'Mayorista' },
-                        ].map(o => (
-                          <button key={o.v} type="button" onClick={() => setMode(o.v)}
-                            className={`flex-1 rounded-lg border px-3 py-2 text-left transition-all ${mode === o.v ? 'border-[#2D3A1F] bg-[#2D3A1F]/5' : 'border-stone-200 hover:bg-stone-50'}`}>
-                            <span className={`block text-[11px] font-semibold leading-none ${mode === o.v ? 'text-stone-900' : 'text-stone-500'}`}>{o.l}</span>
-                            <span className="block text-[10px] text-stone-400 mt-0.5">{o.s}</span>
-                          </button>
-                        ))}
-                      </div>
                     </div>
                     {/* términos */}
                     <label className="flex items-start gap-2 cursor-pointer select-none">

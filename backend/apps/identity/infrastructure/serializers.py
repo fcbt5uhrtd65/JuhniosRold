@@ -146,6 +146,13 @@ class RegisterSerializer(serializers.Serializer):
         required=False,
         default="RETAIL",
     )
+    company_id_type = serializers.CharField(required=False, allow_blank=True, default="")
+    company_id_type_other = serializers.CharField(required=False, allow_blank=True, default="")
+    company_id_number = serializers.CharField(required=False, allow_blank=True, default="")
+    company_name = serializers.CharField(required=False, allow_blank=True, default="")
+    business_type = serializers.CharField(required=False, allow_blank=True, default="")
+    is_international_distributor = serializers.BooleanField(required=False, default=False)
+    company_phone = serializers.CharField(required=False, allow_blank=True, default="")
 
     def validate(self, attrs):
         latitude = attrs.get("latitude")
@@ -187,6 +194,13 @@ class RegisterSerializer(serializers.Serializer):
             "longitude": validated_data.get("longitude"),
             "reference": validated_data.get("reference", ""),
             "purchase_mode": validated_data.get("purchase_mode", "RETAIL"),
+            "company_id_type": validated_data.get("company_id_type", ""),
+            "company_id_type_other": validated_data.get("company_id_type_other", ""),
+            "company_id_number": validated_data.get("company_id_number", ""),
+            "company_name": validated_data.get("company_name", ""),
+            "business_type": validated_data.get("business_type", ""),
+            "is_international_distributor": validated_data.get("is_international_distributor", False),
+            "company_phone": validated_data.get("company_phone", ""),
         }
 
         EmailVerificationCode.objects.filter(
