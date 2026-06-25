@@ -42,16 +42,16 @@ export function saveWholesaleSettings(settings: WholesaleSettings) {
   window.localStorage.setItem(WHOLESALE_SETTINGS_KEY, JSON.stringify(settings));
 }
 
-export function calculateWholesaleDiscount(subtotal: number): WholesaleDiscountSummary {
+export function calculateWholesaleDiscount(subtotal: number, isWholesaleCustomer = false): WholesaleDiscountSummary {
   const settings = getWholesaleSettings();
-  const isActive = subtotal >= settings.minimumPurchase;
+  const isActive = isWholesaleCustomer && subtotal >= settings.minimumPurchase;
   const discount = isActive ? Math.round(subtotal * (settings.discountPercentage / 100)) : 0;
 
   return {
     settings,
     discount,
     totalAfterDiscount: Math.max(0, subtotal - discount),
-    remaining: Math.max(0, settings.minimumPurchase - subtotal),
+    remaining: isWholesaleCustomer ? Math.max(0, settings.minimumPurchase - subtotal) : 0,
     isActive,
   };
 }

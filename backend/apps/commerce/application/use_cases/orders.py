@@ -17,11 +17,14 @@ def _presentation_label(variant):
     return label or variant.name
 
 
-def _wholesale_discount(subtotal):
-    settings = WholesaleSettings.current()
-    if not settings.is_active or subtotal < settings.minimum_purchase:
+def _wholesale_discount(subtotal, customer=None):
+    from apps.customers.infrastructure.models import Customer
+    if customer is None or getattr(customer, "purchase_mode", None) != Customer.PurchaseMode.WHOLESALE:
         return Decimal("0")
-    return (subtotal * (settings.discount_percentage / Decimal("100"))).quantize(Decimal("0.01"))
+    ws = WholesaleSettings.current()
+    if not ws.is_active or subtotal < ws.minimum_purchase:
+        return Decimal("0")
+    return (subtotal * (ws.discount_percentage / Decimal("100"))).quantize(Decimal("0.01"))
 
 
 class CheckoutCart:
@@ -64,7 +67,7 @@ class CheckoutCart:
                 subtotal=line_total,
             )
 
-        discount_amount = _wholesale_discount(total)
+        discount_amount = _wholesale_discount(total, cart.customer)
         payable_subtotal = max(Decimal("0"), total - discount_amount)
         shipping_cost = (
             Decimal("0")
@@ -137,7 +140,7 @@ class CreateOrder:
                 subtotal=line_total,
             )
 
-        discount_amount = _wholesale_discount(subtotal)
+        discount_amount = _wholesale_discount(subtotal, customer)
         payable_subtotal = max(Decimal("0"), subtotal - discount_amount)
         shipping_cost = (
             Decimal("0")

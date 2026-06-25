@@ -184,7 +184,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
     () => items.reduce((sum, item) => sum + item.price * item.quantity, 0),
     [items],
   );
-  const wholesaleDiscount = useMemo(() => calculateWholesaleDiscount(subtotal), [subtotal]);
+  const isWholesaleCustomer = currentUser?.modoCompra === 'WHOLESALE';
+  const wholesaleDiscount = useMemo(
+    () => calculateWholesaleDiscount(subtotal, isWholesaleCustomer),
+    [subtotal, isWholesaleCustomer],
+  );
   const total = wholesaleDiscount.totalAfterDiscount;
   const itemCount = useMemo(
     () => items.reduce((sum, item) => sum + item.quantity, 0),
