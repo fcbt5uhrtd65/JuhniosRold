@@ -142,7 +142,7 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
   if (!currentUser) return null;
 
   const docLabel = currentUser.tipoDocumento ? DOCUMENT_TYPES[currentUser.tipoDocumento] ?? currentUser.tipoDocumento : null;
-  const isWholesale = currentUser.modoCompra === 'WHOLESALE' || Boolean(currentUser.codigoMayorista);
+  const isWholesale = currentUser.modoCompra === 'WHOLESALE';
 
   /* guardar */
   const handleSave = async (e: React.FormEvent) => {
@@ -257,9 +257,13 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
             </div>
             <p className="text-sm font-semibold text-stone-900 leading-tight truncate">{currentUser.nombre}</p>
             <p className="text-xs text-stone-400 truncate mt-0.5">{currentUser.email}</p>
-            {isWholesale && (
+            {isWholesale ? (
               <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-stone-900 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-white">
                 <Store className="w-2.5 h-2.5" /> Mayorista
+              </span>
+            ) : (
+              <span className="mt-2 inline-flex items-center gap-1 rounded-full border border-stone-200 bg-stone-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-stone-500">
+                <Store className="w-2.5 h-2.5" /> Minorista
               </span>
             )}
           </div>
@@ -658,29 +662,52 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
                 <p className="mb-5 text-sm text-stone-400">Condiciones y beneficios para compras por volumen</p>
 
                 {/* Estado */}
-                <div className={`rounded-2xl p-5 ${isWholesale ? 'bg-stone-900' : 'border border-stone-200 bg-white'}`}>
-                  <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-widest ${isWholesale ? 'bg-white/15 text-white' : 'bg-stone-100 text-stone-500'}`}>
-                        <Store className="w-3 h-3" /> {isWholesale ? 'Activo' : 'Sin plan'}
-                      </span>
-                      <p className={`mt-2.5 text-base font-semibold leading-snug ${isWholesale ? 'text-white' : 'text-stone-900'}`}>
-                        {isWholesale ? 'Tu plan mayorista está activo' : 'Compra en volumen con precios especiales'}
-                      </p>
-                      <p className={`mt-1 text-sm leading-6 ${isWholesale ? 'text-white/65' : 'text-stone-400'}`}>
-                        {isWholesale
-                          ? 'El descuento se aplica automáticamente al superar el monto mínimo. Sin cupones.'
-                          : 'Diseñado para distribuidoras, salones y emprendedoras que compran en volumen.'}
-                      </p>
-                    </div>
-                    {isWholesale && currentUser.codigoMayorista && (
-                      <div className="rounded-xl border border-white/20 bg-white/10 px-4 py-3">
-                        <p className="text-[9px] font-bold uppercase tracking-widest text-white/50">Código</p>
-                        <p className="mt-1 font-mono text-base font-bold tracking-wider text-white">{currentUser.codigoMayorista}</p>
+                {isWholesale ? (
+                  <div className="rounded-2xl bg-stone-900 p-5">
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-[9px] font-bold uppercase tracking-widest text-white">
+                          <Store className="w-3 h-3" /> Activo
+                        </span>
+                        <p className="mt-2.5 text-base font-semibold leading-snug text-white">
+                          Tu plan mayorista está activo
+                        </p>
+                        <p className="mt-1 text-sm leading-6 text-white/65">
+                          El descuento se aplica automáticamente al superar el monto mínimo. Sin cupones.
+                        </p>
                       </div>
-                    )}
+                      {currentUser.codigoMayorista && (
+                        <div className="rounded-xl border border-white/20 bg-white/10 px-4 py-3">
+                          <p className="text-[9px] font-bold uppercase tracking-widest text-white/50">Código</p>
+                          <p className="mt-1 font-mono text-base font-bold tracking-wider text-white">{currentUser.codigoMayorista}</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1 text-[9px] font-bold uppercase tracking-widest text-amber-700">
+                          <Store className="w-3 h-3" /> Inactivo
+                        </span>
+                        <p className="mt-2.5 text-base font-semibold leading-snug text-stone-900">
+                          Aún no has activado tu plan mayorista
+                        </p>
+                        <p className="mt-1 text-sm leading-6 text-stone-500">
+                          Actívalo aquí y podrás tener numerosos beneficios: precios exclusivos, descuentos automáticos por volumen y atención prioritaria.
+                        </p>
+                      </div>
+                      <a
+                        href="/#mayorista"
+                        className="inline-flex flex-shrink-0 items-center gap-2 rounded-xl bg-stone-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-85"
+                      >
+                        <Store className="w-4 h-4" strokeWidth={1.6} />
+                        Activar plan
+                      </a>
+                    </div>
+                  </div>
+                )}
 
                 {/* Cómo funciona */}
                 <div className="rounded-2xl border border-stone-200 bg-white p-5">
