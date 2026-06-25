@@ -27,6 +27,20 @@ def send_order_payment_confirmation(order_id):
         recipient_list=[order.customer.email],
         fail_silently=False,
     )
+    try:
+        from apps.notifications.application.service import NotificationService
+        from apps.notifications.infrastructure.models import Notification
+        order_ref = order.number or str(order.id)[:8].upper()
+        NotificationService.send(
+            customer=order.customer,
+            type=Notification.Type.ORDER_CONFIRMED,
+            title="Pago confirmado",
+            message=f"Tu pedido #{order_ref} fue pagado correctamente. Ya lo estamos preparando.",
+            action_url="/perfil?s=pedidos",
+            send_email=False,
+        )
+    except Exception:
+        logger.exception("Error al crear notificación in-app para pedido %s.", order_id)
 
 
 def enqueue_order_payment_confirmation(order_id):

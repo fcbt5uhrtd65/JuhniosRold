@@ -1,23 +1,18 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  Search, X, User, Heart, Bell,
-  ChevronRight, ArrowRight, ChevronDown, Instagram
+  Search, X, User, Bell, Package, Tag, Info, AlertCircle,
+  ChevronRight, ArrowRight, ChevronDown, Instagram, CheckCheck,
 } from 'lucide-react';
 import { ShoppingCart } from './ShoppingCart';
 import { UserDropdown } from './UserDropdown';
 import { useSearch } from '../contexts/SearchContext';
 import { useUser } from '../contexts/UserContext';
+import { useNotifications } from '../contexts/NotificationsContext';
+import type { NotificationType } from '../services/notifications.service';
 
 interface NavbarProps {
   onLoginClick?: () => void;
-}
-
-interface Notification {
-  id: string;
-  type: 'order' | 'promo' | 'info';
-  message: string;
-  read: boolean;
 }
 
 const TikTokIcon = ({ className }: { className?: string }) => (
@@ -58,9 +53,34 @@ const allNavLinks = [
 
 const OLIVE = '#2D3A1F';
 
+function notifIcon(type: NotificationType) {
+  if (type.startsWith('order')) return <Package className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" strokeWidth={1.5} />;
+  if (type === 'promo') return <Tag className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" strokeWidth={1.5} />;
+  if (type === 'order_cancelled') return <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" strokeWidth={1.5} />;
+  return <Info className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" strokeWidth={1.5} />;
+}
+
+function notifColor(type: NotificationType) {
+  if (type === 'order_confirmed' || type === 'order_delivered') return 'text-emerald-500';
+  if (type === 'order_shipped') return 'text-blue-500';
+  if (type === 'order_cancelled') return 'text-red-400';
+  if (type === 'promo') return 'text-amber-500';
+  if (type === 'wholesale_activated') return 'text-violet-500';
+  return 'text-stone-400';
+}
+
+function timeAgo(dateStr: string): string {
+  const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+  if (diff < 60) return 'Ahora';
+  if (diff < 3600) return `Hace ${Math.floor(diff / 60)} min`;
+  if (diff < 86400) return `Hace ${Math.floor(diff / 3600)} h`;
+  return `Hace ${Math.floor(diff / 86400)} d`;
+}
+
 export function Navbar({ onLoginClick }: NavbarProps = {}) {
   const { searchQuery, setSearchQuery, isSearchOpen, setIsSearchOpen } = useSearch();
-  const { currentUser, orders } = useUser();
+  const { currentUser } = useUser();
+  const { notifications, unreadCount, markRead, markAllRead } = useNotifications();
   const [scrolled, setScrolled]                   = useState(false);
   const [hidden, setHidden]                        = useState(false);
   const [menuOpen, setMenuOpen]                   = useState(false);
@@ -76,13 +96,6 @@ export function Navbar({ onLoginClick }: NavbarProps = {}) {
       return () => clearTimeout(t);
     }
   }, []);
-
-  const notifications: Notification[] = currentUser ? [
-    ...orders
-      .filter(o => o.estado === 'enviado')
-      .map(o => ({ id: o.id, type: 'order' as const, message: `Tu pedido #${o.id} está en camino`, read: false })),
-    { id: 'promo-1', type: 'promo' as const, message: '¡Nuevo descuento exclusivo disponible!', read: false },
-  ] : [];
 
   useEffect(() => {
     const fn = () => {
@@ -288,8 +301,10 @@ export function Navbar({ onLoginClick }: NavbarProps = {}) {
                       className="relative p-2 rounded-full hover:bg-stone-100 text-stone-500 hover:text-stone-700 transition-all"
                     >
                       <Bell className="w-4 h-4" strokeWidth={1.5} />
-                      {notifications.filter(n => !n.read).length > 0 && (
-                        <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-red-500 rounded-full" />
+                      {unreadCount > 0 && (
+                        <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white">
+                          {unreadCount > 9 ? '9+' : unreadCount}
+                        </span>
                       )}
                     </button>
                     <AnimatePresence>
@@ -301,19 +316,53 @@ export function Navbar({ onLoginClick }: NavbarProps = {}) {
                           transition={{ duration: 0.16 }}
                           className="absolute right-0 mt-2 w-80 bg-white border border-stone-100 shadow-xl rounded-2xl z-50 overflow-hidden"
                         >
-                          <div className="p-4 border-b border-stone-100">
-                            <div className="text-[10px] tracking-[0.25em] uppercase text-stone-500">Notificaciones</div>
+                          {/* Header */}
+                          <div className="flex items-center justify-between px-4 py-3 border-b border-stone-100">
+                            <span className="text-[10px] font-bold tracking-[0.25em] uppercase text-stone-500">
+                              Notificaciones {unreadCount > 0 && `· ${unreadCount} nueva${unreadCount > 1 ? 's' : ''}`}
+                            </span>
+                            {unreadCount > 0 && (
+                              <button
+                                onClick={markAllRead}
+                                className="flex items-center gap-1 text-[10px] text-stone-400 hover:text-stone-700 transition-colors"
+                              >
+                                <CheckCheck className="w-3 h-3" strokeWidth={2} /> Marcar todas
+                              </button>
+                            )}
                           </div>
-                          <div className="max-h-64 overflow-y-auto">
+
+                          {/* Lista */}
+                          <div className="max-h-72 overflow-y-auto divide-y divide-stone-50">
                             {notifications.length === 0 ? (
-                              <div className="p-6 text-center text-xs text-stone-400">Sin notificaciones</div>
-                            ) : notifications.map(n => (
-                              <div key={n.id} className="p-4 border-b border-stone-50 hover:bg-stone-50 transition-colors">
-                                <div className="flex gap-3">
-                                  <div className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${n.type === 'order' ? 'bg-blue-400' : 'bg-emerald-400'}`} />
-                                  <div className="text-xs text-stone-600">{n.message}</div>
-                                </div>
+                              <div className="flex flex-col items-center justify-center py-8 text-center gap-2">
+                                <Bell className="w-6 h-6 text-stone-200" strokeWidth={1} />
+                                <p className="text-xs text-stone-400">Sin notificaciones</p>
                               </div>
+                            ) : notifications.map(n => (
+                              <button
+                                key={n.id}
+                                onClick={() => {
+                                  markRead(n.id);
+                                  if (n.action_url) {
+                                    window.history.pushState({}, '', n.action_url);
+                                    window.dispatchEvent(new Event('app:navigate'));
+                                    setShowNotifications(false);
+                                  }
+                                }}
+                                className={`w-full text-left px-4 py-3 hover:bg-stone-50 transition-colors flex gap-3 ${!n.read ? 'bg-stone-50/60' : ''}`}
+                              >
+                                <span className={notifColor(n.type)}>{notifIcon(n.type)}</span>
+                                <div className="flex-1 min-w-0">
+                                  <p className={`text-xs leading-snug truncate ${n.read ? 'text-stone-500' : 'font-semibold text-stone-800'}`}>
+                                    {n.title}
+                                  </p>
+                                  <p className="text-[11px] text-stone-400 mt-0.5 leading-relaxed line-clamp-2">{n.message}</p>
+                                  <p className="text-[10px] text-stone-300 mt-1">{timeAgo(n.created_at)}</p>
+                                </div>
+                                {!n.read && (
+                                  <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-red-400" />
+                                )}
+                              </button>
                             ))}
                           </div>
                         </motion.div>

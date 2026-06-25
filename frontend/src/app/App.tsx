@@ -4,6 +4,7 @@ import { CartProvider } from './contexts/CartContext';
 import { SearchProvider } from './contexts/SearchContext';
 import { UserProvider } from './contexts/UserContext';
 import { ToastProvider } from './contexts/ToastContext';
+import { NotificationsProvider } from './contexts/NotificationsContext';
 import { Admin } from './components/admin/Admin';
 import { Hero } from './components/Hero';
 import { ShippingInfo } from './components/ShippingInfo';
@@ -193,11 +194,13 @@ export default function App() {
     <AdminProvider>
       <UserProvider>
         <ToastProvider>
-          <CartProvider>
-            <SearchProvider>
-              <AppContent />
-            </SearchProvider>
-          </CartProvider>
+          <NotificationsProvider>
+            <CartProvider>
+              <SearchProvider>
+                <AppContent />
+              </SearchProvider>
+            </CartProvider>
+          </NotificationsProvider>
         </ToastProvider>
       </UserProvider>
     </AdminProvider>

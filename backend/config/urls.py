@@ -28,6 +28,7 @@ urlpatterns = [
     path("api/v1/geography/", include("apps.geography.interfaces.urls")),
     path("api/v1/analytics/", include("apps.analytics.interfaces.urls")),
     path("api/v1/audit/", include("apps.audit.interfaces.urls")),
+    path("api/v1/notifications/", include("apps.notifications.interfaces.urls")),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
     path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),

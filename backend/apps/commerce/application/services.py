@@ -1,3 +1,5 @@
+import logging
+
 from django.utils import timezone
 
 from shared.domain.exceptions import BusinessRuleViolation
@@ -7,6 +9,8 @@ from apps.inventory.application.use_cases import RegisterInventoryMovement
 from apps.inventory.infrastructure.models import InventoryMovement, Stock
 
 from ..infrastructure.models import Order, OrderStatusHistory
+
+logger = logging.getLogger(__name__)
 
 
 class OrderStatusService:
@@ -61,7 +65,67 @@ class OrderStatusService:
                 "notes": notes,
             },
         )
+        cls._notify_customer(order, status)
         return order
+
+    @staticmethod
+    def _notify_customer(order, status):
+        from apps.notifications.application.service import NotificationService
+        from apps.notifications.infrastructure.models import Notification
+
+        customer = getattr(order, "customer", None)
+        if customer is None:
+            return
+
+        order_ref = order.number or str(order.id)[:8].upper()
+
+        STATUS_NOTIFICATION = {
+            Order.Status.PAID: (
+                Notification.Type.ORDER_CONFIRMED,
+                "Pago confirmado",
+                f"Tu pedido #{order_ref} fue pagado correctamente. Ya lo estamos preparando.",
+                "/perfil?s=pedidos",
+                True,
+            ),
+            Order.Status.SHIPPED: (
+                Notification.Type.ORDER_SHIPPED,
+                "Tu pedido está en camino",
+                f"El pedido #{order_ref} fue despachado y pronto llegará a tu dirección.",
+                "/perfil?s=pedidos",
+                True,
+            ),
+            Order.Status.DELIVERED: (
+                Notification.Type.ORDER_DELIVERED,
+                "Pedido entregado",
+                f"El pedido #{order_ref} fue marcado como entregado. ¡Gracias por tu compra!",
+                "/perfil?s=pedidos",
+                False,
+            ),
+            Order.Status.CANCELLED: (
+                Notification.Type.ORDER_CANCELLED,
+                "Pedido cancelado",
+                f"El pedido #{order_ref} fue cancelado.",
+                "/perfil?s=pedidos",
+                False,
+            ),
+        }
+
+        entry = STATUS_NOTIFICATION.get(status)
+        if entry is None:
+            return
+
+        notif_type, title, message, action_url, send_email = entry
+        try:
+            NotificationService.send(
+                customer=customer,
+                type=notif_type,
+                title=title,
+                message=message,
+                action_url=action_url,
+                send_email=send_email,
+            )
+        except Exception:
+            logger.exception("Error al crear notificación para pedido %s.", order.id)
 
 
 class OrderInventoryService:
