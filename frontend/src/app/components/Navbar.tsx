@@ -302,7 +302,7 @@ export function Navbar({ onLoginClick }: NavbarProps = {}) {
                     >
                       <Bell className="w-4 h-4" strokeWidth={1.5} />
                       {unreadCount > 0 && (
-                        <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white">
+                        <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-red-600 text-white text-[9px] font-semibold border-2 border-white shadow-sm">
                           {unreadCount > 9 ? '9+' : unreadCount}
                         </span>
                       )}
