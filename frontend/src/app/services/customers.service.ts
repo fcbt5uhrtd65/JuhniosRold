@@ -19,6 +19,13 @@ export interface BackendCustomer {
   city: string;
   purchase_mode?: 'RETAIL' | 'WHOLESALE';
   wholesale_code?: string;
+  company_id_type?: string;
+  company_id_type_other?: string;
+  company_id_number?: string;
+  company_name?: string;
+  business_type?: string;
+  is_international_distributor?: boolean;
+  company_phone?: string;
   is_active: boolean;
   created_at: string;
   updated_at: string;

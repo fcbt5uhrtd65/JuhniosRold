@@ -104,6 +104,13 @@ export interface Customer {
   ultimaCompra?: string;
   modoCompra?: 'RETAIL' | 'WHOLESALE';
   codigoMayorista?: string;
+  companyName?: string;
+  companyIdType?: string;
+  companyIdTypeOther?: string;
+  companyIdNumber?: string;
+  businessType?: string;
+  isInternationalDistributor?: boolean;
+  companyPhone?: string;
 }
 
 export interface DashboardMetrics {

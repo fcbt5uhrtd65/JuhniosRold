@@ -293,6 +293,13 @@ function mapApiCustomer(customer: BackendCustomer): Customer {
     ultimaCompra: customer.ultima_compra ?? customer.updated_at ?? customer.created_at,
     modoCompra: customer.purchase_mode ?? 'RETAIL',
     codigoMayorista: customer.wholesale_code,
+    companyName: customer.company_name || undefined,
+    companyIdType: customer.company_id_type || undefined,
+    companyIdTypeOther: customer.company_id_type_other || undefined,
+    companyIdNumber: customer.company_id_number || undefined,
+    businessType: customer.business_type || undefined,
+    isInternationalDistributor: customer.is_international_distributor,
+    companyPhone: customer.company_phone || undefined,
   };
 }
 

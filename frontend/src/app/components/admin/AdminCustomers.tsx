@@ -342,6 +342,9 @@ export function AdminCustomers() {
                       color={getModoColor(customer.modoCompra)}
                     />
                   </div>
+                  {customer.modoCompra === 'WHOLESALE' && customer.companyName && (
+                    <p className="text-xs font-medium text-gray-600 truncate">{customer.companyName}</p>
+                  )}
                   <p className="text-xs text-gray-400">{customer.tipoDocumento} {customer.documento}</p>
                 </div>
 
