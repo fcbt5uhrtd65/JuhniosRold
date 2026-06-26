@@ -3,6 +3,7 @@ from rest_framework import generics, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from apps.customers.infrastructure.models import Customer
 from apps.identity.infrastructure.models import Component, Role, RoleComponentPermission, User
 from apps.identity.infrastructure.serializers import (
     ComponentSerializer,
@@ -33,6 +34,22 @@ def _verification_response_data(verification, message):
     if settings.DEBUG and hasattr(verification, "debug_code"):
         data["debug_code"] = verification.debug_code
     return data
+
+
+class CheckAvailabilityView(generics.GenericAPIView):
+    permission_classes = (permissions.AllowAny,)
+
+    def post(self, request):
+        email = request.data.get("email", "").strip().lower()
+        document_number = request.data.get("document_number", "").strip()
+        errors = {}
+        if email and User.objects.filter(email__iexact=email).exists():
+            errors["email"] = "El correo ya se encuentra registrado."
+        if document_number and Customer.objects.filter(document_number__iexact=document_number).exists():
+            errors["document_number"] = "El número de documento ya se encuentra registrado."
+        if errors:
+            return Response(errors, status=status.HTTP_409_CONFLICT)
+        return Response({"ok": True}, status=status.HTTP_200_OK)
 
 
 class RegisterView(generics.GenericAPIView):

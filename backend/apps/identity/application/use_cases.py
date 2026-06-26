@@ -63,6 +63,10 @@ class RegisterUser:
         user_model = get_user_model()
         if user_model.objects.filter(email__iexact=data.email).exists():
             raise EmailAlreadyRegistered("El correo ya se encuentra registrado.")
+        doc = (data.document_number or "").strip()
+        if doc and Customer.objects.filter(document_number__iexact=doc).exists():
+            from apps.identity.domain.exceptions import DocumentNumberAlreadyRegistered
+            raise DocumentNumberAlreadyRegistered("El numero de documento ya se encuentra registrado.")
         user = user_model(
             email=data.email.lower(),
             first_name=data.first_name,

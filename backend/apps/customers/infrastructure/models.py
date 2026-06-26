@@ -59,7 +59,13 @@ class Customer(BaseModel):
         if not self.wholesale_code:
             seed = self.document_number or self.email or str(self.id)
             clean = "".join(ch for ch in seed.upper() if ch.isalnum())[:8] or str(self.id).replace("-", "")[:8].upper()
-            self.wholesale_code = f"JR-MAY-{clean}"
+            base = f"JR-MAY-{clean}"
+            candidate = base
+            suffix = 1
+            while Customer.objects.filter(wholesale_code=candidate).exclude(pk=self.pk).exists():
+                candidate = f"{base}-{suffix}"
+                suffix += 1
+            self.wholesale_code = candidate
         super().save(*args, **kwargs)
 
 

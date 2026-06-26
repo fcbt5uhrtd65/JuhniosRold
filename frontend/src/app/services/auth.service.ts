@@ -3,7 +3,7 @@
 // Handles: register, login, refresh, me, logout
 // ============================================================
 
-import { api, setTokens, clearTokens } from './api';
+import { api, ApiError, setTokens, clearTokens } from './api';
 
 export type UserRole =
   | 'ADMIN'
@@ -84,6 +84,39 @@ export interface RegistrationVerification {
 
 interface RegisterVerifyResponse extends BackendTokenPair {
   user: AuthUser;
+}
+
+// ---- Check availability ----
+export interface AvailabilityErrors {
+  email?: string;
+  document_number?: string;
+}
+
+export async function checkRegistrationAvailability(
+  email: string,
+  documentNumber?: string,
+): Promise<AvailabilityErrors> {
+  try {
+    await api.post('/auth/register/check-availability/', {
+      email: email.trim().toLowerCase(),
+      document_number: documentNumber?.trim() ?? '',
+    });
+    return {};
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 409) {
+      const result: AvailabilityErrors = {};
+      for (const msg of err.errors ?? []) {
+        const colonIdx = msg.indexOf(': ');
+        if (colonIdx === -1) continue;
+        const field = msg.slice(0, colonIdx);
+        const text = msg.slice(colonIdx + 2);
+        if (field === 'email') result.email = text;
+        if (field === 'document_number') result.document_number = text;
+      }
+      return result;
+    }
+    throw err;
+  }
 }
 
 // ---- Register ----

@@ -5,6 +5,7 @@ import {
   MapPin, Phone, Shield, User as UserIcon, X,
 } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
+import { checkRegistrationAvailability } from '../services/auth.service';
 import { LocationPicker } from './ui/LocationPicker';
 import { DeliveryLocationSection } from './ui/DeliveryLocationSection';
 import { geographyService, type City } from '../services/geography.service';
@@ -159,7 +160,7 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
   }, [regLoc.stateId]);
 
   /* ── paso 1 registro: validar antes de avanzar ── */
-  const handleReg1Next = (e: React.FormEvent) => {
+  const handleReg1Next = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     if (mode === 'WHOLESALE') {
@@ -172,8 +173,19 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
     if (!email.trim())     { setError('Ingresa tu email.'); return; }
     if (password.length < 8) { setError('Mínimo 8 caracteres.'); return; }
     if (password !== confirm) { setError('Las contraseñas no coinciden.'); return; }
+    if (tipoDoc === 'OTHER' && !otroTipoId.trim()) { setError('Especifica el tipo de documento.'); return; }
     if (!terms) { setError('Acepta los términos para continuar.'); return; }
-    goScreen('reg2');
+    setSubmitting(true);
+    try {
+      const availability = await checkRegistrationAvailability(email, documento || undefined);
+      if (availability.email) { setError(availability.email); return; }
+      if (availability.document_number) { setError(availability.document_number); return; }
+      goScreen('reg2');
+    } catch {
+      setError('No se pudo verificar la disponibilidad. Intenta de nuevo.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   /* ── submit final ── */
@@ -250,7 +262,12 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
           setVerificationCode(''); setDebugCode(r.debugCode || '');
           setSuccess(r.message || 'Código enviado a tu correo.');
           goScreen('verify');
-        } else setError(r.message || 'No fue posible crear la cuenta.');
+        } else {
+          const msg = r.message || 'No fue posible crear la cuenta.';
+          const isDataConflict = msg.toLowerCase().includes('documento') || msg.toLowerCase().includes('correo');
+          if (isDataConflict) goScreen('reg1');
+          setError(msg);
+        }
       }
     } finally { setSubmitting(false); }
   };
@@ -585,7 +602,7 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
                     <button type="submit" disabled={submitting}
                       className="w-full py-2.5 rounded-xl text-white text-[11px] tracking-[0.2em] uppercase font-bold transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
                       style={{ backgroundColor: OLIVE }}>
-                      Siguiente <ChevronRight className="w-3.5 h-3.5" strokeWidth={2} />
+                      {submitting ? 'Verificando…' : <>Siguiente <ChevronRight className="w-3.5 h-3.5" strokeWidth={2} /></>}
                     </button>
                     <p className="text-center text-[11px] text-stone-400">
                       ¿Ya tienes cuenta?{' '}

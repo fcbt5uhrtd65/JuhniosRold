@@ -19,7 +19,7 @@ from apps.identity.infrastructure.models import (
 )
 
 from ..application.dtos import RegisterUserDTO
-from ..domain.exceptions import EmailAlreadyRegistered
+from ..domain.exceptions import DocumentNumberAlreadyRegistered, EmailAlreadyRegistered
 from ..application.use_cases import RegisterUser
 from .tasks import (
     send_password_reset_code_email,
@@ -263,7 +263,14 @@ class RegisterVerifySerializer(serializers.Serializer):
             user = RegisterUser().execute_verified(dto, verification.password_hash)
         except EmailAlreadyRegistered as exc:
             raise serializers.ValidationError({"email": str(exc)}) from exc
+        except DocumentNumberAlreadyRegistered as exc:
+            raise serializers.ValidationError({"document_number": str(exc)}) from exc
         except IntegrityError as exc:
+            detail = str(exc).lower()
+            if "wholesale_code" in detail:
+                raise serializers.ValidationError(
+                    {"non_field_errors": "Error al generar código interno. Intenta de nuevo."}
+                ) from exc
             raise serializers.ValidationError(
                 {"document_number": "El numero de documento ya se encuentra registrado."}
             ) from exc
