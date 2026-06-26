@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useCallback, type ReactNode } from 'react';
+import { useMemo, useState, useEffect, useCallback, useRef, type ReactNode, type RefObject } from 'react';
 import { useAdmin } from '../../contexts/AdminContext';
 import {
   AlertCircle,
@@ -786,20 +786,95 @@ function SegmentBadge({ segment }: { segment: string }) {
   );
 }
 
-function ExportButton({ reportType }: { reportType: string }) {
+async function exportSectionAsPdf(
+  contentRef: RefObject<HTMLDivElement | null>,
+  title: string,
+) {
+  const { default: jsPDF } = await import('jspdf');
+  // dom-to-image-more soporta oklch y colores CSS modernos, a diferencia de html2canvas
+  const domToImage = await import('dom-to-image-more');
+
+  const el = contentRef.current;
+  if (!el) throw new Error('Contenido no disponible');
+
+  const dataUrl: string = await domToImage.toPng(el, {
+    scale: 2,
+    bgcolor: '#ffffff',
+  });
+
+  const img = new Image();
+  await new Promise<void>((res, rej) => {
+    img.onload = () => res();
+    img.onerror = rej;
+    img.src = dataUrl;
+  });
+  const canvas = document.createElement('canvas');
+  canvas.width = img.width;
+  canvas.height = img.height;
+  canvas.getContext('2d')!.drawImage(img, 0, 0);
+
+  const imgData = canvas.toDataURL('image/png');
+  const pageW = 210;
+  const pageH = 297;
+  const margin = 14;
+  const headerH = 20;
+  const maxImgW = pageW - margin * 2;
+  const maxImgH = pageH - margin * 2 - headerH;
+  const ratio = canvas.width / canvas.height;
+  const imgW = maxImgW;
+  const imgH = Math.min(imgW / ratio, maxImgH);
+
+  const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+  pdf.setFillColor(26, 26, 26);
+  pdf.rect(0, 0, pageW, headerH, 'F');
+  pdf.setTextColor(255, 255, 255);
+  pdf.setFontSize(11);
+  pdf.setFont('helvetica', 'bold');
+  pdf.text('Juhnios Rold', margin, 8);
+  pdf.setFontSize(8);
+  pdf.setFont('helvetica', 'normal');
+  pdf.text(title, margin, 14);
+  pdf.setTextColor(180, 180, 180);
+  pdf.text(new Date().toLocaleDateString('es-CO'), pageW - margin, 14, { align: 'right' });
+
+  pdf.addImage(imgData, 'PNG', margin, headerH + 4, imgW, imgH);
+
+  const slug = title.toLowerCase().replace(/\s+/g, '_');
+  pdf.save(`${slug}.pdf`);
+}
+
+function ExportButton({ reportType, sectionTitle, contentRef }: {
+  reportType: string;
+  sectionTitle: string;
+  contentRef: RefObject<HTMLDivElement | null>;
+}) {
   const toast = useToast();
   const [loading, setLoading] = useState(false);
 
-  const handleExport = async (fmt: 'xlsx' | 'pdf') => {
+  const handleXlsx = async () => {
     setLoading(true);
-    toast.info('Generando exportación…');
+    toast.info('Generando Excel…');
     try {
-      const taskId = await requestGenericReportExport(reportType, fmt);
+      const taskId = await requestGenericReportExport(reportType, 'xlsx');
       const url = await pollExportStatus(taskId, getGenericReportExportStatus);
       await downloadFile(resolveBackendUrl(url));
-      toast.success('Exportación lista.');
+      toast.success('Excel listo.');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Error al exportar');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePdf = async () => {
+    setLoading(true);
+    toast.info('Generando PDF…');
+    try {
+      await exportSectionAsPdf(contentRef, sectionTitle);
+      toast.success('PDF listo.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Error al generar PDF');
     } finally {
       setLoading(false);
     }
@@ -819,11 +894,11 @@ function ExportButton({ reportType }: { reportType: string }) {
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem onSelect={() => handleExport('xlsx')}>
+        <DropdownMenuItem onSelect={handleXlsx}>
           <FileSpreadsheet className="mr-2 h-3.5 w-3.5" strokeWidth={1.5} /> Excel (.xlsx)
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => handleExport('pdf')}>
-          <FileText className="mr-2 h-3.5 w-3.5" strokeWidth={1.5} /> PDF
+        <DropdownMenuItem onSelect={handlePdf}>
+          <FileText className="mr-2 h-3.5 w-3.5" strokeWidth={1.5} /> PDF (con gráfico)
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -836,6 +911,7 @@ function CollapsibleSection({
   title: string; icon: React.ElementType; children: ReactNode; defaultOpen?: boolean; exportType?: string;
 }) {
   const [open, setOpen] = useState(defaultOpen);
+  const contentRef = useRef<HTMLDivElement>(null);
   return (
     <div>
       <div className="flex items-center gap-2 pt-2 pb-1">
@@ -855,9 +931,15 @@ function CollapsibleSection({
               : <ChevronDown className="w-3 h-3" strokeWidth={2} />}
           </span>
         </button>
-        {exportType && <ExportButton reportType={exportType} />}
+        {exportType && (
+          <ExportButton
+            reportType={exportType}
+            sectionTitle={title}
+            contentRef={contentRef}
+          />
+        )}
       </div>
-      {open && <div className="space-y-4 pt-2">{children}</div>}
+      {open && <div ref={contentRef} className="space-y-4 pt-2">{children}</div>}
     </div>
   );
 }
