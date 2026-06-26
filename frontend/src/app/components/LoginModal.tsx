@@ -229,7 +229,7 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
         const r = await customerRegister(nombre, apellidos, email, password, {
           phone: telefono || undefined, address: delLoc.address || undefined,
           city: regLoc.cityName || delLoc.city || undefined,
-          document_type: tipoDoc || undefined, document_number: documento || undefined,
+          document_type: tipoDoc === 'OTHER' ? (otroTipoId || 'OTHER') : (tipoDoc || undefined), document_number: documento || undefined,
           purchase_mode: mode, state: delLoc.state || undefined,
           country: delLoc.country || regLoc.countryName || undefined,
           latitude: delLoc.lat, longitude: delLoc.lng,
@@ -554,7 +554,7 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
                     <div className="flex gap-2.5">
                       <div className="flex flex-col gap-1 flex-1 min-w-0">
                         <label className="text-[9px] tracking-[0.22em] uppercase text-stone-400 font-semibold">Tipo doc.</label>
-                        <select value={tipoDoc} onChange={e => setTipoDoc(e.target.value)}
+                        <select value={tipoDoc} onChange={e => { setTipoDoc(e.target.value); if (e.target.value !== 'OTHER') setOtroTipoId(''); }}
                           className="w-full px-2.5 py-2 rounded-lg border border-[#E5E0D8] bg-white text-[13px] text-stone-800 focus:outline-none focus:border-[#2D3A1F] transition appearance-none"
                           style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23A8A29E' stroke-width='1.5'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.5rem center' }}>
                           <option value="CC">Cédula</option>
@@ -566,6 +566,9 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
                       </div>
                       <Field label="N° de documento" value={documento} onChange={setDocumento} placeholder="1000000001" icon={CreditCard} />
                     </div>
+                    {tipoDoc === 'OTHER' && (
+                      <Field label="Especifica el tipo de documento *" value={otroTipoId} onChange={setOtroTipoId} placeholder="Ej: RUT, RFC, DNI…" icon={CreditCard} required />
+                    )}
                     {/* términos */}
                     <label className="flex items-start gap-2 cursor-pointer select-none">
                       <div className="relative flex-shrink-0 mt-0.5" onClick={() => setTerms(t => !t)}>
