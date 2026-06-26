@@ -57,6 +57,8 @@ import {
   getSalesReport,
   requestSalesReportExport,
   getSalesReportExportStatus,
+  requestGenericReportExport,
+  getGenericReportExportStatus,
   type SalesReport,
   type SalesReportExportFormat,
   type TopCustomer,
@@ -784,30 +786,77 @@ function SegmentBadge({ segment }: { segment: string }) {
   );
 }
 
+function ExportButton({ reportType }: { reportType: string }) {
+  const toast = useToast();
+  const [loading, setLoading] = useState(false);
+
+  const handleExport = async (fmt: 'xlsx' | 'pdf') => {
+    setLoading(true);
+    toast.info('Generando exportación…');
+    try {
+      const taskId = await requestGenericReportExport(reportType, fmt);
+      const url = await pollExportStatus(taskId, getGenericReportExportStatus);
+      await downloadFile(resolveBackendUrl(url));
+      toast.success('Exportación lista.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Error al exportar');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          disabled={loading}
+          className="flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-2.5 py-1 text-[10px] font-semibold text-stone-500 hover:bg-stone-50 hover:text-stone-700 transition disabled:opacity-40"
+        >
+          {loading
+            ? <Loader2 className="w-3 h-3 animate-spin" />
+            : <Download className="w-3 h-3" strokeWidth={1.5} />}
+          Exportar
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onSelect={() => handleExport('xlsx')}>
+          <FileSpreadsheet className="mr-2 h-3.5 w-3.5" strokeWidth={1.5} /> Excel (.xlsx)
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => handleExport('pdf')}>
+          <FileText className="mr-2 h-3.5 w-3.5" strokeWidth={1.5} /> PDF
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function CollapsibleSection({
-  title, icon: Icon, children, defaultOpen = true,
+  title, icon: Icon, children, defaultOpen = true, exportType,
 }: {
-  title: string; icon: React.ElementType; children: ReactNode; defaultOpen?: boolean;
+  title: string; icon: React.ElementType; children: ReactNode; defaultOpen?: boolean; exportType?: string;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div>
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center gap-2 pt-2 pb-1 group"
-      >
-        <Icon className="w-4 h-4 text-stone-400" strokeWidth={1.5} />
-        <span className="text-[11px] font-bold uppercase tracking-widest text-stone-400 group-hover:text-stone-600 transition">
-          {title}
-        </span>
-        <div className="flex-1 h-px bg-stone-100" />
-        <span className="text-[10px] text-stone-300 group-hover:text-stone-500 transition flex items-center gap-1">
-          {open ? 'Ocultar' : 'Mostrar'}
-          {open
-            ? <ChevronUp className="w-3 h-3" strokeWidth={2} />
-            : <ChevronDown className="w-3 h-3" strokeWidth={2} />}
-        </span>
-      </button>
+      <div className="flex items-center gap-2 pt-2 pb-1">
+        <button
+          onClick={() => setOpen(o => !o)}
+          className="flex items-center gap-2 flex-1 group"
+        >
+          <Icon className="w-4 h-4 text-stone-400" strokeWidth={1.5} />
+          <span className="text-[11px] font-bold uppercase tracking-widest text-stone-400 group-hover:text-stone-600 transition">
+            {title}
+          </span>
+          <div className="flex-1 h-px bg-stone-100" />
+          <span className="text-[10px] text-stone-300 group-hover:text-stone-500 transition flex items-center gap-1 pr-2">
+            {open ? 'Ocultar' : 'Mostrar'}
+            {open
+              ? <ChevronUp className="w-3 h-3" strokeWidth={2} />
+              : <ChevronDown className="w-3 h-3" strokeWidth={2} />}
+          </span>
+        </button>
+        {exportType && <ExportButton reportType={exportType} />}
+      </div>
       {open && <div className="space-y-4 pt-2">{children}</div>}
     </div>
   );
@@ -988,7 +1037,7 @@ function TabCustomers({ a, report, loadingReport }: {
       </CollapsibleSection>
 
       {/* ════════════════ 4. GEOGRAFÍA ════════════════ */}
-      <CollapsibleSection title="Distribución geográfica" icon={MapPin} defaultOpen={false}>
+      <CollapsibleSection title="Distribución geográfica" icon={MapPin} defaultOpen={false} exportType="customer_geo">
 
       <div className="grid gap-4 xl:grid-cols-2">
         {/* Top ciudades por ingresos */}
@@ -1109,7 +1158,7 @@ function TabCustomers({ a, report, loadingReport }: {
       </CollapsibleSection>
 
       {/* ════════════════ 6. CLIENTES INTERNACIONALES ════════════════ */}
-      <CollapsibleSection title="Clientes internacionales" icon={Globe} defaultOpen={false}>
+      <CollapsibleSection title="Clientes internacionales" icon={Globe} defaultOpen={false} exportType="international_customers">
 
       {loadingReport
         ? <ChartSkeleton h={100} />
@@ -1175,7 +1224,7 @@ function TabCustomers({ a, report, loadingReport }: {
       </CollapsibleSection>
 
       {/* ════════════════ 7. TABLA COMPLETA ════════════════ */}
-      <CollapsibleSection title="Todos los clientes activos" icon={Users} defaultOpen={false}>
+      <CollapsibleSection title="Todos los clientes activos" icon={Users} defaultOpen={false} exportType="customers">
 
       <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
         <div className="px-5 py-4 border-b border-stone-100 flex items-center justify-between">

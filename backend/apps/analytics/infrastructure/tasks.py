@@ -41,16 +41,29 @@ def _month_label(month):
 
 @shared_task
 def generate_report(report_type, output_format="xlsx", filters=None):
-    data = DashboardQuery().execute()
     report_dir = Path(settings.MEDIA_ROOT) / "reports"
     report_dir.mkdir(parents=True, exist_ok=True)
     filename = f"{report_type}-{uuid4().hex}.{output_format}"
     output_path = report_dir / filename
 
-    if output_format == "pdf":
-        _write_pdf(output_path, report_type, data)
+    CUSTOMER_REPORTS = {"customers", "customer_geo", "international_customers"}
+    if report_type in CUSTOMER_REPORTS:
+        sales_data = SalesReportQuery().execute()
+        if output_format == "pdf":
+            _write_customer_report_pdf(output_path, report_type, sales_data)
+        else:
+            if report_type == "customers":
+                _write_customers_xlsx(output_path, sales_data)
+            elif report_type == "customer_geo":
+                _write_customer_geo_xlsx(output_path, sales_data)
+            else:
+                _write_international_customers_xlsx(output_path, sales_data)
     else:
-        _write_xlsx(output_path, report_type, data)
+        data = DashboardQuery().execute()
+        if output_format == "pdf":
+            _write_pdf(output_path, report_type, data)
+        else:
+            _write_xlsx(output_path, report_type, data)
 
     return {
         "report_type": report_type,
@@ -58,6 +71,250 @@ def generate_report(report_type, output_format="xlsx", filters=None):
         "status": "generated",
         "url": f"{settings.MEDIA_URL}reports/{filename}",
     }
+
+
+def _fmt_cop(value):
+    try:
+        return f"$ {float(value):,.0f}".replace(",", ".")
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _xlsx_header_style():
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    font = Font(bold=True, color="FFFFFF", size=10)
+    fill = PatternFill("solid", fgColor="1A1A1A")
+    alignment = Alignment(horizontal="center", vertical="center")
+    thin = Side(style="thin", color="CCCCCC")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    return font, fill, alignment, border
+
+
+def _xlsx_row_style(even):
+    from openpyxl.styles import PatternFill, Alignment, Border, Side
+    fill = PatternFill("solid", fgColor="F5F5F4" if even else "FFFFFF")
+    alignment = Alignment(vertical="center")
+    thin = Side(style="thin", color="E7E5E4")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    return fill, alignment, border
+
+
+def _apply_header(sheet, headers):
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    font, fill, alignment, border = _xlsx_header_style()
+    sheet.row_dimensions[1].height = 20
+    for col_idx, header in enumerate(headers, 1):
+        cell = sheet.cell(row=1, column=col_idx, value=header)
+        cell.font = font
+        cell.fill = fill
+        cell.alignment = alignment
+        cell.border = border
+
+
+def _apply_row(sheet, row_idx, values):
+    fill, alignment, border = _xlsx_row_style(row_idx % 2 == 0)
+    for col_idx, value in enumerate(values, 1):
+        cell = sheet.cell(row=row_idx, column=col_idx, value=value)
+        cell.fill = fill
+        cell.alignment = alignment
+        cell.border = border
+
+
+def _write_customers_xlsx(path, data):
+    from openpyxl.styles import Font
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Clientes activos"
+
+    headers = ["#", "Nombre", "Email", "Ciudad", "Pedidos", "Ingresos", "Ticket promedio", "Última compra", "Segmento", "Modo"]
+    _apply_header(sheet, headers)
+
+    segment_map = {"VIP": "★ VIP", "Recurrente": "Recurrente", "Nuevo": "Nuevo", "Inactivo": "Inactivo"}
+    mode_map = {"WHOLESALE": "Mayorista", "RETAIL": "Retail"}
+
+    for i, c in enumerate(data.get("top_customers", []), 1):
+        last_order = ""
+        if c.get("last_order"):
+            try:
+                from datetime import datetime
+                last_order = datetime.fromisoformat(c["last_order"]).strftime("%d/%m/%Y")
+            except Exception:
+                last_order = c["last_order"]
+        values = (
+            i, c["name"], c["email"], c["city"] or "—",
+            c["orders"], _fmt_cop(c["revenue"]), _fmt_cop(c["avg_ticket"]),
+            last_order, segment_map.get(c["segment"], c["segment"]),
+            mode_map.get(c["mode"], c["mode"]),
+        )
+        _apply_row(sheet, i + 1, values)
+        if c["segment"] == "VIP":
+            sheet.cell(row=i + 1, column=9).font = Font(bold=True, color="B45309")
+
+    _auto_width(sheet)
+
+    # hoja de segmentación
+    seg_sheet = workbook.create_sheet("Segmentación")
+    _apply_header(seg_sheet, ["Segmento", "Cantidad", "Porcentaje"])
+    for i, s in enumerate(data.get("customer_segments", []), 1):
+        _apply_row(seg_sheet, i + 1, (s["segment"], s["count"], f"{s['percentage']}%"))
+    _auto_width(seg_sheet)
+
+    workbook.save(path)
+
+
+def _write_customer_geo_xlsx(path, data):
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Distribución geográfica"
+
+    headers = ["#", "Ciudad", "Clientes", "Pedidos", "Ingresos totales", "% de la base"]
+    _apply_header(sheet, headers)
+
+    for i, g in enumerate(data.get("customer_geo", []), 1):
+        _apply_row(sheet, i + 1, (
+            i, g["city"], g["customers"], g["orders"],
+            _fmt_cop(g["revenue"]), f"{g['percentage']}%",
+        ))
+
+    _auto_width(sheet)
+    workbook.save(path)
+
+
+def _write_international_customers_xlsx(path, data):
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Clientes internacionales"
+
+    headers = ["#", "Nombre", "Email", "País(es)", "Pedidos", "Ingresos", "Modo", "Distribuidor"]
+    _apply_header(sheet, headers)
+
+    mode_map = {"WHOLESALE": "Mayorista", "RETAIL": "Retail"}
+    for i, c in enumerate(data.get("international_customers", []), 1):
+        _apply_row(sheet, i + 1, (
+            i, c["name"], c["email"],
+            ", ".join(c["countries"]),
+            c["orders"], _fmt_cop(c["revenue"]),
+            mode_map.get(c["mode"], c["mode"]),
+            "Sí" if c["is_distributor"] else "No",
+        ))
+
+    _auto_width(sheet)
+    workbook.save(path)
+
+
+def _auto_width(sheet):
+    for col in sheet.columns:
+        max_len = max((len(str(cell.value or "")) for cell in col), default=10)
+        sheet.column_dimensions[col[0].column_letter].width = min(max_len + 4, 50)
+
+
+def _pdf_table_style():
+    return TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1a1a1a")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, 0), 9),
+        ("FONTSIZE", (0, 1), (-1, -1), 8),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f5f5f4")]),
+        ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#d6d3d1")),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+    ])
+
+
+def _write_customer_report_pdf(path, report_type, data):
+    from datetime import date
+    document = SimpleDocTemplate(
+        str(path), pagesize=letter,
+        topMargin=40, bottomMargin=36, leftMargin=36, rightMargin=36,
+    )
+    styles = getSampleStyleSheet()
+    title_style = styles["Title"]
+    h2_style = styles["Heading2"]
+    normal = styles["Normal"]
+    normal.fontSize = 8
+
+    TITLES = {
+        "customers": "Reporte de Clientes Activos",
+        "customer_geo": "Reporte de Distribución Geográfica",
+        "international_customers": "Reporte de Clientes Internacionales",
+    }
+
+    elements = [
+        Paragraph("Juhnios Rold", title_style),
+        Paragraph(TITLES.get(report_type, "Reporte de Clientes"), h2_style),
+        Paragraph(f"Generado el {date.today().strftime('%d/%m/%Y')}", normal),
+        Spacer(1, 16),
+    ]
+
+    mode_map = {"WHOLESALE": "Mayorista", "RETAIL": "Retail"}
+
+    if report_type == "customers":
+        # Segmentación summary
+        segments = data.get("customer_segments", [])
+        if segments:
+            elements.append(Paragraph("Segmentación de clientes", h2_style))
+            elements.append(Spacer(1, 6))
+            seg_rows = [["Segmento", "Cantidad", "Porcentaje"]] + [
+                [s["segment"], str(s["count"]), f"{s['percentage']}%"]
+                for s in segments
+            ]
+            seg_table = Table(seg_rows, colWidths=[7 * cm, 4 * cm, 4 * cm])
+            seg_table.setStyle(_pdf_table_style())
+            elements += [seg_table, Spacer(1, 20)]
+
+        customers = data.get("top_customers", [])
+        if customers:
+            elements.append(Paragraph("Detalle de clientes activos", h2_style))
+            elements.append(Spacer(1, 6))
+            rows = [["#", "Nombre", "Ciudad", "Pedidos", "Ingresos", "Ticket prom.", "Segmento", "Modo"]]
+            for i, c in enumerate(customers, 1):
+                rows.append([
+                    str(i), c["name"][:22], c["city"] or "—",
+                    str(c["orders"]), _fmt_cop(c["revenue"]), _fmt_cop(c["avg_ticket"]),
+                    c["segment"], mode_map.get(c["mode"], c["mode"]),
+                ])
+            col_widths = [1 * cm, 5 * cm, 3 * cm, 1.8 * cm, 3 * cm, 3 * cm, 2.5 * cm, 2.5 * cm]
+            table = Table(rows, colWidths=col_widths, repeatRows=1)
+            table.setStyle(_pdf_table_style())
+            elements.append(table)
+
+    elif report_type == "customer_geo":
+        geo = data.get("customer_geo", [])
+        if geo:
+            elements.append(Paragraph("Top ciudades por ingresos", h2_style))
+            elements.append(Spacer(1, 6))
+            rows = [["#", "Ciudad", "Clientes", "Pedidos", "Ingresos totales", "% de la base"]]
+            for i, g in enumerate(geo, 1):
+                rows.append([str(i), g["city"], str(g["customers"]), str(g["orders"]),
+                              _fmt_cop(g["revenue"]), f"{g['percentage']}%"])
+            col_widths = [1 * cm, 5 * cm, 3 * cm, 3 * cm, 5 * cm, 3 * cm]
+            table = Table(rows, colWidths=col_widths, repeatRows=1)
+            table.setStyle(_pdf_table_style())
+            elements.append(table)
+
+    elif report_type == "international_customers":
+        intl = data.get("international_customers", [])
+        elements.append(Paragraph(f"Total: {len(intl)} cliente(s) internacionales detectado(s)", normal))
+        elements.append(Spacer(1, 10))
+        if intl:
+            rows = [["#", "Nombre", "País(es)", "Pedidos", "Ingresos", "Modo", "Distribuidor"]]
+            for i, c in enumerate(intl, 1):
+                rows.append([
+                    str(i), c["name"][:24], ", ".join(c["countries"]),
+                    str(c["orders"]), _fmt_cop(c["revenue"]),
+                    mode_map.get(c["mode"], c["mode"]),
+                    "Sí" if c["is_distributor"] else "No",
+                ])
+            col_widths = [1 * cm, 5 * cm, 4 * cm, 2 * cm, 3.5 * cm, 2.5 * cm, 2.5 * cm]
+            table = Table(rows, colWidths=col_widths, repeatRows=1)
+            table.setStyle(_pdf_table_style())
+            elements.append(table)
+        else:
+            elements.append(Paragraph("No se encontraron clientes internacionales.", normal))
+
+    document.build(elements)
 
 
 def _write_xlsx(path, report_type, data):
