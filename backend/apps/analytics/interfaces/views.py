@@ -41,6 +41,10 @@ class SalesReportSerializer(serializers.Serializer):
     top_products = serializers.ListField()
     customer_segments = serializers.ListField()
     conversion_rate = serializers.FloatField()
+    top_customers = serializers.ListField()
+    customer_geo = serializers.ListField()
+    international_customers = serializers.ListField()
+    customer_churn = serializers.DictField()
 
 
 class SalesReportView(generics.GenericAPIView):
@@ -49,7 +53,9 @@ class SalesReportView(generics.GenericAPIView):
     required_component = "analytics.management"
 
     def get(self, request):
-        return Response(SalesReportQuery().execute())
+        date_from = request.query_params.get("date_from")
+        date_to = request.query_params.get("date_to")
+        return Response(SalesReportQuery().execute(date_from=date_from, date_to=date_to))
 
 
 class SalesReportExportSerializer(serializers.Serializer):

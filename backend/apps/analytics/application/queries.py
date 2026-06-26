@@ -44,13 +44,29 @@ class SalesReportQuery:
 
     NON_REVENUE_STATUSES = (Order.Status.CANCELLED, Order.Status.RETURNED)
 
-    def execute(self):
+    def execute(self, date_from: str | None = None, date_to: str | None = None):
+        from datetime import date
+        today = timezone.localdate()
+
+        def parse(s, fallback):
+            try:
+                return date.fromisoformat(s)
+            except (TypeError, ValueError):
+                return fallback
+
+        range_to = parse(date_to, today)
+        range_from = parse(date_from, today - timedelta(days=29))
+
         return {
             "monthly_sales": self._monthly_sales(),
             "sales_by_category": self._sales_by_category(),
             "top_products": self._top_products(),
             "customer_segments": self._customer_segments(),
             "conversion_rate": self._conversion_rate(),
+            "top_customers": self._top_customers(),
+            "customer_geo": self._customer_geo(),
+            "international_customers": self._international_customers(),
+            "customer_churn": self._customer_churn(range_from, range_to),
         }
 
     def _completed_orders(self):
@@ -111,6 +127,40 @@ class SalesReportQuery:
         converted = sum(1 for customer in customers if (customer.order_count or 0) > 0)
         return round(converted * 100 / len(customers), 1)
 
+    def _top_customers(self, limit=20):
+        today = timezone.localdate()
+        inactive_cutoff = today - timedelta(days=self.INACTIVE_DAYS)
+        customers = self._customers_with_order_stats()
+        result = []
+        for customer in customers:
+            spent = customer.total_spent or 0
+            orders_n = customer.order_count or 0
+            if orders_n == 0:
+                continue
+            if spent >= self.VIP_SPEND_THRESHOLD or orders_n >= self.VIP_ORDERS_THRESHOLD:
+                segment = "VIP"
+            elif customer.last_order_at and customer.last_order_at.date() < inactive_cutoff:
+                segment = "Inactivo"
+            elif orders_n >= self.RECURRING_ORDERS_THRESHOLD:
+                segment = "Recurrente"
+            else:
+                segment = "Nuevo"
+            result.append({
+                "id": str(customer.id),
+                "name": f"{customer.first_name} {customer.last_name}".strip(),
+                "email": customer.email,
+                "phone": customer.phone or "",
+                "city": customer.city or "",
+                "orders": orders_n,
+                "revenue": float(spent),
+                "avg_ticket": round(float(spent) / orders_n, 2),
+                "last_order": customer.last_order_at.strftime("%Y-%m-%dT%H:%M:%S") if customer.last_order_at else None,
+                "segment": segment,
+                "mode": customer.purchase_mode or "RETAIL",
+            })
+        result.sort(key=lambda x: x["revenue"], reverse=True)
+        return result[:limit]
+
     def _customer_segments(self):
         today = timezone.localdate()
         new_cutoff = today - timedelta(days=self.NEW_CUSTOMER_DAYS)
@@ -141,3 +191,94 @@ class SalesReportQuery:
             {"segment": name, "count": count, "percentage": round(count * 100 / total, 1)}
             for name, count in counts.items()
         ]
+
+    def _customer_geo(self, limit=10):
+        """Top ciudades por número de clientes y por ingresos generados."""
+        from apps.customers.infrastructure.models import CustomerAddress
+        stats = self._customers_with_order_stats()
+        city_map: dict[str, dict] = {}
+        for customer in stats:
+            city = (customer.city or "").strip() or "Sin ciudad"
+            if city not in city_map:
+                city_map[city] = {"city": city, "customers": 0, "revenue": 0.0, "orders": 0}
+            city_map[city]["customers"] += 1
+            city_map[city]["revenue"] += float(customer.total_spent or 0)
+            city_map[city]["orders"] += int(customer.order_count or 0)
+
+        result = sorted(city_map.values(), key=lambda x: x["revenue"], reverse=True)
+        total_customers = sum(r["customers"] for r in result) or 1
+        for r in result:
+            r["percentage"] = round(r["customers"] * 100 / total_customers, 1)
+        return result[:limit]
+
+    def _international_customers(self):
+        """Clientes cuya dirección registrada indica país distinto a Colombia."""
+        COLOMBIA_VARIANTS = {"colombia", "col", "co"}
+        from apps.customers.infrastructure.models import CustomerAddress
+        non_revenue_filter = ~Q(orders__status__in=self.NON_REVENUE_STATUSES)
+        customers = Customer.objects.annotate(
+            order_count=Count("orders", filter=non_revenue_filter),
+            total_spent=Sum("orders__total", filter=non_revenue_filter),
+        ).prefetch_related("addresses")
+
+        international = []
+        for customer in customers:
+            countries = set()
+            for addr in customer.addresses.all():
+                c = (addr.country or "").strip().lower()
+                if c and c not in COLOMBIA_VARIANTS:
+                    countries.add(addr.country.strip())
+            if not countries:
+                if customer.is_international_distributor:
+                    countries.add("Internacional")
+                else:
+                    continue
+            international.append({
+                "id": str(customer.id),
+                "name": f"{customer.first_name} {customer.last_name}".strip(),
+                "email": customer.email,
+                "countries": sorted(countries),
+                "orders": int(customer.order_count or 0),
+                "revenue": float(customer.total_spent or 0),
+                "is_distributor": customer.is_international_distributor,
+                "mode": customer.purchase_mode or "RETAIL",
+            })
+        international.sort(key=lambda x: x["revenue"], reverse=True)
+        return international
+
+    def _customer_churn(self, range_from, range_to):
+        """
+        Retención y churn entre el período actual (range_from..range_to)
+        y el período anterior (mismo número de días, inmediatamente anterior).
+        """
+        period_days = (range_to - range_from).days or 1
+        previous_start = range_from - timedelta(days=period_days)
+        previous_end = range_from - timedelta(days=1)
+
+        completed = self._completed_orders()
+        current_ids = set(
+            completed.filter(created_at__date__gte=range_from, created_at__date__lte=range_to)
+            .values_list("customer_id", flat=True)
+        )
+        previous_ids = set(
+            completed.filter(created_at__date__gte=previous_start, created_at__date__lte=previous_end)
+            .values_list("customer_id", flat=True)
+        )
+
+        retained = current_ids & previous_ids
+        churned = previous_ids - current_ids
+        new_this_period = current_ids - previous_ids
+
+        retention_rate = round(len(retained) * 100 / len(previous_ids), 1) if previous_ids else 0
+        churn_rate = round(len(churned) * 100 / len(previous_ids), 1) if previous_ids else 0
+
+        return {
+            "current_period_customers": len(current_ids),
+            "previous_period_customers": len(previous_ids),
+            "retained": len(retained),
+            "churned": len(churned),
+            "new_this_period": len(new_this_period),
+            "retention_rate": retention_rate,
+            "churn_rate": churn_rate,
+            "period_days": period_days,
+        }

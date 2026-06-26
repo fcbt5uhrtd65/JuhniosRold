@@ -27,16 +27,68 @@ export interface CustomerSegment {
   percentage: number;
 }
 
+export interface TopCustomer {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  city: string;
+  orders: number;
+  revenue: number;
+  avg_ticket: number;
+  last_order: string | null;
+  segment: 'VIP' | 'Recurrente' | 'Nuevo' | 'Inactivo';
+  mode: 'RETAIL' | 'WHOLESALE';
+}
+
+export interface CustomerGeo {
+  city: string;
+  customers: number;
+  revenue: number;
+  orders: number;
+  percentage: number;
+}
+
+export interface InternationalCustomer {
+  id: string;
+  name: string;
+  email: string;
+  countries: string[];
+  orders: number;
+  revenue: number;
+  is_distributor: boolean;
+  mode: 'RETAIL' | 'WHOLESALE';
+}
+
+export interface CustomerChurn {
+  current_period_customers: number;
+  previous_period_customers: number;
+  retained: number;
+  churned: number;
+  new_this_period: number;
+  retention_rate: number;
+  churn_rate: number;
+  period_days: number;
+}
+
 export interface SalesReport {
   monthly_sales: MonthlySales[];
   sales_by_category: CategorySales[];
   top_products: TopProduct[];
   customer_segments: CustomerSegment[];
   conversion_rate: number;
+  top_customers: TopCustomer[];
+  customer_geo: CustomerGeo[];
+  international_customers: InternationalCustomer[];
+  customer_churn: CustomerChurn;
 }
 
-export async function getSalesReport(): Promise<SalesReport> {
-  const res = await api.get<SalesReport>(SALES_REPORT_PATH);
+export async function getSalesReport(dateFrom?: string, dateTo?: string): Promise<SalesReport> {
+  const params = new URLSearchParams();
+  if (dateFrom) params.set('date_from', dateFrom);
+  if (dateTo) params.set('date_to', dateTo);
+  const path = params.toString() ? `${SALES_REPORT_PATH}?${params}` : SALES_REPORT_PATH;
+  const res = await api.get<SalesReport>(path);
   if (!res.data) {
     throw new Error(res.message || 'No se pudo cargar el reporte de ventas.');
   }

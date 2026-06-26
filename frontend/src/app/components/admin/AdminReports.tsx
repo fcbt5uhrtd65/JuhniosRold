@@ -1,10 +1,11 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { useAdmin } from '../../contexts/AdminContext';
 import {
   AlertCircle,
   AlertTriangle,
   ArrowDownRight,
   ArrowUpRight,
+  ArrowRight,
   BarChart3,
   Box,
   Calendar,
@@ -17,6 +18,7 @@ import {
   FileSpreadsheet,
   FileText,
   Filter,
+  Globe,
   Loader2,
   MapPin,
   Package,
@@ -26,6 +28,9 @@ import {
   Star,
   TrendingDown,
   TrendingUp,
+  UserCheck,
+  UserMinus,
+  UserPlus,
   Users,
   X,
   Zap,
@@ -54,6 +59,10 @@ import {
   getSalesReportExportStatus,
   type SalesReport,
   type SalesReportExportFormat,
+  type TopCustomer,
+  type CustomerGeo,
+  type InternationalCustomer,
+  type CustomerChurn,
 } from '../../services/reports.service';
 import {
   DropdownMenu,
@@ -756,88 +765,463 @@ function TabProducts({ a, report, loadingReport }: {
 }
 
 /* ── Tab: Clientes ──────────────────────────────────────────────────── */
+const SEGMENT_STYLE: Record<string, { bar: string; badge: string; dot: string }> = {
+  VIP:         { bar: 'bg-amber-400',   badge: 'bg-amber-50 text-amber-700 border-amber-300',      dot: '#d97706' },
+  Recurrentes: { bar: 'bg-blue-500',    badge: 'bg-blue-50 text-blue-700 border-blue-200',         dot: '#2563eb' },
+  Nuevos:      { bar: 'bg-emerald-500', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200',dot: '#16a34a' },
+  Inactivos:   { bar: 'bg-stone-300',   badge: 'bg-stone-50 text-stone-500 border-stone-200',      dot: '#a8a29e' },
+  Recurrente:  { bar: 'bg-blue-500',    badge: 'bg-blue-50 text-blue-700 border-blue-200',         dot: '#2563eb' },
+  Nuevo:       { bar: 'bg-emerald-500', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200',dot: '#16a34a' },
+  Inactivo:    { bar: 'bg-stone-300',   badge: 'bg-stone-50 text-stone-500 border-stone-200',      dot: '#a8a29e' },
+};
+
+function SegmentBadge({ segment }: { segment: string }) {
+  const s = SEGMENT_STYLE[segment] ?? SEGMENT_STYLE['Nuevo'];
+  return (
+    <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ${s.badge}`}>
+      {segment === 'VIP' ? '★ VIP' : segment}
+    </span>
+  );
+}
+
+function CollapsibleSection({
+  title, icon: Icon, children, defaultOpen = true,
+}: {
+  title: string; icon: React.ElementType; children: ReactNode; defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center gap-2 pt-2 pb-1 group"
+      >
+        <Icon className="w-4 h-4 text-stone-400" strokeWidth={1.5} />
+        <span className="text-[11px] font-bold uppercase tracking-widest text-stone-400 group-hover:text-stone-600 transition">
+          {title}
+        </span>
+        <div className="flex-1 h-px bg-stone-100" />
+        <span className="text-[10px] text-stone-300 group-hover:text-stone-500 transition flex items-center gap-1">
+          {open ? 'Ocultar' : 'Mostrar'}
+          {open
+            ? <ChevronUp className="w-3 h-3" strokeWidth={2} />
+            : <ChevronDown className="w-3 h-3" strokeWidth={2} />}
+        </span>
+      </button>
+      {open && <div className="space-y-4 pt-2">{children}</div>}
+    </div>
+  );
+}
+
 function TabCustomers({ a, report, loadingReport }: {
   a: ReturnType<typeof useAnalytics>;
   report: SalesReport | null;
   loadingReport: boolean;
 }) {
   const segments = report?.customer_segments ?? [];
+  const backendCustomers: TopCustomer[] = report?.top_customers ?? [];
+  const geoData: CustomerGeo[] = report?.customer_geo ?? [];
+  const intlCustomers: InternationalCustomer[] = report?.international_customers ?? [];
+  const churn: CustomerChurn | null = report?.customer_churn ?? null;
+
+  /* KPIs globales del backend */
+  const vipCount  = segments.find(s => s.segment === 'VIP')?.count ?? 0;
+  const recCount  = segments.find(s => s.segment === 'Recurrentes')?.count ?? 0;
+  const totalBase = segments.reduce((s, x) => s + x.count, 0);
+  const convRate  = report?.conversion_rate ?? 0;
+
+  /* Ticket promedio del período seleccionado */
+  const periodAvgTicket = a.topCustomers.length
+    ? a.topCustomers.reduce((s, c) => s + c.revenue / c.orders, 0) / a.topCustomers.length
+    : 0;
+
+  /* Pie chart segmentación */
+  const pieData = segments.map(s => ({
+    name: s.segment, value: s.count, fill: SEGMENT_STYLE[s.segment]?.dot ?? '#ccc',
+  }));
+
+  /* Tabla: backend si disponible, fallback al período */
+  const tableRows: Array<{
+    name: string; email: string; orders: number; revenue: number;
+    avgTicket: number; lastOrder: string | null; segment: string; mode: string; city: string;
+  }> = backendCustomers.length > 0
+    ? backendCustomers.map(c => ({
+        name: c.name, email: c.email, orders: c.orders, revenue: c.revenue,
+        avgTicket: c.avg_ticket, lastOrder: c.last_order, segment: c.segment, mode: c.mode, city: c.city,
+      }))
+    : a.topCustomers.map(c => ({
+        name: c.name, email: c.email, orders: c.orders, revenue: c.revenue,
+        avgTicket: c.orders > 0 ? c.revenue / c.orders : 0,
+        lastOrder: c.lastOrder, segment: c.orders > 1 ? 'Recurrente' : 'Nuevo', mode: 'RETAIL', city: '',
+      }));
+
+  /* Mayoristas vs Retail desde backendCustomers */
+  const wholesaleRows = tableRows.filter(c => c.mode === 'WHOLESALE');
+  const retailRows    = tableRows.filter(c => c.mode === 'RETAIL');
+  const wholesaleRev  = wholesaleRows.reduce((s, c) => s + c.revenue, 0);
+  const retailRev     = retailRows.reduce((s, c) => s + c.revenue, 0);
+  const totalRev      = wholesaleRev + retailRev || 1;
 
   return (
-    <div className="space-y-6">
-      <div className="grid gap-3 sm:grid-cols-4">
-        <KpiCard label="Clientes activos" value={fmtN(a.topCustomers.length)} icon={Users} color="blue" />
-        <KpiCard label="Clientes nuevos" value={fmtN(a.newCustomers)} icon={Users} color="green" />
-        <KpiCard label="Clientes recurrentes" value={fmtN(a.repeatCustomers.length)} icon={RotateCcw} color="violet" />
-        <KpiCard label="Tasa de recompra" value={`${a.repeatRate.toFixed(1)}%`} icon={TrendingUp} color="amber" />
-      </div>
+    <div className="space-y-4">
+
+      {/* ════════════════ 1. RESUMEN GENERAL ════════════════ */}
+      <CollapsibleSection title="Resumen general" icon={Users}>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <KpiCard label="Base total de clientes" value={loadingReport ? '—' : fmtN(totalBase)}
+            sub={`${convRate.toFixed(1)}% han comprado`} icon={Users} color="blue" />
+          <KpiCard label="Clientes VIP" value={loadingReport ? '—' : fmtN(vipCount)}
+            sub="≥ $1.5M o ≥ 10 pedidos" icon={Star} color="amber" />
+          <KpiCard label="Clientes recurrentes" value={loadingReport ? '—' : fmtN(recCount)}
+            sub="2 o más pedidos" icon={RotateCcw} color="violet" />
+          <KpiCard label="Ticket promedio / cliente" value={a.topCustomers.length ? fmt(periodAvgTicket) : '—'}
+            sub="En el período seleccionado" icon={TrendingUp} color="green" />
+        </div>
+      </CollapsibleSection>
+
+      {/* ════════════════ 2. SEGMENTACIÓN ════════════════ */}
+      <CollapsibleSection title="Segmentación por comportamiento" icon={BarChart3}>
 
       <div className="grid gap-4 xl:grid-cols-2">
-        {/* segmentación del backend */}
+        {/* Barras + pie */}
         <div className="rounded-2xl border border-stone-200 bg-white p-5">
-          <SectionHeader title="Segmentación de clientes" subtitle="Base por comportamiento (datos del backend)" icon={Users} />
+          <SectionHeader title="Segmentación de clientes" subtitle="Base total · comportamiento histórico" icon={Users} />
           {loadingReport
             ? <ChartSkeleton />
             : segments.length === 0
-              ? <EmptyState icon={Users} title="Sin segmentación" sub="El backend no retorna segmentos" />
-              : <div className="space-y-4">
-                {segments.map(s => (
-                  <div key={s.segment}>
-                    <div className="flex items-center justify-between text-xs mb-1.5">
-                      <span className="font-semibold text-stone-700">{s.segment}</span>
-                      <span className="text-stone-400">{s.count} clientes · {s.percentage}%</span>
-                    </div>
-                    <ProgressBar value={s.percentage} max={100} color="bg-stone-800" />
+              ? <EmptyState icon={Users} title="Sin segmentación" sub="No hay datos del backend" />
+              : <div className="mt-4 grid grid-cols-5 gap-4 items-center">
+                  <div className="col-span-3 space-y-3">
+                    {segments.map(s => {
+                      const style = SEGMENT_STYLE[s.segment] ?? { bar: 'bg-stone-400', badge: '' };
+                      return (
+                        <div key={s.segment}>
+                          <div className="flex items-center justify-between text-xs mb-1">
+                            <span className="font-semibold text-stone-700 flex items-center gap-1.5">
+                              <span className={`inline-block w-2 h-2 rounded-full ${style.bar}`} />
+                              {s.segment}
+                            </span>
+                            <span className="text-stone-400">{fmtN(s.count)} · <span className="font-semibold text-stone-600">{s.percentage}%</span></span>
+                          </div>
+                          <ProgressBar value={s.percentage} max={100} color={style.bar} />
+                        </div>
+                      );
+                    })}
                   </div>
-                ))}
-              </div>}
+                  <div className="col-span-2">
+                    <ResponsiveContainer width="100%" height={160}>
+                      <PieChart>
+                        <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%"
+                          innerRadius={42} outerRadius={68} paddingAngle={3}>
+                          {pieData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
+                        </Pie>
+                        <Tooltip formatter={(v: number, name: string) => [`${fmtN(v)} clientes`, name]} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>}
         </div>
 
-        {/* clientes por valor */}
-        <ChartCard title="Clientes por valor acumulado" subtitle="Top 10 por ingresos generados">
-          {a.topCustomers.length === 0
-            ? <EmptyState icon={Users} title="Sin clientes" sub="No hay ventas en el período" />
+        {/* Top clientes por valor */}
+        <ChartCard title="Clientes por valor acumulado" subtitle="Top 10 · ordenados por ingresos totales">
+          {tableRows.length === 0
+            ? <EmptyState icon={Users} title="Sin clientes" sub="No hay datos disponibles" />
             : <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={a.topCustomers.slice(0, 10).map(c => ({ nombre: c.name.split(' ')[0], ingresos: c.revenue }))} layout="vertical">
+              <BarChart data={tableRows.slice(0, 10).map(c => ({ nombre: c.name.split(' ')[0], ingresos: c.revenue, segment: c.segment }))} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis type="number" tick={{ fontSize: 9 }} stroke="#ccc" tickFormatter={v => fmt(v)} />
-                <YAxis dataKey="nombre" type="category" tick={{ fontSize: 9 }} width={80} stroke="#ccc" />
-                <Tooltip formatter={(v: number) => fmt(v)} />
-                <Bar dataKey="ingresos" fill={C.primary} radius={[0, 4, 4, 0]} name="Ingresos" />
+                <YAxis dataKey="nombre" type="category" tick={{ fontSize: 9 }} width={72} stroke="#ccc" />
+                <Tooltip formatter={(v: number) => fmt(v)}
+                  labelFormatter={(label, payload) => `${label}${payload?.[0]?.payload?.segment ? ` · ${payload[0].payload.segment}` : ''}`} />
+                <Bar dataKey="ingresos" radius={[0, 4, 4, 0]} name="Ingresos">
+                  {tableRows.slice(0, 10).map((c, i) => <Cell key={i} fill={SEGMENT_STYLE[c.segment]?.dot ?? C.primary} />)}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>}
         </ChartCard>
       </div>
+      </CollapsibleSection>
 
-      {/* tabla clientes */}
-      <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
-        <div className="px-5 py-4 border-b border-stone-100">
-          <SectionHeader title="Detalle por cliente" subtitle="Clientes con compras en el período" icon={Users} />
+      {/* ════════════════ 3. RETENCIÓN Y CHURN ════════════════ */}
+      <CollapsibleSection title="Retención y churn" icon={RotateCcw} defaultOpen={false}>
+        {loadingReport
+        ? <ChartSkeleton h={100} />
+        : churn
+          ? <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <KpiCard label="Tasa de retención" value={`${churn.retention_rate}%`}
+                sub="Clientes que repitieron vs período anterior" icon={UserCheck}
+                color={churn.retention_rate >= 50 ? 'green' : 'amber'} />
+              <KpiCard label="Churn (período)" value={`${churn.churn_rate}%`}
+                sub={`${fmtN(churn.churned)} clientes no volvieron`} icon={UserMinus}
+                color={churn.churn_rate > 40 ? 'red' : 'stone'} />
+              <KpiCard label="Clientes retenidos" value={fmtN(churn.retained)}
+                sub="Compraron en ambos períodos" icon={UserCheck} color="blue" />
+              <KpiCard label="Captados (nuevos)" value={fmtN(churn.new_this_period)}
+                sub="Primera compra en este período" icon={UserPlus} color="green" />
+            </div>
+          : <EmptyState icon={RotateCcw} title="Sin datos de retención" sub="El backend no retorna datos de churn" />}
+
+        {churn && !loadingReport && (
+          <div className="rounded-2xl border border-stone-200 bg-white p-5">
+            <div className="flex items-center justify-between mb-4">
+              <SectionHeader title="Flujo de clientes"
+                subtitle={churn ? `Últimos ${churn.period_days} días vs ${churn.period_days} días anteriores` : ''}
+                icon={ArrowRight} />
+            </div>
+            <div className="flex items-stretch gap-3 text-center text-xs">
+              <div className="flex-1 rounded-xl bg-stone-50 border border-stone-100 p-4">
+                <div className="text-2xl font-bold text-stone-800">{fmtN(churn.previous_period_customers)}</div>
+                <div className="text-stone-400 mt-1">Período anterior</div>
+              </div>
+              <div className="flex flex-col items-center justify-center gap-1 px-1">
+                <div className="text-[10px] text-emerald-600 font-bold">+{fmtN(churn.new_this_period)} nuevos</div>
+                <ArrowRight className="w-5 h-5 text-stone-300" />
+                <div className="text-[10px] text-red-500 font-bold">-{fmtN(churn.churned)} perdidos</div>
+              </div>
+              <div className="flex-1 rounded-xl bg-stone-900 border border-stone-800 p-4">
+                <div className="text-2xl font-bold text-white">{fmtN(churn.current_period_customers)}</div>
+                <div className="text-stone-400 mt-1">Período actual</div>
+              </div>
+            </div>
+          </div>
+        )}
+      </CollapsibleSection>
+
+      {/* ════════════════ 4. GEOGRAFÍA ════════════════ */}
+      <CollapsibleSection title="Distribución geográfica" icon={MapPin} defaultOpen={false}>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        {/* Top ciudades por ingresos */}
+        <ChartCard title="Top ciudades por ingresos" subtitle="Ciudades donde se generan más ventas">
+          {loadingReport
+            ? <ChartSkeleton />
+            : geoData.length === 0
+              ? <EmptyState icon={MapPin} title="Sin datos geográficos" sub="No hay ciudad registrada en los clientes" />
+              : <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={geoData.map(g => ({ ciudad: g.city, ingresos: g.revenue, clientes: g.customers }))} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis type="number" tick={{ fontSize: 9 }} stroke="#ccc" tickFormatter={v => fmt(v)} />
+                  <YAxis dataKey="ciudad" type="category" tick={{ fontSize: 9 }} width={90} stroke="#ccc" />
+                  <Tooltip formatter={(v: number, name: string) => [name === 'ingresos' ? fmt(v) : fmtN(v), name === 'ingresos' ? 'Ingresos' : 'Clientes']} />
+                  <Bar dataKey="ingresos" fill={C.blue} radius={[0, 4, 4, 0]} name="ingresos" />
+                </BarChart>
+              </ResponsiveContainer>}
+        </ChartCard>
+
+        {/* Tabla ciudades */}
+        <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
+          <div className="px-5 py-4 border-b border-stone-100">
+            <SectionHeader title="Ciudades · detalle" subtitle="Clientes, pedidos e ingresos por ciudad" icon={MapPin} />
+          </div>
+          {loadingReport
+            ? <ChartSkeleton />
+            : geoData.length === 0
+              ? <EmptyState icon={MapPin} title="Sin ciudades" sub="No hay datos geográficos" />
+              : <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-stone-50 border-b border-stone-100">
+                    <tr>
+                      {['#', 'Ciudad', 'Clientes', 'Pedidos', 'Ingresos', '% base'].map(h => (
+                        <th key={h} className="px-4 py-3 text-left font-bold uppercase tracking-wider text-stone-400 text-[10px]">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {geoData.map((g, i) => (
+                      <tr key={g.city} className="border-b border-stone-50 hover:bg-stone-50/50 transition">
+                        <td className="px-4 py-3 text-stone-300 font-bold">{i + 1}</td>
+                        <td className="px-4 py-3 font-semibold text-stone-800">{g.city}</td>
+                        <td className="px-4 py-3 text-stone-600">{fmtN(g.customers)}</td>
+                        <td className="px-4 py-3 text-stone-600">{fmtN(g.orders)}</td>
+                        <td className="px-4 py-3 font-bold text-stone-900">{fmt(g.revenue)}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-1.5 rounded-full bg-stone-100">
+                              <div className="h-1.5 rounded-full bg-blue-400" style={{ width: `${g.percentage}%` }} />
+                            </div>
+                            <span className="text-stone-400 text-[10px]">{g.percentage}%</span>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>}
         </div>
-        {a.topCustomers.length === 0
-          ? <EmptyState icon={Users} title="Sin clientes activos" sub="No hay ventas en este período" />
+      </div>
+      </CollapsibleSection>
+
+      {/* ════════════════ 5. MAYORISTAS VS RETAIL ════════════════ */}
+      <CollapsibleSection title="Mayoristas vs Retail" icon={Users} defaultOpen={false}>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <KpiCard label="Clientes mayoristas" value={loadingReport ? '—' : fmtN(wholesaleRows.length)}
+          sub={`${((wholesaleRows.length / (tableRows.length || 1)) * 100).toFixed(1)}% de la base activa`}
+          icon={Users} color="violet" />
+        <KpiCard label="Ingresos mayoristas" value={loadingReport ? '—' : fmt(wholesaleRev)}
+          sub={`${((wholesaleRev / totalRev) * 100).toFixed(1)}% del total`}
+          icon={TrendingUp} color="violet" />
+        <KpiCard label="Ingresos retail" value={loadingReport ? '—' : fmt(retailRev)}
+          sub={`${((retailRev / totalRev) * 100).toFixed(1)}% del total`}
+          icon={TrendingUp} color="blue" />
+      </div>
+
+      {tableRows.length > 0 && (
+        <div className="grid gap-4 xl:grid-cols-2">
+          <ChartCard title="Ingresos: Mayoristas vs Retail" subtitle="Distribución del total de ingresos">
+            <ResponsiveContainer width="100%" height={200}>
+              <PieChart>
+                <Pie
+                  data={[
+                    { name: 'Mayorista', value: wholesaleRev, fill: '#7c3aed' },
+                    { name: 'Retail', value: retailRev, fill: '#2563eb' },
+                  ]}
+                  dataKey="value" nameKey="name" cx="50%" cy="50%"
+                  innerRadius={50} outerRadius={80} paddingAngle={4}>
+                  <Cell fill="#7c3aed" />
+                  <Cell fill="#2563eb" />
+                </Pie>
+                <Tooltip formatter={(v: number) => fmt(v)} />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </ChartCard>
+
+          <div className="rounded-2xl border border-stone-200 bg-white p-5 space-y-3">
+            <SectionHeader title="Top mayoristas" subtitle="Por ingresos generados" icon={Users} />
+            {wholesaleRows.length === 0
+              ? <EmptyState icon={Users} title="Sin clientes mayoristas" sub="No hay pedidos de mayoristas" />
+              : wholesaleRows.slice(0, 6).map((c, i) => (
+                <div key={c.name + i} className="flex items-center justify-between text-xs py-1.5 border-b border-stone-50 last:border-0">
+                  <div>
+                    <div className="font-semibold text-stone-800">{c.name}</div>
+                    <div className="text-[10px] text-stone-400">{c.city || c.email || '—'}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-bold text-stone-900">{fmt(c.revenue)}</div>
+                    <div className="text-[10px] text-stone-400">{fmtN(c.orders)} pedidos</div>
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+        )}
+      </CollapsibleSection>
+
+      {/* ════════════════ 6. CLIENTES INTERNACIONALES ════════════════ */}
+      <CollapsibleSection title="Clientes internacionales" icon={Globe} defaultOpen={false}>
+
+      {loadingReport
+        ? <ChartSkeleton h={100} />
+        : intlCustomers.length === 0
+          ? <div className="rounded-2xl border border-stone-200 bg-white p-6">
+              <EmptyState icon={Globe} title="Sin clientes internacionales" sub="No se detectaron clientes con dirección fuera de Colombia" />
+            </div>
+          : <>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <KpiCard label="Clientes internacionales" value={fmtN(intlCustomers.length)}
+                  sub="Con dirección fuera de Colombia" icon={Globe} color="blue" />
+                <KpiCard label="Ingresos internacionales"
+                  value={fmt(intlCustomers.reduce((s, c) => s + c.revenue, 0))}
+                  sub="Total generado" icon={TrendingUp} color="green" />
+                <KpiCard label="Distribuidores internacionales"
+                  value={fmtN(intlCustomers.filter(c => c.is_distributor).length)}
+                  sub="Marcados como distribuidor" icon={Star} color="amber" />
+              </div>
+
+              <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
+                <div className="px-5 py-4 border-b border-stone-100">
+                  <SectionHeader title="Detalle · clientes internacionales" subtitle="Clientes con dirección fuera de Colombia" icon={Globe} />
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-stone-50 border-b border-stone-100">
+                      <tr>
+                        {['#', 'Cliente', 'País(es)', 'Pedidos', 'Ingresos', 'Modo', 'Distribuidor'].map(h => (
+                          <th key={h} className="px-4 py-3 text-left font-bold uppercase tracking-wider text-stone-400 text-[10px]">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {intlCustomers.map((c, i) => (
+                        <tr key={c.id} className="border-b border-stone-50 hover:bg-stone-50/50 transition">
+                          <td className="px-4 py-3 text-stone-300 font-bold">{i + 1}</td>
+                          <td className="px-4 py-3">
+                            <div className="font-semibold text-stone-800">{c.name}</div>
+                            {c.email && <div className="text-[10px] text-stone-400">{c.email}</div>}
+                          </td>
+                          <td className="px-4 py-3 text-stone-600">{c.countries.join(', ') || '—'}</td>
+                          <td className="px-4 py-3 font-semibold text-stone-700">{c.orders}</td>
+                          <td className="px-4 py-3 font-bold text-stone-900">{fmt(c.revenue)}</td>
+                          <td className="px-4 py-3">
+                            {c.mode === 'WHOLESALE'
+                              ? <span className="rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide bg-indigo-50 text-indigo-700 border-indigo-200">Mayorista</span>
+                              : <span className="rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide bg-stone-50 text-stone-500 border-stone-200">Retail</span>
+                            }
+                          </td>
+                          <td className="px-4 py-3">
+                            {c.is_distributor
+                              ? <span className="rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide bg-amber-50 text-amber-700 border-amber-200">Sí</span>
+                              : <span className="text-stone-300">—</span>
+                            }
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>}
+      </CollapsibleSection>
+
+      {/* ════════════════ 7. TABLA COMPLETA ════════════════ */}
+      <CollapsibleSection title="Todos los clientes activos" icon={Users} defaultOpen={false}>
+
+      <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
+        <div className="px-5 py-4 border-b border-stone-100 flex items-center justify-between">
+          <SectionHeader
+            title="Detalle por cliente"
+            subtitle={backendCustomers.length > 0 ? 'Datos globales · ordenados por ingresos' : 'Clientes con compras en el período'}
+            icon={Users}
+          />
+          {tableRows.length > 0 && (
+            <span className="text-[10px] text-stone-400 bg-stone-50 border border-stone-200 rounded-lg px-2 py-1">
+              {fmtN(tableRows.length)} clientes
+            </span>
+          )}
+        </div>
+        {tableRows.length === 0
+          ? <EmptyState icon={Users} title="Sin clientes activos" sub="No hay ventas registradas" />
           : <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="bg-stone-50 border-b border-stone-100">
                 <tr>
-                  {['#', 'Cliente', 'Email', 'Pedidos', 'Ingresos', 'Última compra', 'Tipo'].map(h => (
+                  {['#', 'Cliente', 'Ciudad', 'Pedidos', 'Ingresos', 'Ticket prom.', 'Última compra', 'Segmento', 'Modo'].map(h => (
                     <th key={h} className="px-4 py-3 text-left font-bold uppercase tracking-wider text-stone-400 text-[10px]">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {a.topCustomers.map((c, i) => (
+                {tableRows.map((c, i) => (
                   <tr key={c.name + i} className="border-b border-stone-50 hover:bg-stone-50/50 transition">
                     <td className="px-4 py-3 text-stone-300 font-bold">{i + 1}</td>
-                    <td className="px-4 py-3 font-semibold text-stone-800">{c.name}</td>
-                    <td className="px-4 py-3 text-stone-400">{c.email || '—'}</td>
+                    <td className="px-4 py-3">
+                      <div className="font-semibold text-stone-800">{c.name}</div>
+                      {c.email && <div className="text-[10px] text-stone-400">{c.email}</div>}
+                    </td>
+                    <td className="px-4 py-3 text-stone-400">{c.city || '—'}</td>
                     <td className="px-4 py-3 font-semibold text-stone-700">{c.orders}</td>
                     <td className="px-4 py-3 font-bold text-stone-900">{fmt(c.revenue)}</td>
-                    <td className="px-4 py-3 text-stone-400">{c.lastOrder ? format(new Date(c.lastOrder), 'dd/MM/yyyy') : '—'}</td>
+                    <td className="px-4 py-3 text-stone-500">{c.avgTicket > 0 ? fmt(c.avgTicket) : '—'}</td>
+                    <td className="px-4 py-3 text-stone-400">
+                      {c.lastOrder ? format(new Date(c.lastOrder), 'dd/MM/yyyy') : '—'}
+                    </td>
+                    <td className="px-4 py-3"><SegmentBadge segment={c.segment} /></td>
                     <td className="px-4 py-3">
-                      <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ${c.orders > 1 ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-stone-50 text-stone-500 border-stone-200'}`}>
-                        {c.orders > 1 ? 'Recurrente' : 'Nuevo'}
-                      </span>
+                      {c.mode === 'WHOLESALE'
+                        ? <span className="rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide bg-indigo-50 text-indigo-700 border-indigo-200">Mayorista</span>
+                        : <span className="rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide bg-stone-50 text-stone-500 border-stone-200">Retail</span>
+                      }
                     </td>
                   </tr>
                 ))}
@@ -845,6 +1229,7 @@ function TabCustomers({ a, report, loadingReport }: {
             </table>
           </div>}
       </div>
+      </CollapsibleSection>
     </div>
   );
 }
@@ -1077,16 +1462,17 @@ export function AdminReports() {
 
   const analytics = useAnalytics(orders, customers, filters);
 
-  const loadReport = () => {
+  const loadReport = useCallback(() => {
+    const { from, to } = getDateBounds(filters);
+    const fmt2 = (d: Date) => d.toISOString().slice(0, 10);
     setLoadingReport(true);
     setReportError('');
-    getSalesReport()
+    getSalesReport(fmt2(from), fmt2(to))
       .then(d => { setReport(d); setLoadingReport(false); })
       .catch(e => { setReportError(e instanceof Error ? e.message : 'Error'); setLoadingReport(false); });
-  };
+  }, [filters]);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useMemo(() => { loadReport(); }, []);
+  useEffect(() => { loadReport(); }, [loadReport]);
 
   const handleExport = async (format: SalesReportExportFormat) => {
     setIsExporting(true);
