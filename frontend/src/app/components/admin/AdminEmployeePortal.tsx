@@ -75,8 +75,17 @@ function getStatusColor(status: VacationRequestStatus): BadgeColor {
   return colors[status];
 }
 
+const REQUEST_TYPE_LABELS: Record<VacationRequestType, string> = {
+  PERMISSION: 'Permiso',
+  VACATION: 'Vacaciones',
+  OVERTIME: 'Horas extras',
+  INCAPACITY: 'Incapacidad',
+  LEAVE: 'Licencia',
+  OTHER: 'Otro',
+};
+
 function getRequestTypeLabel(type: VacationRequestType): string {
-  return type === 'PERMISSION' ? 'Permiso' : 'Vacaciones';
+  return REQUEST_TYPE_LABELS[type] ?? type;
 }
 
 function isAllowedSupportDocument(file: File): boolean {
@@ -264,8 +273,9 @@ export function AdminEmployeePortal() {
                   onChange={(event) => setForm({ ...form, request_type: event.target.value as VacationRequestType })}
                   className={selectCls}
                 >
-                  <option value="PERMISSION">Permiso</option>
-                  <option value="VACATION">Vacaciones</option>
+                  {Object.entries(REQUEST_TYPE_LABELS).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -432,7 +442,7 @@ export function AdminEmployeePortal() {
 
             <div className="bg-gray-50 border border-gray-100 rounded-xl p-4 text-xs text-gray-500 space-y-1">
               <p className="font-medium text-gray-900">Resumen</p>
-              <p>Tipo: {getRequestTypeLabel(form.request_type)}</p>
+              <p>Tipo: {REQUEST_TYPE_LABELS[form.request_type]}</p>
               <p>
                 {form.period_mode === 'SINGLE_DAY'
                   ? `Fecha: ${form.single_date || 'pendiente'}`
