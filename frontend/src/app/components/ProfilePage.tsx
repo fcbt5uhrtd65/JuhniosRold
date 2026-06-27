@@ -6,8 +6,11 @@ import {
   ArrowLeft,
   BadgeCheck,
   Check,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   CreditCard,
+  ExternalLink,
   FileText,
   Hash,
   Heart,
@@ -37,6 +40,7 @@ import { getProductById } from '../services/products.service';
 import { initiatePayment, resolveMockPayment, getInvoiceByOrder, openInvoicePdf } from '../services/payments.service';
 import { TrackingPedidoPage } from './TrackingPedidoPage';
 import { navigateBack, navigateTo } from '../services/navigate';
+import { getTrackingPedido, type Envio } from '../services/enviosApi';
 
 type Section = 'datos' | 'pedidos' | 'guardados' | 'mayorista';
 
@@ -102,6 +106,10 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
   const [mockPay, setMockPay] = useState<{ orderId: string; paymentId: string } | null>(null);
   const [trackingId, setTrackingId] = useState<string | null>(null);
   const [loadingInvoiceId, setLoadingInvoiceId] = useState<string | null>(null);
+  const [ordersPage, setOrdersPage] = useState(1);
+  const ORDERS_PER_PAGE = 5;
+  const [shippingData, setShippingData] = useState<Record<string, Envio | null>>({});
+  const [loadingShipping, setLoadingShipping] = useState<Record<string, boolean>>({});
 
   /* redirect si no logueado */
   useEffect(() => {
@@ -137,7 +145,24 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
     return () => { c = false; };
   }, [profileLoc.stateId]);
 
-  useEffect(() => { if (section === 'pedidos') loadOrders(); }, [section, loadOrders]);
+  useEffect(() => {
+    if (section === 'pedidos') { loadOrders(); setOrdersPage(1); }
+  }, [section, loadOrders]);
+
+  /* cargar datos de envío para pedidos que ya están pagados */
+  useEffect(() => {
+    if (!backendOnline || section !== 'pedidos') return;
+    orders.forEach(order => {
+      if (canPay(order.estado)) return;
+      if (shippingData[order.id] !== undefined || loadingShipping[order.id]) return;
+      setLoadingShipping(prev => ({ ...prev, [order.id]: true }));
+      getTrackingPedido(order.id)
+        .then(data => setShippingData(prev => ({ ...prev, [order.id]: data.envio })))
+        .catch(() => setShippingData(prev => ({ ...prev, [order.id]: null })))
+        .finally(() => setLoadingShipping(prev => ({ ...prev, [order.id]: false })));
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orders, section, backendOnline]);
 
   if (!currentUser) return null;
 
@@ -485,7 +510,7 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
                     <h1 className="text-lg font-semibold text-stone-900">Mis pedidos</h1>
                     <p className="text-xs text-stone-400">{orders.length} {orders.length === 1 ? 'pedido' : 'pedidos'} en total</p>
                   </div>
-                  <button onClick={loadOrders} className="flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-stone-500 transition hover:border-stone-300 hover:text-stone-800">
+                  <button onClick={() => { loadOrders(); setShippingData({}); setOrdersPage(1); }} className="flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-stone-500 transition hover:border-stone-300 hover:text-stone-800">
                     <RefreshCw className="w-3 h-3" /> Actualizar
                   </button>
                 </div>
@@ -496,14 +521,19 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
                     <p className="text-sm font-medium text-stone-500">Sin pedidos aún</p>
                     <p className="mt-1 text-xs text-stone-400">Tu historial aparecerá aquí</p>
                   </div>
-                ) : (
+                ) : (() => {
+                  const totalPages = Math.ceil(orders.length / ORDERS_PER_PAGE);
+                  const pagedOrders = orders.slice((ordersPage - 1) * ORDERS_PER_PAGE, ordersPage * ORDERS_PER_PAGE);
+                  return (
                   <div className="space-y-3">
-                    {orders.map(order => {
+                    {pagedOrders.map(order => {
                       const subtotal = order.productos.reduce((s: number, p: { precio: number; cantidad: number }) => s + p.precio * p.cantidad, 0);
                       const costoEnvio = order.total - subtotal;
                       const showEnvioCost = costoEnvio > 0;
                       const isTracking = trackingId === order.id;
                       const isPaid = !canPay(order.estado);
+                      const envio = shippingData[order.id] ?? null;
+                      const loadingEnvio = loadingShipping[order.id] ?? false;
 
                       return (
                         <div key={order.id} className="overflow-hidden rounded-2xl border border-stone-200 bg-white">
@@ -591,12 +621,51 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
                                     <Truck className="w-3.5 h-3.5 text-stone-400" strokeWidth={1.5} />
                                     <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Información del envío</p>
                                   </div>
-                                  <p className="text-xs text-stone-600">Transportadora: <span className="text-stone-400">Por asignar</span></p>
-                                  <p className="text-xs text-stone-500 mt-0.5">Tiempo estimado: 2 a 5 días hábiles</p>
-                                  <p className="mt-2 flex items-start gap-1.5 rounded-lg bg-emerald-50 border border-emerald-100 px-2.5 py-2 text-[11px] text-emerald-700 leading-relaxed">
-                                    <Check className="w-3 h-3 mt-0.5 flex-shrink-0" strokeWidth={2.5} />
-                                    Te notificaremos cuando tu pedido esté en camino.
-                                  </p>
+                                  {loadingEnvio ? (
+                                    <div className="flex items-center gap-1.5 text-xs text-stone-400">
+                                      <Loader2 className="w-3 h-3 animate-spin" /> Cargando…
+                                    </div>
+                                  ) : envio ? (
+                                    <div className="space-y-1.5">
+                                      <p className="text-xs text-stone-600">
+                                        Transportadora: <span className="font-medium text-stone-800">{envio.transportadora?.nombre ?? 'Por asignar'}</span>
+                                      </p>
+                                      {envio.numero_guia && (
+                                        <p className="text-xs text-stone-600">
+                                          Guía: <span className="font-mono font-medium text-stone-800">{envio.numero_guia}</span>
+                                        </p>
+                                      )}
+                                      {envio.fecha_entrega_estimada && (
+                                        <p className="text-xs text-stone-600">
+                                          Entrega estimada: <span className="font-medium text-stone-800">
+                                            {new Date(envio.fecha_entrega_estimada).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                          </span>
+                                        </p>
+                                      )}
+                                      {envio.fecha_entrega_real && (
+                                        <p className="text-xs text-stone-600">
+                                          Entregado el: <span className="font-medium text-emerald-700">
+                                            {new Date(envio.fecha_entrega_real).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                          </span>
+                                        </p>
+                                      )}
+                                      {envio.tracking_url && (
+                                        <a href={envio.tracking_url} target="_blank" rel="noopener noreferrer"
+                                          className="mt-1 flex items-center gap-1 text-xs font-medium text-violet-600 hover:text-violet-800 transition-colors">
+                                          <ExternalLink className="w-3 h-3" strokeWidth={2} />
+                                          Rastrear envío
+                                        </a>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <div className="space-y-1.5">
+                                      <p className="text-xs text-stone-600">Transportadora: <span className="text-stone-400">Por asignar</span></p>
+                                      <p className="mt-2 flex items-start gap-1.5 rounded-lg bg-emerald-50 border border-emerald-100 px-2.5 py-2 text-[11px] text-emerald-700 leading-relaxed">
+                                        <Check className="w-3 h-3 mt-0.5 flex-shrink-0" strokeWidth={2.5} />
+                                        Te notificaremos cuando tu pedido esté en camino.
+                                      </p>
+                                    </div>
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -669,8 +738,49 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
                         </div>
                       );
                     })}
+
+                    {/* ── Paginación ── */}
+                    {totalPages > 1 && (
+                      <div className="flex items-center justify-between pt-2">
+                        <p className="text-xs text-stone-400">
+                          Página {ordersPage} de {totalPages}
+                        </p>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => setOrdersPage(p => Math.max(1, p - 1))}
+                            disabled={ordersPage === 1}
+                            className="flex items-center gap-1 rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-stone-600 transition hover:border-stone-300 disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            <ChevronLeft className="w-3.5 h-3.5" strokeWidth={2} />
+                            Anterior
+                          </button>
+                          {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                            <button
+                              key={page}
+                              onClick={() => setOrdersPage(page)}
+                              className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition ${
+                                page === ordersPage
+                                  ? 'bg-stone-900 text-white'
+                                  : 'border border-stone-200 bg-white text-stone-600 hover:border-stone-300'
+                              }`}
+                            >
+                              {page}
+                            </button>
+                          ))}
+                          <button
+                            onClick={() => setOrdersPage(p => Math.min(totalPages, p + 1))}
+                            disabled={ordersPage === totalPages}
+                            className="flex items-center gap-1 rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-stone-600 transition hover:border-stone-300 disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            Siguiente
+                            <ChevronRight className="w-3.5 h-3.5" strokeWidth={2} />
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                )}
+                  );
+                })()}
               </motion.div>
             )}
 
