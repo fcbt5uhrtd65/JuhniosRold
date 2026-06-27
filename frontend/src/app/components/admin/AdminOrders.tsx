@@ -26,7 +26,6 @@ import { AdminRegistrarGuia } from './AdminRegistrarGuia';
 import { KpiCard, Card, Badge, type BadgeColor } from './AdminUI';
 import { InteractiveLocationMap } from '../ui/InteractiveLocationMap';
 import { Pagination } from './Pagination';
-import { TrackingPedidoPage } from '../TrackingPedidoPage';
 import { getTrackingPedido, type TrackingPedido } from '../../services/enviosApi';
 import { getInvoiceByOrder, openInvoicePdf } from '../../services/payments.service';
 import { useToast } from '../../contexts/ToastContext';
@@ -57,6 +56,38 @@ const STATUS_LABEL: Partial<Record<Order['estado'], string>> = {
   confirmado: 'Confirmado',
   en_camino: 'En camino',
 };
+
+const STATUS_LABEL_EN: Record<string, string> = {
+  pending: 'Pendiente',
+  payment_pending: 'Pago pendiente',
+  confirmed: 'Confirmado',
+  paid: 'Pagado',
+  processing: 'Procesando',
+  packed: 'Empacado',
+  shipped: 'Enviado',
+  in_transit: 'En camino',
+  delivered: 'Entregado',
+  cancelled: 'Cancelado',
+  returned: 'Devuelto',
+  failed: 'Fallido',
+  pendiente: 'Pendiente',
+  guia_generada: 'Guía generada',
+  generando_guia: 'Generando guía',
+  recogida_programada: 'Recogida programada',
+  recogido: 'Recogido',
+  en_transito: 'En tránsito',
+  en_reparto: 'En reparto',
+  entregado: 'Entregado',
+  novedad: 'Novedad',
+  devuelto: 'Devuelto',
+};
+
+function translateStatus(status: string): string {
+  const key = status.toLowerCase();
+  return STATUS_LABEL[key as keyof typeof STATUS_LABEL]
+    ?? STATUS_LABEL_EN[key]
+    ?? status;
+}
 
 function isWorkflowState(estado: Order['estado']): boolean {
   return WORKFLOW.includes(estado);
@@ -702,24 +733,67 @@ export function AdminOrders() {
                     )}
                   </div>
 
-                  {/* Seguimiento completo — ancho completo */}
+                  {/* Historial de actividad */}
                   <div>
                     <button
                       type="button"
                       onClick={() => setShowTrackingId(cur => cur === order.id ? null : order.id)}
                       className="inline-flex items-center gap-2 text-[11px] font-semibold text-[#2a4038] hover:underline"
                     >
-                      <Truck size={12} />
-                      {showTrackingId === order.id ? 'Ocultar seguimiento' : 'Ver seguimiento completo'}
+                      <FileText size={12} />
+                      {showTrackingId === order.id ? 'Ocultar historial' : 'Ver historial de actividad'}
                     </button>
-                    {showTrackingId === order.id && (
-                      <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50 p-4 xl:p-6">
-                        <TrackingPedidoPage
-                          pedidoId={order.id}
-                          onClose={() => setShowTrackingId(null)}
-                        />
-                      </div>
-                    )}
+                    {showTrackingId === order.id && (() => {
+                      const historialPedido = td?.historial_pedido ?? [];
+                      const eventosEnvio = td?.envio?.eventos ?? [];
+
+                      type ActivityEntry = { fecha: string; titulo: string; detalle?: string; autor?: string };
+                      const entries: ActivityEntry[] = [
+                        ...historialPedido.map(h => ({
+                          fecha: h.created_at,
+                          titulo: translateStatus(h.status),
+                          detalle: h.notes || undefined,
+                          autor: h.changed_by_email,
+                        })),
+                        ...eventosEnvio.map(e => ({
+                          fecha: e.fecha_evento,
+                          titulo: translateStatus(e.estado.toLowerCase()),
+                          detalle: [e.descripcion, e.ubicacion].filter(Boolean).join(' · ') || undefined,
+                          autor: e.changed_by_email,
+                        })),
+                      ].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+
+                      return (
+                        <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50 p-4">
+                          {loadingTrackingId === order.id ? (
+                            <div className="flex items-center gap-2 text-xs text-gray-400">
+                              <Loader2 size={12} className="animate-spin" /> Cargando historial…
+                            </div>
+                          ) : entries.length === 0 ? (
+                            <p className="text-xs text-gray-400">Sin actividad registrada.</p>
+                          ) : (
+                            <div className="space-y-0">
+                              {entries.map((entry, i) => (
+                                <div key={i} className="flex gap-3">
+                                  <div className="flex flex-col items-center">
+                                    <div className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#2a4038]" />
+                                    {i < entries.length - 1 && <div className="w-px flex-1 bg-gray-200 my-1" />}
+                                  </div>
+                                  <div className="pb-4 min-w-0">
+                                    <p className="text-xs font-semibold text-gray-800">{entry.titulo}</p>
+                                    {entry.detalle && <p className="text-[11px] text-gray-500 mt-0.5">{entry.detalle}</p>}
+                                    <p className="text-[10px] text-gray-400 mt-0.5">
+                                      {new Date(entry.fecha).toLocaleString('es-CO', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                      {entry.autor && <span className="ml-2">· {entry.autor}</span>}
+                                    </p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               )}
