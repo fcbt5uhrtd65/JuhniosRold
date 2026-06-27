@@ -677,25 +677,6 @@ export function AdminOrders() {
                         </div>
                       )}
 
-                      {/* Seguimiento completo */}
-                      <div>
-                        <button
-                          type="button"
-                          onClick={() => setShowTrackingId(cur => cur === order.id ? null : order.id)}
-                          className="inline-flex items-center gap-2 text-[11px] font-semibold text-[#2a4038] hover:underline"
-                        >
-                          <Truck size={12} />
-                          {showTrackingId === order.id ? 'Ocultar seguimiento' : 'Ver seguimiento completo'}
-                        </button>
-                        {showTrackingId === order.id && (
-                          <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50 p-4">
-                            <TrackingPedidoPage
-                              pedidoId={order.id}
-                              onClose={() => setShowTrackingId(null)}
-                            />
-                          </div>
-                        )}
-                      </div>
                     </div>
 
                     {/* Mapa */}
@@ -717,6 +698,26 @@ export function AdminOrders() {
                             {order.direccionEnvio}
                           </div>
                         )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Seguimiento completo — ancho completo */}
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => setShowTrackingId(cur => cur === order.id ? null : order.id)}
+                      className="inline-flex items-center gap-2 text-[11px] font-semibold text-[#2a4038] hover:underline"
+                    >
+                      <Truck size={12} />
+                      {showTrackingId === order.id ? 'Ocultar seguimiento' : 'Ver seguimiento completo'}
+                    </button>
+                    {showTrackingId === order.id && (
+                      <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50 p-4 xl:p-6">
+                        <TrackingPedidoPage
+                          pedidoId={order.id}
+                          onClose={() => setShowTrackingId(null)}
+                        />
                       </div>
                     )}
                   </div>

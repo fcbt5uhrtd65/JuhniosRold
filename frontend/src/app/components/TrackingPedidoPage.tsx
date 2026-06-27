@@ -327,10 +327,10 @@ function HelpWidget({ onClose }: { onClose?: () => void }) {
         </a>
         <a
           href="mailto:contacto@juhniosrold.com"
-          className="flex items-center gap-2.5 rounded-xl border border-stone-100 bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-700 transition hover:bg-stone-100"
+          className="flex items-center gap-2.5 rounded-xl border border-stone-100 bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-700 transition hover:bg-stone-100 min-w-0"
         >
           <Mail className="w-4 h-4 text-stone-400 flex-shrink-0" strokeWidth={1.5} />
-          contacto@juhniosrold.com
+          <span className="break-all">contacto@juhniosrold.com</span>
         </a>
       </div>
 
@@ -410,8 +410,8 @@ export function TrackingPedidoPage({
   if (!tracking) return null;
 
   return (
-    /* layout de 2 columnas: contenido principal + widget ayuda */
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_200px]">
+    /* layout de 2 columnas solo cuando no está embebido en un panel */
+    <div className={`grid grid-cols-1 gap-4 ${!onClose ? 'min-[900px]:grid-cols-[1fr_240px]' : ''}`}>
 
       {/* ── COLUMNA PRINCIPAL ── */}
       <div className="space-y-0">
@@ -563,10 +563,12 @@ export function TrackingPedidoPage({
         )}
       </div>
 
-      {/* ── COLUMNA DERECHA: widget de ayuda ── */}
-      <div className="lg:pt-[52px]">
-        <HelpWidget onClose={onClose} />
-      </div>
+      {/* ── COLUMNA DERECHA: widget de ayuda — solo en vista pública ── */}
+      {!onClose && (
+        <div className="lg:pt-[52px]">
+          <HelpWidget onClose={onClose} />
+        </div>
+      )}
     </div>
   );
 }
