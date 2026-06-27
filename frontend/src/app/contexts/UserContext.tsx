@@ -106,6 +106,8 @@ export interface CustomerOrder {
     | 'refunded';
   fecha: string;
   direccionEnvio: string;
+  latitudEnvio: number | null;
+  longitudEnvio: number | null;
   invoiceId?: string | null;
   invoiceNumber?: string | null;
 }
@@ -273,7 +275,9 @@ function mapApiOrder(o: Order): CustomerOrder {
     total: o.total_amount,
     estado: o.status as CustomerOrder['estado'],
     fecha: o.created_at,
-    direccionEnvio: `${o.shipping_address.address_line1}, ${o.shipping_address.city}, ${o.shipping_address.department}`,
+    direccionEnvio: [o.shipping_address.address_line1, o.shipping_address.city, o.shipping_address.department].filter(Boolean).join(', '),
+    latitudEnvio: o.shipping_address.latitude ?? null,
+    longitudEnvio: o.shipping_address.longitude ?? null,
   };
 }
 

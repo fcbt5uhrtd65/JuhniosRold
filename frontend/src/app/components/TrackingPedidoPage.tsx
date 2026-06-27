@@ -391,7 +391,17 @@ export function TrackingPedidoPage({
   const isDelivered = estadoNorm === 'DELIVERED';
   const hasPaid = estadoNorm !== '' && !['PENDING', 'PAYMENT_PENDING', 'FAILED'].includes(estadoNorm);
   const envio = tracking?.envio;
-  const direccionMostrar = envio?.direccion_envio || tracking?.direccion_envio || direccionEnvio || '';
+  const parseAddressString = (raw: string): string => {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        return [parsed.address_line1, parsed.city, parsed.department].filter(Boolean).join(', ');
+      }
+    } catch { /* not JSON */ }
+    return raw;
+  };
+  const direccionRaw = envio?.direccion_envio || tracking?.direccion_envio || direccionEnvio || '';
+  const direccionMostrar = direccionRaw ? parseAddressString(direccionRaw) : '';
   const ciudadMostrar = envio ? [envio.ciudad, envio.departamento].filter(Boolean).join(', ') : '';
 
   if (isLoading && !tracking) {

@@ -201,18 +201,38 @@ function normalizeOrder(order: BackendOrder): Order {
     subtotal: parseNumber(order.subtotal),
     shipping_cost: parseNumber(order.shipping_cost),
     discount_amount: 0,
-    shipping_address: {
-      full_name: order.shipping_address_details?.full_name ?? '',
-      address_line1: order.shipping_address_details?.address_line1 ?? order.shipping_address,
-      address_line2: order.shipping_address_details?.address_line2,
-      city: order.shipping_address_details?.city ?? '',
-      department: order.shipping_address_details?.department ?? '',
-      postal_code: order.shipping_address_details?.postal_code,
-      phone: order.shipping_address_details?.phone ?? '',
-      country: order.shipping_address_details?.country || 'CO',
-      latitude: order.shipping_address_details?.latitude ?? null,
-      longitude: order.shipping_address_details?.longitude ?? null,
-    },
+    shipping_address: (() => {
+      const d = order.shipping_address_details;
+      if (d) {
+        return {
+          full_name: d.full_name ?? '',
+          address_line1: d.address_line1 ?? '',
+          address_line2: d.address_line2,
+          city: d.city ?? '',
+          department: d.department ?? '',
+          postal_code: d.postal_code,
+          phone: d.phone ?? '',
+          country: d.country || 'CO',
+          latitude: d.latitude ?? null,
+          longitude: d.longitude ?? null,
+        };
+      }
+      // fallback: try to parse shipping_address as JSON
+      let parsed: Record<string, unknown> = {};
+      try { parsed = JSON.parse(order.shipping_address); } catch { /* raw string */ }
+      return {
+        full_name: (parsed.full_name as string) ?? '',
+        address_line1: (parsed.address_line1 as string) ?? order.shipping_address ?? '',
+        address_line2: parsed.address_line2 as string | undefined,
+        city: (parsed.city as string) ?? '',
+        department: (parsed.department as string) ?? '',
+        postal_code: parsed.postal_code as string | undefined,
+        phone: (parsed.phone as string) ?? '',
+        country: (parsed.country as string) || 'CO',
+        latitude: (parsed.latitude as number) ?? null,
+        longitude: (parsed.longitude as number) ?? null,
+      };
+    })(),
     payment_method: latestPayment?.provider.toLowerCase() ?? '',
     payment_status: paymentStatus,
     payment_reference: latestPayment?.reference || order.payment_reference,

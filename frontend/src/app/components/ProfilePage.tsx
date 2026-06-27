@@ -41,6 +41,7 @@ import { initiatePayment, resolveMockPayment, getInvoiceByOrder, openInvoicePdf 
 import { TrackingPedidoPage } from './TrackingPedidoPage';
 import { navigateBack, navigateTo } from '../services/navigate';
 import { getTrackingPedido, type Envio } from '../services/enviosApi';
+import { InteractiveLocationMap } from './ui/InteractiveLocationMap';
 
 type Section = 'datos' | 'pedidos' | 'guardados' | 'mayorista';
 
@@ -603,14 +604,23 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
                             {/* ── Col derecha: dirección + envío ── */}
                             <div className="border-t border-stone-100 md:border-t-0 md:border-l px-5 py-4 space-y-4 bg-stone-50/40">
 
-                              {/* Dirección de entrega */}
+                              {/* Dirección de entrega + mapa */}
                               {order.direccionEnvio && (
                                 <div>
                                   <div className="flex items-center gap-1.5 mb-1.5">
                                     <MapPin className="w-3.5 h-3.5 text-stone-400" strokeWidth={1.5} />
                                     <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Dirección de entrega</p>
                                   </div>
-                                  <p className="text-xs text-stone-600 leading-relaxed">{order.direccionEnvio}</p>
+                                  <p className="text-xs text-stone-600 leading-relaxed mb-2">{order.direccionEnvio}</p>
+                                  {order.latitudEnvio != null && order.longitudEnvio != null ? (
+                                    <InteractiveLocationMap
+                                      lat={order.latitudEnvio}
+                                      lng={order.longitudEnvio}
+                                      onMarkerMove={() => {}}
+                                      readOnly
+                                      className="h-40 overflow-hidden rounded-xl border border-stone-200"
+                                    />
+                                  ) : null}
                                 </div>
                               )}
 
