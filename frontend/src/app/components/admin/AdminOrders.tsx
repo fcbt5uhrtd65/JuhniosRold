@@ -79,8 +79,8 @@ export function AdminOrders() {
   // Which order is showing the "Registrar guía" modal
   const [guiaOrderId, setGuiaOrderId] = useState<string | null>(null);
 
-  const loadTracking = async (orderId: string) => {
-    if (trackingData[orderId]) return;
+  const loadTracking = async (orderId: string, force = false) => {
+    if (!force && trackingData[orderId]) return;
     setLoadingTrackingId(orderId);
     try {
       const data = await getTrackingPedido(orderId);
@@ -530,8 +530,8 @@ export function AdminOrders() {
                               pedidoId={order.id}
                               onSaved={() => {
                                 setGuiaOrderId(null);
-                                setTrackingData(prev => { const next = { ...prev }; delete next[order.id]; return next; });
-                                void loadTracking(order.id);
+                                void updateOrderStatus(order.id, 'enviado');
+                                void loadTracking(order.id, true);
                               }}
                               onCancel={() => setGuiaOrderId(null)}
                             />

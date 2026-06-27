@@ -87,8 +87,8 @@ export function AdminRegistrarGuia({
         resolvedCarrierId = created;
       }
 
-      const tracking = await getTrackingPedido(pedidoId);
-      const shipment = tracking.envio ?? await crearEnvio({ pedido_id: pedidoId });
+      const tracking = await getTrackingPedido(pedidoId).catch(() => null);
+      const shipment = tracking?.envio ?? await crearEnvio({ pedido_id: pedidoId });
       await registrarGuiaManual(shipment.id, {
         transportadora_id: resolvedCarrierId,
         numero_guia: trackingNumber,
