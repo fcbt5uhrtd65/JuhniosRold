@@ -191,7 +191,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   );
   const total = wholesaleDiscount.totalAfterDiscount;
   const itemCount = useMemo(
-    () => items.reduce((sum, item) => sum + item.quantity, 0),
+    () => items.length,
     [items],
   );
 

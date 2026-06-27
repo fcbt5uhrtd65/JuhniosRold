@@ -295,7 +295,16 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
                                   >
                                     <Minus className="w-3.5 h-3.5" strokeWidth={2} />
                                   </button>
-                                  <span className="text-sm font-semibold w-8 text-center text-stone-900">{primaryItem.quantity}</span>
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    value={primaryItem.quantity}
+                                    onChange={(e) => {
+                                      const val = parseInt(e.target.value, 10);
+                                      if (!isNaN(val) && val >= 1) updateQuantity(primaryItem.id, val);
+                                    }}
+                                    className="text-sm font-semibold w-14 text-center text-stone-900 bg-transparent outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                  />
                                   <button
                                     onClick={() => updateQuantity(primaryItem.id, primaryItem.quantity + 1)}
                                     className="px-3 py-2 text-stone-500 hover:text-stone-900 transition-colors"
@@ -349,7 +358,16 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
                                 <button onClick={() => updateQuantity(item.id, item.quantity - 1)} className="px-2.5 py-1.5 text-stone-500">
                                   <Minus className="w-3 h-3" strokeWidth={2} />
                                 </button>
-                                <span className="text-xs font-semibold w-6 text-center">{item.quantity}</span>
+                                <input
+                                  type="number"
+                                  min={1}
+                                  value={item.quantity}
+                                  onChange={(e) => {
+                                    const val = parseInt(e.target.value, 10);
+                                    if (!isNaN(val) && val >= 1) updateQuantity(item.id, val);
+                                  }}
+                                  className="text-xs font-semibold w-12 text-center bg-transparent outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                />
                                 <button onClick={() => updateQuantity(item.id, item.quantity + 1)} className="px-2.5 py-1.5 text-stone-500">
                                   <Plus className="w-3 h-3" strokeWidth={2} />
                                 </button>
