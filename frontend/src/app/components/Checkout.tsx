@@ -118,6 +118,31 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
       phone: current.phone || currentUser?.telefono || '',
     }));
     setShowAddressForm(!currentUser?.direccion);
+
+    // Si el usuario tiene dirección registrada, cargarla automáticamente
+    if (currentUser?.direccion) {
+      setDeliveryLocation({
+        ...EMPTY_DELIVERY_LOCATION,
+        address: currentUser.direccion,
+        reference: currentUser.referencia ?? '',
+        city: currentUser.ciudad ?? '',
+        state: currentUser.departamento ?? '',
+        country: currentUser.pais || 'Colombia',
+        lat: currentUser.latitud ?? null,
+        lng: currentUser.longitud ?? null,
+        confirmed: Boolean(currentUser.latitud && currentUser.longitud),
+      });
+      if (currentUser.pais || currentUser.ciudad) {
+        geographyService
+          .resolveLocationByNames({
+            country: currentUser.pais || 'Colombia',
+            state: currentUser.departamento ?? '',
+            city: currentUser.ciudad ?? '',
+          })
+          .then(setShippingLocation)
+          .catch(() => {});
+      }
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
@@ -589,15 +614,15 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
                 </>
               )}
 
-              {error && (
-                <div className="p-4 border border-red-300 bg-red-50 text-sm text-red-700">
-                  {error}
-                </div>
-              )}
             </div>
 
             {!mockPayment && !wompiOrderId && (
               <div className="border-t border-stone-200 bg-white px-4 py-4 sm:rounded-b-[32px] md:px-8">
+                {error && (
+                  <div className="mx-auto mb-3 max-w-3xl rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {error}
+                  </div>
+                )}
                 <div className="mx-auto grid max-w-3xl gap-4 md:grid-cols-[1fr_auto] md:items-end">
                   <div className="rounded-3xl border border-stone-200 bg-[#F8F7F4] p-4">
                     <h3 className="mb-3 text-sm font-semibold text-stone-950">Resumen del pedido</h3>

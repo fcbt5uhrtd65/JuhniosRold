@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -105,6 +105,11 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
     if (itemCount === 1) return '1 producto';
     return `${itemCount} productos`;
   }, [itemCount]);
+
+  useEffect(() => {
+    document.body.style.overflow = isOpen ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
+  }, [isOpen]);
 
   const openCart = () => {
     setIsOpen(true);
@@ -303,6 +308,7 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
                                       const val = parseInt(e.target.value, 10);
                                       if (!isNaN(val) && val >= 1) updateQuantity(primaryItem.id, val);
                                     }}
+                                    onWheel={(e) => e.currentTarget.blur()}
                                     className="text-sm font-semibold w-14 text-center text-stone-900 bg-transparent outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                   />
                                   <button
@@ -366,6 +372,7 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
                                     const val = parseInt(e.target.value, 10);
                                     if (!isNaN(val) && val >= 1) updateQuantity(item.id, val);
                                   }}
+                                  onWheel={(e) => e.currentTarget.blur()}
                                   className="text-xs font-semibold w-12 text-center bg-transparent outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                 />
                                 <button onClick={() => updateQuantity(item.id, item.quantity + 1)} className="px-2.5 py-1.5 text-stone-500">
