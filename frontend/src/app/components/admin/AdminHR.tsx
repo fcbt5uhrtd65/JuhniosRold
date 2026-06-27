@@ -439,6 +439,15 @@ function getSupportDocumentName(url: string): string {
   return decodeURIComponent(cleanUrl.split('/').pop() ?? 'soporte');
 }
 
+function getMediaUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return parsed.pathname + parsed.search;
+  } catch {
+    return url;
+  }
+}
+
 function fieldValue(value: string | null | undefined): string {
   return value ?? '';
 }
@@ -1998,8 +2007,8 @@ export function AdminHR() {
                             <div className="flex flex-col items-center gap-2">
                               {request.support_document ? (
                                 <div className="flex flex-wrap items-center justify-center gap-2">
-                                  <a href={request.support_document} target="_blank" rel="noreferrer" className="px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors">Vista previa</a>
-                                  <a href={request.support_document} download={getSupportDocumentName(request.support_document)} className="px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors">Descargar</a>
+                                  <a href={getMediaUrl(request.support_document)} target="_blank" rel="noreferrer" className="px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors">Vista previa</a>
+                                  <a href={getMediaUrl(request.support_document)} download={getSupportDocumentName(request.support_document)} className="px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors">Descargar</a>
                                 </div>
                               ) : <div className="text-[10px] text-gray-400">Sin soporte</div>}
                               <div className="flex items-center justify-center gap-2">
@@ -2147,8 +2156,8 @@ export function AdminHR() {
               <Card className="p-4">
                 <div className="text-sm font-semibold text-gray-900 mb-3">Adjuntos</div>
                 <div className="space-y-2">
-                  {viewingRequest.support_document && <a href={viewingRequest.support_document} target="_blank" rel="noreferrer" className="block text-xs text-[#2a4038] underline">Soporte principal</a>}
-                  {viewingRequest.attachments.map((attachment) => <a key={attachment.id} href={attachment.file} target="_blank" rel="noreferrer" className="block text-xs text-[#2a4038] underline">{attachment.name}</a>)}
+                  {viewingRequest.support_document && <a href={getMediaUrl(viewingRequest.support_document)} target="_blank" rel="noreferrer" className="block text-xs text-[#2a4038] underline">Soporte principal</a>}
+                  {viewingRequest.attachments.map((attachment) => <a key={attachment.id} href={getMediaUrl(attachment.file)} target="_blank" rel="noreferrer" className="block text-xs text-[#2a4038] underline">{attachment.name}</a>)}
                   {!viewingRequest.support_document && viewingRequest.attachments.length === 0 && <div className="text-xs text-gray-400">Sin adjuntos</div>}
                 </div>
               </Card>
