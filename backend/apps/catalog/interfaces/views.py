@@ -7,6 +7,7 @@ from rest_framework.views import APIView
 from apps.identity.interfaces.permissions import HasComponentAccess
 from shared.interfaces.viewsets import SoftDeleteModelViewSet
 
+from apps.inventory.infrastructure.models import Stock
 from ..infrastructure.models import Category, Price, Product, ProductImage, ProductVariant
 from ..infrastructure.serializers import (
     CategorySerializer,
@@ -38,7 +39,8 @@ class ProductViewSet(SoftDeleteModelViewSet):
             return queryset.prefetch_related("variants__prices", "images")
 
         active_variants = ProductVariant.objects.filter(is_active=True).prefetch_related(
-            Prefetch("prices", queryset=Price.objects.filter(is_active=True))
+            Prefetch("prices", queryset=Price.objects.filter(is_active=True)),
+            Prefetch("stocks", queryset=Stock.objects.all(), to_attr="_prefetched_stocks"),
         )
         return queryset.filter(is_active=True, category__is_active=True).prefetch_related(
             Prefetch("variants", queryset=active_variants),

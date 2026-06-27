@@ -138,15 +138,17 @@ class OrderInventoryService:
         if not order.fulfillment_location_id:
             raise BusinessRuleViolation("El pedido no tiene una ubicación de inventario asignada.")
 
-        for item in order.items.select_related("variant").order_by("variant_id"):
+        for item in order.items.select_related("variant__product").order_by("variant_id"):
             stock, _ = Stock.objects.select_for_update().get_or_create(
                 variant=item.variant,
                 location=order.fulfillment_location,
                 defaults={"quantity": 0},
             )
             if stock.available_quantity < item.quantity:
+                product_name = getattr(getattr(item.variant, "product", None), "name", None) or item.sku
                 raise BusinessRuleViolation(
-                    f"No hay stock disponible para la variante {item.sku}."
+                    f"No hay stock suficiente para «{product_name}». "
+                    f"Solo quedan {int(stock.available_quantity)} unidades disponibles."
                 )
             stock.reserved_quantity += item.quantity
             stock.save(update_fields=("reserved_quantity", "updated_at"))

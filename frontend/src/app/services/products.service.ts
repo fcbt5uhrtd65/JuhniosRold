@@ -129,6 +129,8 @@ export interface ProductVariant {
   prices: ProductPrice[];
   current_price: number | null;
   presentation: string;
+  available_quantity: number | null;
+  minimum_quantity: number | null;
 }
 
 export interface ProductImage {
@@ -281,6 +283,8 @@ function normalizeVariant(variant: BackendVariant): ProductVariant {
     prices: variant.prices.map(normalizePrice),
     current_price: currentPrice?.amount ?? null,
     presentation: buildPresentation(variant),
+    available_quantity: (variant as any).available_quantity ?? null,
+    minimum_quantity: (variant as any).minimum_quantity ?? null,
   };
 }
 

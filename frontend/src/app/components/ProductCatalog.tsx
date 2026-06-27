@@ -811,6 +811,11 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                 const badge  = getProductBadge(product);
                 const saved  = isProductSaved(product.id);
                 const selSize = selectedSizes[product.id] ?? sizes[0];
+                const selVariant = product.variants.find(v => v.presentation === selSize) ?? product.variants[0];
+                const availableQty = selVariant?.available_quantity ?? null;
+                const minimumQty = selVariant?.minimum_quantity ?? 0;
+                const isLowStock = availableQty !== null && availableQty > 0 && availableQty <= minimumQty;
+                const isOutOfStock = availableQty !== null && availableQty <= 0;
 
                 if (viewMode === 'list') {
                   return (
@@ -851,6 +856,12 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                         <span className="text-sm font-semibold text-stone-900">
                           {formatPrice(product.price, product.currency ?? 'COP')}
                         </span>
+                        {isLowStock && !isOutOfStock && (
+                          <p className="text-[10px] font-semibold text-amber-600">¡Solo quedan {availableQty}!</p>
+                        )}
+                        {isOutOfStock && (
+                          <p className="text-[10px] font-semibold text-red-600">Agotado</p>
+                        )}
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => setQuickViewProduct(product)}
@@ -860,11 +871,12 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                           </button>
                           <button
                             onClick={() => handleAddToCart(product)}
-                            className="flex items-center gap-1.5 px-4 py-2 text-white text-[10px] tracking-wide font-medium rounded-lg transition-opacity hover:opacity-85"
+                            disabled={isOutOfStock}
+                            className="flex items-center gap-1.5 px-4 py-2 text-white text-[10px] tracking-wide font-medium rounded-lg transition-opacity hover:opacity-85 disabled:opacity-40 disabled:cursor-not-allowed"
                             style={{ backgroundColor: OLIVE }}
                           >
                             <ShoppingBag className="w-3 h-3" strokeWidth={1.5} />
-                            Añadir
+                            {isOutOfStock ? 'Agotado' : 'Añadir'}
                           </button>
                         </div>
                       </div>
@@ -965,6 +977,16 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                         ))}
                       </div>
 
+                      {/* Indicador de stock */}
+                      {isOutOfStock && (
+                        <p className="text-[10px] font-semibold text-red-600 mb-2">Agotado</p>
+                      )}
+                      {isLowStock && !isOutOfStock && (
+                        <p className="text-[10px] font-semibold text-amber-600 mb-2">
+                          ¡Solo quedan {availableQty} unidades!
+                        </p>
+                      )}
+
                       {/* Precio + botón */}
                       <div className="flex items-center justify-between mt-auto pt-3 border-t border-stone-100">
                         <span className="text-base font-semibold text-stone-900">
@@ -973,11 +995,12 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                         <motion.button
                           whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
                           onClick={() => handleAddToCart(product)}
-                          className="flex items-center gap-1.5 px-3.5 py-2 text-white text-[10px] font-semibold rounded-xl transition-opacity hover:opacity-85"
+                          disabled={isOutOfStock}
+                          className="flex items-center gap-1.5 px-3.5 py-2 text-white text-[10px] font-semibold rounded-xl transition-opacity hover:opacity-85 disabled:opacity-40 disabled:cursor-not-allowed"
                           style={{ backgroundColor: OLIVE }}
                         >
-                          Añadir al carrito
-                          <span className="w-4 h-4 rounded-full bg-white/20 flex items-center justify-center text-[10px] font-bold leading-none">+</span>
+                          {isOutOfStock ? 'Agotado' : 'Añadir al carrito'}
+                          {!isOutOfStock && <span className="w-4 h-4 rounded-full bg-white/20 flex items-center justify-center text-[10px] font-bold leading-none">+</span>}
                         </motion.button>
                       </div>
                     </div>
