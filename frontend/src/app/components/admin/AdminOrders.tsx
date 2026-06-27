@@ -16,6 +16,9 @@ import {
   Hash,
   FileText,
   Loader2,
+  DollarSign,
+  ExternalLink,
+  Tag,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import type { Order } from '../../types/admin';
@@ -76,6 +79,7 @@ export function AdminOrders() {
   const [loadingTrackingId, setLoadingTrackingId] = useState<string | null>(null);
   const [showTrackingId, setShowTrackingId] = useState<string | null>(null);
   const [loadingInvoiceId, setLoadingInvoiceId] = useState<string | null>(null);
+  const [expandedShippingId, setExpandedShippingId] = useState<string | null>(null);
   // Which order is showing the "Registrar guía" modal
   const [guiaOrderId, setGuiaOrderId] = useState<string | null>(null);
 
@@ -442,30 +446,132 @@ export function AdminOrders() {
                     </div>
                   )}
                   {envio && (
-                    <div className="rounded-lg border border-gray-200 bg-white p-3">
-                      <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-gray-400">Envío</p>
-                      <div className="grid gap-2 sm:grid-cols-3 text-xs">
-                        <div>
-                          <p className="text-[10px] uppercase tracking-wider text-gray-400">Transportadora</p>
-                          <p className="font-medium text-gray-800">{envio.transportadora?.nombre ?? '—'}</p>
+                    <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
+                      {/* Resumen siempre visible */}
+                      <div className="flex items-center justify-between gap-3 p-3">
+                        <div className="grid gap-2 sm:grid-cols-3 text-xs flex-1">
+                          <div>
+                            <p className="text-[10px] uppercase tracking-wider text-gray-400">Transportadora</p>
+                            <p className="font-medium text-gray-800">{envio.transportadora?.nombre ?? '—'}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] uppercase tracking-wider text-gray-400 flex items-center gap-1">
+                              <Hash size={9} /> Guía
+                            </p>
+                            <p className="font-mono font-semibold text-gray-800">{envio.numero_guia || 'Sin asignar'}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] uppercase tracking-wider text-gray-400 flex items-center gap-1">
+                              <Calendar size={9} /> Entrega estimada
+                            </p>
+                            <p className="font-medium text-gray-800">
+                              {envio.fecha_entrega_estimada
+                                ? new Date(envio.fecha_entrega_estimada).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })
+                                : 'Por confirmar'}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-[10px] uppercase tracking-wider text-gray-400 flex items-center gap-1">
-                            <Hash size={9} /> Guía
-                          </p>
-                          <p className="font-mono font-semibold text-gray-800">{envio.numero_guia || 'Sin asignar'}</p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] uppercase tracking-wider text-gray-400 flex items-center gap-1">
-                            <Calendar size={9} /> Entrega estimada
-                          </p>
-                          <p className="font-medium text-gray-800">
-                            {envio.fecha_entrega_estimada
-                              ? new Date(envio.fecha_entrega_estimada).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })
-                              : 'Por confirmar'}
-                          </p>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setExpandedShippingId(prev => prev === order.id ? null : order.id)}
+                          className="shrink-0 flex items-center gap-1 text-[11px] font-semibold text-[#2a4038] hover:underline"
+                        >
+                          {expandedShippingId === order.id ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                          {expandedShippingId === order.id ? 'Ocultar' : 'Ver detalle'}
+                        </button>
                       </div>
+
+                      {/* Panel detallado */}
+                      {expandedShippingId === order.id && (
+                        <div className="border-t border-gray-100 bg-gray-50 p-4 space-y-4">
+                          {/* Fila 1: estado + costo + despacho + entrega real */}
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wider text-gray-400 flex items-center gap-1 mb-0.5">
+                                <Tag size={9} /> Estado envío
+                              </p>
+                              <span className="inline-block rounded-full bg-[#2a4038]/10 px-2 py-0.5 text-[11px] font-semibold text-[#2a4038]">
+                                {envio.estado_envio ?? '—'}
+                              </span>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wider text-gray-400 flex items-center gap-1 mb-0.5">
+                                <DollarSign size={9} /> Costo de envío
+                              </p>
+                              <p className="font-medium text-gray-800">
+                                {envio.costo_envio ? `$${Number(envio.costo_envio).toLocaleString('es-CO')}` : 'No registrado'}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wider text-gray-400 flex items-center gap-1 mb-0.5">
+                                <Calendar size={9} /> Fecha despacho
+                              </p>
+                              <p className="font-medium text-gray-800">
+                                {envio.fecha_despacho
+                                  ? new Date(envio.fecha_despacho).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })
+                                  : 'Pendiente'}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wider text-gray-400 flex items-center gap-1 mb-0.5">
+                                <Check size={9} /> Entrega real
+                              </p>
+                              <p className="font-medium text-gray-800">
+                                {envio.fecha_entrega_real
+                                  ? new Date(envio.fecha_entrega_real).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })
+                                  : 'Pendiente'}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Dirección */}
+                          <div className="text-xs">
+                            <p className="text-[10px] uppercase tracking-wider text-gray-400 flex items-center gap-1 mb-0.5">
+                              <MapPin size={9} /> Dirección de entrega
+                            </p>
+                            <p className="text-gray-700">
+                              {[envio.direccion_envio, envio.ciudad, envio.departamento, envio.pais].filter(Boolean).join(', ') || 'No registrada'}
+                            </p>
+                          </div>
+
+                          {/* URL de rastreo */}
+                          {envio.tracking_url && (
+                            <div className="text-xs">
+                              <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-0.5">URL de rastreo</p>
+                              <a
+                                href={envio.tracking_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 text-[#2a4038] underline underline-offset-2"
+                              >
+                                <ExternalLink size={11} /> {envio.tracking_url}
+                              </a>
+                            </div>
+                          )}
+
+                          {/* Historial de eventos */}
+                          {envio.eventos && envio.eventos.length > 0 && (
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-2">Historial de eventos</p>
+                              <div className="space-y-2">
+                                {envio.eventos.map(evento => (
+                                  <div key={evento.id} className="flex gap-3 text-xs">
+                                    <div className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-[#2a4038]" />
+                                    <div>
+                                      <p className="font-semibold text-gray-800">{evento.estado}</p>
+                                      {evento.descripcion && <p className="text-gray-500">{evento.descripcion}</p>}
+                                      {evento.ubicacion && <p className="text-gray-400">{evento.ubicacion}</p>}
+                                      <p className="text-[10px] text-gray-400 mt-0.5">
+                                        {new Date(evento.fecha_evento).toLocaleString('es-CO', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                      </p>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
 
