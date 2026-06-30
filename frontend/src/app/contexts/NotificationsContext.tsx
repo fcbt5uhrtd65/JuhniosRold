@@ -15,6 +15,7 @@ interface NotificationsContextValue {
   markRead: (id: string) => Promise<void>;
   markAllRead: () => Promise<void>;
   refresh: () => Promise<void>;
+  refreshSoon: () => void;
 }
 
 const NotificationsContext = createContext<NotificationsContextValue | undefined>(undefined);
@@ -64,10 +65,16 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const refreshSoon = useCallback(() => {
+    void refresh();
+    window.setTimeout(() => void refresh(), 1000);
+    window.setTimeout(() => void refresh(), 3000);
+  }, [refresh]);
+
   const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
-    <NotificationsContext.Provider value={{ notifications, unreadCount, markRead, markAllRead, refresh }}>
+    <NotificationsContext.Provider value={{ notifications, unreadCount, markRead, markAllRead, refresh, refreshSoon }}>
       {children}
     </NotificationsContext.Provider>
   );

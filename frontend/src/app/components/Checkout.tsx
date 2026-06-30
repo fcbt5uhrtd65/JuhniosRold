@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 
 import { useCart } from '../contexts/CartContext';
+import { useNotifications } from '../contexts/NotificationsContext';
 import { useUser } from '../contexts/UserContext';
 import { checkoutActiveCart } from '../services/cart.service';
 import {
@@ -63,6 +64,7 @@ function formatMoney(value: number): string {
 
 export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
   const { items, subtotal, total, wholesaleDiscount, reloadCart } = useCart();
+  const { refreshSoon: refreshNotificationsSoon } = useNotifications();
   const { currentUser } = useUser();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -165,6 +167,12 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
     };
   }, [shippingLocation.stateId]);
 
+  useEffect(() => {
+    if (wompiState === 'approved') {
+      refreshNotificationsSoon();
+    }
+  }, [wompiState, refreshNotificationsSoon]);
+
   const close = () => {
     if (!isSubmitting) {
       setError('');
@@ -263,6 +271,7 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
 
     try {
       const order = await checkoutActiveCart(shippingAddress(), currentUser?.codigoMayorista);
+      refreshNotificationsSoon();
       const payment = await initiatePayment(order.id);
       await reloadCart();
       if (payment.requires_redirect) {
@@ -298,6 +307,9 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
     try {
       await resolveMockPayment(mockPayment.paymentId, outcome);
       await reloadCart();
+      if (outcome === 'approved') {
+        refreshNotificationsSoon();
+      }
       window.history.pushState(
         {},
         '',

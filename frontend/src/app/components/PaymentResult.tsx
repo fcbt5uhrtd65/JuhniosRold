@@ -1,4 +1,6 @@
+import { useEffect } from 'react';
 import { CheckCircle2, Clock3, XCircle } from 'lucide-react';
+import { useNotifications } from '../contexts/NotificationsContext';
 import { usePaymentStatusPolling } from '../hooks/usePaymentStatusPolling';
 
 interface PaymentResultProps {
@@ -8,9 +10,16 @@ interface PaymentResultProps {
 export function PaymentResult({ onReturnToStore }: PaymentResultProps) {
   const orderId = new URLSearchParams(window.location.search).get('pedido_id');
   const { state, payment, errorMessage } = usePaymentStatusPolling(orderId);
+  const { refreshSoon: refreshNotificationsSoon } = useNotifications();
 
   const approved = state === 'approved';
   const failed = state === 'failed' || state === 'timeout' || state === 'error';
+
+  useEffect(() => {
+    if (approved) {
+      refreshNotificationsSoon();
+    }
+  }, [approved, refreshNotificationsSoon]);
 
   return (
     <main className="min-h-screen bg-background flex items-center justify-center p-6">
