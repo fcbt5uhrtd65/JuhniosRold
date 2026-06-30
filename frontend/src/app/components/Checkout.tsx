@@ -66,6 +66,7 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
   const { items, subtotal, total, wholesaleDiscount, reloadCart } = useCart();
   const { refreshSoon: refreshNotificationsSoon } = useNotifications();
   const { currentUser } = useUser();
+  const isWholesaleCustomer = currentUser?.modoCompra === 'WHOLESALE';
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [mockPayment, setMockPayment] = useState<MockPayment | null>(null);
@@ -270,7 +271,10 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
     const wompiTab = window.open('about:blank', '_blank');
 
     try {
-      const order = await checkoutActiveCart(shippingAddress(), currentUser?.codigoMayorista);
+      const order = await checkoutActiveCart(
+        shippingAddress(),
+        isWholesaleCustomer ? currentUser?.codigoMayorista : undefined,
+      );
       refreshNotificationsSoon();
       const payment = await initiatePayment(order.id);
       await reloadCart();
@@ -643,20 +647,24 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
                         <span className="text-stone-500">Subtotal</span>
                         <span className="font-medium text-stone-900">{formatMoney(subtotal)}</span>
                       </div>
-                      {wholesaleDiscount.isActive ? (
-                        <div className="flex justify-between text-sm text-emerald-700">
-                          <span>Descuento mayorista aplicado</span>
-                          <span className="font-semibold">-{formatMoney(wholesaleDiscount.discount)}</span>
-                        </div>
-                      ) : (
-                        <div className="rounded-2xl bg-amber-50 px-3 py-2 text-[11px] text-amber-700">
-                          Te faltan {formatMoney(wholesaleDiscount.remaining)} para activar tu descuento mayorista.
-                        </div>
+                      {isWholesaleCustomer && (
+                        <>
+                          {wholesaleDiscount.isActive ? (
+                            <div className="flex justify-between text-sm text-emerald-700">
+                              <span>Descuento mayorista aplicado</span>
+                              <span className="font-semibold">-{formatMoney(wholesaleDiscount.discount)}</span>
+                            </div>
+                          ) : (
+                            <div className="rounded-2xl bg-amber-50 px-3 py-2 text-[11px] text-amber-700">
+                              Te faltan {formatMoney(wholesaleDiscount.remaining)} para activar tu descuento mayorista.
+                            </div>
+                          )}
+                          <div className="flex justify-between text-sm">
+                            <span className="text-stone-500">Subtotal con descuento</span>
+                            <span className="font-medium text-stone-900">{formatMoney(total)}</span>
+                          </div>
+                        </>
                       )}
-                      <div className="flex justify-between text-sm">
-                        <span className="text-stone-500">Subtotal con descuento</span>
-                        <span className="font-medium text-stone-900">{formatMoney(total)}</span>
-                      </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-stone-500">Envío</span>
                         <span className={shippingCost === 0 ? 'font-semibold text-emerald-700' : 'font-medium text-stone-900'}>
