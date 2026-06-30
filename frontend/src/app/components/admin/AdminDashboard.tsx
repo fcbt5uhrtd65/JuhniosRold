@@ -69,14 +69,14 @@ export function AdminDashboard() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-start justify-between mb-6">
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Dashboard</h2>
           <p className="text-xs text-gray-500 mt-0.5">{format(new Date(), 'EEEE, dd MMMM yyyy')}</p>
         </div>
 
         {/* Backend status + refresh */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Badge label={
             <span className="flex items-center gap-1.5">
               {backendOnline ? <Wifi size={12} /> : <WifiOff size={12} />}
@@ -86,7 +86,7 @@ export function AdminDashboard() {
           <button
             onClick={handleRefresh}
             disabled={refreshing || isLoading}
-            className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-40"
+            className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-40 whitespace-nowrap"
           >
             <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />
             Sincronizar
@@ -95,7 +95,7 @@ export function AdminDashboard() {
       </div>
 
       {/* Metrics Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
         <KpiCard label="Hoy" value={`$${(ventasHoy / 1000).toFixed(0)}k`} icon={DollarSign} color="text-[#2a4038] bg-[#2a4038]/10" />
         <KpiCard label="Este mes" value={`$${(ventasMes / 1000).toFixed(0)}k`} icon={TrendingUp} color="text-emerald-600 bg-emerald-50" />
         <KpiCard label="Pendientes" value={String(pedidosPendientes)} icon={ShoppingCart} color="text-blue-600 bg-blue-50" />

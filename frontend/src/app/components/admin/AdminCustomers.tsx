@@ -259,20 +259,20 @@ export function AdminCustomers() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Clientes</h2>
           <p className="text-xs text-gray-500 mt-0.5">{filteredCustomers.length} de {customers.length} clientes</p>
         </div>
         <button
           onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white text-xs font-semibold rounded-xl hover:bg-[#3d5c4e] transition-colors"
+          className="flex items-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white text-xs font-semibold rounded-xl hover:bg-[#3d5c4e] transition-colors whitespace-nowrap"
         >
           <Plus size={14} /> Nuevo Cliente
         </button>
       </div>
 
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
         <KpiCard label="Total" value={String(stats.total)} icon={Users} color="text-[#2a4038] bg-[#2a4038]/10" />
         <KpiCard label="Nuevos (30d)" value={String(stats.nuevos)} icon={TrendingUp} color="text-emerald-600 bg-emerald-50" />
         <KpiCard label="Total Compras" value={`$${(stats.ingresos / 1000).toFixed(0)}k`} icon={DollarSign} color="text-blue-600 bg-blue-50" />

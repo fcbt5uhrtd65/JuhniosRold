@@ -22,34 +22,37 @@ const oils: Oil[] = [
     index: '01',
     name: 'Aceite de Oliva',
     subtitle: 'Nutrición profunda',
-    detail: 'Rico en antioxidantes y ácidos grasos esenciales. Hidrata, fortalece y da brillo natural.',
+    detail: 'Rico en antioxidantes y ácidos grasos esenciales. Hidrata, fortalece y da brillo natural desde la raíz.',
     purity: '100% puro',
     origin: 'Mediterráneo',
     compound: 'Olea europaea',
-    image: 'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=1200&q=85',
-    thumb: 'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=160&q=80',
+    // Ramas de olivo con aceitunas, luz natural cálida — limpio y natural
+    image: 'https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=1200&q=85',
+    thumb: 'https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=160&q=80',
   },
   {
     index: '02',
     name: 'Aceite de Argán',
     subtitle: 'Reparación y elasticidad',
-    detail: 'Restaura el brillo natural. Alto contenido de ácidos grasos esenciales y vitamina E para una reparación profunda.',
+    detail: 'Restaura el brillo natural. Alto contenido de vitamina E y ácidos grasos esenciales para una reparación profunda.',
     purity: '100% puro',
     origin: 'Marruecos',
     compound: 'Argania spinosa',
-    image: 'https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?w=1200&q=85',
-    thumb: 'https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?w=160&q=80',
+    // Nueces de argán, aceite dorado, fondo neutro — muy limpio
+    image: 'https://images.unsplash.com/photo-1600857062241-98e5dba7f025?w=1200&q=85',
+    thumb: 'https://images.unsplash.com/photo-1600857062241-98e5dba7f025?w=160&q=80',
   },
   {
     index: '03',
     name: 'Aceite de Uva',
     subtitle: 'Ligero y protector',
-    detail: 'Protege y fortalece. Ligero y de rápida absorción con poderosos antioxidantes que sellan la cutícula.',
+    detail: 'Protege y fortalece. Ligero, de rápida absorción, con antioxidantes que sellan la cutícula y dan brillo.',
     purity: '100% puro',
     origin: 'Francia',
     compound: 'Vitis vinifera',
-    image: 'https://images.unsplash.com/photo-1566065363841-0e0d82b4a5c5?w=1200&q=85',
-    thumb: 'https://images.unsplash.com/photo-1566065363841-0e0d82b4a5c5?w=160&q=80',
+    // Racimos de uva negra, fondo natural verde — fresco y botánico
+    image: 'https://images.unsplash.com/photo-1537640538966-79f369143f8f?w=1200&q=85',
+    thumb: 'https://images.unsplash.com/photo-1537640538966-79f369143f8f?w=160&q=80',
   },
   {
     index: '04',
@@ -59,8 +62,9 @@ const oils: Oil[] = [
     purity: '100% puro',
     origin: 'España',
     compound: 'Rosmarinus officinalis',
-    image: 'https://images.unsplash.com/photo-1596240896925-a8e728c0d3c7?w=1200&q=85',
-    thumb: 'https://images.unsplash.com/photo-1596240896925-a8e728c0d3c7?w=160&q=80',
+    // Ramas de romero fresco sobre fondo blanco — limpio, herbal, elegante
+    image: 'https://images.unsplash.com/photo-1600880292203-757bb62b4baf?w=1200&q=85',
+    thumb: 'https://images.unsplash.com/photo-1600880292203-757bb62b4baf?w=160&q=80',
   },
 ];
 
@@ -72,7 +76,7 @@ export function OilsSection() {
   const oil = oils[active];
 
   return (
-    <section ref={sectionRef} className="py-20 overflow-hidden" style={{ backgroundColor: CREAM }}>
+    <section ref={sectionRef} className="py-12 md:py-20 overflow-hidden" style={{ backgroundColor: CREAM }}>
       <div className="max-w-[1400px] mx-auto px-6 md:px-10 lg:px-14">
 
         {/* ── ENCABEZADO ── */}
@@ -114,7 +118,7 @@ export function OilsSection() {
         </motion.div>
 
         {/* ── CUERPO: 2 columnas ── */}
-        <div className="grid lg:grid-cols-[1fr_1.1fr] gap-10 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.1fr] gap-8 lg:gap-10 items-start">
 
           {/* COLUMNA IZQUIERDA — imagen grande */}
           <motion.div

@@ -5,6 +5,7 @@ import {
   Leaf, FlaskConical, Heart, MapPin,
   Search, X, User, Bell, ChevronDown,
   Package, Tag, Info, AlertCircle, CheckCheck,
+  Instagram,
 } from 'lucide-react';
 import { ShoppingCart } from './ShoppingCart';
 import { UserDropdown } from './UserDropdown';
@@ -36,24 +37,48 @@ const LeafLogo = () => (
 );
 
 const CircleSeal = () => (
-  <div className="relative w-24 h-24 md:w-28 md:h-28">
-    <svg viewBox="0 0 120 120" className="w-full h-full" style={{ transform: 'rotate(-15deg)' }}>
+  <div className="w-24 h-24 md:w-28 md:h-28">
+    <svg viewBox="0 0 512 512" className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
       <defs>
-        <path id="circle-top2" d="M 60,60 m -42,0 a 42,42 0 1,1 84,0 a 42,42 0 1,1 -84,0" />
-        <path id="circle-bottom2" d="M 60,60 m -38,0 a 38,38 0 1,0 76,0 a 38,38 0 1,0 -76,0" />
+        <style>{`
+          .cs-line { fill: none; stroke: #6f725f; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+          .cs-text { fill: #6f725f; font-family: Arial, Helvetica, sans-serif; font-size: 31px; font-weight: 600; letter-spacing: 5px; }
+          .cs-text-sm { fill: #6f725f; font-family: Arial, Helvetica, sans-serif; font-size: 29px; font-weight: 600; letter-spacing: 5px; }
+        `}</style>
+        <path id="cs-top-arc" d="M 105 256 A 151 151 0 0 1 407 256" fill="none" />
+        <path id="cs-bot-arc" d="M 407 256 A 151 151 0 0 1 105 256" fill="none" />
       </defs>
-      <circle cx="60" cy="60" r="50" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="0.8" />
-      <circle cx="60" cy="60" r="44" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="0.5" />
-      <text fontSize="9" fill="rgba(255,255,255,0.9)" letterSpacing="3.5" fontFamily="'Space Grotesk', sans-serif" fontWeight="500">
-        <textPath href="#circle-top2" startOffset="8%">NATURAL · EFECTIVO ·</textPath>
+
+      {/* Fondo blanco */}
+      <circle cx="256" cy="256" r="205" fill="white" />
+
+      {/* Círculos exteriores */}
+      <circle cx="256" cy="256" r="205" className="cs-line" />
+      <circle cx="256" cy="256" r="193" className="cs-line" />
+
+      {/* Círculo interior */}
+      <circle cx="256" cy="256" r="122" className="cs-line" />
+
+      {/* Texto superior */}
+      <text className="cs-text">
+        <textPath href="#cs-top-arc" startOffset="50%" textAnchor="middle">
+          NATURAL · EFECTIVO
+        </textPath>
       </text>
-      <text fontSize="9" fill="rgba(255,255,255,0.9)" letterSpacing="3.5" fontFamily="'Space Grotesk', sans-serif" fontWeight="500">
-        <textPath href="#circle-bottom2" startOffset="18%">CONSCIENTE ·</textPath>
+
+      {/* Texto inferior */}
+      <text className="cs-text-sm">
+        <textPath href="#cs-bot-arc" startOffset="50%" textAnchor="middle">
+          CONSCIENTE
+        </textPath>
       </text>
-      <g transform="translate(60,60)">
-        <path d="M0 -12 C-6-8 -8-2 -6 4 C-4 8 0 12 0 12 C0 12 4 8 6 4 C8-2 6-8 0-12Z"
-          fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="1" strokeLinecap="round"/>
-        <line x1="0" y1="12" x2="0" y2="-8" stroke="rgba(255,255,255,0.6)" strokeWidth="0.7" strokeDasharray="1.5 2"/>
+
+      {/* Hoja central */}
+      <g transform="translate(256 256)">
+        <path d="M 0 -62 C 42 -25 47 28 0 66 C -47 28 -42 -25 0 -62 Z" className="cs-line" />
+        <path d="M 0 -16 L 0 78" className="cs-line" />
+        <path d="M 0 20 L -25 0" className="cs-line" />
+        <path d="M 0 38 L 24 18" className="cs-line" />
       </g>
     </svg>
   </div>
@@ -111,42 +136,46 @@ export function Hero({ onLoginClick }: HeroProps = {}) {
   const [hidden, setHidden]             = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [activeLink, setActiveLink]     = useState('#');
+  const [menuOpen, setMenuOpen]         = useState(false);
   const lastScrollY = useRef(0);
   const sectionRef = useRef<HTMLElement>(null);
 
   const slides = [
     {
       id: 1,
-      eyebrow: 'TRANSFORMACIONES REALES',
-      titleLine1: 'Resultados',
-      titleLine2: 'que ',
-      titleItalic: 'hablan.',
-      description: 'Más de 10.000 mujeres en toda Colombia han transformado su cabello con lo natural.',
-      ctaPrimary: 'Ver resultados',
-      ctaSecondary: 'Hacer diagnóstico',
-      image: 'https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?w=1600&q=90',
-    },
-    {
-      id: 2,
       eyebrow: 'CUIDADO CAPILAR NATURAL',
       titleLine1: 'Tu cabello,',
       titleLine2: 'tu ',
       titleItalic: 'poder.',
-      description: 'Productos naturales diseñados para mujeres que no piden permiso para brillar.',
+      description: 'Productos con aceites naturales puros que nutren, reparan y dan brillo desde la primera aplicación.',
       ctaPrimary: 'Comprar ahora',
       ctaSecondary: 'Hacer diagnóstico',
-      image: 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=1600&q=90',
+      // Mujer con cabello saludable, brillante, natural — estética limpia
+      image: 'https://images.unsplash.com/photo-1617897903246-719242758050?w=1600&q=90',
     },
     {
-      id: 3,
-      eyebrow: 'MARCA COLOMBIANA',
+      id: 2,
+      eyebrow: 'INGREDIENTES 100% NATURALES',
       titleLine1: 'Naturaleza',
       titleLine2: 'que ',
       titleItalic: 'transforma.',
-      description: 'Ingredientes puros, ciencia y amor en cada frasco. Certificados y cruelty-free.',
+      description: 'Aceites de oliva, argán, romero y uva seleccionados de los mejores orígenes del mundo.',
       ctaPrimary: 'Ver colección',
       ctaSecondary: 'Hacer diagnóstico',
-      image: 'https://images.unsplash.com/photo-1560066984-138dadb4c035?w=1600&q=90',
+      // Aceites, flores y plantas — estética botánica limpia
+      image: 'https://images.unsplash.com/photo-1556228578-8c89e6adf883?w=1600&q=90',
+    },
+    {
+      id: 3,
+      eyebrow: 'TRANSFORMACIONES REALES',
+      titleLine1: 'Resultados',
+      titleLine2: 'que ',
+      titleItalic: 'hablan.',
+      description: 'Más de 10.000 mujeres en Colombia han transformado su cabello con lo natural.',
+      ctaPrimary: 'Ver resultados',
+      ctaSecondary: 'Hacer diagnóstico',
+      // Mujer con cabello liso brillante, cuidado natural, elegante
+      image: 'https://images.unsplash.com/photo-1526045612212-70caf35c14df?w=1600&q=90',
     },
   ];
 
@@ -175,6 +204,11 @@ export function Hero({ onLoginClick }: HeroProps = {}) {
     window.addEventListener('scroll', fn, { passive: true });
     return () => window.removeEventListener('scroll', fn);
   }, []);
+
+  useEffect(() => {
+    document.body.style.overflow = menuOpen ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
+  }, [menuOpen]);
 
   const handleNavClick = (href: string, e: React.MouseEvent) => {
     if (href.startsWith('/') && href !== '/') {
@@ -206,7 +240,7 @@ export function Hero({ onLoginClick }: HeroProps = {}) {
     <section
       ref={sectionRef}
       className="relative overflow-hidden rounded-[20px] mx-3 md:mx-5 lg:mx-7"
-      style={{ height: '100vh', minHeight: 600, marginTop: 14 }}
+      style={{ height: 'min(100vh, 680px)', minHeight: 480, marginTop: 14 }}
       onMouseMove={handleMouseMove}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -439,39 +473,134 @@ export function Hero({ onLoginClick }: HeroProps = {}) {
               >
                 Comprar ahora
               </motion.a>
+
+              {/* Hamburguesa mobile */}
+              <button
+                onClick={() => setMenuOpen(true)}
+                className="lg:hidden flex flex-col gap-[5px] p-2 rounded-full hover:bg-stone-100 transition-colors"
+                aria-label="Abrir menú"
+              >
+                <span className="block w-4 h-px bg-stone-700" />
+                <span className="block w-3 h-px bg-stone-400" />
+              </button>
             </div>
           </div>
         </div>
       </motion.div>
 
+      {/* ── MENÚ LATERAL MOBILE ── */}
+      <AnimatePresence>
+        {menuOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              transition={{ duration: 0.22 }}
+              onClick={() => setMenuOpen(false)}
+              className="fixed inset-0 bg-black/25 backdrop-blur-sm z-[150]"
+            />
+            <motion.div
+              initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+              transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
+              className="fixed top-0 right-0 bottom-0 z-[160] w-full max-w-xs bg-white shadow-2xl flex flex-col rounded-l-3xl overflow-hidden"
+            >
+              <div className="flex items-center justify-between px-7 py-5 border-b border-stone-100">
+                <div>
+                  <div className="text-[13px] tracking-[0.22em] uppercase font-semibold text-stone-900">JUHNIOS ROLD</div>
+                  <div className="text-[8px] tracking-[0.25em] uppercase text-[#8B7355] mt-0.5">CUIDADO CAPILAR NATURAL</div>
+                </div>
+                <button onClick={() => setMenuOpen(false)} className="p-2 rounded-full hover:bg-stone-100 transition-colors">
+                  <X className="w-4 h-4 text-stone-400" strokeWidth={1.5} />
+                </button>
+              </div>
+              <nav className="flex-1 overflow-y-auto px-4 py-3">
+                <div className="space-y-0.5">
+                  {[
+                    { href: '#',          label: 'Inicio',     sub: 'Volver al inicio' },
+                    { href: '/catalogo',  label: 'Catálogo',   sub: 'Flipbook comercial' },
+                    { href: '#productos', label: 'Productos',  sub: 'Colección completa' },
+                    { href: '#aceites',   label: 'Aceites',    sub: 'Naturales & premium' },
+                    { href: '#mayorista', label: 'Mayorista',  sub: 'Materias primas' },
+                    { href: '#pro',       label: 'Modo PRO',   sub: 'Programa profesional' },
+                    { href: '#comunidad', label: 'Comunidad',  sub: 'Comunidad & rituales' },
+                    { href: '#diagnostico', label: 'Diagnóstico', sub: 'Test capilar' },
+                  ].map((link, i) => (
+                    <motion.div key={link.href}
+                      initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.04 + i * 0.045 }}
+                    >
+                      <a
+                        href={link.href === '#' ? undefined : link.href}
+                        onClick={e => { handleNavClick(link.href, e); setMenuOpen(false); }}
+                        className={`group flex items-center justify-between px-4 py-3.5 rounded-xl transition-all duration-200 ${activeLink === link.href ? 'bg-stone-100' : 'hover:bg-stone-50'}`}
+                      >
+                        <div>
+                          <div className="text-[14px] font-light text-stone-800">{link.label}</div>
+                          <div className="text-[9px] tracking-[0.18em] uppercase text-stone-400 mt-0.5">{link.sub}</div>
+                        </div>
+                        <ArrowRight className="w-3.5 h-3.5 text-stone-300 opacity-0 group-hover:opacity-100 transition-opacity" strokeWidth={1.5} />
+                      </a>
+                    </motion.div>
+                  ))}
+                </div>
+              </nav>
+              <div className="px-6 py-5 border-t border-stone-100 space-y-3">
+                {!currentUser && (
+                  <button
+                    onClick={() => { setMenuOpen(false); onLoginClick?.(); }}
+                    className="w-full py-3 text-white text-[11px] tracking-[0.18em] uppercase font-medium rounded-xl hover:opacity-90 transition-opacity"
+                    style={{ backgroundColor: OLIVE }}
+                  >
+                    Iniciar sesión
+                  </button>
+                )}
+                <a href="#catalogo" onClick={() => setMenuOpen(false)}
+                  className="w-full py-3 border border-stone-200 text-stone-700 text-[11px] tracking-[0.18em] uppercase font-medium rounded-xl hover:bg-stone-50 transition-colors flex items-center justify-center"
+                >
+                  Comprar ahora
+                </a>
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-[9px] tracking-[0.25em] uppercase text-stone-400">Síguenos</span>
+                  <div className="flex items-center gap-3">
+                    <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" className="text-stone-400 hover:text-stone-700 transition-colors">
+                      <Instagram className="w-3.5 h-3.5" strokeWidth={1.5} />
+                    </a>
+                  </div>
+                </div>
+                <div className="text-[9px] text-stone-300">© 2026 Juhnios Rold · Colombia</div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
       {/* ── CONTENIDO ── */}
-      <div className="relative z-20 h-full flex flex-col justify-center px-8 md:px-14 lg:px-20 pb-20 pt-24">
+      <div className="relative z-20 h-full flex flex-col justify-center px-6 sm:px-8 md:px-14 lg:px-20 pb-16 pt-20 sm:pt-24">
         <div className="max-w-xl">
           <AnimatePresence mode="wait">
             <div key={currentSlide}>
               <motion.div
                 initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1, duration: 0.5 }}
-                className="flex items-center gap-3 mb-5"
+                className="flex items-center gap-3 mb-3 sm:mb-5"
               >
-                <div className="w-8 h-px" style={{ backgroundColor: '#8B7355' }} />
-                <span className="text-[10px] tracking-[0.35em] uppercase font-medium text-stone-700">{slide.eyebrow}</span>
+                <div className="w-6 sm:w-8 h-px" style={{ backgroundColor: '#8B7355' }} />
+                <span className="text-[9px] sm:text-[10px] tracking-[0.3em] sm:tracking-[0.35em] uppercase font-medium text-stone-700">{slide.eyebrow}</span>
               </motion.div>
 
               <div className="overflow-hidden mb-1">
                 <motion.div
                   initial={{ y: '100%', opacity: 0 }} animate={{ y: 0, opacity: 1 }}
                   transition={{ delay: 0.22, duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-                  className="text-5xl md:text-6xl lg:text-[68px] font-semibold text-stone-900 leading-[1.0] tracking-tight"
+                  className="text-4xl sm:text-5xl md:text-6xl lg:text-[68px] font-semibold text-stone-900 leading-[1.0] tracking-tight"
                   style={{ fontFamily: "'Playfair Display', serif" }}
                 >
                   {slide.titleLine1}
                 </motion.div>
               </div>
-              <div className="overflow-hidden mb-6">
+              <div className="overflow-hidden mb-4 sm:mb-6">
                 <motion.div
                   initial={{ y: '100%', opacity: 0 }} animate={{ y: 0, opacity: 1 }}
                   transition={{ delay: 0.34, duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-                  className="text-5xl md:text-6xl lg:text-[68px] leading-[1.0] tracking-tight"
+                  className="text-4xl sm:text-5xl md:text-6xl lg:text-[68px] leading-[1.0] tracking-tight"
                   style={{ fontFamily: "'Playfair Display', serif" }}
                 >
                   <span className="font-light text-stone-800">{slide.titleLine2}</span>
@@ -481,24 +610,24 @@ export function Hero({ onLoginClick }: HeroProps = {}) {
 
               <motion.p
                 initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5, duration: 0.55 }}
-                className="text-sm md:text-base text-stone-700/90 mb-8 max-w-sm leading-relaxed"
+                className="text-xs sm:text-sm md:text-base text-stone-700/90 mb-5 sm:mb-8 max-w-sm leading-relaxed"
               >
                 {slide.description}
               </motion.p>
 
               <motion.div
                 initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.62, duration: 0.5 }}
-                className="flex flex-wrap gap-3"
+                className="flex flex-wrap gap-2.5 sm:gap-3"
               >
                 <motion.a href="#resultados" whileHover={{ scale: 1.03, y: -1 }} whileTap={{ scale: 0.97 }}
-                  className="inline-flex items-center gap-2.5 px-7 py-3.5 text-white text-[11px] tracking-[0.18em] uppercase font-medium rounded-full shadow-md shadow-stone-900/15 hover:opacity-90 transition-opacity"
+                  className="inline-flex items-center gap-2 px-5 sm:px-7 py-3 sm:py-3.5 text-white text-[10px] sm:text-[11px] tracking-[0.15em] sm:tracking-[0.18em] uppercase font-medium rounded-full shadow-md shadow-stone-900/15 hover:opacity-90 transition-opacity"
                   style={{ backgroundColor: OLIVE }}
                 >
                   {slide.ctaPrimary}
-                  <ArrowRight className="w-3.5 h-3.5" strokeWidth={2} />
+                  <ArrowRight className="w-3 sm:w-3.5 h-3 sm:h-3.5" strokeWidth={2} />
                 </motion.a>
                 <motion.a href="#diagnostico" whileHover={{ scale: 1.03, y: -1 }} whileTap={{ scale: 0.97 }}
-                  className="inline-flex items-center gap-2.5 px-7 py-3.5 bg-white/70 backdrop-blur-sm text-stone-800 text-[11px] tracking-[0.18em] uppercase font-medium rounded-full border border-stone-300/60 hover:bg-white/90 transition-colors"
+                  className="inline-flex items-center gap-2 px-5 sm:px-7 py-3 sm:py-3.5 bg-white/70 backdrop-blur-sm text-stone-800 text-[10px] sm:text-[11px] tracking-[0.15em] sm:tracking-[0.18em] uppercase font-medium rounded-full border border-stone-300/60 hover:bg-white/90 transition-colors"
                 >
                   {slide.ctaSecondary}
                 </motion.a>

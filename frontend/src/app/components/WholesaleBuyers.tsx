@@ -63,7 +63,7 @@ export function WholesaleBuyers() {
         />
 
         {/* ── Contenido ── */}
-        <div className="relative h-full px-10 md:px-14 lg:px-20 py-14 flex flex-col justify-between gap-10 lg:flex-row lg:items-center">
+        <div className="relative h-full px-6 sm:px-10 md:px-14 lg:px-20 py-10 sm:py-14 flex flex-col justify-between gap-8 lg:gap-10 lg:flex-row lg:items-center">
 
           {/* BLOQUE IZQUIERDO */}
           <div className="flex flex-col max-w-sm">
@@ -71,7 +71,7 @@ export function WholesaleBuyers() {
               Para fabricantes · B2B
             </p>
             <h2
-              className="text-[44px] md:text-[52px] font-light text-white leading-[0.95] tracking-tight mb-5"
+              className="text-[34px] sm:text-[44px] md:text-[52px] font-light text-white leading-[0.95] tracking-tight mb-5"
               style={{ fontFamily: "'Playfair Display', serif" }}
             >
               Materias<br />

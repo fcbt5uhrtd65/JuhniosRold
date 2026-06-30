@@ -38,15 +38,15 @@ export const selectCls = "w-full px-3 py-2.5 text-sm border border-gray-200 roun
 
 export function PageHeader({ title, subtitle, onNew, newLabel, actions }: { title: string; subtitle?: string; onNew?: () => void; newLabel?: string; actions?: ReactNode }) {
   return (
-    <div className="flex items-center justify-between mb-6">
+    <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
       <div>
         <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
         {subtitle && <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>}
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         {actions}
         {onNew && (
-          <button onClick={onNew} className="flex items-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white text-xs font-semibold rounded-xl hover:bg-[#3d5c4e] transition-colors">
+          <button onClick={onNew} className="flex items-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white text-xs font-semibold rounded-xl hover:bg-[#3d5c4e] transition-colors whitespace-nowrap">
             <Plus size={14} /> {newLabel ?? 'Nuevo'}
           </button>
         )}
@@ -152,15 +152,15 @@ export function DrawerFooter({ onClose, onSave, saveLabel }: { onClose: () => vo
 
 export function KpiCard({ label, value, sub, icon: Icon, color, trend }: { label: string; value: string; sub?: string; icon: React.ComponentType<{ size?: number; className?: string }>; color: string; trend?: string }) {
   return (
-    <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-      <div className="flex items-start justify-between mb-3">
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${color}`}>
-          <Icon size={18} />
+    <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
+      <div className="flex items-start justify-between mb-2.5">
+        <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${color}`}>
+          <Icon size={16} />
         </div>
         {trend && <span className="text-[10px] text-gray-400">{trend}</span>}
       </div>
-      <p className="text-3xl font-bold text-gray-900">{value}</p>
-      <p className="text-xs font-medium text-gray-700 mt-0.5">{label}</p>
+      <p className="text-xl sm:text-2xl font-bold text-gray-900 leading-none">{value}</p>
+      <p className="text-xs font-medium text-gray-700 mt-1">{label}</p>
       {sub && <p className="text-[11px] text-gray-400 mt-0.5">{sub}</p>}
     </div>
   );

@@ -8,24 +8,32 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Clock,
   CreditCard,
   ExternalLink,
   FileText,
+  Gift,
   Hash,
   Heart,
+  Headphones,
   Loader2,
+  Lock,
   Mail,
   MapPin,
   Package,
+  Percent,
   Phone,
   RefreshCw,
   Save,
+  ShoppingBag,
   ShoppingCart,
+  Sparkles,
   Store,
   Trash2,
   Truck,
   User as UserIcon,
+  Zap,
 } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
 import { useCart } from '../contexts/CartContext';
@@ -50,7 +58,7 @@ const DOCUMENT_TYPES: Record<string, string> = {
   PASSPORT: 'Pasaporte', NIT: 'NIT', OTHER: 'Otro', PENDING: 'Sin definir',
 };
 
-const inp = 'w-full rounded-xl border border-stone-200 bg-white px-3.5 py-2.5 text-sm text-stone-900 outline-none transition placeholder:text-stone-300 focus:border-stone-400 focus:ring-2 focus:ring-stone-100 disabled:bg-stone-50 disabled:text-stone-400 disabled:cursor-not-allowed';
+const inp = 'w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs text-stone-900 outline-none transition placeholder:text-stone-300 focus:border-stone-400 focus:ring-2 focus:ring-stone-100 disabled:bg-stone-50 disabled:text-stone-400 disabled:cursor-not-allowed';
 
 /* ── status helpers ── */
 const STATUS_LABEL: Record<string, string> = {
@@ -77,6 +85,211 @@ function StatusIcon({ s }: { s: string }) {
   return <Clock className="w-3 h-3" strokeWidth={2} />;
 }
 const canPay = (s: string) => ['pendiente','pending','payment_pending','failed'].includes(s);
+
+const OLIVE = '#2D3A1F';
+
+/* ── Icono WhatsApp SVG ── */
+const WhatsAppIcon = () => (
+  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+    <path d="M12 0C5.373 0 0 5.373 0 12c0 2.127.558 4.126 1.533 5.858L.057 23.625a.75.75 0 00.918.918l5.783-1.476A11.944 11.944 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.75a9.715 9.715 0 01-4.953-1.354l-.355-.211-3.68.938.955-3.595-.232-.371A9.718 9.718 0 012.25 12C2.25 6.615 6.615 2.25 12 2.25S21.75 6.615 21.75 12 17.385 21.75 12 21.75z"/>
+  </svg>
+);
+
+/* ── Sección Mayorista ── */
+function MayoristaSection({ isWholesale, codigoMayorista }: { isWholesale: boolean; codigoMayorista?: string }) {
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
+
+  const beneficios = [
+    { icon: Percent,     title: 'Descuento automático',      desc: 'Descuentos aplicados al instante según el volumen de compra.' },
+    { icon: ShoppingBag, title: 'Precios de distribuidor',   desc: 'Accede a precios especiales diseñados para revendedores y distribuidores.' },
+    { icon: Sparkles,    title: 'Acceso a toda la colección',desc: 'Sin restricciones por referencia. Elige lo que necesites.' },
+    { icon: Gift,        title: 'Promociones exclusivas',    desc: 'Acceso anticipado a lanzamientos y promociones solo para mayoristas.' },
+    { icon: Headphones,  title: 'Atención prioritaria',      desc: 'Canal exclusivo y tiempos de respuesta preferenciales para mayoristas.' },
+    { icon: Zap,         title: 'Sin tope de cantidad',      desc: 'Compra la cantidad que necesites, sin límites.' },
+  ];
+
+  const pasos = [
+    { n: '01', icon: ShoppingCart,  title: 'Elige tus productos',       desc: 'Agrega al carrito los productos que necesitas para tu negocio.' },
+    { n: '02', icon: Lock,          title: 'Supera el monto mínimo',     desc: 'Tu compra debe alcanzar el monto mínimo mayorista establecido.' },
+    { n: '03', icon: Package,       title: 'Confirma tu pedido',         desc: 'Solicita tu activación y confirma tu pedido por WhatsApp o correo.' },
+    { n: '04', icon: Headphones,    title: 'Recibe atención prioritaria',desc: 'Nuestro equipo revisa tu solicitud y activa tu cuenta en menos de 24 horas.' },
+  ];
+
+  const faqs = [
+    ['¿Cuál es el monto mínimo?',          'Se muestra automáticamente en el carrito al tener plan mayorista.'],
+    ['¿Se combina con otras promociones?',  'El sistema aplica siempre el precio más conveniente para ti.'],
+    ['¿Puede comprar a nombre de un tercero?', 'Sí. El descuento aplica sobre tu cuenta sin importar la dirección.'],
+    ['¿Con qué frecuencia puedo comprar?',  'Sin restricción de frecuencia, solo superando el monto mínimo.'],
+  ];
+
+  return (
+    <motion.div key="mayorista" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.16 }}>
+
+      {/* Header */}
+      <div className="mb-5">
+        <h1 className="text-xl font-semibold text-stone-900 tracking-tight">Plan Mayorista Juhnios Rold</h1>
+        <p className="mt-0.5 text-xs text-stone-400">Compra por volumen, accede a precios especiales y recibe atención prioritaria.</p>
+      </div>
+
+      {/* Layout 2 columnas */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.05fr] gap-4 items-start">
+
+        {/* ── COL IZQUIERDA ── */}
+        <div className="flex flex-col gap-3">
+
+          {/* Tarjeta principal — estado */}
+          {isWholesale ? (
+            <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
+              <div className="px-5 pt-5 pb-4" style={{ background: 'linear-gradient(135deg, #f0f4ed 0%, #ffffff 60%)' }}>
+                <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-widest border" style={{ color: OLIVE, borderColor: `${OLIVE}30`, backgroundColor: `${OLIVE}10` }}>
+                  <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: OLIVE }} /> Plan activo
+                </span>
+                <p className="mt-3 text-base font-semibold text-stone-900">Descuento mayorista habilitado</p>
+                <p className="mt-1 text-xs leading-5 text-stone-400">
+                  Se aplica automáticamente al superar el monto mínimo. Sin cupones ni pasos adicionales.
+                </p>
+                {codigoMayorista && (
+                  <div className="mt-3 inline-flex items-center gap-2 rounded-xl border border-stone-200 bg-white px-3 py-2">
+                    <span className="text-[9px] font-bold uppercase tracking-widest text-stone-400">Código</span>
+                    <span className="font-mono text-sm font-bold tracking-wider text-stone-900">{codigoMayorista}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
+              <div className="px-5 pt-5 pb-5" style={{ background: 'linear-gradient(135deg, #fafaf9 0%, #ffffff 60%)' }}>
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                  <span className="text-[9px] font-bold uppercase tracking-widest text-stone-400">Plan inactivo</span>
+                </div>
+                <h2 className="text-base font-semibold text-stone-900 mb-1">Activa tu cuenta mayorista</h2>
+                <p className="text-xs leading-5 text-stone-400 mb-4">
+                  Accede a precios exclusivos por volumen, descuentos automáticos y atención prioritaria de nuestro equipo. Activamos tu cuenta en menos de 24 horas.
+                </p>
+                <div className="flex gap-2">
+                  <a href="https://wa.me/573001234567" target="_blank" rel="noopener noreferrer"
+                    className="flex-1 flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-semibold text-white transition hover:opacity-90"
+                    style={{ backgroundColor: OLIVE }}>
+                    <WhatsAppIcon /> Solicitar por WhatsApp
+                  </a>
+                  <a href="mailto:contacto@juhniosrold.com"
+                    className="flex items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-xs font-semibold text-stone-700 transition hover:bg-stone-50">
+                    <Mail className="w-3.5 h-3.5" strokeWidth={1.6} /> Enviar por correo
+                  </a>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Compra mínima */}
+          <div className="rounded-2xl border border-stone-200 bg-white px-5 py-3.5 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${OLIVE}12` }}>
+                <Lock className="w-3.5 h-3.5" style={{ color: OLIVE }} strokeWidth={1.8} />
+              </div>
+              <span className="text-xs font-semibold text-stone-700">Compra mínima mayorista</span>
+            </div>
+            <span className="text-sm font-bold text-stone-900 font-mono">$XXX.XXX COP</span>
+          </div>
+
+          {/* Cómo funciona */}
+          <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
+            <div className="px-5 py-3 border-b border-stone-100">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Cómo funciona</p>
+            </div>
+            <div className="grid grid-cols-2 gap-px bg-stone-100">
+              {pasos.map(({ n, icon: Icon, title, desc }) => (
+                <div key={n} className="bg-white px-4 py-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-[10px] font-mono font-bold" style={{ color: OLIVE }}>{n}</span>
+                    <div className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${OLIVE}10` }}>
+                      <Icon className="w-3 h-3" style={{ color: OLIVE }} strokeWidth={1.8} />
+                    </div>
+                  </div>
+                  <p className="text-[11px] font-semibold text-stone-800 leading-tight mb-0.5">{title}</p>
+                  <p className="text-[10px] text-stone-400 leading-4">{desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* ── COL DERECHA ── */}
+        <div className="flex flex-col gap-3">
+
+          {/* Beneficios */}
+          <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
+            <div className="px-5 py-3 border-b border-stone-100 flex items-center justify-between">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Beneficios del plan</p>
+              <div className="flex items-center gap-1">
+                <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: OLIVE }} />
+                <div className="w-1 h-1 rounded-full bg-stone-200" />
+                <div className="w-1 h-1 rounded-full bg-stone-200" />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-px bg-stone-100">
+              {beneficios.map(({ icon: Icon, title, desc }) => (
+                <div key={title} className="bg-white px-3.5 py-4 flex flex-col gap-2">
+                  <div className="relative w-8 h-8 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${OLIVE}10` }}>
+                    <Icon className="w-4 h-4" style={{ color: OLIVE }} strokeWidth={1.6} />
+                    <div className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center" style={{ backgroundColor: '#C9A84C' }}>
+                      <Check className="w-2 h-2 text-white" strokeWidth={3} />
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold text-stone-800 leading-tight">{title}</p>
+                    <p className="text-[10px] text-stone-400 mt-0.5 leading-4">{desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* FAQ acordeón */}
+          <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
+            <div className="px-5 py-3 border-b border-stone-100">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Preguntas frecuentes</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-stone-100">
+              {faqs.map(([q, a], i) => (
+                <div key={i} className="bg-white">
+                  <button
+                    onClick={() => setOpenFaq(openFaq === i ? null : i)}
+                    className="w-full flex items-start gap-3 px-4 py-3.5 text-left hover:bg-stone-50 transition-colors"
+                  >
+                    <div className="w-5 h-5 rounded-full border border-stone-200 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <span className="text-[9px] font-bold text-stone-400">?</span>
+                    </div>
+                    <p className="flex-1 text-xs font-semibold text-stone-800 leading-snug">{q}</p>
+                    <ChevronDown
+                      className="w-3.5 h-3.5 text-stone-400 flex-shrink-0 mt-0.5 transition-transform duration-200"
+                      style={{ transform: openFaq === i ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                      strokeWidth={2}
+                    />
+                  </button>
+                  <AnimatePresence>
+                    {openFaq === i && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                      >
+                        <p className="px-4 pb-3.5 text-[11px] text-stone-400 leading-5 ml-8">{a}</p>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              ))}
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </motion.div>
+  );
+}
 
 /* ════════════════════════════════════════════════════════ */
 export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => void }) {
@@ -343,162 +556,172 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
 
         {/* ══ MAIN ══ — ocupa todo el ancho restante */}
         <main className="min-w-0 flex-1 overflow-x-hidden">
-          <div className="px-6 py-6 pb-20 lg:pb-6">
+          <div className="px-4 py-4 pb-20 lg:pb-4 lg:px-6">
           <AnimatePresence mode="wait">
 
             {/* ─── MIS DATOS ─── */}
             {section === 'datos' && (
               <motion.div key="datos" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.16 }}>
 
-                <h1 className="mb-1 text-lg font-semibold text-stone-900">Mis datos</h1>
-                <p className="mb-5 text-sm text-stone-400">Nombre, contacto y dirección de entrega</p>
+                {/* Header */}
+                <div className="mb-5">
+                  <h1 className="text-xl font-semibold text-stone-900 tracking-tight">Mi perfil</h1>
+                  <p className="mt-0.5 text-xs text-stone-400">Gestiona tu información personal y dirección de entrega.</p>
+                </div>
 
                 <AnimatePresence>
                   {saveOk && (
-                    <motion.p key="ok" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                      className="mb-4 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-700">
-                      <Check className="w-4 h-4 flex-shrink-0" strokeWidth={2.5} /> Cambios guardados correctamente
-                    </motion.p>
+                    <motion.div key="ok" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                      className="mb-4 flex items-center gap-2.5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-700">
+                      <div className="w-5 h-5 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                        <Check className="w-3 h-3 text-emerald-600" strokeWidth={2.5} />
+                      </div>
+                      Cambios guardados correctamente
+                    </motion.div>
                   )}
                   {saveErr && (
-                    <motion.p key="err" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                      className="mb-4 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-600">
-                      <AlertTriangle className="w-4 h-4 flex-shrink-0" strokeWidth={1.8} /> {saveErr}
-                    </motion.p>
+                    <motion.div key="err" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                      className="mb-4 flex items-center gap-2.5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-600">
+                      <div className="w-5 h-5 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                        <AlertTriangle className="w-3 h-3 text-red-500" strokeWidth={2} />
+                      </div>
+                      {saveErr}
+                    </motion.div>
                   )}
                 </AnimatePresence>
 
-                <form onSubmit={handleSave} className="space-y-3">
+                <form onSubmit={handleSave}>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
 
-                  {/* Nombre y apellido */}
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <label className="flex flex-col gap-1.5">
-                      <span className="text-[11px] font-semibold uppercase tracking-wide text-stone-400">Nombre *</span>
-                      <input type="text" value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value })} className={inp} placeholder="María Fernanda" required />
-                    </label>
-                    <label className="flex flex-col gap-1.5">
-                      <span className="text-[11px] font-semibold uppercase tracking-wide text-stone-400">Apellidos *</span>
-                      <input type="text" value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value })} className={inp} placeholder="García López" required />
-                    </label>
-                  </div>
+                    {/* ── COLUMNA IZQUIERDA: datos personales ── */}
+                    <div className="flex flex-col gap-3">
 
-                  {/* Contacto */}
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <label className="flex flex-col gap-1.5">
-                      <span className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-stone-400">
-                        <Mail className="w-3 h-3" /> Email
-                      </span>
-                      <input type="email" value={currentUser.email} disabled className={inp} />
-                    </label>
-                    <label className="flex flex-col gap-1.5">
-                      <span className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-stone-400">
-                        <Phone className="w-3 h-3" /> Teléfono
-                      </span>
-                      <input type="tel" value={form.telefono} onChange={e => setForm({ ...form, telefono: e.target.value })} className={inp} placeholder="3001234567" />
-                    </label>
-                  </div>
-
-                  {/* Documento — solo si existe, compacto */}
-                  {docLabel && currentUser.numeroDocumento && (
-                    <div className="flex items-center gap-2 rounded-xl border border-stone-100 bg-stone-50 px-3.5 py-2.5 text-sm text-stone-500">
-                      <Hash className="w-3.5 h-3.5 flex-shrink-0 text-stone-400" />
-                      <span>{docLabel} · <span className="font-mono font-semibold text-stone-700">{currentUser.numeroDocumento}</span></span>
-                    </div>
-                  )}
-
-                  {/* Datos de empresa — solo mayoristas */}
-                  {isWholesale && (
-                    <>
-                      <div className="flex items-center gap-3 pt-1">
-                        <div className="h-px flex-1 bg-stone-100" />
-                        <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-stone-300">
-                          <Store className="w-3 h-3" /> Empresa
-                        </span>
-                        <div className="h-px flex-1 bg-stone-100" />
-                      </div>
-                      <div className="rounded-2xl border border-stone-200 bg-white p-4 space-y-3">
-                        {currentUser.companyName && (
-                          <div className="flex flex-col gap-0.5">
-                            <span className="text-[10px] font-semibold uppercase tracking-wide text-stone-400">Razón social</span>
-                            <span className="text-sm font-semibold text-stone-800">{currentUser.companyName}</span>
+                      {/* Tarjeta identidad */}
+                      <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
+                        <div className="px-5 pt-4 pb-3 border-b border-stone-100 flex items-center justify-between" style={{ background: 'linear-gradient(135deg, #f0f4ed 0%, #ffffff 60%)' }}>
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Información personal</p>
+                            <p className="mt-0.5 text-sm font-semibold text-stone-900">{currentUser.nombre || `${currentUser.firstName} ${currentUser.lastName}`}</p>
                           </div>
-                        )}
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                          {currentUser.companyIdNumber && (
-                            <div className="flex items-center gap-2 rounded-xl border border-stone-100 bg-stone-50 px-3.5 py-2.5 text-sm text-stone-500">
-                              <Hash className="w-3.5 h-3.5 flex-shrink-0 text-stone-400" />
-                              <span>
-                                {currentUser.companyIdType === 'OTRO'
-                                  ? (currentUser.companyIdTypeOther || 'Otro')
-                                  : (currentUser.companyIdType || 'ID')}
-                                {' · '}
-                                <span className="font-mono font-semibold text-stone-700">{currentUser.companyIdNumber}</span>
-                              </span>
-                            </div>
-                          )}
-                          {currentUser.businessType && (
-                            <div className="flex items-center gap-2 rounded-xl border border-stone-100 bg-stone-50 px-3.5 py-2.5 text-sm text-stone-500">
-                              <Store className="w-3.5 h-3.5 flex-shrink-0 text-stone-400" />
-                              <span>{{
-                                TIENDA: 'Tienda',
-                                DISTRIBUIDOR: 'Distribuidor',
-                                RESTAURANTE: 'Restaurante',
-                                FARMACIA: 'Farmacia / Droguería',
-                                SPA: 'Spa / Estética',
-                                OTRO: 'Otro',
-                              }[currentUser.businessType] ?? currentUser.businessType}</span>
-                            </div>
-                          )}
+                          <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0" style={{ backgroundColor: OLIVE }}>
+                            {currentUser.firstName?.[0]?.toUpperCase() ?? currentUser.nombre?.[0]?.toUpperCase() ?? '?'}
+                          </div>
                         </div>
-                        {currentUser.businessType === 'DISTRIBUIDOR' && currentUser.isInternationalDistributor && (
-                          <div className="flex items-center gap-2 text-xs text-stone-500">
-                            <Check className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" strokeWidth={2.5} />
-                            Distribuidor internacional
+
+                        {/* Campos */}
+                        <div className="px-5 py-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <label className="flex flex-col gap-1.5">
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Nombre *</span>
+                            <input type="text" value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value })} className={inp} placeholder="María Fernanda" required />
+                          </label>
+                          <label className="flex flex-col gap-1.5">
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Apellidos *</span>
+                            <input type="text" value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value })} className={inp} placeholder="García López" required />
+                          </label>
+                          <label className="flex flex-col gap-1.5">
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Email</span>
+                            <input type="email" value={currentUser.email} disabled className={inp} />
+                          </label>
+                          <label className="flex flex-col gap-1.5">
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Teléfono</span>
+                            <input type="tel" value={form.telefono} onChange={e => setForm({ ...form, telefono: e.target.value })} className={inp} placeholder="3001234567" />
+                          </label>
+                        </div>
+
+                        {/* Documento */}
+                        {docLabel && currentUser.numeroDocumento && (
+                          <div className="mx-5 mb-4 flex items-center gap-3 rounded-xl border border-stone-100 bg-stone-50 px-3.5 py-2.5">
+                            <div className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${OLIVE}12` }}>
+                              <Hash className="w-3 h-3" style={{ color: OLIVE }} strokeWidth={2} />
+                            </div>
+                            <div>
+                              <p className="text-[9px] font-bold uppercase tracking-widest text-stone-400">{docLabel}</p>
+                              <p className="font-mono text-xs font-semibold text-stone-800">{currentUser.numeroDocumento}</p>
+                            </div>
+                            <div className="ml-auto">
+                              <BadgeCheck className="w-4 h-4 text-emerald-500" strokeWidth={2} />
+                            </div>
                           </div>
                         )}
-                        {currentUser.companyPhone && (
-                          <div className="flex items-center gap-2 text-sm text-stone-500">
-                            <Phone className="w-3.5 h-3.5 flex-shrink-0 text-stone-400" />
-                            <span>{currentUser.companyPhone}</span>
-                          </div>
-                        )}
+
+                        {/* Botón guardar */}
+                        <div className="px-5 pb-4">
+                          <button type="submit" disabled={saving}
+                            className="flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-40"
+                            style={{ backgroundColor: OLIVE }}>
+                            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" strokeWidth={2} />}
+                            {saving ? 'Guardando…' : 'Guardar cambios'}
+                          </button>
+                        </div>
                       </div>
-                    </>
-                  )}
 
-                  {/* Separador */}
-                  <div className="flex items-center gap-3 py-1">
-                    <div className="h-px flex-1 bg-stone-100" />
-                    <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-stone-300">
-                      <MapPin className="w-3 h-3" /> Dirección de envío
-                    </span>
-                    <div className="h-px flex-1 bg-stone-100" />
-                  </div>
+                      {/* Tarjeta empresa — solo mayoristas */}
+                      {isWholesale && (
+                        <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
+                          <div className="px-5 py-3 border-b border-stone-100 flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${OLIVE}12` }}>
+                              <Store className="w-3 h-3" style={{ color: OLIVE }} strokeWidth={1.8} />
+                            </div>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Datos de empresa</p>
+                          </div>
+                          <div className="px-5 py-4 space-y-3">
+                            {currentUser.companyName && (
+                              <p className="text-sm font-semibold text-stone-900">{currentUser.companyName}</p>
+                            )}
+                            <div className="grid grid-cols-2 gap-2">
+                              {currentUser.companyIdNumber && (
+                                <div className="flex items-center gap-2 rounded-xl border border-stone-100 bg-stone-50 px-3 py-2.5">
+                                  <Hash className="w-3 h-3 flex-shrink-0 text-stone-400" strokeWidth={2} />
+                                  <div className="min-w-0">
+                                    <p className="text-[9px] text-stone-400 uppercase tracking-wide">{currentUser.companyIdType === 'OTRO' ? (currentUser.companyIdTypeOther || 'Otro') : (currentUser.companyIdType || 'ID')}</p>
+                                    <p className="font-mono text-xs font-semibold text-stone-800 truncate">{currentUser.companyIdNumber}</p>
+                                  </div>
+                                </div>
+                              )}
+                              {currentUser.businessType && (
+                                <div className="flex items-center gap-2 rounded-xl border border-stone-100 bg-stone-50 px-3 py-2.5">
+                                  <Store className="w-3 h-3 flex-shrink-0 text-stone-400" strokeWidth={1.8} />
+                                  <p className="text-xs text-stone-700 truncate">{{ TIENDA:'Tienda', DISTRIBUIDOR:'Distribuidor', RESTAURANTE:'Restaurante', FARMACIA:'Farmacia', SPA:'Spa / Estética', OTRO:'Otro' }[currentUser.businessType] ?? currentUser.businessType}</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
-                  {/* Dirección */}
-                  <div className="rounded-2xl border border-stone-200 bg-white p-4">
-                    {loadingLoc && (
-                      <p className="mb-3 flex items-center gap-1.5 text-[11px] text-stone-400">
-                        <Loader2 className="w-3 h-3 animate-spin" /> Cargando ubicación guardada…
-                      </p>
-                    )}
-                    <div className="space-y-3">
-                      <LocationPicker value={profileLoc} onChange={setProfileLoc} />
-                      <DeliveryLocationSection
-                        value={deliveryLoc} onChange={setDeliveryLoc}
-                        searchScope={{ state: profileLoc.stateName, country: profileLoc.countryName }}
-                        cityOptions={cityNames}
-                        onCityResolved={cn => setProfileLoc(p => ({ ...p, cityId: null, cityName: cn }))}
-                      />
                     </div>
-                  </div>
 
-                  <button type="submit" disabled={saving}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-stone-900 px-5 py-3 text-sm font-semibold text-white transition hover:opacity-85 disabled:opacity-40 sm:w-auto">
-                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" strokeWidth={2} />}
-                    {saving ? 'Guardando…' : 'Guardar cambios'}
-                  </button>
-                </form>
+                    {/* ── COLUMNA DERECHA: dirección de envío ── */}
+                    <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
+                      <div className="px-5 pt-4 pb-3 border-b border-stone-100 flex items-center gap-2" style={{ background: 'linear-gradient(135deg, #f0f4ed 0%, #ffffff 60%)' }}>
+                        <div className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${OLIVE}12` }}>
+                          <MapPin className="w-3.5 h-3.5" style={{ color: OLIVE }} strokeWidth={1.8} />
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Dirección de envío</p>
+                          <p className="text-xs text-stone-500 mt-0.5">Ubicación donde recibirás tus pedidos</p>
+                        </div>
+                      </div>
+                      <div className="px-5 py-4">
+                        {loadingLoc && (
+                          <div className="mb-3 flex items-center gap-2 text-[11px] text-stone-400">
+                            <Loader2 className="w-3 h-3 animate-spin" /> Cargando ubicación guardada…
+                          </div>
+                        )}
+                        <div className="space-y-3">
+                          <LocationPicker value={profileLoc} onChange={setProfileLoc} />
+                          <DeliveryLocationSection
+                            value={deliveryLoc} onChange={setDeliveryLoc}
+                            searchScope={{ state: profileLoc.stateName, country: profileLoc.countryName }}
+                            cityOptions={cityNames}
+                            onCityResolved={cn => setProfileLoc(p => ({ ...p, cityId: null, cityName: cn }))}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>{/* grid cols-2 */}
+                  </form>
               </motion.div>
             )}
 
@@ -540,16 +763,14 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
                         <div key={order.id} className="overflow-hidden rounded-2xl border border-stone-200 bg-white">
 
                           {/* ══ CABECERA ══ */}
-                          <div className="flex items-center justify-between px-5 pt-4 pb-3">
-                            <div className="flex items-center gap-3">
-                              <div>
-                                <p className="font-mono text-sm font-bold text-stone-900">
-                                  #{order.order_number ?? order.id.slice(0, 8).toUpperCase()}
-                                </p>
-                                <p className="text-[11px] text-stone-400 mt-0.5">
-                                  {new Date(order.fecha).toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })}
-                                </p>
-                              </div>
+                          <div className="flex flex-wrap items-center justify-between gap-2 px-4 sm:px-5 pt-4 pb-3">
+                            <div>
+                              <p className="font-mono text-sm font-bold text-stone-900">
+                                #{order.order_number ?? order.id.slice(0, 8).toUpperCase()}
+                              </p>
+                              <p className="text-[11px] text-stone-400 mt-0.5">
+                                {new Date(order.fecha).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })}
+                              </p>
                             </div>
                             <span className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${STATUS_CLS[order.estado] ?? 'bg-stone-100 text-stone-600 border-stone-200'}`}>
                               <StatusIcon s={order.estado} />
@@ -836,139 +1057,7 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
 
             {/* ─── MAYORISTA ─── */}
             {section === 'mayorista' && (
-              <motion.div key="mayorista" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.16 }} className="space-y-3">
-
-                <h1 className="mb-1 text-lg font-semibold text-stone-900">Plan mayorista</h1>
-                <p className="mb-5 text-sm text-stone-400">Condiciones y beneficios para compras por volumen</p>
-
-                {/* Estado */}
-                {isWholesale ? (
-                  <div className="rounded-2xl bg-stone-900 p-5">
-                    <div className="flex flex-wrap items-start justify-between gap-4">
-                      <div className="flex-1">
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-[9px] font-bold uppercase tracking-widest text-white">
-                          <Store className="w-3 h-3" /> Activo
-                        </span>
-                        <p className="mt-2.5 text-base font-semibold leading-snug text-white">
-                          Tu plan mayorista está activo
-                        </p>
-                        <p className="mt-1 text-sm leading-6 text-white/65">
-                          El descuento se aplica automáticamente al superar el monto mínimo. Sin cupones.
-                        </p>
-                      </div>
-                      {currentUser.codigoMayorista && (
-                        <div className="rounded-xl border border-white/20 bg-white/10 px-4 py-3">
-                          <p className="text-[9px] font-bold uppercase tracking-widest text-white/50">Código</p>
-                          <p className="mt-1 font-mono text-base font-bold tracking-wider text-white">{currentUser.codigoMayorista}</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
-                    <div className="flex flex-wrap items-start justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1 text-[9px] font-bold uppercase tracking-widest text-amber-700">
-                          <Store className="w-3 h-3" /> Inactivo
-                        </span>
-                        <p className="mt-2.5 text-base font-semibold leading-snug text-stone-900">
-                          Aún no has activado tu plan mayorista
-                        </p>
-                        <p className="mt-1 text-sm leading-6 text-stone-500">
-                          Actívalo aquí y podrás tener numerosos beneficios: precios exclusivos, descuentos automáticos por volumen y atención prioritaria.
-                        </p>
-                      </div>
-                      <a
-                        href="/#mayorista"
-                        className="inline-flex flex-shrink-0 items-center gap-2 rounded-xl bg-stone-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-85"
-                      >
-                        <Store className="w-4 h-4" strokeWidth={1.6} />
-                        Activar plan
-                      </a>
-                    </div>
-                  </div>
-                )}
-
-                {/* Cómo funciona */}
-                <div className="rounded-2xl border border-stone-200 bg-white p-5">
-                  <p className="mb-4 text-[10px] font-bold uppercase tracking-widest text-stone-400">Cómo funciona</p>
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    {[
-                      { n: '1', t: 'Arma tu carrito', d: 'Agrega los productos que necesitas.' },
-                      { n: '2', t: 'Supera el mínimo', d: 'El descuento se activa solo al superar el monto.' },
-                      { n: '3', t: 'Precio aplicado', d: 'Ves el precio mayorista antes de pagar.' },
-                    ].map(({ n, t, d }) => (
-                      <div key={n} className="rounded-xl bg-stone-50 p-4">
-                        <span className="text-3xl font-bold leading-none text-stone-100">{n}</span>
-                        <p className="mt-1.5 text-sm font-semibold text-stone-800">{t}</p>
-                        <p className="mt-0.5 text-xs leading-5 text-stone-400">{d}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Beneficios */}
-                <div className="rounded-2xl border border-stone-200 bg-white p-5">
-                  <p className="mb-4 text-[10px] font-bold uppercase tracking-widest text-stone-400">Beneficios</p>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {[
-                      ['Descuento automático por volumen', 'Se activa solo, sin cupones.'],
-                      ['Acceso a toda la colección', 'Sin restricciones por referencia.'],
-                      ['Atención prioritaria', 'Canal exclusivo para mayoristas.'],
-                      ['Promociones exclusivas', 'Acceso anticipado a lanzamientos.'],
-                      ['Precios de distribuidor', 'Margen real para revender.'],
-                      ['Sin tope de cantidad', 'Compra lo que necesites.'],
-                    ].map(([t, d]) => (
-                      <div key={t} className="flex items-start gap-2.5 rounded-xl border border-stone-100 p-3">
-                        <Check className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-emerald-500" strokeWidth={2.5} />
-                        <div>
-                          <p className="text-sm font-medium text-stone-800">{t}</p>
-                          <p className="text-xs text-stone-400">{d}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Solicitar (solo si no es mayorista) */}
-                {!isWholesale && (
-                  <div className="rounded-2xl border border-stone-200 bg-white p-5">
-                    <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-stone-400">¿Cómo obtener acceso?</p>
-                    <p className="mb-4 text-sm leading-6 text-stone-500">
-                      El plan se activa por el equipo de Juhnios Rold. Escríbenos indicando tu nombre, ciudad y volumen mensual estimado. En menos de 24 h tienes tu acceso.
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      <a href="https://wa.me/573001234567" target="_blank" rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 rounded-xl bg-stone-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-85">
-                        Solicitar por WhatsApp
-                      </a>
-                      <a href="mailto:contacto@juhniosrold.com"
-                        className="inline-flex items-center gap-2 rounded-xl border border-stone-200 px-4 py-2.5 text-sm font-semibold text-stone-700 transition hover:bg-stone-50">
-                        <Mail className="h-4 w-4" strokeWidth={1.6} /> Correo
-                      </a>
-                    </div>
-                  </div>
-                )}
-
-                {/* FAQ */}
-                <div className="rounded-2xl border border-stone-200 bg-white p-5">
-                  <p className="mb-4 text-[10px] font-bold uppercase tracking-widest text-stone-400">Preguntas frecuentes</p>
-                  <div className="space-y-2.5">
-                    {[
-                      ['¿Cuál es el monto mínimo?', 'Se muestra automáticamente en el carrito al ser mayorista.'],
-                      ['¿Se combina con otras promociones?', 'El sistema aplica siempre el precio más conveniente.'],
-                      ['¿Puedo pedir a nombre de un tercero?', 'Sí. El descuento aplica sobre tu cuenta sin importar la dirección.'],
-                      ['¿Con qué frecuencia puedo comprar?', 'Sin restricción de frecuencia, solo superando el mínimo.'],
-                    ].map(([q, a]) => (
-                      <div key={q as string} className="rounded-xl bg-stone-50 px-4 py-3.5">
-                        <p className="text-sm font-semibold text-stone-800">{q}</p>
-                        <p className="mt-1 text-xs leading-5 text-stone-400">{a}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-              </motion.div>
+              <MayoristaSection isWholesale={isWholesale} codigoMayorista={currentUser.codigoMayorista} />
             )}
 
           </AnimatePresence>

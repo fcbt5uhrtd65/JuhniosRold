@@ -122,22 +122,18 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
   return (
     <div className="min-h-screen bg-gray-50/40 flex">
       {/* Desktop Sidebar */}
-      <div className="hidden md:block w-64 fixed left-0 top-0 bottom-0">
+      <div className="hidden md:block w-56 lg:w-64 fixed left-0 top-0 bottom-0 z-30">
         <Sidebar />
       </div>
 
-      {/* Mobile Sidebar */}
+      {/* Mobile Sidebar overlay */}
       {sidebarOpen && (
         <div className="fixed inset-0 z-50 md:hidden">
-          <div
-            className="absolute inset-0 bg-black/40"
-            onClick={() => setSidebarOpen(false)}
-          />
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
           <motion.div
-            initial={{ x: -300 }}
-            animate={{ x: 0 }}
-            exit={{ x: -300 }}
-            className="absolute left-0 top-0 bottom-0 w-64 bg-gray-50"
+            initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }}
+            transition={{ type: 'spring', stiffness: 320, damping: 30 }}
+            className="absolute left-0 top-0 bottom-0 w-64 bg-gray-50 shadow-xl"
           >
             <Sidebar />
           </motion.div>
@@ -145,17 +141,31 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
       )}
 
       {/* Main Content */}
-      <div className="flex-1 md:ml-64">
-        <div className="sticky top-0 z-40 bg-white border-b border-gray-100 p-4 md:hidden">
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-          >
-            <Menu className="w-5 h-5" strokeWidth={1.75} />
-          </button>
+      <div className="flex-1 md:ml-56 lg:ml-64 min-w-0">
+        {/* Mobile top bar */}
+        <div className="sticky top-0 z-40 bg-white border-b border-gray-100 md:hidden">
+          <div className="flex items-center justify-between px-4 h-14">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="p-2 -ml-1 rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              <Menu className="w-5 h-5 text-gray-600" strokeWidth={1.75} />
+            </button>
+            <div className="text-center">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400 leading-none">Juhnios Rold</p>
+              <p className="text-[9px] text-gray-400 mt-0.5">{roleLabel}</p>
+            </div>
+            <button
+              onClick={logout}
+              className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+              title="Cerrar sesión"
+            >
+              <LogOut className="w-4 h-4 text-gray-400" strokeWidth={1.75} />
+            </button>
+          </div>
         </div>
 
-        <div className="p-6 md:p-8">{children}</div>
+        <div className="p-4 sm:p-6 md:p-8 overflow-x-hidden">{children}</div>
       </div>
     </div>
   );

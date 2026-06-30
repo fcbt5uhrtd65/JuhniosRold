@@ -123,51 +123,59 @@ export function BeforeAfter() {
   const cards: Card[] = [
     {
       id: 1,
-      before: 'https://images.unsplash.com/photo-1580618672591-eb180b1a973f?w=600&q=85',
-      after:  'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=600&q=85',
+      // Cabello opaco / cabello brillante y sedoso liso
+      before: 'https://images.unsplash.com/photo-1519699047748-de8e457a634e?w=600&q=85',
+      after:  'https://images.unsplash.com/photo-1526045612212-70caf35c14df?w=600&q=85',
       benefit: '+ Brillo y suavidad',
     },
     {
       id: 2,
-      before: 'https://images.unsplash.com/photo-1487412947147-5cebf100ffc2?w=600&q=85',
-      after:  'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=600&q=85',
+      // Cabello con pérdida / cabello abundante y saludable
+      before: 'https://images.unsplash.com/photo-1595476108010-b4d1f102b1b1?w=600&q=85',
+      after:  'https://images.unsplash.com/photo-1617897903246-719242758050?w=600&q=85',
       benefit: '+ Crecimiento saludable',
     },
     {
       id: 3,
-      before: 'https://images.unsplash.com/photo-1534751516642-a1af1ef26a56?w=600&q=85',
-      after:  'https://images.unsplash.com/photo-1524502397800-2eeaad7c3fe5?w=600&q=85',
-      benefit: '+ Menos frizz',
+      // Cabello esponjado con frizz / liso controlado y brillante
+      before: 'https://images.unsplash.com/photo-1618609378039-b572f369f2a8?w=600&q=85',
+      after:  'https://images.unsplash.com/photo-1560066984-138dadb4c035?w=600&q=85',
+      benefit: '+ Control del frizz',
     },
     {
       id: 4,
-      before: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=600&q=85',
+      // Cabello sin vida / nutrido, con textura y movimiento
+      before: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&q=85',
       after:  'https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?w=600&q=85',
       benefit: '+ Fuerza y nutrición',
     },
     {
       id: 5,
-      before: 'https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?w=600&q=85',
-      after:  'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=600&q=85',
-      benefit: '+ Definición',
+      // Rizos indefinidos / rizos definidos con humedad y forma
+      before: 'https://images.unsplash.com/photo-1594744803329-e58b31de8bf5?w=600&q=85',
+      after:  'https://images.unsplash.com/photo-1590065707046-4fde65275b2e?w=600&q=85',
+      benefit: '+ Rizos definidos',
     },
     {
       id: 6,
-      before: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=600&q=85',
+      // Cabello fino / volumen suave y natural
+      before: 'https://images.unsplash.com/photo-1522337094846-8a818192de1f?w=600&q=85',
       after:  'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=600&q=85',
-      benefit: '+ Más volumen',
+      benefit: '+ Volumen natural',
     },
     {
       id: 7,
-      before: 'https://images.unsplash.com/photo-1559893088-c0787ebfc084?w=600&q=85',
-      after:  'https://images.unsplash.com/photo-1560066984-138dadb4c035?w=600&q=85',
+      // Cabello quebradizo y opaco / hidratado y sellado
+      before: 'https://images.unsplash.com/photo-1523263685509-57c1d050d19b?w=600&q=85',
+      after:  'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=600&q=85',
       benefit: '+ Hidratación intensa',
     },
     {
       id: 8,
-      before: 'https://images.unsplash.com/photo-1611001904764-b2ac05aec5ae?w=600&q=85',
-      after:  'https://images.unsplash.com/photo-1590065707046-4fde65275b2e?w=600&q=85',
-      benefit: '+ Rizos saludables',
+      // Cabello con daño y opacidad / color vibrante y recuperado
+      before: 'https://images.unsplash.com/photo-1576097449798-7c7f90e1248a?w=600&q=85',
+      after:  'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=600&q=85',
+      benefit: '+ Reparación capilar',
     },
   ];
 
