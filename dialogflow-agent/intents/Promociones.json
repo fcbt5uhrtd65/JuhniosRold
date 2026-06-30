@@ -1,0 +1,24 @@
+{
+  "id": "promociones",
+  "name": "Promociones",
+  "auto": true,
+  "contexts": [],
+  "responses": [
+    {
+      "resetContexts": false,
+      "action": "commerce.promotions",
+      "affectedContexts": [],
+      "parameters": [],
+      "messages": [
+        { "type": 0, "lang": "es", "speech": ["Las promociones vigentes se confirman en el catalogo o con un asesor para no darte informacion desactualizada."] }
+      ],
+      "defaultResponsePlatforms": {},
+      "speech": []
+    }
+  ],
+  "priority": 500000,
+  "webhookUsed": true,
+  "webhookForSlotFilling": false,
+  "fallbackIntent": false,
+  "events": []
+}

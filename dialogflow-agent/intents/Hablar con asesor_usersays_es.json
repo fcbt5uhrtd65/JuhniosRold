@@ -1,0 +1,8 @@
+[
+  { "id": "human-1", "data": [{ "text": "quiero hablar con un asesor" }], "isTemplate": false, "count": 0 },
+  { "id": "human-2", "data": [{ "text": "pasame con alguien" }], "isTemplate": false, "count": 0 },
+  { "id": "human-3", "data": [{ "text": "atencion humana" }], "isTemplate": false, "count": 0 },
+  { "id": "human-4", "data": [{ "text": "necesito ayuda por whatsapp" }], "isTemplate": false, "count": 0 },
+  { "id": "human-5", "data": [{ "text": "asesor comercial" }], "isTemplate": false, "count": 0 },
+  { "id": "human-6", "data": [{ "text": "quiero que me llamen" }], "isTemplate": false, "count": 0 }
+]

@@ -1,0 +1,30 @@
+{
+  "id": "default-welcome-intent",
+  "name": "Default Welcome Intent",
+  "auto": true,
+  "contexts": [],
+  "responses": [
+    {
+      "resetContexts": false,
+      "action": "input.welcome",
+      "affectedContexts": [],
+      "parameters": [],
+      "messages": [
+        {
+          "type": 0,
+          "lang": "es",
+          "speech": [
+            "Hola, soy el asistente de Productos Juhnios Rold. Te puedo ayudar a escoger productos, ver envios, catalogo o hablar con un asesor."
+          ]
+        }
+      ],
+      "defaultResponsePlatforms": {},
+      "speech": []
+    }
+  ],
+  "priority": 500000,
+  "webhookUsed": false,
+  "webhookForSlotFilling": false,
+  "fallbackIntent": false,
+  "events": [{ "name": "WELCOME" }]
+}

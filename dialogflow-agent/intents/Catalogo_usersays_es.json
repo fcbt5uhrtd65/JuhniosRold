@@ -1,0 +1,8 @@
+[
+  { "id": "cat-1", "data": [{ "text": "quiero ver el catalogo" }], "isTemplate": false, "count": 0 },
+  { "id": "cat-2", "data": [{ "text": "mandame el catalogo" }], "isTemplate": false, "count": 0 },
+  { "id": "cat-3", "data": [{ "text": "que productos venden" }], "isTemplate": false, "count": 0 },
+  { "id": "cat-4", "data": [{ "text": "ver productos" }], "isTemplate": false, "count": 0 },
+  { "id": "cat-5", "data": [{ "text": "tienen linea capilar" }], "isTemplate": false, "count": 0 },
+  { "id": "cat-6", "data": [{ "text": "quiero comprar desde el catalogo" }], "isTemplate": false, "count": 0 }
+]

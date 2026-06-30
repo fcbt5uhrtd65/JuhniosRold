@@ -1,0 +1,5 @@
+[
+  { "value": "cliente final", "synonyms": ["cliente final", "para mi", "uso personal"] },
+  { "value": "mayorista", "synonyms": ["mayorista", "distribuidor", "distribuidora", "por mayor", "negocio", "salon", "peluqueria"] },
+  { "value": "profesional", "synonyms": ["profesional", "estilista", "barbero", "cosmetologa"] }
+]

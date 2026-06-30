@@ -1,0 +1,33 @@
+{
+  "id": "estado-de-pedido",
+  "name": "Estado de pedido",
+  "auto": true,
+  "contexts": [],
+  "responses": [
+    {
+      "resetContexts": false,
+      "action": "commerce.order_status",
+      "affectedContexts": [],
+      "parameters": [
+        {
+          "id": "numero_pedido",
+          "required": false,
+          "dataType": "@sys.any",
+          "name": "numero_pedido",
+          "value": "$numero_pedido",
+          "isList": false
+        }
+      ],
+      "messages": [
+        { "type": 0, "lang": "es", "speech": ["Para revisar tu pedido necesito el numero de orden o guia. Si no lo tienes, te paso con un asesor."] }
+      ],
+      "defaultResponsePlatforms": {},
+      "speech": []
+    }
+  ],
+  "priority": 500000,
+  "webhookUsed": true,
+  "webhookForSlotFilling": false,
+  "fallbackIntent": false,
+  "events": []
+}

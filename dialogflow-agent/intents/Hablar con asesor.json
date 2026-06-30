@@ -1,0 +1,24 @@
+{
+  "id": "hablar-con-asesor",
+  "name": "Hablar con asesor",
+  "auto": true,
+  "contexts": [],
+  "responses": [
+    {
+      "resetContexts": false,
+      "action": "commerce.human_handoff",
+      "affectedContexts": [],
+      "parameters": [],
+      "messages": [
+        { "type": 0, "lang": "es", "speech": ["Listo. Te conecto con un asesor por WhatsApp para ayudarte mejor."] }
+      ],
+      "defaultResponsePlatforms": {},
+      "speech": []
+    }
+  ],
+  "priority": 500000,
+  "webhookUsed": true,
+  "webhookForSlotFilling": false,
+  "fallbackIntent": false,
+  "events": []
+}

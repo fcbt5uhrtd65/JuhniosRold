@@ -1,0 +1,8 @@
+[
+  { "id": "rec-1", "data": [{ "text": "que me recomiendas para el " }, { "text": "frizz", "alias": "necesidad_capilar", "meta": "@necesidad_capilar", "userDefined": true }], "isTemplate": false, "count": 0 },
+  { "id": "rec-2", "data": [{ "text": "tengo el " }, { "text": "cabello seco", "alias": "necesidad_capilar", "meta": "@necesidad_capilar", "userDefined": true }], "isTemplate": false, "count": 0 },
+  { "id": "rec-3", "data": [{ "text": "necesito algo para dar " }, { "text": "brillo", "alias": "necesidad_capilar", "meta": "@necesidad_capilar", "userDefined": true }], "isTemplate": false, "count": 0 },
+  { "id": "rec-4", "data": [{ "text": "mi cabello esta maltratado" }], "isTemplate": false, "count": 0 },
+  { "id": "rec-5", "data": [{ "text": "quiero alisar mi cabello" }], "isTemplate": false, "count": 0 },
+  { "id": "rec-6", "data": [{ "text": "que producto sirve para suavidad" }], "isTemplate": false, "count": 0 }
+]

@@ -1,0 +1,7 @@
+[
+  { "id": "promo-1", "data": [{ "text": "tienen promociones" }], "isTemplate": false, "count": 0 },
+  { "id": "promo-2", "data": [{ "text": "hay descuentos hoy" }], "isTemplate": false, "count": 0 },
+  { "id": "promo-3", "data": [{ "text": "que ofertas manejan" }], "isTemplate": false, "count": 0 },
+  { "id": "promo-4", "data": [{ "text": "quiero ver promos" }], "isTemplate": false, "count": 0 },
+  { "id": "promo-5", "data": [{ "text": "hay descuento por comprar varios" }], "isTemplate": false, "count": 0 }
+]

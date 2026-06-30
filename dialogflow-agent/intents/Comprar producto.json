@@ -1,0 +1,45 @@
+{
+  "id": "comprar-producto",
+  "name": "Comprar producto",
+  "auto": true,
+  "contexts": [],
+  "responses": [
+    {
+      "resetContexts": false,
+      "action": "commerce.buy_product",
+      "affectedContexts": [],
+      "parameters": [
+        {
+          "id": "producto",
+          "required": false,
+          "dataType": "@producto",
+          "name": "producto",
+          "value": "$producto",
+          "isList": false
+        },
+        {
+          "id": "presentacion_producto",
+          "required": false,
+          "dataType": "@presentacion_producto",
+          "name": "presentacion_producto",
+          "value": "$presentacion_producto",
+          "isList": false
+        }
+      ],
+      "messages": [
+        {
+          "type": 0,
+          "lang": "es",
+          "speech": ["Claro. Te ayudo a comprar. Dime que producto quieres o te paso al catalogo para elegirlo."]
+        }
+      ],
+      "defaultResponsePlatforms": {},
+      "speech": []
+    }
+  ],
+  "priority": 500000,
+  "webhookUsed": true,
+  "webhookForSlotFilling": false,
+  "fallbackIntent": false,
+  "events": []
+}

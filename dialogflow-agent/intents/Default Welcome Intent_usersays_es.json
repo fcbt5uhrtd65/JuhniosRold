@@ -1,0 +1,8 @@
+[
+  { "id": "welcome-1", "data": [{ "text": "hola" }], "isTemplate": false, "count": 0 },
+  { "id": "welcome-2", "data": [{ "text": "buenas" }], "isTemplate": false, "count": 0 },
+  { "id": "welcome-3", "data": [{ "text": "buenos dias" }], "isTemplate": false, "count": 0 },
+  { "id": "welcome-4", "data": [{ "text": "buenas tardes" }], "isTemplate": false, "count": 0 },
+  { "id": "welcome-5", "data": [{ "text": "quiero informacion" }], "isTemplate": false, "count": 0 },
+  { "id": "welcome-6", "data": [{ "text": "me ayudan por favor" }], "isTemplate": false, "count": 0 }
+]

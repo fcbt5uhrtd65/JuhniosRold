@@ -1,0 +1,10 @@
+[
+  { "value": "Full Liso", "synonyms": ["Full Liso", "full liso", "kit full liso", "linea full liso"] },
+  { "value": "Aceite de Argan", "synonyms": ["Aceite de Argan", "aceite de argan", "argan"] },
+  { "value": "Aceite de Coco", "synonyms": ["Aceite de Coco", "aceite de coco", "coco"] },
+  { "value": "Tratamiento Capilar Nutritivo", "synonyms": ["Tratamiento Capilar Nutritivo", "tratamiento nutritivo", "mascarilla nutritiva"] },
+  { "value": "Tono sobre Tono", "synonyms": ["Tono sobre Tono", "tono sobre tono", "matizante", "color"] },
+  { "value": "Keratina", "synonyms": ["Keratina", "keratina", "queratina"] },
+  { "value": "Romero y Quina", "synonyms": ["Romero y Quina", "romero y quina", "quina", "romero"] },
+  { "value": "Locion corporal", "synonyms": ["Locion corporal", "locion corporal", "crema corporal", "hidratante corporal"] }
+]

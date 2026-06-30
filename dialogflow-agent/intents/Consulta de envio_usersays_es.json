@@ -1,0 +1,8 @@
+[
+  { "id": "ship-1", "data": [{ "text": "cuanto demora el envio a " }, { "text": "Bogota", "alias": "ciudad", "meta": "@ciudad", "userDefined": true }], "isTemplate": false, "count": 0 },
+  { "id": "ship-2", "data": [{ "text": "hacen envios a " }, { "text": "Medellin", "alias": "ciudad", "meta": "@ciudad", "userDefined": true }], "isTemplate": false, "count": 0 },
+  { "id": "ship-3", "data": [{ "text": "cuanto vale el envio" }], "isTemplate": false, "count": 0 },
+  { "id": "ship-4", "data": [{ "text": "envian a toda colombia" }], "isTemplate": false, "count": 0 },
+  { "id": "ship-5", "data": [{ "text": "tiempo de entrega en cali" }], "isTemplate": false, "count": 0 },
+  { "id": "ship-6", "data": [{ "text": "necesito informacion de envios" }], "isTemplate": false, "count": 0 }
+]

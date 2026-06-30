@@ -1,3 +1,7 @@
 .env
 .env.production
 backend/celerybeat-schedule
+node_modules/
+dialogflow-agent/node_modules/
+server/node_modules/
+dialogflow-agent/dist/

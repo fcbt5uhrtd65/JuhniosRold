@@ -1,0 +1,33 @@
+{
+  "id": "compra-mayorista",
+  "name": "Compra mayorista",
+  "auto": true,
+  "contexts": [],
+  "responses": [
+    {
+      "resetContexts": false,
+      "action": "commerce.wholesale",
+      "affectedContexts": [],
+      "parameters": [
+        {
+          "id": "tipo_cliente",
+          "required": false,
+          "dataType": "@tipo_cliente",
+          "name": "tipo_cliente",
+          "value": "$tipo_cliente",
+          "isList": false
+        }
+      ],
+      "messages": [
+        { "type": 0, "lang": "es", "speech": ["Tenemos atencion para compras mayoristas. Te conecto con un asesor para validar cantidades, catalogo y condiciones."] }
+      ],
+      "defaultResponsePlatforms": {},
+      "speech": []
+    }
+  ],
+  "priority": 500000,
+  "webhookUsed": true,
+  "webhookForSlotFilling": false,
+  "fallbackIntent": false,
+  "events": []
+}
