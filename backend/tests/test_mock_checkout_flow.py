@@ -8,6 +8,7 @@ from rest_framework.test import APIClient
 
 from apps.catalog.infrastructure.models import Category, Price, Product, ProductVariant
 from apps.commerce.infrastructure.models import Cart, CartItem, Order, Payment
+from apps.commerce.infrastructure.tasks import send_order_payment_confirmation
 from apps.customers.infrastructure.models import Customer
 from apps.finance.infrastructure.models import FinancialTransaction, SalesInvoice
 from apps.inventory.infrastructure.models import (
@@ -16,6 +17,7 @@ from apps.inventory.infrastructure.models import (
     Stock,
     Warehouse,
 )
+from apps.notifications.infrastructure.models import Notification
 
 
 @override_settings(PAYMENT_PROVIDER="mock")
@@ -184,6 +186,24 @@ class MockCheckoutFlowTests(TestCase):
             Payment.objects.get(pk=payment_id).status,
             Payment.Status.APPROVED,
         )
+
+    @override_settings(DEBUG=True)
+    @patch("apps.commerce.infrastructure.tasks.send_mail")
+    def test_payment_confirmation_debug_creates_notification_without_email(
+        self,
+        send_mail_mock,
+    ):
+        self.add_to_cart(quantity=1)
+        order_id, _payment_id = self.checkout_and_start_payment()
+
+        send_order_payment_confirmation(str(order_id))
+
+        notification = Notification.objects.get(
+            customer=self.customer,
+            type=Notification.Type.ORDER_CONFIRMED,
+        )
+        self.assertIn("Pago confirmado", notification.title)
+        send_mail_mock.assert_not_called()
 
     def test_declined_mock_payment_releases_stock_and_does_not_invoice(self):
         self.add_to_cart(quantity=2)
