@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 from django.conf import settings
+from django.db import transaction
 
 from apps.notifications.infrastructure.models import Notification
 
@@ -31,14 +32,21 @@ class NotificationService:
         )
 
         if send_email and not settings.DEBUG:
-            try:
-                from apps.notifications.tasks import send_notification_email
-                send_notification_email.apply_async(
-                    args=(str(notif.id),),
-                    ignore_result=True,
-                    retry=False,
-                )
-            except Exception:
-                logger.exception("No fue posible encolar email para notificación %s.", notif.id)
+            notif_id = str(notif.id)
+
+            def _enqueue():
+                try:
+                    from apps.notifications.tasks import send_notification_email
+                    send_notification_email.apply_async(
+                        args=(notif_id,),
+                        ignore_result=True,
+                        retry=False,
+                    )
+                except Exception:
+                    logger.exception(
+                        "No fue posible encolar email para notificación %s.", notif_id
+                    )
+
+            transaction.on_commit(_enqueue)
 
         return notif

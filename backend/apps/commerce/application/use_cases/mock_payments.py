@@ -8,7 +8,7 @@ from shared.domain.exceptions import BusinessRuleViolation
 
 from apps.finance.application.invoicing import GenerateSalesInvoice
 
-from ..services import OrderInventoryService
+from ..services import OrderInventoryService, OrderStatusService
 from .cart import ActiveCartService
 from ...infrastructure.models import Order, OrderStatusHistory, Payment
 
@@ -97,13 +97,11 @@ class ResolveMockPayment:
             payment.status = Payment.Status.APPROVED
             OrderInventoryService.consume(order, actor=actor)
             ActiveCartService().remove_restored_order_items(order=order)
-            order.status = Order.Status.PAID
             notes = "Pago aprobado por el proveedor simulado."
         else:
             payment.status = Payment.Status.DECLINED
             OrderInventoryService.release(order)
             ActiveCartService().restore_order_items(order=order)
-            order.status = Order.Status.FAILED
             notes = "Pago rechazado por el proveedor simulado."
 
         payment.save(
@@ -111,26 +109,18 @@ class ResolveMockPayment:
         )
         order.save(
             update_fields=(
-                "status",
                 "inventory_consumed_at",
                 "inventory_released_at",
                 "updated_at",
             )
         )
-        OrderStatusHistory.objects.create(
+        OrderStatusService.change(
             order=order,
-            status=order.status,
+            status=Order.Status.PAID if approved else Order.Status.FAILED,
+            actor=actor,
             notes=notes,
-            changed_by=actor,
+            source="payment",
         )
         if approved:
             GenerateSalesInvoice().execute(order=order, payment=payment, actor=actor)
-            order_id = str(order.id)
-            transaction.on_commit(lambda: self._send_confirmation(order_id))
         return payment
-
-    @staticmethod
-    def _send_confirmation(order_id):
-        from ...infrastructure.tasks import enqueue_order_payment_confirmation
-
-        enqueue_order_payment_confirmation(order_id)

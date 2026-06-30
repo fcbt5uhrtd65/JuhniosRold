@@ -1,9 +1,9 @@
 import logging
 
 from celery import shared_task
-from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.core.mail import send_mail
+
+from apps.identity.infrastructure.tasks import _send_email
 
 from ..application.use_cases import ActualizarTrackingUseCase
 from .models import EnvioModel
@@ -41,18 +41,21 @@ def send_shipping_status_notification(envio_id):
     customer = envio.pedido.customer
     if not customer.email:
         return
-    send_mail(
-        subject=f"Actualización de tu pedido {envio.pedido.number}",
-        message=(
-            f"Hola {customer.first_name},\n\n"
-            f"Tu envío ahora está en estado: {envio.get_estado_envio_display()}.\n"
-            f"Número de guía: {envio.numero_guia or 'pendiente'}\n"
-            f"Consulta el seguimiento desde tu cuenta."
-        ),
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[customer.email],
-        fail_silently=True,
-    )
+    try:
+        _send_email(
+            subject=f"Actualización de tu pedido {envio.pedido.number}",
+            message=(
+                f"Hola {customer.first_name},\n\n"
+                f"Tu envío ahora está en estado: {envio.get_estado_envio_display()}.\n"
+                f"Número de guía: {envio.numero_guia or 'pendiente'}\n"
+                f"Consulta el seguimiento desde tu cuenta."
+            ),
+            recipient=customer.email,
+        )
+    except Exception:
+        logger.exception(
+            "No fue posible enviar el correo de estado de envío %s.", envio_id
+        )
 
 
 @shared_task(ignore_result=True)
@@ -66,16 +69,20 @@ def alert_shipping_incident(envio_id):
     )
     if not recipients:
         return
-    send_mail(
-        subject=f"Novedad logística en {envio.pedido.number}",
-        message=(
-            f"El envío {envio.id} del pedido {envio.pedido.number} "
-            "presenta una novedad y requiere revisión."
-        ),
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=recipients,
-        fail_silently=True,
+    subject = f"Novedad logística en {envio.pedido.number}"
+    message = (
+        f"El envío {envio.id} del pedido {envio.pedido.number} "
+        "presenta una novedad y requiere revisión."
     )
+    for recipient in recipients:
+        try:
+            _send_email(subject=subject, message=message, recipient=recipient)
+        except Exception:
+            logger.exception(
+                "No fue posible enviar la alerta de envío %s a %s.",
+                envio_id,
+                recipient,
+            )
 
 
 def enqueue_shipping_notifications(envio_id):

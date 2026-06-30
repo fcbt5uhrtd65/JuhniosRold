@@ -8,7 +8,6 @@ from rest_framework.test import APIClient
 
 from apps.catalog.infrastructure.models import Category, Price, Product, ProductVariant
 from apps.commerce.infrastructure.models import Cart, CartItem, Order, Payment
-from apps.commerce.infrastructure.tasks import send_order_payment_confirmation
 from apps.customers.infrastructure.models import Customer
 from apps.finance.infrastructure.models import FinancialTransaction, SalesInvoice
 from apps.inventory.infrastructure.models import (
@@ -162,8 +161,7 @@ class MockCheckoutFlowTests(TestCase):
         self.assertTrue(approved.data["invoice_number"].startswith("FAC-JR-"))
 
     @patch(
-        "apps.commerce.infrastructure.tasks."
-        "send_order_payment_confirmation.apply_async",
+        "apps.notifications.tasks.send_notification_email.apply_async",
         side_effect=RuntimeError("broker unavailable"),
     )
     def test_approved_payment_succeeds_when_confirmation_cannot_be_enqueued(
@@ -188,22 +186,28 @@ class MockCheckoutFlowTests(TestCase):
         )
 
     @override_settings(DEBUG=True)
-    @patch("apps.commerce.infrastructure.tasks.send_mail")
+    @patch("apps.notifications.tasks.send_notification_email.apply_async")
     def test_payment_confirmation_debug_creates_notification_without_email(
         self,
-        send_mail_mock,
+        apply_async_mock,
     ):
         self.add_to_cart(quantity=1)
-        order_id, _payment_id = self.checkout_and_start_payment()
+        order_id, payment_id = self.checkout_and_start_payment()
 
-        send_order_payment_confirmation(str(order_id))
+        self.client.post(
+            f"/api/v1/commerce/payments/mock/{payment_id}/resolve/",
+            {"outcome": "approved"},
+            format="json",
+        )
 
+        order = Order.objects.get(pk=order_id)
         notification = Notification.objects.get(
             customer=self.customer,
             type=Notification.Type.ORDER_CONFIRMED,
         )
         self.assertIn("Pago confirmado", notification.title)
-        send_mail_mock.assert_not_called()
+        self.assertEqual(order.status, Order.Status.PAID)
+        apply_async_mock.assert_not_called()
 
     def test_declined_mock_payment_releases_stock_and_does_not_invoice(self):
         self.add_to_cart(quantity=2)

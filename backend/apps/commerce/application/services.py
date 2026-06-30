@@ -87,6 +87,20 @@ class OrderStatusService:
                 "/perfil?s=pedidos",
                 True,
             ),
+            Order.Status.PROCESSING: (
+                Notification.Type.INFO,
+                "Pedido en preparación",
+                f"Tu pedido #{order_ref} está siendo preparado por nuestro equipo.",
+                "/perfil?s=pedidos",
+                True,
+            ),
+            Order.Status.PACKED: (
+                Notification.Type.INFO,
+                "Pedido empacado",
+                f"Tu pedido #{order_ref} ya está empacado y listo para ser enviado.",
+                "/perfil?s=pedidos",
+                True,
+            ),
             Order.Status.SHIPPED: (
                 Notification.Type.ORDER_SHIPPED,
                 "Tu pedido está en camino",
@@ -99,14 +113,14 @@ class OrderStatusService:
                 "Pedido entregado",
                 f"El pedido #{order_ref} fue marcado como entregado. ¡Gracias por tu compra!",
                 "/perfil?s=pedidos",
-                False,
+                True,
             ),
             Order.Status.CANCELLED: (
                 Notification.Type.ORDER_CANCELLED,
                 "Pedido cancelado",
                 f"El pedido #{order_ref} fue cancelado.",
                 "/perfil?s=pedidos",
-                False,
+                True,
             ),
         }
 

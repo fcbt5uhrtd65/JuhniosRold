@@ -4,11 +4,11 @@ from django.db import transaction
 
 from apps.finance.application.invoicing import GenerateSalesInvoice
 
-from ..services import OrderInventoryService
+from ..services import OrderInventoryService, OrderStatusService
 from .cart import ActiveCartService
 from ...domain.exceptions import PaymentIntegrityError
 from ...domain.repositories import PaymentGateway
-from ...infrastructure.models import Order, OrderStatusHistory, Payment, PaymentWebhookEvent
+from ...infrastructure.models import Order, Payment, PaymentWebhookEvent
 from ...infrastructure.payment_gateways import WompiPaymentGateway
 
 
@@ -118,17 +118,22 @@ class ConfirmWompiPayment:
         if incoming_status == Payment.Status.APPROVED:
             OrderInventoryService.consume(order)
             ActiveCartService().remove_restored_order_items(order=order)
-            self._change_order_status(order, Order.Status.PAID, "Pago aprobado por Wompi.")
-            GenerateSalesInvoice().execute(order=order, payment=payment)
-            order_id = str(order.id)
-            transaction.on_commit(
-                lambda: self._send_payment_confirmation(order_id)
+            order.save(
+                update_fields=("inventory_consumed_at", "inventory_released_at")
             )
+            OrderStatusService.change(
+                order=order,
+                status=Order.Status.PAID,
+                notes="Pago aprobado por Wompi.",
+                source="payment",
+            )
+            GenerateSalesInvoice().execute(order=order, payment=payment)
         elif incoming_status == Payment.Status.PENDING:
-            self._change_order_status(
-                order,
-                Order.Status.PAYMENT_PENDING,
-                "Pago pendiente en Wompi.",
+            OrderStatusService.change(
+                order=order,
+                status=Order.Status.PAYMENT_PENDING,
+                notes="Pago pendiente en Wompi.",
+                source="payment",
             )
         else:
             newer_attempt_exists = order.payments.filter(
@@ -138,20 +143,15 @@ class ConfirmWompiPayment:
             if not newer_attempt_exists:
                 OrderInventoryService.release(order)
                 ActiveCartService().restore_order_items(order=order)
-                self._change_order_status(
-                    order,
-                    Order.Status.FAILED,
-                    f"Pago finalizado por Wompi con estado {incoming_status}.",
+                order.save(
+                    update_fields=("inventory_consumed_at", "inventory_released_at")
                 )
-
-        order.save(
-            update_fields=(
-                "status",
-                "inventory_consumed_at",
-                "inventory_released_at",
-                "updated_at",
-            )
-        )
+                OrderStatusService.change(
+                    order=order,
+                    status=Order.Status.FAILED,
+                    notes=f"Pago finalizado por Wompi con estado {incoming_status}.",
+                    source="payment",
+                )
         event.processed = True
         event.processing_error = ""
         event.save(update_fields=("processed", "processing_error", "updated_at"))
@@ -177,16 +177,3 @@ class ConfirmWompiPayment:
             provider_transaction_id=transaction_id
         ).exists():
             raise PaymentIntegrityError("La transacción ya está asociada a otro pago.")
-
-    @staticmethod
-    def _change_order_status(order, new_status, notes):
-        if order.status == new_status:
-            return
-        order.status = new_status
-        OrderStatusHistory.objects.create(order=order, status=new_status, notes=notes)
-
-    @staticmethod
-    def _send_payment_confirmation(order_id):
-        from ...infrastructure.tasks import enqueue_order_payment_confirmation
-
-        enqueue_order_payment_confirmation(order_id)
