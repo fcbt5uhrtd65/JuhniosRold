@@ -14,18 +14,35 @@ logger = logging.getLogger(__name__)
 
 
 @shared_task(ignore_result=True)
+def send_order_placed_notification(order_id):
+    order = Order.objects.select_related("customer").get(pk=order_id)
+    try:
+        from apps.notifications.application.service import NotificationService
+        from apps.notifications.infrastructure.models import Notification
+
+        order_ref = order.number or str(order.id)[:8].upper()
+        NotificationService.send(
+            customer=order.customer,
+            type=Notification.Type.INFO,
+            title="Pedido recibido",
+            message=(
+                f"Hemos recibido tu pedido #{order_ref} por "
+                f"${order.total:,.0f} COP. Pronto confirmaremos tu pago."
+            ),
+            action_url="/perfil?s=pedidos",
+            send_email=not settings.DEBUG,
+        )
+    except Exception:
+        logger.exception("Error al crear notificación de pedido recibido %s.", order_id)
+
+
+@shared_task(ignore_result=True)
 def send_order_payment_confirmation(order_id):
     order = Order.objects.select_related("customer").get(pk=order_id)
-    send_mail(
-        subject=f"Pago confirmado para tu pedido {order.number}",
-        message=(
-            f"Hola {order.customer.first_name},\n\n"
-            f"El proveedor de pagos confirmó el pedido {order.number}. "
-            "Ya estamos preparando tu compra."
-        ),
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[order.customer.email],
-        fail_silently=False,
+    title = f"Pago confirmado — pedido {order.number}"
+    message = (
+        f"Hola {order.customer.first_name}, el pago de tu pedido {order.number} "
+        "fue confirmado. Ya estamos preparando tu compra."
     )
     try:
         from apps.notifications.application.service import NotificationService
@@ -41,6 +58,32 @@ def send_order_payment_confirmation(order_id):
         )
     except Exception:
         logger.exception("Error al crear notificación in-app para pedido %s.", order_id)
+
+    if settings.DEBUG:
+        logger.info("DEBUG activo: email de confirmación de pago %s omitido.", order_id)
+        return
+
+    try:
+        send_mail(
+            subject=title,
+            message=f"{message}\n\nGracias por tu compra en Juhnios Rold.",
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[order.customer.email],
+            fail_silently=False,
+        )
+    except Exception:
+        logger.exception("Error enviando email de confirmación de pago %s.", order_id)
+
+
+def enqueue_order_placed_notification(order_id):
+    try:
+        send_order_placed_notification.apply_async(
+            args=(str(order_id),),
+            retry=False,
+            ignore_result=True,
+        )
+    except Exception:
+        logger.exception("No fue posible encolar notificación de pedido %s.", order_id)
 
 
 def enqueue_order_payment_confirmation(order_id):

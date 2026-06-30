@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 
+from django.conf import settings
+
 from apps.notifications.infrastructure.models import Notification
 
 logger = logging.getLogger(__name__)
@@ -28,7 +30,7 @@ class NotificationService:
             action_url=action_url,
         )
 
-        if send_email:
+        if send_email and not settings.DEBUG:
             try:
                 from apps.notifications.tasks import send_notification_email
                 send_notification_email.apply_async(

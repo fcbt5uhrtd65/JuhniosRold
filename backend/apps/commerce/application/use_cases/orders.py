@@ -27,6 +27,11 @@ def _wholesale_discount(subtotal, customer=None):
     return (subtotal * (ws.discount_percentage / Decimal("100"))).quantize(Decimal("0.01"))
 
 
+def _enqueue_placed_notification(order_id):
+    from ...infrastructure.tasks import enqueue_order_placed_notification
+    enqueue_order_placed_notification(order_id)
+
+
 class CheckoutCart:
     @transaction.atomic
     def execute(self, *, cart, location, shipping_address, actor=None, wholesale_code=""):
@@ -95,6 +100,10 @@ class CheckoutCart:
         OrderStatusHistory.objects.create(order=order, status=order.status, changed_by=actor)
         cart.checked_out_at = timezone.now()
         cart.save(update_fields=("checked_out_at", "updated_at"))
+        order_id = str(order.id)
+        transaction.on_commit(
+            lambda: _enqueue_placed_notification(order_id)
+        )
         return order
 
 
