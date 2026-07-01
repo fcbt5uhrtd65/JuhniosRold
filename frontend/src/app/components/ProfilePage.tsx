@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   BadgeCheck,
+  Calendar,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -26,6 +27,7 @@ import {
   Phone,
   RefreshCw,
   Save,
+  Search,
   ShoppingBag,
   ShoppingCart,
   Sparkles,
@@ -323,7 +325,18 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
   const [ordersPage, setOrdersPage] = useState(1);
   const ORDERS_PER_PAGE = 5;
   const [shippingData, setShippingData] = useState<Record<string, Envio | null>>({});
+
   const [loadingShipping, setLoadingShipping] = useState<Record<string, boolean>>({});
+
+  /* ── filtros de pedidos ── */
+  const [orderNumFilter, setOrderNumFilter] = useState('');
+  const [orderStatusFilter, setOrderStatusFilter] = useState('');
+  const [orderDateFrom, setOrderDateFrom] = useState('');
+  const [orderDateTo, setOrderDateTo] = useState('');
+
+  /* ── guardados ── */
+  const [savedPage, setSavedPage] = useState(1);
+  const SAVED_PER_PAGE = 9;
 
   /* redirect si no logueado */
   useEffect(() => {
@@ -361,7 +374,10 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
 
   useEffect(() => {
     if (section === 'pedidos') { loadOrders(); setOrdersPage(1); }
+    if (section === 'guardados') { setSavedPage(1); }
   }, [section, loadOrders]);
+
+  useEffect(() => { setOrdersPage(1); }, [orderNumFilter, orderStatusFilter, orderDateFrom, orderDateTo]);
 
   /* cargar datos de envío para pedidos que ya están pagados */
   useEffect(() => {
@@ -377,6 +393,29 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orders, section, backendOnline]);
+
+  const filteredOrders = useMemo(() => {
+    const numQ = orderNumFilter.toLowerCase().trim();
+    const fromDate = orderDateFrom ? new Date(orderDateFrom) : null;
+    const toDate = orderDateTo ? new Date(`${orderDateTo}T23:59:59`) : null;
+    return orders.filter(o => {
+      const orderText = `${o.order_number ?? ''} ${o.id}`.toLowerCase();
+      const orderDate = new Date(o.fecha);
+      return (!numQ || orderText.includes(numQ)) &&
+        (!orderStatusFilter || o.estado === orderStatusFilter) &&
+        (!fromDate || orderDate >= fromDate) &&
+        (!toDate || orderDate <= toDate);
+    });
+  }, [orders, orderNumFilter, orderStatusFilter, orderDateFrom, orderDateTo]);
+
+  const clearOrderFilters = () => {
+    setOrderNumFilter('');
+    setOrderStatusFilter('');
+    setOrderDateFrom('');
+    setOrderDateTo('');
+  };
+
+  const hasOrderFilters = orderNumFilter || orderStatusFilter || orderDateFrom || orderDateTo;
 
   if (!currentUser) return null;
 
@@ -729,14 +768,97 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
             {section === 'pedidos' && (
               <motion.div key="pedidos" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.16 }}>
 
-                <div className="mb-5 flex items-center justify-between">
+                <div className="mb-4 flex items-center justify-between">
                   <div>
                     <h1 className="text-lg font-semibold text-stone-900">Mis pedidos</h1>
-                    <p className="text-xs text-stone-400">{orders.length} {orders.length === 1 ? 'pedido' : 'pedidos'} en total</p>
+                    <p className="text-xs text-stone-400">
+                      {filteredOrders.length !== orders.length
+                        ? `${filteredOrders.length} de ${orders.length} pedidos`
+                        : `${orders.length} ${orders.length === 1 ? 'pedido' : 'pedidos'} en total`}
+                    </p>
                   </div>
                   <button onClick={() => { loadOrders(); setShippingData({}); setOrdersPage(1); }} className="flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-stone-500 transition hover:border-stone-300 hover:text-stone-800">
                     <RefreshCw className="w-3 h-3" /> Actualizar
                   </button>
+                </div>
+
+                {/* ── Panel de filtros ── */}
+                <div className="mb-5 rounded-2xl border border-stone-200 bg-white p-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    {/* Número de pedido */}
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Número de pedido</label>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-stone-300 pointer-events-none" />
+                        <input
+                          value={orderNumFilter}
+                          onChange={e => setOrderNumFilter(e.target.value)}
+                          placeholder="ID o número..."
+                          className="w-full pl-8 pr-3 py-2 text-xs border border-stone-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-stone-900/10 focus:border-stone-400 placeholder:text-stone-300"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Estado */}
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Estado</label>
+                      <select
+                        value={orderStatusFilter}
+                        onChange={e => setOrderStatusFilter(e.target.value)}
+                        className="w-full px-3 py-2 text-xs border border-stone-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-stone-900/10 focus:border-stone-400 text-stone-700"
+                      >
+                        <option value="">Todos los estados</option>
+                        <option value="pendiente">Pendiente</option>
+                        <option value="pending">Pago pendiente</option>
+                        <option value="paid">Pagado</option>
+                        <option value="packed">Empacado</option>
+                        <option value="shipped">Enviado</option>
+                        <option value="in_transit">En tránsito</option>
+                        <option value="delivered">Entregado</option>
+                        <option value="cancelled">Cancelado</option>
+                      </select>
+                    </div>
+
+                    {/* Fecha desde */}
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Fecha desde</label>
+                      <div className="relative">
+                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-stone-300 pointer-events-none" />
+                        <input
+                          type="date"
+                          value={orderDateFrom}
+                          onChange={e => setOrderDateFrom(e.target.value)}
+                          className="w-full pl-8 pr-3 py-2 text-xs border border-stone-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-stone-900/10 focus:border-stone-400"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Fecha hasta */}
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Fecha hasta</label>
+                      <div className="relative">
+                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-stone-300 pointer-events-none" />
+                        <input
+                          type="date"
+                          value={orderDateTo}
+                          min={orderDateFrom || undefined}
+                          onChange={e => setOrderDateTo(e.target.value)}
+                          className="w-full pl-8 pr-3 py-2 text-xs border border-stone-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-stone-900/10 focus:border-stone-400"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {hasOrderFilters && (
+                    <div className="flex justify-end mt-3 pt-3 border-t border-stone-100">
+                      <button
+                        onClick={clearOrderFilters}
+                        className="text-xs font-semibold text-stone-400 hover:text-stone-800 transition-colors"
+                      >
+                        Limpiar filtros
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {orders.length === 0 ? (
@@ -746,8 +868,15 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
                     <p className="mt-1 text-xs text-stone-400">Tu historial aparecerá aquí</p>
                   </div>
                 ) : (() => {
-                  const totalPages = Math.ceil(orders.length / ORDERS_PER_PAGE);
-                  const pagedOrders = orders.slice((ordersPage - 1) * ORDERS_PER_PAGE, ordersPage * ORDERS_PER_PAGE);
+                  const totalPages = Math.ceil(filteredOrders.length / ORDERS_PER_PAGE);
+                  const pagedOrders = filteredOrders.slice((ordersPage - 1) * ORDERS_PER_PAGE, ordersPage * ORDERS_PER_PAGE);
+                  if (pagedOrders.length === 0) return (
+                    <div className="flex flex-col items-center justify-center py-16 text-center rounded-2xl border border-stone-200 bg-white">
+                      <Package className="mb-3 h-8 w-8 text-stone-200" strokeWidth={1} />
+                      <p className="text-sm font-medium text-stone-500">Sin pedidos con esos filtros</p>
+                      <button onClick={clearOrderFilters} className="mt-2 text-xs font-semibold text-stone-400 hover:text-stone-800 transition-colors">Limpiar filtros</button>
+                    </div>
+                  );
                   return (
                   <div className="space-y-3">
                     {pagedOrders.map(order => {
@@ -1027,31 +1156,76 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
                     <p className="text-sm font-medium text-stone-500">Sin productos guardados</p>
                     <p className="mt-1 text-xs text-stone-400">Toca el ♡ en cualquier producto para guardarlo aquí</p>
                   </div>
-                ) : (
-                  <div className="grid gap-3 grid-cols-2 sm:grid-cols-3">
-                    {savedWithDetail.map((p: any) => (
-                      <div key={p.id} className="group overflow-hidden rounded-2xl border border-stone-200 bg-white">
-                        <div className="relative aspect-[4/3] overflow-hidden bg-stone-100">
-                          <img src={p.imagen || 'https://images.unsplash.com/photo-1571875257727-256c39da42af?w=600&q=80'} alt={p.nombre} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
-                          <button onClick={() => toggleSaveProduct(p.id)} className="absolute right-2 top-2 rounded-full bg-white/90 p-1.5 shadow-sm transition hover:opacity-70">
-                            <Trash2 className="h-3.5 w-3.5 text-stone-600" strokeWidth={1.5} />
-                          </button>
-                        </div>
-                        <div className="p-3">
-                          <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">{p.tipo}</p>
-                          <p className="mt-0.5 text-sm font-medium text-stone-900 leading-tight">{p.nombre}</p>
-                          <p className="text-xs text-stone-400">{p.presentacion}</p>
-                          <div className="mt-3 flex items-center justify-between gap-2">
-                            <span className="text-sm font-bold text-stone-900">${p.precio.toLocaleString('es-CO')}</span>
-                            <button onClick={() => handleAddToCart(p)} className="flex items-center gap-1 rounded-lg bg-stone-900 px-2.5 py-1.5 text-[10px] font-bold text-white transition hover:opacity-80">
-                              <ShoppingCart className="h-3 w-3" strokeWidth={2} /> Agregar
+                ) : (() => {
+                  const savedTotalPages = Math.ceil(savedWithDetail.length / SAVED_PER_PAGE);
+                  const pagedSaved = savedWithDetail.slice((savedPage - 1) * SAVED_PER_PAGE, savedPage * SAVED_PER_PAGE);
+                  return (
+                    <div className="space-y-3">
+                      <div className="grid gap-3 grid-cols-2 sm:grid-cols-3">
+                        {pagedSaved.map((p: any) => (
+                          <div key={p.id} className="group overflow-hidden rounded-2xl border border-stone-200 bg-white">
+                            <div className="relative aspect-[4/3] overflow-hidden bg-stone-100">
+                              <img src={p.imagen || 'https://images.unsplash.com/photo-1571875257727-256c39da42af?w=600&q=80'} alt={p.nombre} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                              <button onClick={() => toggleSaveProduct(p.id)} className="absolute right-2 top-2 rounded-full bg-white/90 p-1.5 shadow-sm transition hover:opacity-70">
+                                <Trash2 className="h-3.5 w-3.5 text-stone-600" strokeWidth={1.5} />
+                              </button>
+                            </div>
+                            <div className="p-3">
+                              <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">{p.tipo}</p>
+                              <p className="mt-0.5 text-sm font-medium text-stone-900 leading-tight">{p.nombre}</p>
+                              <p className="text-xs text-stone-400">{p.presentacion}</p>
+                              <div className="mt-3 flex items-center justify-between gap-2">
+                                <span className="text-sm font-bold text-stone-900">${p.precio.toLocaleString('es-CO')}</span>
+                                <button onClick={() => handleAddToCart(p)} className="flex items-center gap-1 rounded-lg bg-stone-900 px-2.5 py-1.5 text-[10px] font-bold text-white transition hover:opacity-80">
+                                  <ShoppingCart className="h-3 w-3" strokeWidth={2} /> Agregar
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {savedTotalPages > 1 && (
+                        <div className="flex items-center justify-between pt-2">
+                          <p className="text-xs text-stone-400">
+                            Página {savedPage} de {savedTotalPages}
+                          </p>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => setSavedPage(p => Math.max(1, p - 1))}
+                              disabled={savedPage === 1}
+                              className="flex items-center gap-1 rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-stone-600 transition hover:border-stone-300 disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                              <ChevronLeft className="w-3.5 h-3.5" strokeWidth={2} />
+                              Anterior
+                            </button>
+                            {Array.from({ length: savedTotalPages }, (_, i) => i + 1).map(page => (
+                              <button
+                                key={page}
+                                onClick={() => setSavedPage(page)}
+                                className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition ${
+                                  page === savedPage
+                                    ? 'bg-stone-900 text-white'
+                                    : 'border border-stone-200 bg-white text-stone-600 hover:border-stone-300'
+                                }`}
+                              >
+                                {page}
+                              </button>
+                            ))}
+                            <button
+                              onClick={() => setSavedPage(p => Math.min(savedTotalPages, p + 1))}
+                              disabled={savedPage === savedTotalPages}
+                              className="flex items-center gap-1 rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-stone-600 transition hover:border-stone-300 disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                              Siguiente
+                              <ChevronRight className="w-3.5 h-3.5" strokeWidth={2} />
                             </button>
                           </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                      )}
+                    </div>
+                  );
+                })()}
               </motion.div>
             )}
 
