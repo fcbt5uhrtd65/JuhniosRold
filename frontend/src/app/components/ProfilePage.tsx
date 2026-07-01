@@ -107,7 +107,7 @@ function MayoristaSection({
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   /* ── estado formulario solicitud ── */
-  const [tipoIdEmpresa, setTipoIdEmpresa] = useState<'NIT' | 'OTRO'>('NIT');
+  const [tipoIdEmpresa, setTipoIdEmpresa] = useState<'NIT' | 'CC' | 'OTRO'>('NIT');
   const [otroTipoId,    setOtroTipoId]    = useState('');
   const [numIdEmpresa,  setNumIdEmpresa]  = useState('');
   const [razonSocial,   setRazonSocial]   = useState('');
@@ -236,9 +236,10 @@ function MayoristaSection({
                   <div className="flex gap-2.5">
                     <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                       <label className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Tipo de identificación *</label>
-                      <select value={tipoIdEmpresa} onChange={e => setTipoIdEmpresa(e.target.value as 'NIT' | 'OTRO')}
+                      <select value={tipoIdEmpresa} onChange={e => setTipoIdEmpresa(e.target.value as 'NIT' | 'CC' | 'OTRO')}
                         className={selectCls} style={selectArrow}>
                         <option value="NIT">NIT</option>
+                        <option value="CC">Cédula</option>
                         <option value="OTRO">Otro</option>
                       </select>
                     </div>

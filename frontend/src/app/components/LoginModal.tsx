@@ -123,7 +123,7 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
   const [confNewPass,       setConfNewPass]       = useState('');
 
   /* campos mayorista */
-  const [tipoIdEmpresa,     setTipoIdEmpresa]     = useState<'NIT' | 'OTRO'>('NIT');
+  const [tipoIdEmpresa,     setTipoIdEmpresa]     = useState<'NIT' | 'CC' | 'OTRO'>('NIT');
   const [otroTipoId,        setOtroTipoId]        = useState('');
   const [numIdEmpresa,      setNumIdEmpresa]       = useState('');
   const [razonSocial,       setRazonSocial]        = useState('');
@@ -496,10 +496,11 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
                         <div className="flex gap-2.5">
                           <div className="flex flex-col gap-1 flex-1 min-w-0">
                             <label className="text-[9px] tracking-[0.22em] uppercase text-stone-400 font-semibold">Tipo de identificación *</label>
-                            <select value={tipoIdEmpresa} onChange={e => setTipoIdEmpresa(e.target.value as 'NIT' | 'OTRO')}
+                            <select value={tipoIdEmpresa} onChange={e => setTipoIdEmpresa(e.target.value as 'NIT' | 'CC' | 'OTRO')}
                               className="w-full px-2.5 py-2 rounded-lg border border-[#E5E0D8] bg-white text-[13px] text-stone-800 focus:outline-none focus:border-[#2D3A1F] transition appearance-none"
                               style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23A8A29E' stroke-width='1.5'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.5rem center' }}>
                               <option value="NIT">NIT</option>
+                              <option value="CC">Cédula</option>
                               <option value="OTRO">Otro</option>
                             </select>
                           </div>

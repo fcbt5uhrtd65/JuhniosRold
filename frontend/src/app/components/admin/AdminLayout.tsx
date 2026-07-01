@@ -17,6 +17,8 @@ import {
   LogOut,
   Menu,
   X,
+  Shield,
+  Puzzle,
 } from 'lucide-react';
 
 interface AdminLayoutProps {
@@ -42,6 +44,8 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
     { id: 'hr', label: 'RRHH', icon: Briefcase, roles: ['ADMIN', 'RRHH'] },
     { id: 'employee-portal', label: 'Mis solicitudes', icon: CalendarClock, roles: ['ADMIN', 'EMPLEADO'] },
     { id: 'legal', label: 'Legal', icon: Scale, roles: ['ADMIN'] },
+    { id: 'roles', label: 'Roles', icon: Shield, roles: ['ADMIN'] },
+    { id: 'components', label: 'Permisos', icon: Puzzle, roles: ['ADMIN'] },
   ] as const;
 
   const allowedNavItems = useMemo(() => {

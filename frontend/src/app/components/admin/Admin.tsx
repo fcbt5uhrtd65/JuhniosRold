@@ -14,6 +14,8 @@ import { AdminPayroll } from './AdminPayroll';
 import { AdminHR } from './AdminHR';
 import { AdminLegal } from './AdminLegal';
 import { AdminEmployeePortal } from './AdminEmployeePortal';
+import { AdminRoles } from './AdminRoles';
+import { AdminComponents } from './AdminComponents';
 
 function getDefaultViewForRole(role?: string) {
   switch (role) {
@@ -77,6 +79,10 @@ export function Admin() {
         return <AdminLegal />;
       case 'employee-portal':
         return <AdminEmployeePortal />;
+      case 'roles':
+        return <AdminRoles />;
+      case 'components':
+        return <AdminComponents />;
       default:
         return <AdminDashboard />;
     }
