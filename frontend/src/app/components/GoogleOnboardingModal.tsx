@@ -57,14 +57,15 @@ interface Props {
   isOpen: boolean;
   initialFirstName?: string;
   initialLastName?: string;
+  initialStep?: 'identity' | 'location' | 'wholesale';
   onClose: () => void;
 }
 
-export function GoogleOnboardingModal({ isOpen, initialFirstName = '', initialLastName = '', onClose }: Props) {
+export function GoogleOnboardingModal({ isOpen, initialFirstName = '', initialLastName = '', initialStep = 'identity', onClose }: Props) {
   const { updateProfile, currentUser } = useUser();
 
   type Step = 'identity' | 'location' | 'wholesale';
-  const [step, setStep] = useState<Step>('identity');
+  const [step, setStep] = useState<Step>(initialStep);
 
   // Paso 1 — identidad
   const [firstName, setFirstName] = useState(initialFirstName);
@@ -94,17 +95,33 @@ export function GoogleOnboardingModal({ isOpen, initialFirstName = '', initialLa
 
   useEffect(() => {
     if (isOpen) {
-      setStep('identity');
-      setFirstName(initialFirstName);
-      setLastName(initialLastName);
-      setTipoDoc('CC'); setDocumento(''); setTelefono('');
+      setStep(initialStep);
+      setFirstName(initialFirstName || currentUser?.firstName || '');
+      setLastName(initialLastName || currentUser?.lastName || '');
+
+      // Pre-fill identity fields from existing profile
+      const existingDocType = currentUser?.tipoDocumento;
+      const validDocTypes = ['CC', 'CE', 'PASSPORT', 'NIT', 'OTHER'];
+      setTipoDoc(existingDocType && validDocTypes.includes(existingDocType) ? existingDocType : 'CC');
+      setDocumento(currentUser?.numeroDocumento && !currentUser.numeroDocumento.startsWith('USR-') ? currentUser.numeroDocumento : '');
+      setTelefono(currentUser?.telefono || '');
+
       setRegLoc(EMPTY_LOCATION); setDelLoc(EMPTY_DELIVERY_LOCATION); setCities([]);
-      setWantsWholesale(null);
-      setTipoIdEmpresa('NIT'); setOtroTipoId(''); setNumIdEmpresa('');
-      setRazonSocial(''); setTipoNegocio('TIENDA'); setEsDistribIntl(false); setTelefonoEmpresa('');
+
+      // Pre-fill wholesale fields from existing profile
+      const hasWholesale = currentUser?.modoCompra === 'WHOLESALE';
+      setWantsWholesale(hasWholesale ? true : null);
+      const existingIdType = currentUser?.companyIdType;
+      setTipoIdEmpresa(existingIdType === 'CC' || existingIdType === 'OTRO' ? existingIdType : 'NIT');
+      setOtroTipoId(currentUser?.companyIdTypeOther || '');
+      setNumIdEmpresa(currentUser?.companyIdNumber || '');
+      setRazonSocial(currentUser?.companyName || '');
+      setTipoNegocio(currentUser?.businessType || 'TIENDA');
+      setEsDistribIntl(currentUser?.isInternationalDistributor ?? false);
+      setTelefonoEmpresa(currentUser?.companyPhone || '');
       setError('');
     }
-  }, [isOpen, initialFirstName, initialLastName]);
+  }, [isOpen, initialFirstName, initialLastName, initialStep]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!regLoc.stateId) { setCities([]); return; }
@@ -115,7 +132,10 @@ export function GoogleOnboardingModal({ isOpen, initialFirstName = '', initialLa
     return () => { active = false; };
   }, [regLoc.stateId]);
 
-  const stepNumber = step === 'identity' ? 1 : step === 'location' ? 2 : 3;
+  const allSteps: Step[] = ['identity', 'location', 'wholesale'];
+  const visibleSteps = allSteps.slice(allSteps.indexOf(initialStep));
+  const stepNumber = visibleSteps.indexOf(step) + 1;
+  const totalSteps = visibleSteps.length;
 
   const handleIdentityNext = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -229,7 +249,7 @@ export function GoogleOnboardingModal({ isOpen, initialFirstName = '', initialLa
               {/* Header */}
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <StepIndicator current={stepNumber} total={3} />
+                  <StepIndicator current={stepNumber} total={totalSteps} />
                   <h2 className="mt-3 text-lg font-semibold text-stone-900 leading-tight">
                     {step === 'identity'  && 'Completa tu perfil'}
                     {step === 'location'  && 'Tu dirección de entrega'}

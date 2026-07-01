@@ -1422,7 +1422,7 @@ export function AdminHR() {
               <Td>{parseDate(document.expires_at)}</Td>
               <Td>
                 {document.file ? (
-                  <a href={document.file} target="_blank" rel="noreferrer" className="text-[#2a4038] underline underline-offset-4">Ver archivo</a>
+                  <a href={getMediaUrl(document.file)} target="_blank" rel="noreferrer" className="text-[#2a4038] underline underline-offset-4">Ver archivo</a>
                 ) : 'Sin archivo'}
               </Td>
             </tr>
@@ -1613,7 +1613,7 @@ export function AdminHR() {
                   </Td>
                   <Td><Badge label={documentStatusLabel(document.status)} color={statusBadge(document.status)} /></Td>
                   <Td>{parseDate(document.expires_at)}</Td>
-                  <Td>{document.file ? <a href={document.file} target="_blank" rel="noreferrer" className="text-[#2a4038] underline underline-offset-4">Ver archivo</a> : 'Sin archivo'}</Td>
+                  <Td>{document.file ? <a href={getMediaUrl(document.file)} target="_blank" rel="noreferrer" className="text-[#2a4038] underline underline-offset-4">Ver archivo</a> : 'Sin archivo'}</Td>
                 </tr>
               ))}
             </tbody>

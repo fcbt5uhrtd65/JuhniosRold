@@ -1418,6 +1418,7 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
         isOpen={showOnboarding}
         initialFirstName={currentUser.firstName}
         initialLastName={currentUser.lastName}
+        initialStep={missingDoc ? 'identity' : missingLocation ? 'location' : 'wholesale'}
         onClose={() => setShowOnboarding(false)}
       />
     </div>

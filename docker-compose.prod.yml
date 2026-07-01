@@ -1,0 +1,176 @@
+name: juhniosrold-prod
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file:
+      - ${PROD_ENV_FILE:-.env.production}
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - juhnios_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - juhnios_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: backend.Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ${PROD_ENV_FILE:-.env.production}
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.production
+      DJANGO_DEBUG: "false"
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      DB_NAME: ${POSTGRES_DB:?POSTGRES_DB is required}
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      PYTHONUNBUFFERED: "1"
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py collectstatic --noinput &&
+             gunicorn config.wsgi:application
+             --bind 0.0.0.0:8000
+             --workers ${GUNICORN_WORKERS:-3}
+             --timeout ${GUNICORN_TIMEOUT:-120}
+             --access-logfile -
+             --error-logfile -"
+    volumes:
+      - static_data:/app/staticfiles
+      - media_data:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - juhnios_network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/', timeout=5)"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  celery:
+    build:
+      context: ./backend
+      dockerfile: backend.Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ${PROD_ENV_FILE:-.env.production}
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.production
+      DJANGO_DEBUG: "false"
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      DB_NAME: ${POSTGRES_DB:?POSTGRES_DB is required}
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      PYTHONUNBUFFERED: "1"
+    command: celery -A config worker --loglevel=info
+    volumes:
+      - media_data:/app/media
+    depends_on:
+      backend:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - juhnios_network
+
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: backend.Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ${PROD_ENV_FILE:-.env.production}
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.production
+      DJANGO_DEBUG: "false"
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      DB_NAME: ${POSTGRES_DB:?POSTGRES_DB is required}
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      PYTHONUNBUFFERED: "1"
+    command: celery -A config beat --loglevel=info --schedule=/tmp/celerybeat-schedule
+    depends_on:
+      backend:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - juhnios_network
+
+  nginx:
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-/api/v1}
+        VITE_GOOGLE_CLIENT_ID: ${GOOGLE_OAUTH2_CLIENT_ID:-}
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - static_data:/var/www/static:ro
+      - media_data:/var/www/media:ro
+      - certbot_www:/var/www/certbot:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - juhnios_network
+
+  certbot:
+    image: certbot/certbot:latest
+    profiles: ["certbot"]
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    networks:
+      - juhnios_network
+
+volumes:
+  postgres_data:
+  redis_data:
+  static_data:
+  media_data:
+  certbot_www:
+  letsencrypt:
+
+networks:
+  juhnios_network:
+    driver: bridge

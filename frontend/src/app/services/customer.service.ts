@@ -42,6 +42,8 @@ export interface UpdateMyCustomerProfilePayload {
   reference?: string;
   latitude?: number | null;
   longitude?: number | null;
+  document_type?: string;
+  document_number?: string;
   purchase_mode?: 'RETAIL' | 'WHOLESALE';
   company_id_type?: string;
   company_id_type_other?: string;

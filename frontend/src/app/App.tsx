@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AdminProvider, useAdmin } from './contexts/AdminContext';
+import { useUser } from './contexts/UserContext';
 import { CartProvider } from './contexts/CartContext';
 import { SearchProvider } from './contexts/SearchContext';
 import { UserProvider } from './contexts/UserContext';
@@ -101,9 +102,18 @@ function PublicSite({ onLoginClick }: { onLoginClick: () => void }) {
 
 function AppContent() {
   const { login, currentUser, isLoading } = useAdmin();
+  const { currentUser: customerUser } = useUser();
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
+
+  const onboardingInitialStep = useMemo((): 'identity' | 'location' | 'wholesale' => {
+    if (!customerUser) return 'identity';
+    const missingDoc = !customerUser.numeroDocumento || customerUser.tipoDocumento === 'PENDING';
+    if (missingDoc) return 'identity';
+    if (!customerUser.latitud) return 'location';
+    return 'wholesale';
+  }, [customerUser]);
   const isPaymentResult = currentPath === '/pago/resultado';
   const isCatalogPage = currentPath === '/catalogo';
   const isProfilePage = currentPath === '/perfil';
@@ -151,7 +161,7 @@ function AppContent() {
           onAdminAccess={handleAdminAccess}
           onGoogleNewUser={() => setShowOnboarding(true)}
         />
-        <GoogleOnboardingModal isOpen={showOnboarding} onClose={() => setShowOnboarding(false)} />
+        <GoogleOnboardingModal isOpen={showOnboarding} initialStep={onboardingInitialStep} onClose={() => setShowOnboarding(false)} />
       </>
     );
   }
@@ -166,7 +176,7 @@ function AppContent() {
           onAdminAccess={handleAdminAccess}
           onGoogleNewUser={() => setShowOnboarding(true)}
         />
-        <GoogleOnboardingModal isOpen={showOnboarding} onClose={() => setShowOnboarding(false)} />
+        <GoogleOnboardingModal isOpen={showOnboarding} initialStep={onboardingInitialStep} onClose={() => setShowOnboarding(false)} />
       </>
     );
   }

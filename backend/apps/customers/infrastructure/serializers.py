@@ -43,6 +43,21 @@ class CustomerSerializer(serializers.ModelSerializer):
 class MyCustomerProfileSerializer(serializers.ModelSerializer):
     """Datos propios del cliente autenticado que viven en el modelo Customer."""
 
+    # Declare explicitly to suppress the auto-generated UniqueValidator that
+    # DRF adds for unique=True fields — it doesn't exclude the current instance
+    # in partial updates. We handle uniqueness manually in validate_document_number.
+    document_number = serializers.CharField(required=False, allow_blank=True)
+
+    def validate_document_number(self, value):
+        if not value:
+            return value
+        qs = Customer.objects.filter(document_number__iexact=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError("El número de documento ya se encuentra registrado.")
+        return value
+
     class Meta:
         model = Customer
         fields = (

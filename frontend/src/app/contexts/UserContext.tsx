@@ -755,6 +755,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
       reference: updates.referencia,
       latitude: updates.latitud,
       longitude: updates.longitud,
+      document_type: updates.tipoDocumento,
+      document_number: updates.numeroDocumento,
       purchase_mode: updates.modoCompra,
       company_id_type: updates.companyIdType,
       company_id_type_other: updates.companyIdTypeOther,
