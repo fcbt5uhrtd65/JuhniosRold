@@ -7,6 +7,7 @@ from apps.customers.infrastructure.models import Customer
 from apps.identity.infrastructure.models import Component, Role, RoleComponentPermission, User
 from apps.identity.infrastructure.serializers import (
     ComponentSerializer,
+    GoogleAuthSerializer,
     PasswordResetConfirmSerializer,
     PasswordResetRequestSerializer,
     PasswordResetVerifyCodeSerializer,
@@ -265,3 +266,97 @@ class RoleComponentPermissionViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         self.required_component_action = "view" if self.action in {"list", "retrieve"} else "edit"
         return super().get_permissions()
+
+
+class GoogleAuthView(generics.GenericAPIView):
+    serializer_class = GoogleAuthSerializer
+    permission_classes = (permissions.AllowAny,)
+
+    def post(self, request):
+        from google.oauth2 import id_token
+        from google.auth.transport import requests as google_requests
+        from rest_framework_simplejwt.tokens import RefreshToken
+        from apps.customers.infrastructure.models import Customer
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        credential = serializer.validated_data["credential"]
+
+        client_id = settings.GOOGLE_OAUTH2_CLIENT_ID
+        if not client_id:
+            return Response(
+                {"detail": "Google OAuth no está configurado en el servidor."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        try:
+            id_info = id_token.verify_oauth2_token(
+                credential, google_requests.Request(), client_id
+            )
+        except ValueError:
+            return Response(
+                {"detail": "El token de Google es inválido o ha expirado."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        google_id = id_info["sub"]
+        email = id_info.get("email", "").lower()
+        first_name = id_info.get("given_name", "")
+        last_name = id_info.get("family_name", "")
+
+        if not email:
+            return Response(
+                {"detail": "Google no proporcionó un correo electrónico."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Buscar por google_id primero, luego por email
+        user = User.objects.filter(google_id=google_id).first()
+        if user is None:
+            user = User.objects.filter(email__iexact=email).first()
+            if user is not None:
+                # Vincular cuenta existente con Google
+                user.google_id = google_id
+                update_fields = ["google_id"]
+                if not user.first_name and first_name:
+                    user.first_name = first_name
+                    update_fields.append("first_name")
+                if not user.last_name and last_name:
+                    user.last_name = last_name
+                    update_fields.append("last_name")
+                user.save(update_fields=update_fields)
+
+        if user is None:
+            # Crear nuevo usuario
+            user = User.objects.create_user(
+                email=email,
+                password=None,
+                first_name=first_name,
+                last_name=last_name,
+                google_id=google_id,
+            )
+            user.set_unusable_password()
+            user.save(update_fields=["password"])
+            Customer.objects.get_or_create(
+                user=user,
+                defaults={
+                    "document_type": "PENDING",
+                    "document_number": f"USR-{user.id.hex}",
+                    "first_name": first_name or email.split("@")[0],
+                    "last_name": last_name,
+                    "email": email,
+                    "purchase_mode": Customer.PurchaseMode.RETAIL,
+                },
+            )
+
+        if not user.is_active:
+            return Response(
+                {"detail": "Esta cuenta está desactivada."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        refresh = RefreshToken.for_user(user)
+        return Response(
+            {"access": str(refresh.access_token), "refresh": str(refresh)},
+            status=status.HTTP_200_OK,
+        )

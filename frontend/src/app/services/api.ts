@@ -284,6 +284,7 @@ export async function apiRequest<T>(
   const url = `${API_BASE_URL}${endpoint}`;
   const isAuthenticationRequest =
     endpoint === '/auth/login/' ||
+    endpoint === '/auth/google/' ||
     endpoint === '/auth/register/' ||
     endpoint.startsWith('/auth/register/') ||
     endpoint.startsWith('/auth/password-reset/') ||

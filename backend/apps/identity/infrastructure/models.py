@@ -125,6 +125,7 @@ class User(AbstractUser):
     username = None
     email = models.EmailField(unique=True)
     phone = models.CharField(max_length=30, blank=True)
+    google_id = models.CharField(max_length=128, blank=True, db_index=True)
     role = models.ForeignKey(
         Role,
         on_delete=models.PROTECT,

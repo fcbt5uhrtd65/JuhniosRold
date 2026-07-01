@@ -54,6 +54,7 @@ services:
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-Juhnios Rold <onboarding@resend.dev>}
       LOCATIONIQ_API_KEY: ${LOCATIONIQ_API_KEY:-}
+      GOOGLE_OAUTH2_CLIENT_ID: ${GOOGLE_OAUTH2_CLIENT_ID:-}
       DB_HOST: db
       DB_PORT: "5432"
       DB_USER: postgres
@@ -117,6 +118,7 @@ services:
       VITE_DEV_SERVER_PORT: "5173"
       VITE_PROXY_TARGET: "http://backend:8000"
       VITE_API_URL: "/api/v1"
+      VITE_GOOGLE_CLIENT_ID: "${GOOGLE_OAUTH2_CLIENT_ID:-}"
       TZ: "America/Bogota"
     depends_on:
       backend:

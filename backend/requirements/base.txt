@@ -13,3 +13,5 @@ whitenoise==6.9.0
 openpyxl==3.1.5
 reportlab==4.4.1
 qrcode==8.0
+google-auth==2.40.3
+requests==2.32.3

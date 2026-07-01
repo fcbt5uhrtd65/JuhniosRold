@@ -13,6 +13,7 @@ import {
 } from 'react';
 import {
   loginUser,
+  loginWithGoogle,
   startRegistration,
   verifyRegistrationCode,
   resendRegistrationCode,
@@ -125,6 +126,7 @@ interface UserContextType {
   isLoadingAuth: boolean;
   backendOnline: boolean;
   login: (email: string, password: string) => Promise<AuthActionResult>;
+  googleLogin: (credential: string) => Promise<AuthActionResult>;
   register: (
     firstName: string,
     lastName: string,
@@ -423,6 +425,37 @@ export function UserProvider({ children }: { children: ReactNode }) {
         ok: false,
         message: serverResponded
           ? authErrorMessage(error, 'Email o contraseña incorrectos.')
+          : 'No hay conexión con el servidor. Intenta nuevamente.',
+      };
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ---- GOOGLE LOGIN ----
+  const googleLogin = useCallback(async (credential: string): Promise<AuthActionResult> => {
+    try {
+      const user = await loginWithGoogle(credential);
+      setBackendOnline(true);
+      if (!isCustomerUser(user)) {
+        setCurrentUser(null);
+        return {
+          ok: false,
+          message: 'Esta cuenta pertenece al panel interno. Usa el acceso administrativo.',
+        };
+      }
+      const mapped = mapAuthUser(user);
+      setCurrentUser(mapped);
+      await fetchOrdersFromApi();
+      await enrichWithCustomerProfile();
+      return { ok: true };
+    } catch (error) {
+      clearTokens();
+      const serverResponded = error instanceof ApiError;
+      setBackendOnline(serverResponded);
+      return {
+        ok: false,
+        message: serverResponded
+          ? authErrorMessage(error, 'No fue posible iniciar sesión con Google.')
           : 'No hay conexión con el servidor. Intenta nuevamente.',
       };
     }
@@ -753,6 +786,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         isLoadingAuth,
         backendOnline,
         login,
+        googleLogin,
         register,
         verifyRegistration,
         resendRegistrationCode: resendRegistration,

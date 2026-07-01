@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Check, ChevronRight, CreditCard, Eye, EyeOff, Lock, Mail,
@@ -84,7 +84,7 @@ interface LoginModalProps {
 }
 
 export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) {
-  const { login: customerLogin, register: customerRegister, verifyRegistration,
+  const { login: customerLogin, googleLogin, register: customerRegister, verifyRegistration,
     resendRegistrationCode, resetPassword, verifyPasswordReset, confirmPasswordReset } = useUser();
 
   type Screen = 'login' | 'reg1' | 'reg2' | 'verify' | 'forgot';
@@ -149,6 +149,46 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
 
   const handleClose = () => { clear(); setScreen('login'); onClose(); };
   const goScreen = (s: Screen) => { setError(''); setSuccess(''); setScreen(s); };
+
+  /* ── Google OAuth ── */
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+
+  const handleGoogleCredential = useCallback(async (credential: string) => {
+    setError(''); setSubmitting(true);
+    try {
+      const r = await googleLogin(credential);
+      if (r.ok) { clear(); setScreen('login'); onClose(); }
+      else setError(r.message || 'No fue posible iniciar sesión con Google.');
+    } finally { setSubmitting(false); }
+  }, [googleLogin, onClose]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    // Escucha el credential que llega desde el popup de Google
+    const handler = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin) return;
+      if (e.data?.type === 'GOOGLE_CREDENTIAL') handleGoogleCredential(e.data.credential);
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, [handleGoogleCredential]);
+
+  const handleGoogleButtonClick = useCallback(() => {
+    if (!googleClientId) return;
+    const nonce = Math.random().toString(36).slice(2);
+    const params = new URLSearchParams({
+      client_id: googleClientId,
+      redirect_uri: `${window.location.origin}/google-callback.html`,
+      response_type: 'token id_token',
+      scope: 'openid email profile',
+      nonce,
+      prompt: 'select_account',
+    });
+    const url = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
+    const w = 500, h = 600;
+    const left = window.screenX + (window.innerWidth - w) / 2;
+    const top = window.screenY + (window.innerHeight - h) / 2;
+    window.open(url, 'google-signin', `width=${w},height=${h},left=${left},top=${top}`);
+  }, [googleClientId]);
 
   useEffect(() => {
     if (!regLoc.stateId) { setCities([]); return; }
@@ -434,14 +474,13 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
                       <div className="flex-1 h-px bg-stone-100" />
                     </div>
                     <div className="flex gap-2">
-                      {[
-                        { icon: <GoogleG />, label: 'Google' },
-                        { icon: <svg width="13" height="13" viewBox="0 0 814 1000" fill="currentColor"><path d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155.5 123.1s-85.5-39.5-164-39.5c-76 0-103.7 40.8-165.9 40.8s-105-43.4-150.3-109.2c-52.1-73.1-96.2-187.6-96.2-295.1C172 151.1 359.4 75 542.8 75c81.1 0 148.1 32.1 200.8 84.4 30.4 29.7 60.4 65.2 63.5 181.5z"/><path d="M554.2 0c2.6 27.2-7.7 55.8-21.6 76.1-15.2 22.5-42.5 40.7-71.3 38.3-3.7-28.4 9.2-58.1 24-77.2 16.4-21.2 43.6-38.9 68.9-37.2z"/></svg>, label: 'Apple' },
-                      ].map(({ icon, label }) => (
-                        <button key={label} type="button" className="flex-1 flex items-center justify-center gap-1.5 py-2 border border-stone-200 rounded-lg text-xs text-stone-600 font-medium hover:bg-stone-50 transition-colors">
-                          {icon} {label}
-                        </button>
-                      ))}
+                      <button type="button" onClick={handleGoogleButtonClick} disabled={!googleClientId || submitting}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2 border border-stone-200 rounded-lg text-xs text-stone-600 font-medium hover:bg-stone-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                        <GoogleG /> Google
+                      </button>
+                      <button type="button" className="flex-1 flex items-center justify-center gap-1.5 py-2 border border-stone-200 rounded-lg text-xs text-stone-600 font-medium hover:bg-stone-50 transition-colors">
+                        <svg width="13" height="13" viewBox="0 0 814 1000" fill="currentColor"><path d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155.5 123.1s-85.5-39.5-164-39.5c-76 0-103.7 40.8-165.9 40.8s-105-43.4-150.3-109.2c-52.1-73.1-96.2-187.6-96.2-295.1C172 151.1 359.4 75 542.8 75c81.1 0 148.1 32.1 200.8 84.4 30.4 29.7 60.4 65.2 63.5 181.5z"/><path d="M554.2 0c2.6 27.2-7.7 55.8-21.6 76.1-15.2 22.5-42.5 40.7-71.3 38.3-3.7-28.4 9.2-58.1 24-77.2 16.4-21.2 43.6-38.9 68.9-37.2z"/></svg> Apple
+                      </button>
                     </div>
 
                     <p className="text-center text-[11px] text-stone-400">

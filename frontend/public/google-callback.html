@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8" /><title>Iniciando sesión…</title></head>
+<body>
+<script>
+  const hash = Object.fromEntries(
+    window.location.hash.slice(1).split('&').map(p => p.split('=').map(decodeURIComponent))
+  );
+  if (hash.id_token && window.opener) {
+    window.opener.postMessage(
+      { type: 'GOOGLE_CREDENTIAL', credential: hash.id_token },
+      window.location.origin
+    );
+    // Dar tiempo a que postMessage se entregue antes de cerrar
+    setTimeout(() => window.close(), 300);
+  } else {
+    window.close();
+  }
+</script>
+</body>
+</html>

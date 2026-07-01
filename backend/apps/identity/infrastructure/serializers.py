@@ -410,3 +410,7 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
             verified_at__isnull=False,
         ).update(used_at=timezone.now())
         return token.user
+
+
+class GoogleAuthSerializer(serializers.Serializer):
+    credential = serializers.CharField()
