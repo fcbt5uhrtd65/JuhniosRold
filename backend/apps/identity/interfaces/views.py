@@ -311,6 +311,7 @@ class GoogleAuthView(generics.GenericAPIView):
             )
 
         # Buscar por google_id primero, luego por email
+        is_new_user = False
         user = User.objects.filter(google_id=google_id).first()
         if user is None:
             user = User.objects.filter(email__iexact=email).first()
@@ -328,6 +329,7 @@ class GoogleAuthView(generics.GenericAPIView):
 
         if user is None:
             # Crear nuevo usuario
+            is_new_user = True
             user = User.objects.create_user(
                 email=email,
                 password=None,
@@ -348,6 +350,11 @@ class GoogleAuthView(generics.GenericAPIView):
                     "purchase_mode": Customer.PurchaseMode.RETAIL,
                 },
             )
+        else:
+            # Usuario existente: verificar si le faltan datos clave
+            customer = Customer.objects.filter(user=user).first()
+            if customer and customer.document_type == "PENDING":
+                is_new_user = True
 
         if not user.is_active:
             return Response(
@@ -357,6 +364,10 @@ class GoogleAuthView(generics.GenericAPIView):
 
         refresh = RefreshToken.for_user(user)
         return Response(
-            {"access": str(refresh.access_token), "refresh": str(refresh)},
+            {
+                "access": str(refresh.access_token),
+                "refresh": str(refresh),
+                "is_new_user": is_new_user,
+            },
             status=status.HTTP_200_OK,
         )

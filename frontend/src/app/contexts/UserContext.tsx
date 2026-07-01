@@ -126,7 +126,7 @@ interface UserContextType {
   isLoadingAuth: boolean;
   backendOnline: boolean;
   login: (email: string, password: string) => Promise<AuthActionResult>;
-  googleLogin: (credential: string) => Promise<AuthActionResult>;
+  googleLogin: (credential: string) => Promise<AuthActionResult & { isNewUser?: boolean }>;
   register: (
     firstName: string,
     lastName: string,
@@ -432,9 +432,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // ---- GOOGLE LOGIN ----
-  const googleLogin = useCallback(async (credential: string): Promise<AuthActionResult> => {
+  const googleLogin = useCallback(async (credential: string): Promise<AuthActionResult & { isNewUser?: boolean }> => {
     try {
-      const user = await loginWithGoogle(credential);
+      const { user, isNewUser } = await loginWithGoogle(credential);
       setBackendOnline(true);
       if (!isCustomerUser(user)) {
         setCurrentUser(null);
@@ -447,7 +447,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       setCurrentUser(mapped);
       await fetchOrdersFromApi();
       await enrichWithCustomerProfile();
-      return { ok: true };
+      return { ok: true, isNewUser };
     } catch (error) {
       clearTokens();
       const serverResponded = error instanceof ApiError;

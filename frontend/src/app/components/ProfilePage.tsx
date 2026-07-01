@@ -49,6 +49,7 @@ import { getProductById } from '../services/products.service';
 import { initiatePayment, resolveMockPayment, getInvoiceByOrder, openInvoicePdf } from '../services/payments.service';
 import { TrackingPedidoPage } from './TrackingPedidoPage';
 import { navigateBack, navigateTo } from '../services/navigate';
+import { GoogleOnboardingModal } from './GoogleOnboardingModal';
 import { getTrackingPedido, type Envio } from '../services/enviosApi';
 import { InteractiveLocationMap } from './ui/InteractiveLocationMap';
 
@@ -429,6 +430,7 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
     return (['datos','pedidos','guardados','mayorista'] as Section[]).includes(s as Section) ? (s as Section) : 'datos';
   };
   const [section, setSection] = useState<Section>(initialSection);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   /* ── datos ── */
   const [form, setForm] = useState({ firstName: '', lastName: '', telefono: '' });
@@ -542,6 +544,10 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
   const hasOrderFilters = orderNumFilter || orderStatusFilter || orderDateFrom || orderDateTo;
 
   if (!currentUser) return null;
+
+  const missingData = !currentUser.numeroDocumento || currentUser.tipoDocumento === 'PENDING' || !currentUser.latitud;
+  const missingDoc = !currentUser.numeroDocumento || currentUser.tipoDocumento === 'PENDING';
+  const missingLocation = !currentUser.latitud;
 
   /* solicitud mayorista */
   const handleApplyWholesale = async (data: {
@@ -662,6 +668,34 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
           </div>
         </div>
       </header>
+
+      {/* ── Banner datos faltantes ── */}
+      {missingData && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2.5">
+            <div className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
+            <p className="text-[12px] text-amber-800 leading-snug">
+              {missingDoc && missingLocation && 'Faltan tu documento de identidad y dirección de entrega.'}
+              {missingDoc && !missingLocation && 'Falta tu documento de identidad.'}
+              {!missingDoc && missingLocation && 'Falta tu dirección de entrega.'}
+              {' '}Completa tu perfil para una mejor experiencia.
+            </p>
+          </div>
+          <div className="flex gap-2 flex-shrink-0">
+            <button
+              onClick={() => setShowOnboarding(true)}
+              className="px-3 py-1.5 rounded-lg text-[11px] font-semibold text-white transition-opacity"
+              style={{ backgroundColor: '#2D3A1F' }}>
+              Completar ahora
+            </button>
+            <button
+              onClick={() => { setSection('datos'); }}
+              className="px-3 py-1.5 rounded-lg text-[11px] font-semibold text-amber-700 border border-amber-300 hover:bg-amber-100 transition-colors">
+              Ver mi perfil
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── layout principal: sidebar fijo izquierda + contenido ── */}
       <div className="flex min-h-[calc(100vh-56px)]">
@@ -1379,6 +1413,13 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
           </div>
         </main>
       </div>
+
+      <GoogleOnboardingModal
+        isOpen={showOnboarding}
+        initialFirstName={currentUser.firstName}
+        initialLastName={currentUser.lastName}
+        onClose={() => setShowOnboarding(false)}
+      />
     </div>
   );
 }

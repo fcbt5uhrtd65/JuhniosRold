@@ -81,9 +81,10 @@ interface LoginModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAdminAccess: (email: string, password: string) => Promise<boolean>;
+  onGoogleNewUser?: () => void;
 }
 
-export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) {
+export function LoginModal({ isOpen, onClose, onAdminAccess, onGoogleNewUser }: LoginModalProps) {
   const { login: customerLogin, googleLogin, register: customerRegister, verifyRegistration,
     resendRegistrationCode, resetPassword, verifyPasswordReset, confirmPasswordReset } = useUser();
 
@@ -135,6 +136,7 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
   const [success,    setSuccess]    = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+
   const clear = () => {
     setError(''); setSuccess('');
     setNombre(''); setApellidos(''); setEmail(''); setPassword(''); setConfirm('');
@@ -157,10 +159,18 @@ export function LoginModal({ isOpen, onClose, onAdminAccess }: LoginModalProps) 
     setError(''); setSubmitting(true);
     try {
       const r = await googleLogin(credential);
-      if (r.ok) { clear(); setScreen('login'); onClose(); }
-      else setError(r.message || 'No fue posible iniciar sesión con Google.');
+      if (r.ok) {
+        clear();
+        setScreen('login');
+        onClose();
+        if (r.isNewUser) {
+          setTimeout(() => onGoogleNewUser?.(), 150);
+        }
+      } else {
+        setError(r.message || 'No fue posible iniciar sesión con Google.');
+      }
     } finally { setSubmitting(false); }
-  }, [googleLogin, onClose]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [googleLogin, onClose, onGoogleNewUser]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     // Escucha el credential que llega desde el popup de Google

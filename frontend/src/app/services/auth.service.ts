@@ -223,13 +223,19 @@ export async function confirmPasswordReset(
 }
 
 // ---- Google OAuth ----
-export async function loginWithGoogle(credential: string): Promise<AuthUser> {
-  const res = await api.post<{ access: string; refresh: string }>('/auth/google/', { credential });
+export interface GoogleLoginResult {
+  user: AuthUser;
+  isNewUser: boolean;
+}
+
+export async function loginWithGoogle(credential: string): Promise<GoogleLoginResult> {
+  const res = await api.post<{ access: string; refresh: string; is_new_user: boolean }>('/auth/google/', { credential });
   if (!res.data?.access || !res.data.refresh) {
     throw new Error('El servidor no devolvió una sesión válida.');
   }
   setTokens(res.data.access, res.data.refresh);
-  return getCurrentUser();
+  const user = await getCurrentUser();
+  return { user, isNewUser: res.data.is_new_user ?? false };
 }
 
 // ---- Logout ----

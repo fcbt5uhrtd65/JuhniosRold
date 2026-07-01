@@ -24,6 +24,7 @@ import { Footer } from './components/Footer';
 import { WhatsAppButton } from './components/WhatsAppButton';
 import { FirstPurchasePopup } from './components/FirstPurchasePopup';
 import { LoginModal } from './components/LoginModal';
+import { GoogleOnboardingModal } from './components/GoogleOnboardingModal';
 import { ApiStatus } from './components/ApiStatus';
 import { ScrollToTop } from './components/ScrollToTop';
 import { PaymentResult } from './components/PaymentResult';
@@ -101,6 +102,7 @@ function PublicSite({ onLoginClick }: { onLoginClick: () => void }) {
 function AppContent() {
   const { login, currentUser, isLoading } = useAdmin();
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
   const isPaymentResult = currentPath === '/pago/resultado';
   const isCatalogPage = currentPath === '/catalogo';
@@ -147,7 +149,9 @@ function AppContent() {
           isOpen={showLoginModal}
           onClose={() => setShowLoginModal(false)}
           onAdminAccess={handleAdminAccess}
+          onGoogleNewUser={() => setShowOnboarding(true)}
         />
+        <GoogleOnboardingModal isOpen={showOnboarding} onClose={() => setShowOnboarding(false)} />
       </>
     );
   }
@@ -160,7 +164,9 @@ function AppContent() {
           isOpen={showLoginModal}
           onClose={() => setShowLoginModal(false)}
           onAdminAccess={handleAdminAccess}
+          onGoogleNewUser={() => setShowOnboarding(true)}
         />
+        <GoogleOnboardingModal isOpen={showOnboarding} onClose={() => setShowOnboarding(false)} />
       </>
     );
   }
@@ -184,7 +190,9 @@ function AppContent() {
         isOpen={showLoginModal}
         onClose={() => setShowLoginModal(false)}
         onAdminAccess={handleAdminAccess}
+        onGoogleNewUser={() => setShowOnboarding(true)}
       />
+      <GoogleOnboardingModal isOpen={showOnboarding} onClose={() => setShowOnboarding(false)} />
     </>
   );
 }
