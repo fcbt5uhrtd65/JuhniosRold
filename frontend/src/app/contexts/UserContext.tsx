@@ -723,6 +723,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
       latitude: updates.latitud,
       longitude: updates.longitud,
       purchase_mode: updates.modoCompra,
+      company_id_type: updates.companyIdType,
+      company_id_type_other: updates.companyIdTypeOther,
+      company_id_number: updates.companyIdNumber,
+      company_name: updates.companyName,
+      business_type: updates.businessType,
+      is_international_distributor: updates.isInternationalDistributor,
+      company_phone: updates.companyPhone,
     };
 
     try {

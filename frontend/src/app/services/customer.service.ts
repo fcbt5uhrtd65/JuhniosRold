@@ -43,6 +43,13 @@ export interface UpdateMyCustomerProfilePayload {
   latitude?: number | null;
   longitude?: number | null;
   purchase_mode?: 'RETAIL' | 'WHOLESALE';
+  company_id_type?: string;
+  company_id_type_other?: string;
+  company_id_number?: string;
+  company_name?: string;
+  business_type?: string;
+  is_international_distributor?: boolean;
+  company_phone?: string;
 }
 
 export async function getMyCustomerProfile(): Promise<MyCustomerProfile> {

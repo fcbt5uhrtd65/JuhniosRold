@@ -20,7 +20,6 @@ import {
   Headphones,
   Loader2,
   Lock,
-  Mail,
   MapPin,
   Package,
   Percent,
@@ -90,17 +89,55 @@ const canPay = (s: string) => ['pendiente','pending','payment_pending','failed']
 
 const OLIVE = '#2D3A1F';
 
-/* ── Icono WhatsApp SVG ── */
-const WhatsAppIcon = () => (
-  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
-    <path d="M12 0C5.373 0 0 5.373 0 12c0 2.127.558 4.126 1.533 5.858L.057 23.625a.75.75 0 00.918.918l5.783-1.476A11.944 11.944 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.75a9.715 9.715 0 01-4.953-1.354l-.355-.211-3.68.938.955-3.595-.232-.371A9.718 9.718 0 012.25 12C2.25 6.615 6.615 2.25 12 2.25S21.75 6.615 21.75 12 17.385 21.75 12 21.75z"/>
-  </svg>
-);
+
+const selectCls = 'w-full px-3 py-2 rounded-lg border border-stone-200 bg-white text-xs text-stone-800 focus:outline-none focus:border-stone-400 focus:ring-2 focus:ring-stone-900/10 transition appearance-none';
+const selectArrow = { backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23A8A29E' stroke-width='1.5'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.5rem center' };
 
 /* ── Sección Mayorista ── */
-function MayoristaSection({ isWholesale, codigoMayorista }: { isWholesale: boolean; codigoMayorista?: string }) {
+function MayoristaSection({
+  isWholesale, codigoMayorista, onApply,
+}: {
+  isWholesale: boolean;
+  codigoMayorista?: string;
+  onApply: (data: {
+    company_id_type: string; company_id_type_other?: string; company_id_number: string;
+    company_name: string; business_type: string; is_international_distributor: boolean; company_phone?: string;
+  }) => Promise<{ ok: boolean; message?: string }>;
+}) {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+
+  /* ── estado formulario solicitud ── */
+  const [tipoIdEmpresa, setTipoIdEmpresa] = useState<'NIT' | 'OTRO'>('NIT');
+  const [otroTipoId,    setOtroTipoId]    = useState('');
+  const [numIdEmpresa,  setNumIdEmpresa]  = useState('');
+  const [razonSocial,   setRazonSocial]   = useState('');
+  const [tipoNegocio,   setTipoNegocio]   = useState('TIENDA');
+  const [esDistribIntl, setEsDistribIntl] = useState(false);
+  const [telEmpresa,    setTelEmpresa]    = useState('');
+  const [applying,      setApplying]      = useState(false);
+  const [applyErr,      setApplyErr]      = useState('');
+  const [applyOk,       setApplyOk]       = useState(false);
+
+  const handleApply = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setApplyErr('');
+    if (tipoIdEmpresa === 'OTRO' && !otroTipoId.trim()) { setApplyErr('Especifica el tipo de identificación de la empresa.'); return; }
+    if (!numIdEmpresa.trim()) { setApplyErr('Ingresa el número de identificación de la empresa.'); return; }
+    if (!razonSocial.trim())  { setApplyErr('Ingresa la razón social o nombre de la empresa.'); return; }
+    setApplying(true);
+    const r = await onApply({
+      company_id_type: tipoIdEmpresa,
+      company_id_type_other: tipoIdEmpresa === 'OTRO' ? otroTipoId : undefined,
+      company_id_number: numIdEmpresa,
+      company_name: razonSocial,
+      business_type: tipoNegocio,
+      is_international_distributor: esDistribIntl,
+      company_phone: telEmpresa || undefined,
+    });
+    setApplying(false);
+    if (!r.ok) { setApplyErr(r.message || 'No fue posible enviar la solicitud.'); return; }
+    setApplyOk(true);
+  };
 
   const beneficios = [
     { icon: Percent,     title: 'Descuento automático',      desc: 'Descuentos aplicados al instante según el volumen de compra.' },
@@ -114,8 +151,8 @@ function MayoristaSection({ isWholesale, codigoMayorista }: { isWholesale: boole
   const pasos = [
     { n: '01', icon: ShoppingCart,  title: 'Elige tus productos',       desc: 'Agrega al carrito los productos que necesitas para tu negocio.' },
     { n: '02', icon: Lock,          title: 'Supera el monto mínimo',     desc: 'Tu compra debe alcanzar el monto mínimo mayorista establecido.' },
-    { n: '03', icon: Package,       title: 'Confirma tu pedido',         desc: 'Solicita tu activación y confirma tu pedido por WhatsApp o correo.' },
-    { n: '04', icon: Headphones,    title: 'Recibe atención prioritaria',desc: 'Nuestro equipo revisa tu solicitud y activa tu cuenta en menos de 24 horas.' },
+    { n: '03', icon: Package,       title: 'Registra tu empresa',        desc: 'Completa el formulario con los datos de tu empresa en esta misma sección.' },
+    { n: '04', icon: Headphones,    title: 'Accede al plan al instante', desc: 'El descuento mayorista se activa de inmediato al completar el registro.' },
   ];
 
   const faqs = [
@@ -161,27 +198,113 @@ function MayoristaSection({ isWholesale, codigoMayorista }: { isWholesale: boole
             </div>
           ) : (
             <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
-              <div className="px-5 pt-5 pb-5" style={{ background: 'linear-gradient(135deg, #fafaf9 0%, #ffffff 60%)' }}>
-                <div className="flex items-center gap-2 mb-3">
+              <div className="px-5 py-3 border-b border-stone-100" style={{ background: 'linear-gradient(135deg, #fafaf9 0%, #ffffff 60%)' }}>
+                <div className="flex items-center gap-2 mb-1">
                   <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
                   <span className="text-[9px] font-bold uppercase tracking-widest text-stone-400">Plan inactivo</span>
                 </div>
-                <h2 className="text-base font-semibold text-stone-900 mb-1">Activa tu cuenta mayorista</h2>
-                <p className="text-xs leading-5 text-stone-400 mb-4">
-                  Accede a precios exclusivos por volumen, descuentos automáticos y atención prioritaria de nuestro equipo. Activamos tu cuenta en menos de 24 horas.
+                <h2 className="text-sm font-semibold text-stone-900">Activar plan mayorista</h2>
+                <p className="text-xs text-stone-400 mt-0.5 leading-5">
+                  Ingresa los datos de tu empresa para activar el plan al instante.
                 </p>
-                <div className="flex gap-2">
-                  <a href="https://wa.me/573001234567" target="_blank" rel="noopener noreferrer"
-                    className="flex-1 flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-semibold text-white transition hover:opacity-90"
-                    style={{ backgroundColor: OLIVE }}>
-                    <WhatsAppIcon /> Solicitar por WhatsApp
-                  </a>
-                  <a href="mailto:contacto@juhniosrold.com"
-                    className="flex items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-xs font-semibold text-stone-700 transition hover:bg-stone-50">
-                    <Mail className="w-3.5 h-3.5" strokeWidth={1.6} /> Enviar por correo
-                  </a>
-                </div>
               </div>
+
+              {applyOk ? (
+                <div className="px-5 py-6 flex flex-col items-center text-center gap-3">
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: `${OLIVE}15` }}>
+                    <Check className="w-5 h-5" style={{ color: OLIVE }} strokeWidth={2.5} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-stone-900">¡Plan mayorista activado!</p>
+                    <p className="text-xs text-stone-400 mt-1 leading-5">
+                      Ya tienes acceso a precios especiales y descuentos por volumen. Recarga la página para ver tu nuevo plan.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <form onSubmit={handleApply} className="px-5 py-4 space-y-3">
+                  <AnimatePresence>
+                    {applyErr && (
+                      <motion.p key="err" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                        className="rounded-xl border border-rose-100 bg-rose-50 px-3.5 py-2 text-xs text-rose-700 leading-relaxed">
+                        {applyErr}
+                      </motion.p>
+                    )}
+                  </AnimatePresence>
+
+                  {/* Tipo ID empresa */}
+                  <div className="flex gap-2.5">
+                    <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Tipo de identificación *</label>
+                      <select value={tipoIdEmpresa} onChange={e => setTipoIdEmpresa(e.target.value as 'NIT' | 'OTRO')}
+                        className={selectCls} style={selectArrow}>
+                        <option value="NIT">NIT</option>
+                        <option value="OTRO">Otro</option>
+                      </select>
+                    </div>
+                    {tipoIdEmpresa === 'OTRO' && (
+                      <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Especifica el tipo *</label>
+                        <input value={otroTipoId} onChange={e => setOtroTipoId(e.target.value)} placeholder="Ej: RUT, RFC…"
+                          className={selectCls} required />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Número ID + Razón social */}
+                  <div className="flex gap-2.5">
+                    <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-stone-400">N° de identificación *</label>
+                      <input value={numIdEmpresa} onChange={e => setNumIdEmpresa(e.target.value)} placeholder="900123456-7"
+                        className={selectCls} required />
+                    </div>
+                    <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Razón social *</label>
+                      <input value={razonSocial} onChange={e => setRazonSocial(e.target.value)} placeholder="Mi Empresa S.A.S."
+                        className={selectCls} required />
+                    </div>
+                  </div>
+
+                  {/* Tipo de negocio */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Tipo de negocio *</label>
+                    <select value={tipoNegocio} onChange={e => { setTipoNegocio(e.target.value); if (e.target.value !== 'DISTRIBUIDOR') setEsDistribIntl(false); }}
+                      className={selectCls} style={selectArrow}>
+                      <option value="TIENDA">Tienda</option>
+                      <option value="DISTRIBUIDOR">Distribuidor</option>
+                      <option value="RESTAURANTE">Restaurante</option>
+                      <option value="FARMACIA">Farmacia / Droguería</option>
+                      <option value="SPA">Spa / Estética</option>
+                      <option value="OTRO">Otro</option>
+                    </select>
+                    {tipoNegocio === 'DISTRIBUIDOR' && (
+                      <label className="flex items-center gap-2 mt-1 cursor-pointer select-none">
+                        <div className="relative flex-shrink-0" onClick={() => setEsDistribIntl(v => !v)}>
+                          <div className="w-3.5 h-3.5 rounded border-2 flex items-center justify-center transition-all"
+                            style={{ borderColor: esDistribIntl ? OLIVE : '#D6D0C8', backgroundColor: esDistribIntl ? OLIVE : 'transparent' }}>
+                            {esDistribIntl && <svg width="8" height="6" viewBox="0 0 9 7" fill="none"><path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                          </div>
+                        </div>
+                        <span className="text-xs text-stone-500">¿Es distribuidor internacional?</span>
+                      </label>
+                    )}
+                  </div>
+
+                  {/* Teléfono empresa */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Teléfono empresa</label>
+                    <input type="tel" value={telEmpresa} onChange={e => setTelEmpresa(e.target.value)} placeholder="6011234567"
+                      className={selectCls} />
+                  </div>
+
+                  <button type="submit" disabled={applying}
+                    className="w-full flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-40"
+                    style={{ backgroundColor: OLIVE }}>
+                    {applying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Store className="w-3.5 h-3.5" strokeWidth={2} />}
+                    {applying ? 'Activando…' : 'Activar plan mayorista'}
+                  </button>
+                </form>
+              )}
             </div>
           )}
 
@@ -418,6 +541,23 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
   const hasOrderFilters = orderNumFilter || orderStatusFilter || orderDateFrom || orderDateTo;
 
   if (!currentUser) return null;
+
+  /* solicitud mayorista */
+  const handleApplyWholesale = async (data: {
+    company_id_type: string; company_id_type_other?: string; company_id_number: string;
+    company_name: string; business_type: string; is_international_distributor: boolean; company_phone?: string;
+  }) => {
+    return updateProfile({
+      modoCompra: 'WHOLESALE',
+      companyIdType: data.company_id_type,
+      companyIdTypeOther: data.company_id_type_other,
+      companyIdNumber: data.company_id_number,
+      companyName: data.company_name,
+      businessType: data.business_type,
+      isInternationalDistributor: data.is_international_distributor,
+      companyPhone: data.company_phone,
+    });
+  };
 
   const docLabel = currentUser.tipoDocumento ? DOCUMENT_TYPES[currentUser.tipoDocumento] ?? currentUser.tipoDocumento : null;
   const isWholesale = currentUser.modoCompra === 'WHOLESALE';
@@ -1231,7 +1371,7 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
 
             {/* ─── MAYORISTA ─── */}
             {section === 'mayorista' && (
-              <MayoristaSection isWholesale={isWholesale} codigoMayorista={currentUser.codigoMayorista} />
+              <MayoristaSection isWholesale={isWholesale} codigoMayorista={currentUser.codigoMayorista} onApply={handleApplyWholesale} />
             )}
 
           </AnimatePresence>

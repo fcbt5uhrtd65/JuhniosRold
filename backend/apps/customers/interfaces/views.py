@@ -107,7 +107,11 @@ class MyCustomerProfileView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        customer_fields = {"first_name", "last_name", "phone", "address", "city", "document_type", "document_number"}
+        customer_fields = {
+            "first_name", "last_name", "phone", "address", "city", "document_type", "document_number",
+            "purchase_mode", "company_id_type", "company_id_type_other", "company_id_number",
+            "company_name", "business_type", "is_international_distributor", "company_phone",
+        }
         customer_data = {key: value for key, value in request.data.items() if key in customer_fields}
         serializer = MyCustomerProfileSerializer(customer, data=customer_data, partial=True)
         serializer.is_valid(raise_exception=True)
