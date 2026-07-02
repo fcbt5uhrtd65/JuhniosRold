@@ -497,8 +497,8 @@ function ProductCard({ product, index, isSaved, onToggleSave, onAddToCart, onVie
 
         {/* Badge */}
         <div className="absolute top-3 left-3">
-          <span className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-semibold border ${badge.bg}`}>
-            <badge.icon className="w-2.5 h-2.5" strokeWidth={2} />
+          <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[8px] font-semibold border ${badge.bg}`}>
+            <badge.icon className="w-2 h-2" strokeWidth={2} />
             {badge.label}
           </span>
         </div>
@@ -507,44 +507,44 @@ function ProductCard({ product, index, isSaved, onToggleSave, onAddToCart, onVie
         <motion.div
           initial={{ opacity: 0 }}
           whileHover={{ opacity: 1 }}
-          className="absolute inset-0 bg-black/22 backdrop-blur-[1px] flex items-center justify-center gap-3"
+          className="absolute inset-0 bg-black/22 backdrop-blur-[1px] flex items-center justify-center gap-2"
         >
           <motion.button
             whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
             onClick={() => onView(product)}
-            className="p-3 bg-white rounded-full text-stone-700 shadow-md"
+            className="p-2.5 bg-white rounded-full text-stone-700 shadow-md"
             aria-label="Ver producto"
           >
-            <Eye className="w-4 h-4" strokeWidth={1.5} />
+            <Eye className="w-3.5 h-3.5" strokeWidth={1.5} />
           </motion.button>
           <motion.button
             whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
             onClick={() => onToggleSave(product.id, product.name)}
-            className={`p-3 rounded-full shadow-md transition-all ${isSaved ? 'bg-rose-500 text-white' : 'bg-white text-stone-400'}`}
+            className={`p-2.5 rounded-full shadow-md transition-all ${isSaved ? 'bg-rose-500 text-white' : 'bg-white text-stone-400'}`}
             aria-label="Guardar"
           >
-            <Heart className={`w-4 h-4 ${isSaved ? 'fill-current' : ''}`} strokeWidth={1.5} />
+            <Heart className={`w-3.5 h-3.5 ${isSaved ? 'fill-current' : ''}`} strokeWidth={1.5} />
           </motion.button>
         </motion.div>
       </div>
 
       {/* Info */}
-      <div className="flex flex-col flex-1 p-4">
+      <div className="flex flex-col flex-1 p-3.5">
         <p className="text-[9px] tracking-[0.2em] uppercase text-stone-400 mb-1">{product.category}</p>
-        <h3 className="text-[14px] font-medium text-stone-900 leading-snug mb-1">{product.name}</h3>
-        <p className="text-[11px] text-stone-400 leading-snug mb-3 line-clamp-1">{product.shortDesc}</p>
+        <h3 className="text-[13px] font-medium text-stone-900 leading-snug mb-1">{product.name}</h3>
+        <p className="text-[10.5px] text-stone-400 leading-snug mb-2.5 line-clamp-1">{product.shortDesc}</p>
 
-        <div className="flex items-center gap-2 mb-3">
+        <div className="flex items-center gap-2 mb-2.5">
           <Stars rating={product.rating} />
           <span className="text-[9.5px] text-stone-400">{product.rating} ({product.reviews})</span>
         </div>
 
-        <div className="flex items-center justify-between mt-auto pt-3 border-t border-stone-100">
-          <span className="text-[15px] font-semibold text-stone-900">${product.price} <span className="text-[9px] text-stone-400 font-normal">COP</span></span>
+        <div className="flex items-center justify-between mt-auto pt-2.5 border-t border-stone-100">
+          <span className="text-[14px] font-semibold text-stone-900">${product.price} <span className="text-[9px] text-stone-400 font-normal">COP</span></span>
           <motion.button
             whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
             onClick={() => onAddToCart(product)}
-            className="flex items-center gap-1.5 px-3.5 py-2 text-white text-[10px] font-semibold rounded-xl hover:opacity-85 transition-opacity"
+            className="flex items-center gap-1 px-3 py-1.5 text-white text-[9.5px] font-semibold rounded-xl hover:opacity-85 transition-opacity"
             style={{ backgroundColor: OLIVE }}
           >
             <ShoppingBag className="w-3 h-3" strokeWidth={1.5} />
@@ -565,11 +565,11 @@ function ProductCardSkeleton({ index }: { index: number }) {
       className="bg-white rounded-2xl border border-stone-100 overflow-hidden"
     >
       <div className="aspect-[3/4] bg-stone-100 animate-pulse" />
-      <div className="p-4 space-y-3">
+      <div className="p-3.5 space-y-3">
         <div className="h-3 w-24 bg-stone-100 rounded animate-pulse" />
         <div className="h-4 w-3/4 bg-stone-100 rounded animate-pulse" />
         <div className="h-3 w-full bg-stone-100 rounded animate-pulse" />
-        <div className="h-9 w-full bg-stone-100 rounded animate-pulse" />
+        <div className="h-8 w-full bg-stone-100 rounded animate-pulse" />
       </div>
     </motion.div>
   );
@@ -698,7 +698,7 @@ export function PowerProducts() {
         </motion.div>
 
         {/* Grid */}
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-8">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
           {isLoading
             ? Array.from({ length: 3 }, (_, i) => <ProductCardSkeleton key={i} index={i} />)
             : products.map((p, i) => (

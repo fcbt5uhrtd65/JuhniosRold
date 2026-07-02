@@ -66,6 +66,91 @@ class ResolveVacationRequest:
         return vacation
 
 
+class ResolveVacationRequestByRole:
+    """Flujo de dos responsables: Administrador y Recursos Humanos.
+
+    - Un rechazo de cualquiera de los dos resuelve la solicitud como rechazada.
+    - El Administrador tiene poder de aprobación unilateral (override).
+    - RRHH aprobando primero deja la solicitud pendiente por el Administrador.
+    - Solo queda "Aprobada" cuando el Administrador aprueba (con o sin RRHH previo).
+    """
+
+    TERMINAL_STATUSES = {
+        VacationRequest.Status.APPROVED,
+        VacationRequest.Status.REJECTED,
+        VacationRequest.Status.CANCELLED,
+        VacationRequest.Status.FINALIZED,
+    }
+
+    def execute(self, vacation, decision, reviewer, role, comment=""):
+        if vacation.status in self.TERMINAL_STATUSES:
+            raise BusinessRuleViolation("La solicitud ya fue resuelta.")
+        if role not in ("ADMIN", "HR"):
+            raise BusinessRuleViolation("Rol no autorizado para resolver solicitudes.")
+        if decision == VacationRequest.Status.REJECTED and not comment.strip():
+            raise BusinessRuleViolation("Debes indicar el motivo del rechazo.")
+
+        old_status = vacation.status
+        now = timezone.now()
+        update_fields = ["status", "updated_at"]
+
+        if role == "ADMIN":
+            vacation.admin_decision = decision
+            vacation.admin_decided_by = reviewer
+            vacation.admin_decided_at = now
+            vacation.admin_comment = comment
+            update_fields += ["admin_decision", "admin_decided_by", "admin_decided_at", "admin_comment"]
+        else:
+            vacation.hr_decision = decision
+            vacation.hr_decided_by = reviewer
+            vacation.hr_decided_at = now
+            vacation.hr_comment = comment
+            update_fields += ["hr_decision", "hr_decided_by", "hr_decided_at", "hr_comment"]
+
+        if decision == VacationRequest.Status.REJECTED:
+            vacation.status = VacationRequest.Status.REJECTED
+        elif role == "ADMIN":
+            vacation.status = VacationRequest.Status.APPROVED
+        else:  # role == "HR", decision == APPROVED
+            if vacation.admin_decision == VacationRequest.Status.APPROVED:
+                vacation.status = VacationRequest.Status.APPROVED
+            else:
+                vacation.status = VacationRequest.Status.PENDING_ADMIN
+
+        vacation.reviewed_by = reviewer
+        vacation.reviewed_at = now
+        update_fields += ["reviewed_by", "reviewed_at"]
+        vacation.save(update_fields=update_fields)
+
+        step_code = (
+            VacationRequestApprovalStep.Step.FINAL
+            if role == "ADMIN"
+            else VacationRequestApprovalStep.Step.HR
+        )
+        VacationRequestApprovalStep.objects.update_or_create(
+            request=vacation,
+            step=step_code,
+            defaults={
+                "sequence": 4 if step_code == VacationRequestApprovalStep.Step.FINAL else 3,
+                "status": decision,
+                "user": reviewer,
+                "acted_at": now,
+                "comment": comment,
+            },
+        )
+        VacationRequestHistory.objects.create(
+            request=vacation,
+            action=VacationRequestHistory.Action.APPROVED
+            if decision == VacationRequest.Status.APPROVED
+            else VacationRequestHistory.Action.REJECTED,
+            user=reviewer,
+            old_status=old_status,
+            new_status=vacation.status,
+            comment=f"[{role}] {comment}".strip(),
+        )
+        return vacation
+
+
 class GeneratePayroll:
     @transaction.atomic
     def execute(self, *, employee, period_start, period_end, base_salary, bonuses=0, deductions=0):

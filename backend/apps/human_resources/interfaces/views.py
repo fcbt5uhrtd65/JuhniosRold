@@ -1,10 +1,13 @@
 from collections import defaultdict
 
 from django.db.models import Sum
+from django.http import FileResponse
+from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 from django.utils import timezone
 
 from shared.interfaces.viewsets import SoftDeleteModelViewSet
@@ -12,7 +15,9 @@ from shared.interfaces.viewsets import SoftDeleteModelViewSet
 from apps.employees.infrastructure.models import Employee
 from apps.identity.interfaces.permissions import HasComponentAccess
 
-from ..application.use_cases import RegisterCheckIn, RegisterCheckOut, ResolveVacationRequest
+from shared.domain.exceptions import BusinessRuleViolation
+
+from ..application.use_cases import RegisterCheckIn, RegisterCheckOut, ResolveVacationRequestByRole
 from ..infrastructure.models import (
     Attendance,
     EmployeeDocument,
@@ -24,6 +29,7 @@ from ..infrastructure.models import (
     VacationRequestAttachment,
     VacationRequestHistory,
 )
+from ..infrastructure.request_pdf import render_request_pdf
 from ..infrastructure.serializers import (
     AttendanceSerializer,
     EmployeeDocumentSerializer,
@@ -146,23 +152,83 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
 
+    @staticmethod
+    def _resolver_role(user):
+        if getattr(user, "has_full_access", False):
+            return "ADMIN"
+        if getattr(user, "role_code", None) == "RRHH":
+            return "HR"
+        return None
+
+    def _resolve(self, request, decision):
+        role = self._resolver_role(request.user)
+        if role is None:
+            return Response(
+                {"detail": "Solo Administrador o Recursos Humanos pueden resolver solicitudes."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        try:
+            vacation = ResolveVacationRequestByRole().execute(
+                self.get_object(),
+                decision,
+                request.user,
+                role,
+                request.data.get("comment", ""),
+            )
+        except BusinessRuleViolation as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(self.get_serializer(vacation).data)
+
     @action(detail=True, methods=("post",))
     def approve(self, request, pk=None):
-        vacation = ResolveVacationRequest().execute(
-            self.get_object(),
-            VacationRequest.Status.APPROVED,
-            request.user,
-            request.data.get("comment", ""),
+        return self._resolve(request, VacationRequest.Status.APPROVED)
+
+    @action(detail=True, methods=("post",))
+    def reject(self, request, pk=None):
+        return self._resolve(request, VacationRequest.Status.REJECTED)
+
+    @action(detail=True, methods=("post",))
+    def cancel(self, request, pk=None):
+        vacation = self.get_object()
+        if vacation.status in ResolveVacationRequestByRole.TERMINAL_STATUSES:
+            return Response({"detail": "La solicitud ya fue resuelta."}, status=status.HTTP_400_BAD_REQUEST)
+        old_status = vacation.status
+        vacation.status = VacationRequest.Status.CANCELLED
+        vacation.save(update_fields=("status", "updated_at"))
+        VacationRequestHistory.objects.create(
+            request=vacation,
+            action=VacationRequestHistory.Action.UPDATED,
+            user=request.user,
+            old_status=old_status,
+            new_status=vacation.status,
+            comment=request.data.get("comment", "Solicitud cancelada"),
         )
         return Response(self.get_serializer(vacation).data)
 
     @action(detail=True, methods=("post",))
-    def reject(self, request, pk=None):
-        vacation = ResolveVacationRequest().execute(
-            self.get_object(),
-            VacationRequest.Status.REJECTED,
-            request.user,
-            request.data.get("comment", ""),
+    def finalize(self, request, pk=None):
+        role = self._resolver_role(request.user)
+        if role != "ADMIN":
+            return Response(
+                {"detail": "Solo el Administrador puede finalizar una solicitud."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        vacation = self.get_object()
+        if vacation.status != VacationRequest.Status.APPROVED:
+            return Response(
+                {"detail": "Solo una solicitud aprobada puede finalizarse."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        old_status = vacation.status
+        vacation.status = VacationRequest.Status.FINALIZED
+        vacation.save(update_fields=("status", "updated_at"))
+        VacationRequestHistory.objects.create(
+            request=vacation,
+            action=VacationRequestHistory.Action.UPDATED,
+            user=request.user,
+            old_status=old_status,
+            new_status=vacation.status,
+            comment=request.data.get("comment", "Solicitud finalizada"),
         )
         return Response(self.get_serializer(vacation).data)
 
@@ -305,3 +371,23 @@ class HRNotificationViewSet(SoftDeleteModelViewSet):
         notification.status = HRNotification.Status.READ
         notification.save(update_fields=("status", "updated_at"))
         return Response(self.get_serializer(notification).data)
+
+
+class VacationRequestPdfView(APIView):
+    permission_classes = (HasComponentAccess,)
+    required_component = "human_resources.management"
+    required_component_action = "view"
+
+    def get(self, request, pk):
+        queryset = VacationRequest.objects.select_related(
+            "employee", "employee__department", "employee__position", "employee__branch",
+            "admin_decided_by", "hr_decided_by",
+        ).prefetch_related("approval_steps")
+        vacation = get_object_or_404(queryset, pk=pk)
+        pdf_buffer = render_request_pdf(vacation)
+        return FileResponse(
+            pdf_buffer,
+            as_attachment=False,
+            filename=f"{vacation.request_number or vacation.id}.pdf",
+            content_type="application/pdf",
+        )

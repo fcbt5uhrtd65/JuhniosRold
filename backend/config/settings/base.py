@@ -56,6 +56,7 @@ LOCAL_APPS = [
     "apps.identity",
     "apps.geography",
     "apps.customers",
+    "apps.referrals",
     "apps.catalog",
     "apps.inventory",
     "apps.commerce",

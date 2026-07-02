@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence, useInView } from 'motion/react';
 import { Copy, Check, Link, Share2, User } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
+import { getMyReferralCode } from '../services/referrals.service';
 
 const OLIVE = '#2D3A1F';
 
@@ -18,16 +19,27 @@ const GiftSvg = () => (
 export function ReferralProgram() {
   const { currentUser } = useUser();
   const [referralCode, setReferralCode] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const [copied, setCopied] = useState<'code' | 'link' | null>(null);
   const sectionRef = useRef<HTMLElement>(null);
   const inView = useInView(sectionRef, { once: true, margin: '-60px' });
 
   useEffect(() => {
-    const base = currentUser?.nombre?.split(' ')[0].toUpperCase() || 'JR';
-    setReferralCode(`${base}${Math.random().toString(36).substring(2, 6).toUpperCase()}`);
+    let mounted = true;
+    if (!currentUser) {
+      setReferralCode('');
+      return;
+    }
+    setIsLoading(true);
+    getMyReferralCode()
+      .then(res => { if (mounted) setReferralCode(res.code); })
+      .catch(() => { if (mounted) setReferralCode(''); })
+      .finally(() => { if (mounted) setIsLoading(false); });
+    return () => { mounted = false; };
   }, [currentUser]);
 
   const handleCopy = async (type: 'code' | 'link') => {
+    if (!referralCode) return;
     const text = type === 'code'
       ? referralCode
       : `https://juhniosrold.com/?ref=${referralCode}`;
@@ -46,6 +58,7 @@ export function ReferralProgram() {
   };
 
   const handleShare = () => {
+    if (!referralCode) return;
     const msg = `¡Usa mi código ${referralCode} en Juhnios Rold y obtén 15% de descuento en tu primera compra! 🌿 juhniosrold.com/?ref=${referralCode}`;
     if (navigator.share) {
       navigator.share({ title: 'Juhnios Rold — Código de referido', text: msg });
@@ -188,14 +201,15 @@ export function ReferralProgram() {
               {/* Código */}
               <div className="flex items-center justify-between px-5 py-4 rounded-2xl mb-4 border border-stone-100 bg-stone-50">
                 <span
-                  className="text-[26px] tracking-[0.35em] font-light text-stone-800"
+                  className="text-[22px] md:text-[26px] tracking-[0.35em] font-light text-stone-800"
                   style={{ fontFamily: "'Playfair Display', serif" }}
                 >
-                  {referralCode}
+                  {!currentUser ? 'Inicia sesión' : isLoading ? 'Cargando…' : referralCode || '—'}
                 </span>
                 <button
                   onClick={() => handleCopy('code')}
-                  className="flex items-center gap-1.5 text-[11px] text-stone-400 hover:text-stone-700 transition-colors"
+                  disabled={!referralCode}
+                  className="flex items-center gap-1.5 text-[11px] text-stone-400 hover:text-stone-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <AnimatePresence mode="wait">
                     {copied === 'code' ? (
@@ -220,8 +234,9 @@ export function ReferralProgram() {
               {/* Compartir WhatsApp */}
               <motion.button
                 onClick={handleShare}
+                disabled={!referralCode}
                 whileHover={{ opacity: 0.88 }} whileTap={{ scale: 0.97 }}
-                className="w-full flex items-center justify-center gap-2.5 py-4 text-white text-[11px] tracking-[0.24em] uppercase font-semibold rounded-xl mb-3"
+                className="w-full flex items-center justify-center gap-2.5 py-4 text-white text-[11px] tracking-[0.24em] uppercase font-semibold rounded-xl mb-3 disabled:opacity-40 disabled:cursor-not-allowed"
                 style={{ backgroundColor: OLIVE }}
               >
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
@@ -234,8 +249,9 @@ export function ReferralProgram() {
               {/* Copiar enlace */}
               <motion.button
                 onClick={() => handleCopy('link')}
+                disabled={!referralCode}
                 whileHover={{ opacity: 0.88 }} whileTap={{ scale: 0.97 }}
-                className="w-full flex items-center justify-center gap-2 py-3.5 text-stone-600 text-[11px] tracking-[0.2em] uppercase font-medium rounded-xl border border-stone-200 hover:border-stone-400 transition-colors"
+                className="w-full flex items-center justify-center gap-2 py-3.5 text-stone-600 text-[11px] tracking-[0.2em] uppercase font-medium rounded-xl border border-stone-200 hover:border-stone-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <AnimatePresence mode="wait">
                   {copied === 'link' ? (

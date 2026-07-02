@@ -66,6 +66,7 @@ import {
   getHRNotifications,
   getRequestsDashboard,
   getVacationRequests,
+  openVacationRequestPdf,
   rejectVacationRequest,
   type EmployeeDocument,
   type EmployeeDocumentStatus,
@@ -349,6 +350,10 @@ function statusBadge(status: EmployeeStatus | EmployeeProfileStatus | EmployeeDo
     INCOMPLETE: 'yellow',
     PENDING: 'yellow',
     IN_REVIEW: 'purple',
+    PENDING_HR: 'purple',
+    PENDING_ADMIN: 'yellow',
+    CANCELLED: 'gray',
+    FINALIZED: 'blue',
     INACTIVE: 'gray',
     NOT_APPLICABLE: 'gray',
     SUSPENDED: 'yellow',
@@ -364,8 +369,12 @@ function requestStatusLabel(status: VacationRequestStatus): string {
   const labels: Record<VacationRequestStatus, string> = {
     PENDING: 'Pendiente',
     IN_REVIEW: 'En revisión',
+    PENDING_HR: 'Pendiente por RRHH',
+    PENDING_ADMIN: 'Pendiente por Administrador',
     APPROVED: 'Aprobada',
     REJECTED: 'Rechazada',
+    CANCELLED: 'Cancelada',
+    FINALIZED: 'Finalizada',
     EXPIRED: 'Vencida',
   };
   return labels[status];
@@ -1117,14 +1126,27 @@ export function AdminHR() {
     }
   };
 
+  const handleVacationPdf = async (request: VacationRequest) => {
+    try {
+      await openVacationRequestPdf(request.id);
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo abrir el documento de la solicitud');
+    }
+  };
+
   const activeEmployees = employees.filter((employee) => employee.status === 'ACTIVE');
   const statusOptions = activeTab === 'vacations'
     ? [
         { value: 'all', label: 'Todos los estados' },
         { value: 'PENDING', label: 'Pendientes' },
         { value: 'IN_REVIEW', label: 'En revisión' },
+        { value: 'PENDING_HR', label: 'Pendiente por RRHH' },
+        { value: 'PENDING_ADMIN', label: 'Pendiente por Administrador' },
         { value: 'APPROVED', label: 'Aprobadas' },
         { value: 'REJECTED', label: 'Rechazadas' },
+        { value: 'CANCELLED', label: 'Canceladas' },
+        { value: 'FINALIZED', label: 'Finalizadas' },
         { value: 'EXPIRED', label: 'Vencidas' },
       ]
     : activeTab === 'branches'
@@ -2013,8 +2035,9 @@ export function AdminHR() {
                               ) : <div className="text-[10px] text-gray-400">Sin soporte</div>}
                               <div className="flex items-center justify-center gap-2">
                                 <button onClick={() => openRequestDetailModal(request)} className="px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors">Ver detalle</button>
-                                <button onClick={() => handleVacationAction(request, 'approve')} disabled={!['PENDING', 'IN_REVIEW'].includes(request.status) || vacationActionId === request.id} className="px-3 py-1.5 border border-emerald-200 rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors disabled:opacity-50">Aprobar</button>
-                                <button onClick={() => handleVacationAction(request, 'reject')} disabled={!['PENDING', 'IN_REVIEW'].includes(request.status) || vacationActionId === request.id} className="px-3 py-1.5 border border-red-200 rounded-lg text-red-700 hover:bg-red-50 transition-colors disabled:opacity-50">Rechazar</button>
+                                <button onClick={() => handleVacationPdf(request)} className="px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors">Ver PDF</button>
+                                <button onClick={() => handleVacationAction(request, 'approve')} disabled={!['PENDING', 'IN_REVIEW', 'PENDING_HR', 'PENDING_ADMIN'].includes(request.status) || vacationActionId === request.id} className="px-3 py-1.5 border border-emerald-200 rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors disabled:opacity-50">Aprobar</button>
+                                <button onClick={() => handleVacationAction(request, 'reject')} disabled={!['PENDING', 'IN_REVIEW', 'PENDING_HR', 'PENDING_ADMIN'].includes(request.status) || vacationActionId === request.id} className="px-3 py-1.5 border border-red-200 rounded-lg text-red-700 hover:bg-red-50 transition-colors disabled:opacity-50">Rechazar</button>
                               </div>
                             </div>
                           </Td>
@@ -2138,6 +2161,33 @@ export function AdminHR() {
               <Card className="p-4"><div className="text-sm font-semibold text-gray-900 mb-2">Motivo</div><p className="text-xs text-gray-500">{viewingRequest.reason || 'Sin motivo'}</p></Card>
               <Card className="p-4"><div className="text-sm font-semibold text-gray-900 mb-2">Descripción</div><p className="text-xs text-gray-500">{viewingRequest.description || 'Sin descripción'}</p></Card>
               <Card className="p-4"><div className="text-sm font-semibold text-gray-900 mb-2">Observaciones</div><p className="text-xs text-gray-500">{viewingRequest.observations || 'Sin observaciones'}</p></Card>
+            </div>
+            <div className="flex justify-end">
+              <button onClick={() => handleVacationPdf(viewingRequest)} className="px-4 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+                Descargar documento (PDF)
+              </button>
+            </div>
+            <div className="grid md:grid-cols-2 gap-4">
+              <Card className="p-4">
+                <div className="text-sm font-semibold text-gray-900 mb-2">Decisión del Administrador</div>
+                {viewingRequest.admin_decision ? (
+                  <div className="text-xs space-y-1">
+                    <Badge label={requestStatusLabel(viewingRequest.admin_decision as VacationRequestStatus)} color={statusBadge(viewingRequest.admin_decision)} />
+                    <div className="text-gray-400 mt-1">{parseDate(viewingRequest.admin_decided_at)}</div>
+                    <div className="text-gray-500">{viewingRequest.admin_comment || 'Sin comentario'}</div>
+                  </div>
+                ) : <div className="text-xs text-gray-400">Aún no se ha resuelto.</div>}
+              </Card>
+              <Card className="p-4">
+                <div className="text-sm font-semibold text-gray-900 mb-2">Decisión de Recursos Humanos</div>
+                {viewingRequest.hr_decision ? (
+                  <div className="text-xs space-y-1">
+                    <Badge label={requestStatusLabel(viewingRequest.hr_decision as VacationRequestStatus)} color={statusBadge(viewingRequest.hr_decision)} />
+                    <div className="text-gray-400 mt-1">{parseDate(viewingRequest.hr_decided_at)}</div>
+                    <div className="text-gray-500">{viewingRequest.hr_comment || 'Sin comentario'}</div>
+                  </div>
+                ) : <div className="text-xs text-gray-400">Aún no se ha resuelto.</div>}
+              </Card>
             </div>
             <Card className="p-4">
               <div className="text-sm font-semibold text-gray-900 mb-3">Flujo de aprobación</div>

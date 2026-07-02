@@ -76,6 +76,14 @@ class VacationRequestSerializer(serializers.ModelSerializer):
             "attachments",
             "approval_steps",
             "history",
+            "admin_decision",
+            "admin_decided_by",
+            "admin_decided_at",
+            "admin_comment",
+            "hr_decision",
+            "hr_decided_by",
+            "hr_decided_at",
+            "hr_comment",
         )
 
     def validate(self, attrs):

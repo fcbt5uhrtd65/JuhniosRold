@@ -2,9 +2,20 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 
 from apps.customers.infrastructure.models import Customer, CustomerAddress
+from apps.referrals.application.use_cases import RedeemReferralCode
+from shared.domain.exceptions import BusinessRuleViolation
 
 from .dtos import RegisterUserDTO
 from ..domain.exceptions import EmailAlreadyRegistered
+
+
+def _redeem_referral_if_present(customer: Customer, referral_code: str) -> None:
+    if not referral_code:
+        return
+    try:
+        RedeemReferralCode().execute(code=referral_code, referred_customer=customer)
+    except BusinessRuleViolation:
+        pass
 
 
 def _create_customer_address(customer: Customer, data: RegisterUserDTO) -> None:
@@ -56,6 +67,7 @@ class RegisterUser:
             company_phone=data.company_phone,
         )
         _create_customer_address(customer, data)
+        _redeem_referral_if_present(customer, data.referral_code)
         return user
 
     @transaction.atomic
@@ -95,4 +107,5 @@ class RegisterUser:
             company_phone=data.company_phone,
         )
         _create_customer_address(customer, data)
+        _redeem_referral_if_present(customer, data.referral_code)
         return user

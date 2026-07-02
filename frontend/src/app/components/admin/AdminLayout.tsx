@@ -19,6 +19,7 @@ import {
   X,
   Shield,
   Puzzle,
+  Gift,
 } from 'lucide-react';
 
 interface AdminLayoutProps {
@@ -38,6 +39,7 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
     { id: 'inventory-production', label: 'Inventario', icon: Boxes, roles: ['ADMIN', 'SELLER'] },
     { id: 'orders', label: 'Pedidos', icon: ShoppingCart, roles: ['ADMIN', 'SELLER', 'DISTRIBUTOR', 'PEDIDOS'] },
     { id: 'customers', label: 'Clientes', icon: Users, roles: ['ADMIN', 'SELLER'] },
+    { id: 'referrals', label: 'Referidos', icon: Gift, roles: ['ADMIN'] },
     { id: 'payments', label: 'Pagos', icon: CreditCard, roles: ['ADMIN', 'SELLER'] },
     { id: 'reports', label: 'Reportes', icon: BarChart3, roles: ['ADMIN', 'SELLER'] },
     { id: 'payroll', label: 'Nómina', icon: Calculator, roles: ['ADMIN', 'RRHH'] },

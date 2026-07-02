@@ -3,7 +3,7 @@
 // Wraps attendance, request, payroll, document and notification APIs.
 // ============================================================
 
-import { api } from './api';
+import { api, API_BASE_URL, getAccessToken } from './api';
 
 const HR_PATH = '/hr';
 const ATTENDANCE_PATH = `${HR_PATH}/attendance/`;
@@ -78,7 +78,16 @@ function buildEmployeeDocumentBody(payload: Partial<EmployeeDocumentPayload>): F
   return formData;
 }
 
-export type HRRequestStatus = 'PENDING' | 'IN_REVIEW' | 'APPROVED' | 'REJECTED' | 'EXPIRED';
+export type HRRequestStatus =
+  | 'PENDING'
+  | 'IN_REVIEW'
+  | 'PENDING_HR'
+  | 'PENDING_ADMIN'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'CANCELLED'
+  | 'FINALIZED'
+  | 'EXPIRED';
 export type VacationRequestStatus = HRRequestStatus;
 export type VacationRequestType = 'PERMISSION' | 'OVERTIME' | 'LEAVE' | 'INCAPACITY' | 'VACATION' | 'OTHER';
 export type HRRequestSubtype =
@@ -196,6 +205,14 @@ export interface VacationRequest {
   status: HRRequestStatus;
   reviewed_by: string | null;
   reviewed_at: string | null;
+  admin_decision: HRRequestStatus | '';
+  admin_decided_by: string | null;
+  admin_decided_at: string | null;
+  admin_comment: string;
+  hr_decision: HRRequestStatus | '';
+  hr_decided_by: string | null;
+  hr_decided_at: string | null;
+  hr_comment: string;
   attachments: VacationRequestAttachment[];
   approval_steps: VacationRequestApprovalStep[];
   history: VacationRequestHistory[];
@@ -516,6 +533,35 @@ export async function rejectVacationRequest(id: string, comment = ''): Promise<V
   const res = await api.post<VacationRequest>(`${REQUESTS_PATH}${id}/reject/`, { comment });
   if (res.data) return res.data;
   throw new Error(res.message);
+}
+
+export async function cancelVacationRequest(id: string, comment = ''): Promise<VacationRequest> {
+  const res = await api.post<VacationRequest>(`${REQUESTS_PATH}${id}/cancel/`, { comment });
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
+export async function finalizeVacationRequest(id: string, comment = ''): Promise<VacationRequest> {
+  const res = await api.post<VacationRequest>(`${REQUESTS_PATH}${id}/finalize/`, { comment });
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
+export async function openVacationRequestPdf(id: string): Promise<void> {
+  const token = getAccessToken();
+  if (!token) {
+    throw new Error('Tu sesión expiró. Inicia sesión de nuevo.');
+  }
+  const response = await fetch(`${API_BASE_URL}${REQUESTS_PATH}${id}/pdf/`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error('No se pudo obtener el documento de la solicitud.');
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank');
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 export async function createVacationRequestAttachment(payload: {

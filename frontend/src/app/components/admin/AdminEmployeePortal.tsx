@@ -60,8 +60,14 @@ function formatTime(value: string | null | undefined): string {
 function getStatusLabel(status: VacationRequestStatus): string {
   const labels: Record<VacationRequestStatus, string> = {
     PENDING: 'Pendiente',
+    IN_REVIEW: 'En revisión',
+    PENDING_HR: 'Pendiente por RRHH',
+    PENDING_ADMIN: 'Pendiente por Administrador',
     APPROVED: 'Aprobada',
     REJECTED: 'Rechazada',
+    CANCELLED: 'Cancelada',
+    FINALIZED: 'Finalizada',
+    EXPIRED: 'Vencida',
   };
   return labels[status];
 }
@@ -69,8 +75,14 @@ function getStatusLabel(status: VacationRequestStatus): string {
 function getStatusColor(status: VacationRequestStatus): BadgeColor {
   const colors: Record<VacationRequestStatus, BadgeColor> = {
     PENDING: 'yellow',
+    IN_REVIEW: 'purple',
+    PENDING_HR: 'purple',
+    PENDING_ADMIN: 'yellow',
     APPROVED: 'green',
     REJECTED: 'red',
+    CANCELLED: 'gray',
+    FINALIZED: 'blue',
+    EXPIRED: 'red',
   };
   return colors[status];
 }

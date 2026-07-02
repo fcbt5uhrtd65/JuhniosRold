@@ -153,6 +153,7 @@ class RegisterSerializer(serializers.Serializer):
     business_type = serializers.CharField(required=False, allow_blank=True, default="")
     is_international_distributor = serializers.BooleanField(required=False, default=False)
     company_phone = serializers.CharField(required=False, allow_blank=True, default="")
+    referral_code = serializers.CharField(required=False, allow_blank=True, default="")
 
     def validate(self, attrs):
         latitude = attrs.get("latitude")
@@ -201,6 +202,7 @@ class RegisterSerializer(serializers.Serializer):
             "business_type": validated_data.get("business_type", ""),
             "is_international_distributor": validated_data.get("is_international_distributor", False),
             "company_phone": validated_data.get("company_phone", ""),
+            "referral_code": validated_data.get("referral_code", ""),
         }
 
         EmailVerificationCode.objects.filter(

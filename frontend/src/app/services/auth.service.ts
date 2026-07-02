@@ -57,6 +57,7 @@ export interface RegisterPayload {
   business_type?: string;
   is_international_distributor?: boolean;
   company_phone?: string;
+  referral_code?: string;
 }
 
 export interface LoginPayload {

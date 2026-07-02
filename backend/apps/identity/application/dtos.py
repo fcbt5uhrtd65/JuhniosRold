@@ -25,3 +25,4 @@ class RegisterUserDTO:
     business_type: str = ""
     is_international_distributor: bool = False
     company_phone: str = ""
+    referral_code: str = ""

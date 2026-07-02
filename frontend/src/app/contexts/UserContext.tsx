@@ -492,11 +492,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
     try {
       const first_name = firstName.trim();
       const last_name = lastName.trim();
+      const referral_code = sessionStorage.getItem('jr_referral_code') || undefined;
       const verification = await startRegistration({
         first_name,
         last_name,
         email: email.trim().toLowerCase(),
         password,
+        referral_code,
         phone: extra?.phone,
         address: extra?.address,
         city: extra?.city,

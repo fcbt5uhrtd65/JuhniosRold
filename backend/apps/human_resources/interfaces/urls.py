@@ -1,3 +1,4 @@
+from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
@@ -7,6 +8,7 @@ from .views import (
     PayrollViewSet,
     PerformanceReviewViewSet,
     VacationRequestAttachmentViewSet,
+    VacationRequestPdfView,
     VacationRequestViewSet,
 )
 
@@ -20,4 +22,7 @@ router.register("performance-reviews", PerformanceReviewViewSet)
 router.register("documents", EmployeeDocumentViewSet)
 router.register("notifications", HRNotificationViewSet)
 
-urlpatterns = router.urls
+urlpatterns = [
+    path("requests/<uuid:pk>/pdf/", VacationRequestPdfView.as_view(), name="vacation-request-pdf"),
+    *router.urls,
+]

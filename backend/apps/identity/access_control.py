@@ -89,6 +89,11 @@ COMPONENT_DEFINITIONS = (
         "description": "Gestión de clientes, contactos y segmentos.",
     },
     {
+        "code": "referrals.management",
+        "name": "Referidos",
+        "description": "Gestión y auditoría del programa de referidos.",
+    },
+    {
         "code": "inventory.management",
         "name": "Inventario",
         "description": "Bodegas, ubicaciones, existencias y movimientos.",

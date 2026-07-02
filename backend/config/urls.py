@@ -15,6 +15,7 @@ urlpatterns = [
     path("health/", health_check, name="health"),
     path("api/v1/auth/", include("apps.identity.interfaces.urls")),
     path("api/v1/customers/", include("apps.customers.interfaces.urls")),
+    path("api/v1/referrals/", include("apps.referrals.interfaces.urls")),
     path("api/v1/catalog/", include("apps.catalog.interfaces.urls")),
     path("api/v1/inventory/", include("apps.inventory.interfaces.urls")),
     path("api/v1/commerce/", include("apps.commerce.interfaces.urls")),

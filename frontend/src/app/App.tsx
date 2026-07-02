@@ -41,6 +41,19 @@ function PublicSite({ onLoginClick }: { onLoginClick: () => void }) {
     };
   }, []);
 
+  useEffect(() => {
+    const scrollToHash = () => {
+      const hash = window.location.hash;
+      if (!hash) return;
+      requestAnimationFrame(() => {
+        document.getElementById(hash.slice(1))?.scrollIntoView({ behavior: 'smooth' });
+      });
+    };
+    scrollToHash();
+    window.addEventListener('app:navigate', scrollToHash);
+    return () => window.removeEventListener('app:navigate', scrollToHash);
+  }, []);
+
   return (
     <div className="min-h-screen bg-background text-foreground antialiased">
       <main>
@@ -207,7 +220,15 @@ function AppContent() {
   );
 }
 
+function useCaptureReferralCode() {
+  useEffect(() => {
+    const ref = new URLSearchParams(window.location.search).get('ref');
+    if (ref) sessionStorage.setItem('jr_referral_code', ref.trim().toUpperCase());
+  }, []);
+}
+
 export default function App() {
+  useCaptureReferralCode();
   return (
     <AdminProvider>
       <UserProvider>

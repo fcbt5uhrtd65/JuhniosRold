@@ -57,8 +57,12 @@ class VacationRequest(BaseModel):
     class Status(models.TextChoices):
         PENDING = "PENDING", "Pendiente"
         IN_REVIEW = "IN_REVIEW", "En revisión"
+        PENDING_HR = "PENDING_HR", "Pendiente por Recursos Humanos"
+        PENDING_ADMIN = "PENDING_ADMIN", "Pendiente por Administrador"
         APPROVED = "APPROVED", "Aprobada"
         REJECTED = "REJECTED", "Rechazada"
+        CANCELLED = "CANCELLED", "Cancelada"
+        FINALIZED = "FINALIZED", "Finalizada"
         EXPIRED = "EXPIRED", "Vencida"
 
     employee = models.ForeignKey("employees.Employee", on_delete=models.CASCADE, related_name="vacations")
@@ -85,6 +89,28 @@ class VacationRequest(BaseModel):
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
     reviewed_at = models.DateTimeField(null=True, blank=True)
+
+    admin_decision = models.CharField(max_length=20, choices=Status.choices, blank=True)
+    admin_decided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="hr_admin_decisions",
+    )
+    admin_decided_at = models.DateTimeField(null=True, blank=True)
+    admin_comment = models.TextField(blank=True)
+
+    hr_decision = models.CharField(max_length=20, choices=Status.choices, blank=True)
+    hr_decided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="hr_rrhh_decisions",
+    )
+    hr_decided_at = models.DateTimeField(null=True, blank=True)
+    hr_comment = models.TextField(blank=True)
 
     def save(self, *args, **kwargs):
         if not self.request_number:

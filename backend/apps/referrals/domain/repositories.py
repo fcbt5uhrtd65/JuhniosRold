@@ -1,0 +1,6 @@
+from typing import Protocol
+
+
+class ReferralCodeRepository(Protocol):
+    def get_by_code(self, code: str): ...
+    def get_or_create_for_customer(self, customer): ...
