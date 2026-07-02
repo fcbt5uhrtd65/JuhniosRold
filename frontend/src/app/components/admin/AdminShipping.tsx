@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Truck, Plus, Trash2, Loader2, Save } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Truck, Plus, Trash2, Loader2, Save, Search, MapPin } from 'lucide-react';
 import {
   getShippingSettings,
   updateShippingSettings,
@@ -13,6 +13,19 @@ import {
 } from '../../services/shipping.service';
 import { PageHeader, Card, Field, inputCls, selectCls, PrimaryButton, SecondaryButton, Table, Th, Td, Badge, LoadingState, type BadgeColor } from './AdminUI';
 import { useToast } from '../../contexts/ToastContext';
+import { InteractiveLocationMap } from '../ui/InteractiveLocationMap';
+import { LocationPicker } from '../ui/LocationPicker';
+import { reverseGeocode, searchAddress } from '../../services/nominatim.service';
+import { geographyService } from '../../services/geography.service';
+import { EMPTY_LOCATION, type LocationValue } from '../../services/geography.types';
+import type { NominatimResult } from '../../services/nominatim.types';
+
+const ORIGIN_SEARCH_DEBOUNCE_MS = 400;
+
+// origin_latitude/origin_longitude are DecimalField(max_digits=9, decimal_places=6) on the backend
+function toDecimalString(value: number | string): string {
+  return Number(value).toFixed(6);
+}
 
 const ZONE_TYPE_LABEL: Record<ShippingZoneType, string> = {
   LOCAL: 'Local',
@@ -46,6 +59,15 @@ export function AdminShipping() {
   const [zoneForm, setZoneForm] = useState(EMPTY_ZONE_FORM);
   const [showZoneForm, setShowZoneForm] = useState(false);
 
+  const [originLoc, setOriginLoc] = useState<LocationValue>(EMPTY_LOCATION);
+  const [originQuery, setOriginQuery] = useState('');
+  const [originSuggestions, setOriginSuggestions] = useState<NominatimResult[]>([]);
+  const [originSearching, setOriginSearching] = useState(false);
+  const [originSuggestionsOpen, setOriginSuggestionsOpen] = useState(false);
+  const [originReverseLoading, setOriginReverseLoading] = useState(false);
+  const originDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const originSearchContainerRef = useRef<HTMLDivElement>(null);
+
   const loadData = () => {
     setIsLoading(true);
     Promise.all([getShippingSettings(), getShippingZones()])
@@ -53,6 +75,9 @@ export function AdminShipping() {
         setSettings(settingsRes);
         setForm(settingsRes);
         setZones(zonesRes);
+        geographyService
+          .resolveLocationByNames({ country: 'Colombia', state: settingsRes.origin_department, city: settingsRes.origin_city })
+          .then(setOriginLoc);
       })
       .catch(() => toast.error('No se pudo cargar la configuración de envíos.'))
       .finally(() => setIsLoading(false));
@@ -64,10 +89,93 @@ export function AdminShipping() {
     setForm((current) => ({ ...current, [key]: value }));
   };
 
+  // Close origin suggestions dropdown on outside click
+  useEffect(() => {
+    function onMouseDown(e: MouseEvent) {
+      if (originSearchContainerRef.current && !originSearchContainerRef.current.contains(e.target as Node)) {
+        setOriginSuggestionsOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', onMouseDown);
+    return () => document.removeEventListener('mousedown', onMouseDown);
+  }, []);
+
+  // Debounced origin address search — scoped strictly to the selected país/departamento above
+  useEffect(() => {
+    if (originDebounceRef.current) clearTimeout(originDebounceRef.current);
+    if (!originQuery.trim()) {
+      setOriginSuggestions([]);
+      return;
+    }
+    originDebounceRef.current = setTimeout(async () => {
+      setOriginSearching(true);
+      const results = await searchAddress(originQuery, {
+        country: originLoc.countryName || 'Colombia',
+        state: originLoc.stateName,
+        strictScope: true,
+      });
+      setOriginSearching(false);
+      setOriginSuggestions(results);
+    }, ORIGIN_SEARCH_DEBOUNCE_MS);
+    return () => {
+      if (originDebounceRef.current) clearTimeout(originDebounceRef.current);
+    };
+  }, [originQuery, originLoc.countryName, originLoc.stateName]);
+
+  const handleSelectOriginSuggestion = async (result: NominatimResult) => {
+    const resolvedLocation = await geographyService.resolveLocationFromGeocode(result);
+    setOriginLoc(resolvedLocation);
+    setForm((current) => ({
+      ...current,
+      origin_address: result.display_name,
+      origin_city: resolvedLocation.cityName || current.origin_city,
+      origin_department: resolvedLocation.stateName || current.origin_department,
+      origin_latitude: toDecimalString(result.lat),
+      origin_longitude: toDecimalString(result.lon),
+    }));
+    setOriginQuery('');
+    setOriginSuggestions([]);
+    setOriginSuggestionsOpen(false);
+  };
+
+  const handleOriginMarkerMove = (lat: number, lng: number) => {
+    setForm((current) => ({ ...current, origin_latitude: toDecimalString(lat), origin_longitude: toDecimalString(lng) }));
+    setOriginReverseLoading(true);
+    reverseGeocode(lat, lng).then(async (result) => {
+      if (!result) {
+        setOriginReverseLoading(false);
+        return;
+      }
+      const resolvedLocation = await geographyService.resolveLocationFromGeocode(result);
+      setOriginReverseLoading(false);
+      setOriginLoc(resolvedLocation);
+      setForm((current) => ({
+        ...current,
+        origin_address: result.display_name,
+        origin_city: resolvedLocation.cityName || current.origin_city,
+        origin_department: resolvedLocation.stateName || current.origin_department,
+      }));
+    });
+  };
+
+  const handleOriginLocationChange = (loc: LocationValue) => {
+    setOriginLoc(loc);
+    setForm((current) => ({
+      ...current,
+      origin_city: loc.cityName || current.origin_city,
+      origin_department: loc.stateName || current.origin_department,
+    }));
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      const updated = await updateShippingSettings(form);
+      const payload: Partial<ShippingSettings> = {
+        ...form,
+        origin_latitude: form.origin_latitude ? toDecimalString(form.origin_latitude) : null,
+        origin_longitude: form.origin_longitude ? toDecimalString(form.origin_longitude) : null,
+      };
+      const updated = await updateShippingSettings(payload);
       setSettings(updated);
       setForm(updated);
       toast.success('Configuración de envíos actualizada.');
@@ -196,13 +304,59 @@ export function AdminShipping() {
 
         <Card className="p-5">
           <h3 className="text-sm font-semibold text-gray-900 mb-4">Origen (bodega)</h3>
+
+          <div className="mb-3">
+            <LocationPicker value={originLoc} onChange={handleOriginLocationChange} />
+          </div>
+
+          <div className="relative mb-3" ref={originSearchContainerRef}>
+            <div className="relative flex items-center rounded-lg border border-gray-200 bg-white">
+              <Search className="absolute left-3 w-4 h-4 text-gray-300" strokeWidth={1.5} />
+              <input
+                type="text"
+                value={originQuery}
+                disabled={!originLoc.stateId}
+                onChange={(e) => { setOriginQuery(e.target.value); setOriginSuggestionsOpen(true); }}
+                onFocus={() => setOriginSuggestionsOpen(true)}
+                placeholder={originLoc.stateId ? `Buscar dirección en ${originLoc.stateName}` : 'Selecciona país y departamento primero'}
+                className="w-full pl-9 pr-8 py-2.5 bg-transparent text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none rounded-lg disabled:cursor-not-allowed"
+              />
+              {originSearching && <Loader2 className="absolute right-3 w-3.5 h-3.5 animate-spin text-gray-300" strokeWidth={1.5} />}
+            </div>
+            {originSuggestionsOpen && originSuggestions.length > 0 && (
+              <div className="absolute z-[1100] left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
+                {originSuggestions.map((result) => (
+                  <button
+                    key={result.place_id}
+                    type="button"
+                    onMouseDown={(e) => { e.preventDefault(); handleSelectOriginSuggestion(result); }}
+                    className="w-full text-left px-3.5 py-2 text-xs text-gray-700 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0"
+                  >
+                    {result.display_name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <InteractiveLocationMap
+            lat={form.origin_latitude ? Number(form.origin_latitude) : null}
+            lng={form.origin_longitude ? Number(form.origin_longitude) : null}
+            onMarkerMove={handleOriginMarkerMove}
+            className="h-56 rounded-lg overflow-hidden border border-gray-200 mb-3"
+          />
+
+          {form.origin_address && (
+            <div className="flex items-start gap-2 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-600 leading-relaxed mb-3">
+              <MapPin className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-[#2a4038]" strokeWidth={1.5} />
+              <span className="flex-1">
+                {form.origin_address}
+                {originReverseLoading && <Loader2 className="inline w-3 h-3 ml-1.5 animate-spin" strokeWidth={1.5} />}
+              </span>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Ciudad de origen">
-              <input className={inputCls} value={form.origin_city ?? ''} onChange={(e) => updateField('origin_city', e.target.value)} />
-            </Field>
-            <Field label="Departamento de origen">
-              <input className={inputCls} value={form.origin_department ?? ''} onChange={(e) => updateField('origin_department', e.target.value)} />
-            </Field>
             <Field label="Dirección de origen">
               <input className={inputCls} value={form.origin_address ?? ''} onChange={(e) => updateField('origin_address', e.target.value)} />
             </Field>

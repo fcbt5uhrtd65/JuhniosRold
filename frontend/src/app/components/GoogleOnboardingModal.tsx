@@ -318,6 +318,7 @@ export function GoogleOnboardingModal({ isOpen, initialFirstName = '', initialLa
                       searchScope={{ state: regLoc.stateName, country: regLoc.countryName }}
                       cityOptions={cityNames}
                       onCityResolved={cn => setRegLoc(p => ({ ...p, cityId: null, cityName: cn }))}
+                      onLocationResolved={setRegLoc}
                     />
                   </div>
                   <div className="flex gap-2">

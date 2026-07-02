@@ -73,15 +73,25 @@ const STORAGE_KEYS = {
   CUSTOMERS: 'admin_customers',
 };
 
+function isQuotaExceededError(error: unknown): boolean {
+  return (
+    error instanceof DOMException &&
+    (error.name === 'QuotaExceededError' || error.name === 'NS_ERROR_DOM_QUOTA_REACHED' || error.code === 22)
+  );
+}
+
 // El cache en localStorage es solo un respaldo para modo offline: si falla
-// (p.ej. QuotaExceededError), no debe interrumpir el uso de los datos ya
-// obtenidos de la API. Si se llena la cuota, se libera espacio limpiando el
-// propio cache del admin antes de reintentar una vez.
+// (p.ej. QuotaExceededError, que algunos perfiles de navegador disparan con
+// cuotas muy reducidas incluso con pocos KB en uso), no debe interrumpir el
+// uso de los datos ya obtenidos de la API. Si se llena la cuota, se libera
+// espacio limpiando el propio cache del admin antes de reintentar una vez.
 function safeSetItem(key: string, value: string) {
   try {
     localStorage.setItem(key, value);
   } catch (error) {
-    console.warn(`No se pudo guardar "${key}" en localStorage:`, error);
+    if (!isQuotaExceededError(error)) {
+      console.warn(`No se pudo guardar "${key}" en localStorage:`, error);
+    }
     try {
       Object.values(STORAGE_KEYS).forEach(storageKey => {
         if (storageKey !== key) localStorage.removeItem(storageKey);

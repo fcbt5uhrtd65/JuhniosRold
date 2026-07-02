@@ -14,6 +14,7 @@ import {
   getProducts,
   type Product as CatalogProduct,
 } from '../services/products.service';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 
 const OLIVE = '#2D3A1F';
 const FALLBACK_PRODUCT_IMAGE = 'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?w=900&q=85';
@@ -201,10 +202,7 @@ function ProductPage({
     scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
   }, [product.id]);
 
-  useEffect(() => {
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = ''; };
-  }, []);
+  useBodyScrollLock(true);
 
   return (
     <motion.div

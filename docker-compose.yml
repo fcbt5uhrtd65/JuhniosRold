@@ -49,10 +49,10 @@ services:
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5174,http://localhost}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5174}
       BACKEND_URL: ${BACKEND_URL:-http://localhost:8001}
-      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-no-reply@juhniosrold.com}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-no-reply@juhniosrold.cloud}
       EMAIL_PROVIDER: ${EMAIL_PROVIDER:-django}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
-      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-Juhnios Rold <onboarding@resend.dev>}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-Juhnios Rold <no-reply@juhniosrold.cloud>}
       LOCATIONIQ_API_KEY: ${LOCATIONIQ_API_KEY:-}
       GOOGLE_OAUTH2_CLIENT_ID: ${GOOGLE_OAUTH2_CLIENT_ID:-}
       DB_HOST: db
@@ -156,10 +156,10 @@ services:
       DJANGO_SETTINGS_MODULE: config.settings.development
       DJANGO_SECRET_KEY: development-only-change-me
       DJANGO_DEBUG: ${DJANGO_DEBUG:-true}
-      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-no-reply@juhniosrold.com}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-no-reply@juhniosrold.cloud}
       EMAIL_PROVIDER: ${EMAIL_PROVIDER:-django}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
-      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-Juhnios Rold <no-reply@juhniosrold.com>}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-Juhnios Rold <no-reply@juhniosrold.cloud>}
       DB_HOST: db
       DB_PORT: "5432"
       DB_USER: postgres

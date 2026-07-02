@@ -12,6 +12,7 @@ import { useUser } from '../contexts/UserContext';
 import { useNotifications } from '../contexts/NotificationsContext';
 import type { NotificationType } from '../services/notifications.service';
 import { navigateTo } from '../services/navigate';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 
 interface NavbarProps {
   onLoginClick?: () => void;
@@ -116,10 +117,7 @@ export function Navbar({ onLoginClick }: NavbarProps = {}) {
     return () => window.removeEventListener('scroll', fn);
   }, []);
 
-  useEffect(() => {
-    document.body.style.overflow = menuOpen ? 'hidden' : '';
-    return () => { document.body.style.overflow = ''; };
-  }, [menuOpen]);
+  useBodyScrollLock(menuOpen);
 
   const handleCloseModal = () => {
     setShowModal(false);

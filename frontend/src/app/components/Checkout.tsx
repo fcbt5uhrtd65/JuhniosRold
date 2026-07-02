@@ -31,6 +31,7 @@ import {
 } from '../services/payments.service';
 import { getShippingQuote, type ShippingQuoteResponse } from '../services/shipping.service';
 import { usePaymentStatusPolling } from '../hooks/usePaymentStatusPolling';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { LocationPicker } from './ui/LocationPicker';
 import { DeliveryLocationSection } from './ui/DeliveryLocationSection';
 import { geographyService, type City } from '../services/geography.service';
@@ -109,14 +110,7 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
     lng: currentUser?.longitud ?? null,
   };
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [isOpen]);
+  useBodyScrollLock(isOpen);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -430,7 +424,7 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-5 md:p-8 md:space-y-6">
+            <div className="min-h-0 flex-1 overflow-y-auto p-4 space-y-5 md:p-8 md:space-y-6">
               {wompiOrderId ? (
                 <div className="space-y-6 text-center py-6">
                   {wompiState === 'approved' ? (
@@ -675,6 +669,10 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
                               onCityResolved={(cityName) =>
                                 setShippingLocation((prev) => ({ ...prev, cityId: null, cityName }))
                               }
+                              onLocationResolved={(loc) => {
+                                setShippingLocation(loc);
+                                setFormErrors((current) => ({ ...current, country: undefined, state: undefined, city: undefined }));
+                              }}
                             />
                             {formErrors.address && <p className="text-xs text-red-600">{formErrors.address}</p>}
                           </div>
@@ -692,7 +690,7 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
             </div>
 
             {!mockPayment && !wompiOrderId && (
-              <div className="border-t border-stone-200 bg-white px-4 py-4 sm:rounded-b-[32px] md:px-8">
+              <div className="max-h-[45vh] overflow-y-auto border-t border-stone-200 bg-white px-4 py-4 sm:rounded-b-[32px] md:px-8">
                 {error && (
                   <div className="mx-auto mb-3 max-w-3xl rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                     {error}
