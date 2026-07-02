@@ -27,7 +27,8 @@ import {
 } from 'lucide-react';
 
 import { SearchBar } from './SearchBar';
-import { Badge, type BadgeColor, Card, Table, Th, Td, Modal, EmptyState, LoadingState, inputCls, selectCls } from './AdminUI';
+import { Pagination } from './Pagination';
+import { Badge, type BadgeColor, Card, Table, Th, Td, Modal, EmptyState, LoadingState, inputCls, selectCls, TabBar } from './AdminUI';
 import { useToast } from '../../contexts/ToastContext';
 import { ApiError } from '../../services/api';
 import { getRoleLabel } from '../../utils/permissions';
@@ -81,6 +82,8 @@ import { LocationPicker } from '../ui/LocationPicker';
 import { EMPTY_LOCATION, type LocationValue } from '../../services/geography.types';
 
 type HRTab = 'employees' | 'branches' | 'catalog' | 'vacations';
+
+const EMPLOYEES_PAGE_SIZE = 10;
 type EmployeeModalTab =
   | 'personal'
   | 'labor'
@@ -697,6 +700,7 @@ export function AdminHR() {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [branchSort, setBranchSort] = useState<'name' | 'code' | 'city' | 'status'>('name');
   const [branchPage, setBranchPage] = useState(1);
+  const [employeePage, setEmployeePage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [savingEmployee, setSavingEmployee] = useState(false);
   const [savingDocument, setSavingDocument] = useState(false);
@@ -779,6 +783,10 @@ export function AdminHR() {
     void loadData();
   }, [loadData]);
 
+  useEffect(() => {
+    setBranchPage(1);
+  }, [searchQuery, filterStatus]);
+
   const departmentById = useMemo(() => new Map(departments.map((department) => [department.id, department])), [departments]);
   const positionById = useMemo(() => new Map(positions.map((position) => [position.id, position])), [positions]);
   const branchById = useMemo(() => new Map(branches.map((branch) => [branch.id, branch])), [branches]);
@@ -809,6 +817,17 @@ export function AdminHR() {
       return matchesSearch && matchesDepartment && matchesStatus;
     });
   }, [branchById, departmentById, employees, filterDepartment, filterStatus, positionById, searchQuery]);
+
+  const employeeTotalPages = Math.max(1, Math.ceil(filteredEmployees.length / EMPLOYEES_PAGE_SIZE));
+
+  const paginatedEmployees = useMemo(() => {
+    const start = (employeePage - 1) * EMPLOYEES_PAGE_SIZE;
+    return filteredEmployees.slice(start, start + EMPLOYEES_PAGE_SIZE);
+  }, [employeePage, filteredEmployees]);
+
+  useEffect(() => {
+    setEmployeePage(1);
+  }, [searchQuery, filterDepartment, filterStatus]);
 
   const filteredBranches = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
@@ -1734,25 +1753,19 @@ export function AdminHR() {
       </div>
 
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-        <div className="flex gap-1 bg-gray-100 rounded-xl p-1 overflow-x-auto">
-          {[
-            { id: 'employees', label: 'Empleados' },
-            { id: 'branches', label: 'Sedes' },
-            { id: 'catalog', label: 'Catálogos' },
-            { id: 'vacations', label: 'Solicitudes' },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => {
-                setActiveTab(tab.id as HRTab);
-                setFilterStatus('all');
-              }}
-              className={`px-3 py-2 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${activeTab === tab.id ? 'bg-white text-[#2a4038] shadow-sm font-semibold' : 'text-gray-500 hover:text-gray-700'}`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        <TabBar
+          value={activeTab}
+          onChange={(id) => {
+            setActiveTab(id);
+            setFilterStatus('all');
+          }}
+          tabs={[
+            { id: 'employees', label: 'Empleados', icon: Users },
+            { id: 'branches', label: 'Sedes', icon: Building2 },
+            { id: 'catalog', label: 'Catálogos', icon: Briefcase },
+            { id: 'vacations', label: 'Solicitudes', icon: CalendarClock },
+          ]}
+        />
 
         <div className="flex flex-col sm:flex-row gap-3">
           <SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Buscar por nombre, código, documento, sede..." className="flex-1 min-w-[280px]" />
@@ -1772,7 +1785,7 @@ export function AdminHR() {
         <LoadingState label="Cargando información de RRHH..." />
       ) : (
         <>
-          {activeTab === 'employees' && (
+          {activeTab === 'employees' && filteredEmployees.length > 0 && (
             <Table>
                   <thead>
                     <tr>
@@ -1785,7 +1798,7 @@ export function AdminHR() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredEmployees.map((employee) => {
+                    {paginatedEmployees.map((employee) => {
                       const department = employee.department ? departmentById.get(employee.department) : null;
                       const position = employee.position ? positionById.get(employee.position) : null;
                       const branch = employee.branch ? branchById.get(employee.branch) : null;
@@ -1840,8 +1853,19 @@ export function AdminHR() {
                   </tbody>
             </Table>
           )}
+          {activeTab === 'employees' && filteredEmployees.length > 0 && (
+            <div className="mt-4">
+              <Pagination
+                currentPage={employeePage}
+                totalPages={employeeTotalPages}
+                totalItems={filteredEmployees.length}
+                itemsPerPage={EMPLOYEES_PAGE_SIZE}
+                onPageChange={setEmployeePage}
+              />
+            </div>
+          )}
           {activeTab === 'employees' && filteredEmployees.length === 0 && (
-            <EmptyState title="No se encontraron empleados" />
+            <EmptyState title="No se encontraron empleados" description="Ajusta tu búsqueda o filtros, o crea el primer empleado." />
           )}
 
           {activeTab === 'branches' && (
@@ -1907,14 +1931,16 @@ export function AdminHR() {
                   </tbody>
             </Table>
               {sortedBranches.length > 0 && (
-                <div className="flex items-center justify-between text-xs text-gray-500 px-1">
-                  <button onClick={() => setBranchPage((page) => Math.max(1, page - 1))} disabled={branchPage === 1} className="px-3 py-2 border border-gray-200 rounded-lg disabled:opacity-50 hover:bg-gray-50">Anterior</button>
-                  <span>Página {branchPage} de {branchTotalPages}</span>
-                  <button onClick={() => setBranchPage((page) => Math.min(branchTotalPages, page + 1))} disabled={branchPage === branchTotalPages} className="px-3 py-2 border border-gray-200 rounded-lg disabled:opacity-50 hover:bg-gray-50">Siguiente</button>
-                </div>
+                <Pagination
+                  currentPage={branchPage}
+                  totalPages={branchTotalPages}
+                  totalItems={sortedBranches.length}
+                  itemsPerPage={10}
+                  onPageChange={setBranchPage}
+                />
               )}
               {sortedBranches.length === 0 && (
-                <EmptyState title="No se encontraron sedes" />
+                <EmptyState title="No se encontraron sedes" description="Ajusta tu búsqueda o crea la primera sede." />
               )}
             </div>
           )}

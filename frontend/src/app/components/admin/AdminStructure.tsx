@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Building2, Briefcase, Edit2, Plus, Trash2, Users } from 'lucide-react';
+import { Building2, Briefcase, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import {
   createDepartment,
@@ -7,15 +7,17 @@ import {
   deleteDepartment,
   deletePosition,
   getDepartments,
-  getEmployees,
   getPositions,
   updateDepartment,
   updatePosition,
   type Department,
-  type Employee,
   type Position,
 } from '../../services/employees.service';
-import { Card, LoadingState, EmptyState, inputCls, selectCls } from './AdminUI';
+import { Table, Th, Td, Modal, Field, EmptyState, LoadingState, inputCls, selectCls, PrimaryButton, SecondaryButton, Badge, TabBar } from './AdminUI';
+import { Pagination } from './Pagination';
+import { SearchBar } from './SearchBar';
+
+const PAGE_SIZE = 10;
 
 interface DepartmentFormState {
   name: string;
@@ -30,84 +32,107 @@ interface PositionFormState {
   is_active: boolean;
 }
 
-const EMPTY_DEPARTMENT_FORM: DepartmentFormState = {
-  name: '',
-  description: '',
-  is_active: true,
-};
+const EMPTY_DEPARTMENT_FORM: DepartmentFormState = { name: '', description: '', is_active: true };
+const EMPTY_POSITION_FORM: PositionFormState = { department: '', name: '', description: '', is_active: true };
 
-const EMPTY_POSITION_FORM: PositionFormState = {
-  department: '',
-  name: '',
-  description: '',
-  is_active: true,
-};
+type CatalogTab = 'departments' | 'positions';
 
 export function AdminStructure() {
   const toast = useToast();
-  const [isLoading, setIsLoading] = useState(true);
+  const [tab, setTab] = useState<CatalogTab>('departments');
+
+  // ---- Departments state ----
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [departmentsTotal, setDepartmentsTotal] = useState(0);
+  const [departmentsPage, setDepartmentsPage] = useState(1);
+  const [departmentsSearch, setDepartmentsSearch] = useState('');
+  const [isLoadingDepartments, setIsLoadingDepartments] = useState(true);
+
+  // ---- Positions state ----
   const [positions, setPositions] = useState<Position[]>([]);
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [departmentForm, setDepartmentForm] = useState<DepartmentFormState>(EMPTY_DEPARTMENT_FORM);
-  const [positionForm, setPositionForm] = useState<PositionFormState>(EMPTY_POSITION_FORM);
+  const [positionsTotal, setPositionsTotal] = useState(0);
+  const [positionsPage, setPositionsPage] = useState(1);
+  const [positionsSearch, setPositionsSearch] = useState('');
+  const [isLoadingPositions, setIsLoadingPositions] = useState(true);
+
+  // Solo para armar el select "Departamento" del formulario de cargo y para
+  // mostrar el nombre del departamento en la tabla de cargos.
+  const [allDepartments, setAllDepartments] = useState<Department[]>([]);
+
+  // ---- Modal state (compartido crear/editar) ----
+  const [departmentModalOpen, setDepartmentModalOpen] = useState(false);
+  const [positionModalOpen, setPositionModalOpen] = useState(false);
   const [editingDepartment, setEditingDepartment] = useState<Department | null>(null);
   const [editingPosition, setEditingPosition] = useState<Position | null>(null);
+  const [departmentForm, setDepartmentForm] = useState<DepartmentFormState>(EMPTY_DEPARTMENT_FORM);
+  const [positionForm, setPositionForm] = useState<PositionFormState>(EMPTY_POSITION_FORM);
   const [savingDepartment, setSavingDepartment] = useState(false);
   const [savingPosition, setSavingPosition] = useState(false);
 
-  const loadData = useCallback(async () => {
-    setIsLoading(true);
+  const loadDepartments = useCallback(async () => {
+    setIsLoadingDepartments(true);
     try {
-      const [departmentsRes, positionsRes, employeesRes] = await Promise.allSettled([
-        getDepartments({ limit: 200 }),
-        getPositions({ limit: 200 }),
-        getEmployees({ limit: 200 }),
-      ]);
-
-      if (departmentsRes.status === 'fulfilled') setDepartments(departmentsRes.value.data);
-      if (positionsRes.status === 'fulfilled') setPositions(positionsRes.value.data);
-      if (employeesRes.status === 'fulfilled') setEmployees(employeesRes.value.data);
+      const res = await getDepartments({ page: departmentsPage, limit: PAGE_SIZE, search: departmentsSearch });
+      setDepartments(res.data);
+      setDepartmentsTotal(res.total);
     } catch (error) {
       console.error(error);
-      toast.error('No se pudo cargar el catálogo organizacional');
+      toast.error('No se pudieron cargar los departamentos');
     } finally {
-      setIsLoading(false);
+      setIsLoadingDepartments(false);
     }
-  }, [toast]);
+  }, [departmentsPage, departmentsSearch, toast]);
 
-  useEffect(() => {
-    void loadData();
-  }, [loadData]);
+  const loadPositions = useCallback(async () => {
+    setIsLoadingPositions(true);
+    try {
+      const res = await getPositions({ page: positionsPage, limit: PAGE_SIZE, search: positionsSearch });
+      setPositions(res.data);
+      setPositionsTotal(res.total);
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudieron cargar los cargos');
+    } finally {
+      setIsLoadingPositions(false);
+    }
+  }, [positionsPage, positionsSearch, toast]);
 
-  const employeesByDepartment = useMemo(() => {
-    const counts = new Map<string, number>();
-    employees.forEach((employee) => {
-      counts.set(employee.department, (counts.get(employee.department) ?? 0) + 1);
-    });
-    return counts;
-  }, [employees]);
+  const loadAllDepartments = useCallback(async () => {
+    try {
+      const res = await getDepartments({ limit: 200 });
+      setAllDepartments(res.data);
+    } catch (error) {
+      console.error(error);
+    }
+  }, []);
 
-  const employeesByPosition = useMemo(() => {
-    const counts = new Map<string, number>();
-    employees.forEach((employee) => {
-      counts.set(employee.position, (counts.get(employee.position) ?? 0) + 1);
-    });
-    return counts;
-  }, [employees]);
+  useEffect(() => { void loadDepartments(); }, [loadDepartments]);
+  useEffect(() => { void loadPositions(); }, [loadPositions]);
+  useEffect(() => { void loadAllDepartments(); }, [loadAllDepartments]);
 
-  const departmentNames = useMemo(() => {
-    return new Map(departments.map(department => [department.id, department.name]));
-  }, [departments]);
+  // Reset de página al cambiar de búsqueda
+  useEffect(() => { setDepartmentsPage(1); }, [departmentsSearch]);
+  useEffect(() => { setPositionsPage(1); }, [positionsSearch]);
 
-  const resetDepartmentForm = () => {
+  const departmentNames = useMemo(
+    () => new Map(allDepartments.map((department) => [department.id, department.name])),
+    [allDepartments],
+  );
+
+  const departmentsTotalPages = Math.max(1, Math.ceil(departmentsTotal / PAGE_SIZE));
+  const positionsTotalPages = Math.max(1, Math.ceil(positionsTotal / PAGE_SIZE));
+
+  // ---- Department CRUD ----
+  const openCreateDepartment = () => {
     setEditingDepartment(null);
     setDepartmentForm(EMPTY_DEPARTMENT_FORM);
+    setDepartmentModalOpen(true);
   };
 
-  const resetPositionForm = () => {
-    setEditingPosition(null);
-    setPositionForm(EMPTY_POSITION_FORM);
+  const openEditDepartment = (department: Department) => {
+    setEditingDepartment(department);
+    setDepartmentForm({ name: department.name, description: department.description, is_active: department.is_active });
+    setDepartmentModalOpen(true);
   };
 
   const handleDepartmentSubmit = async (event: React.FormEvent) => {
@@ -121,14 +146,44 @@ export function AdminStructure() {
         await createDepartment(departmentForm);
         toast.success('Departamento creado');
       }
-      await loadData();
-      resetDepartmentForm();
+      setDepartmentModalOpen(false);
+      await Promise.all([loadDepartments(), loadAllDepartments()]);
     } catch (error) {
       console.error(error);
       toast.error('No se pudo guardar el departamento');
     } finally {
       setSavingDepartment(false);
     }
+  };
+
+  const handleDeleteDepartment = async (department: Department) => {
+    if (!window.confirm(`¿Eliminar el departamento "${department.name}"?`)) return;
+    try {
+      await deleteDepartment(department.id);
+      toast.info('Departamento eliminado');
+      await Promise.all([loadDepartments(), loadAllDepartments()]);
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo eliminar el departamento');
+    }
+  };
+
+  // ---- Position CRUD ----
+  const openCreatePosition = () => {
+    setEditingPosition(null);
+    setPositionForm(EMPTY_POSITION_FORM);
+    setPositionModalOpen(true);
+  };
+
+  const openEditPosition = (position: Position) => {
+    setEditingPosition(position);
+    setPositionForm({
+      department: position.department,
+      name: position.name,
+      description: position.description,
+      is_active: position.is_active,
+    });
+    setPositionModalOpen(true);
   };
 
   const handlePositionSubmit = async (event: React.FormEvent) => {
@@ -142,8 +197,8 @@ export function AdminStructure() {
         await createPosition(positionForm);
         toast.success('Cargo creado');
       }
-      await loadData();
-      resetPositionForm();
+      setPositionModalOpen(false);
+      await loadPositions();
     } catch (error) {
       console.error(error);
       toast.error('No se pudo guardar el cargo');
@@ -152,248 +207,278 @@ export function AdminStructure() {
     }
   };
 
-  const handleDeleteDepartment = async (department: Department) => {
-    if (!window.confirm(`¿Eliminar el departamento ${department.name}?`)) return;
-    try {
-      await deleteDepartment(department.id);
-      toast.info('Departamento eliminado');
-      await loadData();
-    } catch (error) {
-      console.error(error);
-      toast.error('No se pudo eliminar el departamento');
-    }
-  };
-
   const handleDeletePosition = async (position: Position) => {
-    if (!window.confirm(`¿Eliminar el cargo ${position.name}?`)) return;
+    if (!window.confirm(`¿Eliminar el cargo "${position.name}"?`)) return;
     try {
       await deletePosition(position.id);
       toast.info('Cargo eliminado');
-      await loadData();
+      await loadPositions();
     } catch (error) {
       console.error(error);
       toast.error('No se pudo eliminar el cargo');
     }
   };
 
-  if (isLoading) {
-    return <LoadingState label="Cargando catálogo organizacional..." />;
-  }
-
   return (
-    <div className="grid xl:grid-cols-2 gap-6">
-      <div>
-        <Card className="p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <Building2 size={15} className="text-gray-400" />
-            <h3 className="text-sm font-semibold text-gray-900">Departamentos</h3>
+    <div>
+      <TabBar
+        value={tab}
+        onChange={setTab}
+        tabs={[
+          { id: 'departments', label: 'Departamentos', icon: Building2 },
+          { id: 'positions', label: 'Cargos', icon: Briefcase },
+        ]}
+      />
+
+      {tab === 'departments' && (
+        <div>
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div className="w-full sm:w-72">
+              <SearchBar value={departmentsSearch} onChange={setDepartmentsSearch} placeholder="Buscar departamento..." />
+            </div>
+            <button
+              onClick={openCreateDepartment}
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white text-xs font-semibold rounded-xl hover:bg-[#3d5c4e] transition-colors whitespace-nowrap"
+            >
+              <Plus size={14} /> Nuevo departamento
+            </button>
           </div>
 
-          <form onSubmit={handleDepartmentSubmit} className="space-y-3 mb-6">
-            <div className="grid sm:grid-cols-2 gap-3">
-              <input
-                type="text"
-                required
-                value={departmentForm.name}
-                onChange={(event) => setDepartmentForm({ ...departmentForm, name: event.target.value })}
-                placeholder="Nombre del departamento"
-                className={inputCls}
-              />
-              <label className="flex items-center gap-2 px-3 rounded-lg border border-gray-200 text-sm text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={departmentForm.is_active}
-                  onChange={(event) => setDepartmentForm({ ...departmentForm, is_active: event.target.checked })}
-                  className="accent-[#2a4038]"
+          {isLoadingDepartments ? (
+            <LoadingState label="Cargando departamentos..." />
+          ) : departments.length === 0 ? (
+            <EmptyState
+              title="No hay departamentos registrados"
+              description={departmentsSearch ? 'Ajusta tu búsqueda e intenta de nuevo.' : 'Crea el primer departamento para empezar a organizar tu equipo.'}
+            />
+          ) : (
+            <>
+              <Table>
+                <thead>
+                  <tr>
+                    <Th>Departamento</Th>
+                    <Th>Descripción</Th>
+                    <Th>Estado</Th>
+                    <Th></Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {departments.map((department) => (
+                    <tr key={department.id}>
+                      <Td>
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-100 flex items-center justify-center flex-shrink-0">
+                            <Building2 size={14} className="text-gray-400" />
+                          </div>
+                          <span className="font-medium text-gray-900">{department.name}</span>
+                        </div>
+                      </Td>
+                      <Td className="max-w-xs truncate text-gray-500">{department.description || '—'}</Td>
+                      <Td><Badge label={department.is_active ? 'Activo' : 'Inactivo'} color={department.is_active ? 'green' : 'gray'} /></Td>
+                      <Td>
+                        <div className="flex items-center justify-end gap-1">
+                          <button onClick={() => openEditDepartment(department)} className="p-2 rounded-lg hover:bg-amber-50 hover:text-amber-600 text-gray-400 transition-colors" title="Editar">
+                            <Pencil size={14} />
+                          </button>
+                          <button onClick={() => void handleDeleteDepartment(department)} className="p-2 rounded-lg hover:bg-red-50 hover:text-red-500 text-gray-400 transition-colors" title="Eliminar">
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+              <div className="mt-4">
+                <Pagination
+                  currentPage={departmentsPage}
+                  totalPages={departmentsTotalPages}
+                  totalItems={departmentsTotal}
+                  itemsPerPage={PAGE_SIZE}
+                  onPageChange={setDepartmentsPage}
                 />
-                Activo
-              </label>
-            </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
+      {tab === 'positions' && (
+        <div>
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div className="w-full sm:w-72">
+              <SearchBar value={positionsSearch} onChange={setPositionsSearch} placeholder="Buscar cargo..." />
+            </div>
+            <button
+              onClick={openCreatePosition}
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white text-xs font-semibold rounded-xl hover:bg-[#3d5c4e] transition-colors whitespace-nowrap"
+            >
+              <Plus size={14} /> Nuevo cargo
+            </button>
+          </div>
+
+          {isLoadingPositions ? (
+            <LoadingState label="Cargando cargos..." />
+          ) : positions.length === 0 ? (
+            <EmptyState
+              title="No hay cargos registrados"
+              description={positionsSearch ? 'Ajusta tu búsqueda e intenta de nuevo.' : 'Crea el primer cargo para empezar a asignar empleados.'}
+            />
+          ) : (
+            <>
+              <Table>
+                <thead>
+                  <tr>
+                    <Th>Cargo</Th>
+                    <Th>Departamento</Th>
+                    <Th>Estado</Th>
+                    <Th></Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {positions.map((position) => (
+                    <tr key={position.id}>
+                      <Td>
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-100 flex items-center justify-center flex-shrink-0">
+                            <Briefcase size={14} className="text-gray-400" />
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-900">{position.name}</p>
+                            {position.description && <p className="text-xs text-gray-400 truncate max-w-xs">{position.description}</p>}
+                          </div>
+                        </div>
+                      </Td>
+                      <Td className="text-gray-500">{departmentNames.get(position.department) ?? '—'}</Td>
+                      <Td><Badge label={position.is_active ? 'Activo' : 'Inactivo'} color={position.is_active ? 'green' : 'gray'} /></Td>
+                      <Td>
+                        <div className="flex items-center justify-end gap-1">
+                          <button onClick={() => openEditPosition(position)} className="p-2 rounded-lg hover:bg-amber-50 hover:text-amber-600 text-gray-400 transition-colors" title="Editar">
+                            <Pencil size={14} />
+                          </button>
+                          <button onClick={() => void handleDeletePosition(position)} className="p-2 rounded-lg hover:bg-red-50 hover:text-red-500 text-gray-400 transition-colors" title="Eliminar">
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+              <div className="mt-4">
+                <Pagination
+                  currentPage={positionsPage}
+                  totalPages={positionsTotalPages}
+                  totalItems={positionsTotal}
+                  itemsPerPage={PAGE_SIZE}
+                  onPageChange={setPositionsPage}
+                />
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── Modal Departamento ── */}
+      <Modal
+        title={editingDepartment ? 'Editar departamento' : 'Nuevo departamento'}
+        open={departmentModalOpen}
+        onClose={() => setDepartmentModalOpen(false)}
+      >
+        <form onSubmit={handleDepartmentSubmit} className="space-y-4">
+          <Field label="Nombre" required>
+            <input
+              type="text"
+              required
+              value={departmentForm.name}
+              onChange={(event) => setDepartmentForm({ ...departmentForm, name: event.target.value })}
+              placeholder="Ej. Marketing"
+              className={inputCls}
+            />
+          </Field>
+          <Field label="Descripción">
             <textarea
               value={departmentForm.description}
               onChange={(event) => setDepartmentForm({ ...departmentForm, description: event.target.value })}
-              placeholder="Descripción"
+              placeholder="Describe la función del departamento..."
               rows={3}
               className={inputCls + ' resize-none'}
             />
-
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={resetDepartmentForm}
-                className="px-4 py-2.5 border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
-              >
-                Limpiar
-              </button>
-              <button
-                type="submit"
-                disabled={savingDepartment}
-                className="px-4 py-2.5 bg-[#2a4038] text-white rounded-xl text-xs font-semibold hover:bg-[#3d5c4e] transition-colors disabled:opacity-50"
-              >
-                {savingDepartment ? 'Guardando...' : editingDepartment ? 'Actualizar' : 'Crear'}
-              </button>
-            </div>
-          </form>
-
-          <div className="divide-y divide-gray-100">
-            {departments.map((department) => (
-              <div key={department.id} className="py-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="font-medium text-gray-900">{department.name}</p>
-                    <p className="text-xs text-gray-400 mt-1">{department.description || 'Sin descripción'}</p>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mt-2">
-                      {employeesByDepartment.get(department.id) ?? 0} empleados
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => {
-                        setEditingDepartment(department);
-                        setDepartmentForm({
-                          name: department.name,
-                          description: department.description,
-                          is_active: department.is_active,
-                        });
-                      }}
-                      className="p-2 rounded-lg hover:bg-amber-50 hover:text-amber-600 text-gray-400 transition-colors"
-                      title="Editar"
-                    >
-                      <Edit2 size={14} />
-                    </button>
-                    <button
-                      onClick={() => void handleDeleteDepartment(department)}
-                      className="p-2 rounded-lg hover:bg-red-50 hover:text-red-500 text-gray-400 transition-colors"
-                      title="Eliminar"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-            {departments.length === 0 && (
-              <EmptyState title="No hay departamentos registrados." />
-            )}
+          </Field>
+          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={departmentForm.is_active}
+              onChange={(event) => setDepartmentForm({ ...departmentForm, is_active: event.target.checked })}
+              className="accent-[#2a4038]"
+            />
+            Departamento activo
+          </label>
+          <div className="flex gap-3 pt-2">
+            <SecondaryButton onClick={() => setDepartmentModalOpen(false)}>Cancelar</SecondaryButton>
+            <PrimaryButton type="submit" disabled={savingDepartment}>
+              {savingDepartment ? 'Guardando...' : editingDepartment ? 'Actualizar' : 'Crear departamento'}
+            </PrimaryButton>
           </div>
-        </Card>
-      </div>
+        </form>
+      </Modal>
 
-      <div>
-        <Card className="p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <Briefcase size={15} className="text-gray-400" />
-            <h3 className="text-sm font-semibold text-gray-900">Cargos</h3>
-          </div>
-
-          <form onSubmit={handlePositionSubmit} className="space-y-3 mb-6">
-            <div className="grid sm:grid-cols-2 gap-3">
-              <select
-                required
-                value={positionForm.department}
-                onChange={(event) => setPositionForm({ ...positionForm, department: event.target.value })}
-                className={selectCls}
-              >
-                <option value="">Selecciona un departamento</option>
-                {departments.map((department) => (
-                  <option key={department.id} value={department.id}>
-                    {department.name}
-                  </option>
-                ))}
-              </select>
-
-              <label className="flex items-center gap-2 px-3 rounded-lg border border-gray-200 text-sm text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={positionForm.is_active}
-                  onChange={(event) => setPositionForm({ ...positionForm, is_active: event.target.checked })}
-                  className="accent-[#2a4038]"
-                />
-                Activo
-              </label>
-            </div>
-
+      {/* ── Modal Cargo ── */}
+      <Modal
+        title={editingPosition ? 'Editar cargo' : 'Nuevo cargo'}
+        open={positionModalOpen}
+        onClose={() => setPositionModalOpen(false)}
+      >
+        <form onSubmit={handlePositionSubmit} className="space-y-4">
+          <Field label="Departamento" required>
+            <select
+              required
+              value={positionForm.department}
+              onChange={(event) => setPositionForm({ ...positionForm, department: event.target.value })}
+              className={selectCls}
+            >
+              <option value="">Selecciona un departamento</option>
+              {allDepartments.map((department) => (
+                <option key={department.id} value={department.id}>{department.name}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Nombre del cargo" required>
             <input
               type="text"
               required
               value={positionForm.name}
               onChange={(event) => setPositionForm({ ...positionForm, name: event.target.value })}
-              placeholder="Nombre del cargo"
+              placeholder="Ej. Administrador de sistemas"
               className={inputCls}
             />
-
+          </Field>
+          <Field label="Descripción">
             <textarea
               value={positionForm.description}
               onChange={(event) => setPositionForm({ ...positionForm, description: event.target.value })}
-              placeholder="Descripción"
+              placeholder="Describe las responsabilidades y funciones del cargo..."
               rows={3}
               className={inputCls + ' resize-none'}
             />
-
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={resetPositionForm}
-                className="px-4 py-2.5 border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
-              >
-                Limpiar
-              </button>
-              <button
-                type="submit"
-                disabled={savingPosition}
-                className="px-4 py-2.5 bg-[#2a4038] text-white rounded-xl text-xs font-semibold hover:bg-[#3d5c4e] transition-colors disabled:opacity-50"
-              >
-                {savingPosition ? 'Guardando...' : editingPosition ? 'Actualizar' : 'Crear'}
-              </button>
-            </div>
-          </form>
-
-          <div className="divide-y divide-gray-100">
-            {positions.map((position) => (
-              <div key={position.id} className="py-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="font-medium text-gray-900">{position.name}</p>
-                    <p className="text-xs text-gray-400 mt-1">{departmentNames.get(position.department) ?? 'Sin departamento'}</p>
-                    <p className="text-xs text-gray-400 mt-1">{position.description || 'Sin descripción'}</p>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mt-2">
-                      {employeesByPosition.get(position.id) ?? 0} empleados
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => {
-                        setEditingPosition(position);
-                        setPositionForm({
-                          department: position.department,
-                          name: position.name,
-                          description: position.description,
-                          is_active: position.is_active,
-                        });
-                      }}
-                      className="p-2 rounded-lg hover:bg-amber-50 hover:text-amber-600 text-gray-400 transition-colors"
-                      title="Editar"
-                    >
-                      <Edit2 size={14} />
-                    </button>
-                    <button
-                      onClick={() => void handleDeletePosition(position)}
-                      className="p-2 rounded-lg hover:bg-red-50 hover:text-red-500 text-gray-400 transition-colors"
-                      title="Eliminar"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-            {positions.length === 0 && (
-              <EmptyState title="No hay cargos registrados." />
-            )}
+          </Field>
+          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={positionForm.is_active}
+              onChange={(event) => setPositionForm({ ...positionForm, is_active: event.target.checked })}
+              className="accent-[#2a4038]"
+            />
+            Cargo activo
+          </label>
+          <div className="flex gap-3 pt-2">
+            <SecondaryButton onClick={() => setPositionModalOpen(false)}>Cancelar</SecondaryButton>
+            <PrimaryButton type="submit" disabled={savingPosition}>
+              {savingPosition ? 'Guardando...' : editingPosition ? 'Actualizar' : 'Crear cargo'}
+            </PrimaryButton>
           </div>
-        </Card>
-      </div>
+        </form>
+      </Modal>
     </div>
   );
 }
