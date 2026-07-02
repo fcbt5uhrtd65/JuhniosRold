@@ -5,7 +5,7 @@ import {
   Leaf, FlaskConical, Heart, MapPin,
   Search, X, User, Bell, ChevronDown,
   Package, Tag, Info, AlertCircle, CheckCheck,
-  Instagram,
+  Instagram, Settings, LogOut,
 } from 'lucide-react';
 import { ShoppingCart } from './ShoppingCart';
 import { UserDropdown } from './UserDropdown';
@@ -13,6 +13,7 @@ import { useSearch } from '../contexts/SearchContext';
 import { useUser } from '../contexts/UserContext';
 import { useNotifications } from '../contexts/NotificationsContext';
 import type { NotificationType } from '../services/notifications.service';
+import { navigateTo } from '../services/navigate';
 
 const OLIVE = '#2D3A1F';
 
@@ -126,7 +127,7 @@ function timeAgo(dateStr: string): string {
 
 export function Hero({ onLoginClick }: HeroProps = {}) {
   const { searchQuery, setSearchQuery, isSearchOpen, setIsSearchOpen } = useSearch();
-  const { currentUser } = useUser();
+  const { currentUser, logout, orders, savedProducts } = useUser();
   const { notifications, unreadCount, markRead, markAllRead } = useNotifications();
   const [currentSlide, setCurrentSlide] = useState(0);
   const [direction, setDirection]       = useState(1);
@@ -544,20 +545,101 @@ export function Hero({ onLoginClick }: HeroProps = {}) {
                 </div>
               </nav>
               <div className="px-6 py-5 border-t border-stone-100 space-y-3">
-                {!currentUser && (
-                  <button
-                    onClick={() => { setMenuOpen(false); onLoginClick?.(); }}
-                    className="w-full py-3 text-white text-[11px] tracking-[0.18em] uppercase font-medium rounded-xl hover:opacity-90 transition-opacity"
-                    style={{ backgroundColor: OLIVE }}
-                  >
-                    Iniciar sesión
-                  </button>
+                {currentUser ? (
+                  <>
+                    {/* Info del usuario */}
+                    <div className="flex items-center gap-3 px-1 pb-3 border-b border-stone-100">
+                      <div className="w-9 h-9 rounded-full bg-stone-100 border border-stone-200 flex items-center justify-center flex-shrink-0">
+                        <User className="w-4 h-4 text-stone-500" strokeWidth={1.5} />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-[13px] font-medium text-stone-800 truncate">{currentUser.nombre}</div>
+                        <div className="text-[10px] text-stone-400 truncate">{currentUser.email}</div>
+                      </div>
+                    </div>
+
+                    {/* Accesos */}
+                    <div className="space-y-0.5">
+                      <button
+                        onClick={() => { setMenuOpen(false); navigateTo('/perfil?s=pedidos'); }}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-stone-50 transition-colors text-left"
+                      >
+                        <Package className="w-4 h-4 text-stone-400" strokeWidth={1.5} />
+                        <div className="flex-1">
+                          <div className="text-[13px] text-stone-700">Mis Pedidos</div>
+                          {orders.length > 0 && (
+                            <div className="text-[10px] text-stone-400">{orders.length} {orders.length === 1 ? 'pedido' : 'pedidos'}</div>
+                          )}
+                        </div>
+                        {orders.filter(o => o.estado === 'pendiente').length > 0 && (
+                          <span className="min-w-[20px] h-5 px-1 flex items-center justify-center rounded-full bg-stone-800 text-white text-[9px] font-semibold">
+                            {orders.filter(o => o.estado === 'pendiente').length}
+                          </span>
+                        )}
+                      </button>
+
+                      <button
+                        onClick={() => { setMenuOpen(false); navigateTo('/perfil?s=guardados'); }}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-stone-50 transition-colors text-left"
+                      >
+                        <Heart className="w-4 h-4 text-stone-400" strokeWidth={1.5} />
+                        <div className="flex-1">
+                          <div className="text-[13px] text-stone-700">Guardados</div>
+                          {savedProducts.length > 0 && (
+                            <div className="text-[10px] text-stone-400">{savedProducts.length} {savedProducts.length === 1 ? 'producto' : 'productos'}</div>
+                          )}
+                        </div>
+                      </button>
+
+                      <button
+                        onClick={() => { setMenuOpen(false); setShowNotifications(true); }}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-stone-50 transition-colors text-left"
+                      >
+                        <Bell className="w-4 h-4 text-stone-400" strokeWidth={1.5} />
+                        <div className="flex-1">
+                          <div className="text-[13px] text-stone-700">Notificaciones</div>
+                        </div>
+                        {unreadCount > 0 && (
+                          <span className="min-w-[20px] h-5 px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-[9px] font-semibold">
+                            {unreadCount > 9 ? '9+' : unreadCount}
+                          </span>
+                        )}
+                      </button>
+
+                      <button
+                        onClick={() => { setMenuOpen(false); navigateTo('/perfil'); }}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-stone-50 transition-colors text-left"
+                      >
+                        <Settings className="w-4 h-4 text-stone-400" strokeWidth={1.5} />
+                        <div className="text-[13px] text-stone-700">Mi Perfil</div>
+                      </button>
+
+                      <button
+                        onClick={() => { setMenuOpen(false); logout(); }}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-red-50 transition-colors text-left"
+                      >
+                        <LogOut className="w-4 h-4 text-red-400" strokeWidth={1.5} />
+                        <div className="text-[13px] text-red-500">Cerrar Sesión</div>
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => { setMenuOpen(false); onLoginClick?.(); }}
+                      className="w-full py-3 text-white text-[11px] tracking-[0.18em] uppercase font-medium rounded-xl hover:opacity-90 transition-opacity"
+                      style={{ backgroundColor: OLIVE }}
+                    >
+                      Iniciar sesión
+                    </button>
+                    <a href="#catalogo" onClick={() => setMenuOpen(false)}
+                      className="w-full py-3 border border-stone-200 text-stone-700 text-[11px] tracking-[0.18em] uppercase font-medium rounded-xl hover:bg-stone-50 transition-colors flex items-center justify-center"
+                    >
+                      Comprar ahora
+                    </a>
+                  </>
                 )}
-                <a href="#catalogo" onClick={() => setMenuOpen(false)}
-                  className="w-full py-3 border border-stone-200 text-stone-700 text-[11px] tracking-[0.18em] uppercase font-medium rounded-xl hover:bg-stone-50 transition-colors flex items-center justify-center"
-                >
-                  Comprar ahora
-                </a>
+
                 <div className="flex items-center justify-between pt-1">
                   <span className="text-[9px] tracking-[0.25em] uppercase text-stone-400">Síguenos</span>
                   <div className="flex items-center gap-3">
