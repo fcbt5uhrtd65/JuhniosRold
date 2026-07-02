@@ -127,6 +127,8 @@ export interface Branch {
   city: string;
   department: string;
   country: string;
+  latitude: string | null;
+  longitude: string | null;
   phone: string;
   email: string;
   responsible: string | null;
@@ -271,6 +273,8 @@ export interface BranchPayload {
   city?: string;
   department?: string;
   country?: string;
+  latitude?: string | null;
+  longitude?: string | null;
   phone?: string;
   email?: string;
   responsible?: string | null;

@@ -38,6 +38,8 @@ class Branch(BaseModel):
     city = models.CharField(max_length=120, blank=True)
     department = models.CharField(max_length=120, blank=True)
     country = models.CharField(max_length=80, default="Colombia", blank=True)
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     phone = models.CharField(max_length=30, blank=True)
     email = models.EmailField(blank=True)
     responsible = models.ForeignKey(

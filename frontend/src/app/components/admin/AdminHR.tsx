@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   BarChart3,
@@ -14,6 +14,8 @@ import {
   History,
   KeyRound,
   Landmark,
+  Loader2,
+  MapPin,
   Plus,
   Search,
   Save,
@@ -79,7 +81,18 @@ import {
 } from '../../services/human-resources.service';
 import { AdminStructure } from './AdminStructure';
 import { LocationPicker } from '../ui/LocationPicker';
+import { InteractiveLocationMap } from '../ui/InteractiveLocationMap';
+import { geographyService } from '../../services/geography.service';
 import { EMPTY_LOCATION, type LocationValue } from '../../services/geography.types';
+import { reverseGeocode, searchAddress } from '../../services/nominatim.service';
+import type { NominatimResult } from '../../services/nominatim.types';
+
+const BRANCH_SEARCH_DEBOUNCE_MS = 400;
+
+// Branch.latitude/longitude are DecimalField(max_digits=9, decimal_places=6) on the backend
+function toBranchDecimalString(value: number | string): string {
+  return Number(value).toFixed(6);
+}
 
 type HRTab = 'employees' | 'branches' | 'catalog' | 'vacations';
 
@@ -174,6 +187,8 @@ interface BranchFormState {
   city: string;
   department: string;
   country: string;
+  latitude: string | null;
+  longitude: string | null;
   phone: string;
   email: string;
   responsible: string;
@@ -262,6 +277,8 @@ const EMPTY_BRANCH_FORM: BranchFormState = {
   city: '',
   department: '',
   country: 'Colombia',
+  latitude: null,
+  longitude: null,
   phone: '',
   email: '',
   responsible: '',
@@ -748,6 +765,11 @@ export function AdminHR() {
   const [branchForm, setBranchForm] = useState<BranchFormState>(EMPTY_BRANCH_FORM);
   const [employeeLocation, setEmployeeLocation] = useState<LocationValue>(EMPTY_LOCATION);
   const [branchLocation, setBranchLocation] = useState<LocationValue>(EMPTY_LOCATION);
+  const [branchQuery, setBranchQuery] = useState('');
+  const [branchSuggestions, setBranchSuggestions] = useState<NominatimResult[]>([]);
+  const [branchSearching, setBranchSearching] = useState(false);
+  const [branchSuggestionsOpen, setBranchSuggestionsOpen] = useState(false);
+  const [branchReverseLoading, setBranchReverseLoading] = useState(false);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -945,6 +967,78 @@ export function AdminHR() {
     void loadEmployeeExtras(employee.id);
   };
 
+  const branchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const branchSearchContainerRef = useRef<HTMLDivElement>(null);
+
+  // Close branch address suggestions dropdown on outside click
+  useEffect(() => {
+    function onMouseDown(e: MouseEvent) {
+      if (branchSearchContainerRef.current && !branchSearchContainerRef.current.contains(e.target as Node)) {
+        setBranchSuggestionsOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', onMouseDown);
+    return () => document.removeEventListener('mousedown', onMouseDown);
+  }, []);
+
+  // Debounced branch address search — scoped strictly to the selected país/departamento above
+  useEffect(() => {
+    if (branchDebounceRef.current) clearTimeout(branchDebounceRef.current);
+    if (!branchQuery.trim()) {
+      setBranchSuggestions([]);
+      return;
+    }
+    branchDebounceRef.current = setTimeout(async () => {
+      setBranchSearching(true);
+      const results = await searchAddress(branchQuery, {
+        country: branchLocation.countryName || 'Colombia',
+        state: branchLocation.stateName,
+        strictScope: true,
+      });
+      setBranchSearching(false);
+      setBranchSuggestions(results);
+    }, BRANCH_SEARCH_DEBOUNCE_MS);
+    return () => {
+      if (branchDebounceRef.current) clearTimeout(branchDebounceRef.current);
+    };
+  }, [branchQuery, branchLocation.countryName, branchLocation.stateName]);
+
+  const handleSelectBranchSuggestion = async (result: NominatimResult) => {
+    const resolvedLocation = await geographyService.resolveLocationFromGeocode(result);
+    setBranchLocation(resolvedLocation);
+    setBranchForm((current) => ({
+      ...current,
+      address: result.display_name,
+      city: resolvedLocation.cityName || current.city,
+      department: resolvedLocation.stateName || current.department,
+      latitude: toBranchDecimalString(result.lat),
+      longitude: toBranchDecimalString(result.lon),
+    }));
+    setBranchQuery('');
+    setBranchSuggestions([]);
+    setBranchSuggestionsOpen(false);
+  };
+
+  const handleBranchMarkerMove = (lat: number, lng: number) => {
+    setBranchForm((current) => ({ ...current, latitude: toBranchDecimalString(lat), longitude: toBranchDecimalString(lng) }));
+    setBranchReverseLoading(true);
+    reverseGeocode(lat, lng).then(async (result) => {
+      if (!result) {
+        setBranchReverseLoading(false);
+        return;
+      }
+      const resolvedLocation = await geographyService.resolveLocationFromGeocode(result);
+      setBranchReverseLoading(false);
+      setBranchLocation(resolvedLocation);
+      setBranchForm((current) => ({
+        ...current,
+        address: result.display_name,
+        city: resolvedLocation.cityName || current.city,
+        department: resolvedLocation.stateName || current.department,
+      }));
+    });
+  };
+
   const openCreateBranchModal = () => {
     setEditingBranch(null);
     setBranchForm(EMPTY_BRANCH_FORM);
@@ -961,6 +1055,8 @@ export function AdminHR() {
       city: branch.city,
       department: branch.department,
       country: branch.country || 'Colombia',
+      latitude: branch.latitude,
+      longitude: branch.longitude,
       phone: branch.phone,
       email: branch.email,
       responsible: branch.responsible ?? '',
@@ -975,6 +1071,9 @@ export function AdminHR() {
       cityId: null,
       cityName: branch.city ?? '',
     });
+    geographyService
+      .resolveLocationByNames({ country: branch.country || 'Colombia', state: branch.department, city: branch.city })
+      .then(setBranchLocation);
     setShowBranchModal(true);
   };
 
@@ -1001,6 +1100,8 @@ export function AdminHR() {
     setEditingBranch(null);
     setBranchForm(EMPTY_BRANCH_FORM);
     setBranchLocation(EMPTY_LOCATION);
+    setBranchQuery('');
+    setBranchSuggestions([]);
   };
 
   const handleDocumentUpload = async (employeeId: string) => {
@@ -1088,6 +1189,8 @@ export function AdminHR() {
         city: (branchLocation.cityName || branchForm.city).trim(),
         department: (branchLocation.stateName || branchForm.department).trim(),
         country: (branchLocation.countryName || branchForm.country).trim(),
+        latitude: branchForm.latitude ? toBranchDecimalString(branchForm.latitude) : null,
+        longitude: branchForm.longitude ? toBranchDecimalString(branchForm.longitude) : null,
         phone: branchForm.phone.trim(),
         email: branchForm.email.trim().toLowerCase(),
         responsible: cleanNullable(branchForm.responsible),
@@ -2260,10 +2363,63 @@ export function AdminHR() {
         <form onSubmit={handleBranchSubmit} className="space-y-4">
           <div className="grid sm:grid-cols-2 gap-4">
             <TextInput label="Nombre" required value={branchForm.name} onChange={(value) => setBranchForm((current) => ({ ...current, name: value }))} />
-            <TextInput label="Dirección" value={branchForm.address} onChange={(value) => setBranchForm((current) => ({ ...current, address: value }))} />
             <div className="sm:col-span-2">
               <LocationPicker value={branchLocation} onChange={setBranchLocation} />
             </div>
+
+            <div className="sm:col-span-2 relative" ref={branchSearchContainerRef}>
+              <div className="relative flex items-center rounded-lg border border-gray-200 bg-white">
+                <Search className="absolute left-3 w-4 h-4 text-gray-300" strokeWidth={1.5} />
+                <input
+                  type="text"
+                  value={branchQuery}
+                  disabled={!branchLocation.stateId}
+                  onChange={(e) => { setBranchQuery(e.target.value); setBranchSuggestionsOpen(true); }}
+                  onFocus={() => setBranchSuggestionsOpen(true)}
+                  placeholder={branchLocation.stateId ? `Buscar dirección en ${branchLocation.stateName}` : 'Selecciona país y departamento primero'}
+                  className="w-full pl-9 pr-8 py-2.5 bg-transparent text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none rounded-lg disabled:cursor-not-allowed"
+                />
+                {branchSearching && <Loader2 className="absolute right-3 w-3.5 h-3.5 animate-spin text-gray-300" strokeWidth={1.5} />}
+              </div>
+              {branchSuggestionsOpen && branchSuggestions.length > 0 && (
+                <div className="absolute z-[1100] left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
+                  {branchSuggestions.map((result) => (
+                    <button
+                      key={result.place_id}
+                      type="button"
+                      onMouseDown={(e) => { e.preventDefault(); void handleSelectBranchSuggestion(result); }}
+                      className="w-full text-left px-3.5 py-2 text-xs text-gray-700 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0"
+                    >
+                      {result.display_name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="sm:col-span-2">
+              <InteractiveLocationMap
+                lat={branchForm.latitude ? Number(branchForm.latitude) : null}
+                lng={branchForm.longitude ? Number(branchForm.longitude) : null}
+                onMarkerMove={handleBranchMarkerMove}
+                className="h-56 rounded-lg overflow-hidden border border-gray-200"
+              />
+            </div>
+
+            {branchForm.address && (
+              <div className="sm:col-span-2 flex items-start gap-2 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-600 leading-relaxed">
+                <MapPin className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-[#2a4038]" strokeWidth={1.5} />
+                <span className="flex-1">
+                  {branchForm.address}
+                  {branchReverseLoading && <Loader2 className="inline w-3 h-3 ml-1.5 animate-spin" strokeWidth={1.5} />}
+                </span>
+              </div>
+            )}
+
+            <div className="sm:col-span-2">
+              <TextInput label="Dirección" value={branchForm.address} onChange={(value) => setBranchForm((current) => ({ ...current, address: value }))} />
+            </div>
+
             <TextInput label="Teléfono" value={branchForm.phone} onChange={(value) => setBranchForm((current) => ({ ...current, phone: value }))} />
             <TextInput label="Correo" type="email" value={branchForm.email} onChange={(value) => setBranchForm((current) => ({ ...current, email: value }))} />
             <SelectInput label="Responsable" value={branchForm.responsible} onChange={(value) => setBranchForm((current) => ({ ...current, responsible: value }))} options={activeEmployees.map((employee) => ({ value: employee.id, label: getEmployeeName(employee) }))} emptyLabel="Sin responsable" />
