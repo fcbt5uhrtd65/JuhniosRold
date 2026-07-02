@@ -453,9 +453,13 @@ export async function getCategories(forceRefresh = false): Promise<ProductCatego
   return categories;
 }
 
-export async function getProducts(params?: ProductsQueryParams): Promise<PaginatedProducts> {
+async function fetchProducts(
+  params: ProductsQueryParams | undefined,
+  useAuth: boolean,
+): Promise<PaginatedProducts> {
+  const client = useAuth ? api : publicApi;
   const [res, categoryMap] = await Promise.all([
-    publicApi.get<PaginatedResponse<BackendProduct>>(`${PRODUCTS_PATH}${buildProductsQuery(params)}`),
+    client.get<PaginatedResponse<BackendProduct>>(`${PRODUCTS_PATH}${buildProductsQuery(params)}`),
     getCategoryMap(),
   ]);
 
@@ -475,15 +479,19 @@ export async function getProducts(params?: ProductsQueryParams): Promise<Paginat
   };
 }
 
-export async function getAllProducts(): Promise<Product[]> {
-  const firstPage = await getProducts({ page: 1, limit: 100 });
+export async function getProducts(params?: ProductsQueryParams): Promise<PaginatedProducts> {
+  return fetchProducts(params, false);
+}
+
+async function getAllProductsInternal(useAuth: boolean): Promise<Product[]> {
+  const firstPage = await fetchProducts({ page: 1, limit: 100 }, useAuth);
   if (firstPage.totalPages <= 1) {
     return firstPage.data;
   }
 
   const remainingPages = await Promise.all(
     Array.from({ length: firstPage.totalPages - 1 }, (_, index) =>
-      getProducts({ page: index + 2, limit: 100 }),
+      fetchProducts({ page: index + 2, limit: 100 }, useAuth),
     ),
   );
 
@@ -491,6 +499,19 @@ export async function getAllProducts(): Promise<Product[]> {
     ...firstPage.data,
     ...remainingPages.flatMap(page => page.data),
   ];
+}
+
+export async function getAllProducts(): Promise<Product[]> {
+  return getAllProductsInternal(false);
+}
+
+/**
+ * Igual que getAllProducts, pero autenticado — usado por el panel admin para
+ * ver también productos inactivos (el backend solo filtra por is_active
+ * cuando la petición NO viene autenticada).
+ */
+export async function getAllProductsForAdmin(): Promise<Product[]> {
+  return getAllProductsInternal(true);
 }
 
 export async function getFeaturedProducts(limit = 100): Promise<Product[]> {

@@ -1,5 +1,5 @@
 import { api } from './api';
-import { getAllProducts, type ProductVariant } from './products.service';
+import { getAllProductsForAdmin, type ProductVariant } from './products.service';
 
 const BASE = '/inventory';
 
@@ -250,7 +250,7 @@ export async function getInventoryWorkspace(): Promise<InventoryWorkspace> {
     getPage<FormulaRecord>(`${BASE}/formulas/`),
     getPage<ProductionOrderRecord>(`${BASE}/production-orders/`),
     getPage<StockConversionRecord>(`${BASE}/conversions/`),
-    getAllProducts().catch(() => []),
+    getAllProductsForAdmin().catch(() => []),
   ]);
 
   const variants = products.flatMap(product => product.variants);

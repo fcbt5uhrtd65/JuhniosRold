@@ -12,7 +12,7 @@ import {
   logoutUser,
 } from '../services/auth.service';
 import {
-  getAllProducts,
+  getAllProductsForAdmin,
   createProduct as apiCreateProduct,
   updateProduct as apiUpdateProduct,
   deleteProduct as apiDeleteProduct,
@@ -200,7 +200,8 @@ const INITIAL_PAYMENTS: Payment[] = [
 
 // ---- Map API product → admin Product ----
 function mapApiProduct(p: ApiProduct): Product {
-  const primaryVariant = p.variants.find(variant => variant.is_active) ?? p.variants[0];
+  const variants = p.variants ?? [];
+  const primaryVariant = variants.find(variant => variant.is_active) ?? variants[0];
   const attrs = primaryVariant?.attributes ?? {};
   const productType = attrs.type;
   const marca = attrs.brand ?? attrs.marca;
@@ -449,11 +450,12 @@ export function AdminProvider({ children }: { children: ReactNode }) {
 
       if (canViewProducts) {
         try {
-          const apiProducts = await getAllProducts();
+          const apiProducts = await getAllProductsForAdmin();
           const mappedProducts = apiProducts.map(mapApiProduct);
           setProducts(mappedProducts);
           localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(mappedProducts));
-        } catch {
+        } catch (error) {
+          console.error('No se pudieron cargar los productos:', error);
           setProducts([]);
         }
       } else {
@@ -464,7 +466,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         try {
           const [stock, apiProducts] = await Promise.all([
             getInventoryStock(),
-            canViewProducts ? getAllProducts() : Promise.resolve([] as ApiProduct[]),
+            canViewProducts ? getAllProductsForAdmin() : Promise.resolve([] as ApiProduct[]),
           ]);
           const mappedInventory = mapApiInventory(stock, apiProducts);
           setInventory(mappedInventory);
@@ -651,7 +653,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         if (stock) {
           await updateStockMinimum(stock.id, updates.stockMinimo);
         } else {
-          const apiProducts = await getAllProducts();
+          const apiProducts = await getAllProductsForAdmin();
           const apiProduct = apiProducts.find(item => item.id === id);
           const variant = apiProduct?.variants.find(item => item.is_active) ?? apiProduct?.variants[0];
           if (variant) {
