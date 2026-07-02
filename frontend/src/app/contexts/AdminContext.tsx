@@ -73,6 +73,26 @@ const STORAGE_KEYS = {
   CUSTOMERS: 'admin_customers',
 };
 
+// El cache en localStorage es solo un respaldo para modo offline: si falla
+// (p.ej. QuotaExceededError), no debe interrumpir el uso de los datos ya
+// obtenidos de la API. Si se llena la cuota, se libera espacio limpiando el
+// propio cache del admin antes de reintentar una vez.
+function safeSetItem(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch (error) {
+    console.warn(`No se pudo guardar "${key}" en localStorage:`, error);
+    try {
+      Object.values(STORAGE_KEYS).forEach(storageKey => {
+        if (storageKey !== key) localStorage.removeItem(storageKey);
+      });
+      localStorage.setItem(key, value);
+    } catch {
+      // Persiste el fallo silenciosamente: los datos en memoria siguen siendo válidos.
+    }
+  }
+}
+
 const DEMO_ADMIN_PASSWORD = 'Admin123!';
 
 const INTERNAL_ROLES = new Set<User['rol']>([
@@ -424,11 +444,11 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   }, [resetAdminSession]);
 
   // Persist changes
-  useEffect(() => { if (products.length > 0) localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products)); }, [products]);
-  useEffect(() => { if (inventory.length > 0) localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(inventory)); }, [inventory]);
-  useEffect(() => { if (orders.length > 0) localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders)); }, [orders]);
-  useEffect(() => { if (payments.length > 0) localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(payments)); }, [payments]);
-  useEffect(() => { if (customers.length > 0) localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers)); }, [customers]);
+  useEffect(() => { if (products.length > 0) safeSetItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products)); }, [products]);
+  useEffect(() => { if (inventory.length > 0) safeSetItem(STORAGE_KEYS.INVENTORY, JSON.stringify(inventory)); }, [inventory]);
+  useEffect(() => { if (orders.length > 0) safeSetItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders)); }, [orders]);
+  useEffect(() => { if (payments.length > 0) safeSetItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(payments)); }, [payments]);
+  useEffect(() => { if (customers.length > 0) safeSetItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers)); }, [customers]);
 
   // ---- Fetch data from API (when online and admin) ----
   // Guarda de concurrencia: si se disparan varios refreshData() solapados
@@ -464,7 +484,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
           const mappedProducts = apiProducts.map(mapApiProduct);
           if (isStale()) return;
           setProducts(mappedProducts);
-          localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(mappedProducts));
+          safeSetItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(mappedProducts));
         } catch (error) {
           console.error('No se pudieron cargar los productos:', error);
           if (!isStale()) setProducts([]);
@@ -482,7 +502,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
           const mappedInventory = mapApiInventory(stock, apiProducts);
           if (isStale()) return;
           setInventory(mappedInventory);
-          localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(mappedInventory));
+          safeSetItem(STORAGE_KEYS.INVENTORY, JSON.stringify(mappedInventory));
         } catch {
           if (!isStale()) setInventory([]);
         }
@@ -496,7 +516,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         if (ordersRes?.data) {
           const mapped = ordersRes.data.map(mapApiOrder);
           setOrders(mapped);
-          localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(mapped));
+          safeSetItem(STORAGE_KEYS.ORDERS, JSON.stringify(mapped));
         } else {
           setOrders([]);
         }
@@ -510,7 +530,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         if (customersRes?.data) {
           const mapped = customersRes.data.map(mapApiCustomer);
           setCustomers(mapped);
-          localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(mapped));
+          safeSetItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(mapped));
         } else {
           setCustomers([]);
         }
