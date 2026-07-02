@@ -2,6 +2,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { ArrowRight, Check, Loader2, X, Plus, Minus } from "lucide-react";
 import proVideo from "../../imports/51905-467131986.mp4";
+import { openWhatsApp } from "../utils/whatsapp";
 
 const OLIVE = '#2D3A1F';
 
@@ -72,7 +73,15 @@ export function ModoPro() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    await new Promise(r => setTimeout(r, 1200));
+    const message = [
+      'Hola, quiero solicitar acceso al Programa PRO de Juhnios Rold.',
+      `Nombre: ${form.name}`,
+      `Teléfono: ${form.phone}`,
+      `Email: ${form.email}`,
+      `Salón o negocio: ${form.salon}`,
+    ].join('\n');
+    openWhatsApp(message);
+    await new Promise(r => setTimeout(r, 400));
     setLoading(false);
     setSubmitted(true);
   };

@@ -62,33 +62,39 @@ def _resolve_shipping(order, payable_subtotal):
 
     if result is None:
         shipping_cost = Decimal(str(settings.ECOMMERCE_SHIPPING_COST))
-        ShippingCalculation.objects.create(
+        ShippingCalculation.objects.update_or_create(
             order=order,
-            address_snapshot=address,
-            city=address.get("city", ""),
-            department=address.get("department", ""),
-            latitude=address.get("latitude"),
-            longitude=address.get("longitude"),
-            method=ShippingCalculation.Method.MANUAL,
-            shipping_cost=shipping_cost,
-            status=ShippingCalculation.Status.PENDING_MANUAL,
-            notes="Fallback: error en el cálculo automático.",
+            defaults={
+                "address_snapshot": address,
+                "city": address.get("city", ""),
+                "department": address.get("department", ""),
+                "latitude": address.get("latitude"),
+                "longitude": address.get("longitude"),
+                "distance_km": None,
+                "method": ShippingCalculation.Method.MANUAL,
+                "zone": None,
+                "shipping_cost": shipping_cost,
+                "status": ShippingCalculation.Status.PENDING_MANUAL,
+                "notes": "Fallback: error en el cálculo automático.",
+            },
         )
         return shipping_cost
 
-    ShippingCalculation.objects.create(
+    ShippingCalculation.objects.update_or_create(
         order=order,
-        address_snapshot=address,
-        city=address.get("city", ""),
-        department=address.get("department", ""),
-        latitude=address.get("latitude"),
-        longitude=address.get("longitude"),
-        distance_km=result.distance_km,
-        method=result.method,
-        zone=result.zone,
-        shipping_cost=result.shipping_cost,
-        status=result.status,
-        notes=result.message,
+        defaults={
+            "address_snapshot": address,
+            "city": address.get("city", ""),
+            "department": address.get("department", ""),
+            "latitude": address.get("latitude"),
+            "longitude": address.get("longitude"),
+            "distance_km": result.distance_km,
+            "method": result.method,
+            "zone": result.zone,
+            "shipping_cost": result.shipping_cost,
+            "status": result.status,
+            "notes": result.message,
+        },
     )
     return result.shipping_cost
 

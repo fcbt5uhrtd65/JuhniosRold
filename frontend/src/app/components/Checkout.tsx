@@ -313,6 +313,10 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
       setError('Revisa los datos obligatorios de envío para continuar.');
       return;
     }
+    if (isQuotingShipping) {
+      setError('Estamos calculando tu costo de envío, espera un momento antes de continuar.');
+      return;
+    }
     if (shippingQuote?.status === 'sin_cobertura') {
       setError('Tu zona aún no tiene cobertura de envío. Contáctanos para coordinar la entrega.');
       return;
@@ -774,11 +778,11 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
                     </div>
                     <button
                       onClick={handlePayment}
-                      disabled={isSubmitting || items.length === 0}
+                      disabled={isSubmitting || isQuotingShipping || items.length === 0}
                       className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#2D3A1F] px-6 py-4 text-sm font-bold uppercase tracking-[0.12em] text-white shadow-lg shadow-[#2D3A1F]/15 transition-opacity hover:opacity-95 disabled:opacity-50"
                     >
                       <Lock className="h-4 w-4" />
-                      {isSubmitting ? 'Preparando pago...' : 'Continuar al pago'}
+                      {isSubmitting ? 'Preparando pago...' : isQuotingShipping ? 'Calculando envío...' : 'Continuar al pago'}
                     </button>
                   </div>
                 </div>

@@ -86,10 +86,8 @@ function PublicSite({ onLoginClick }: { onLoginClick: () => void }) {
           <OilsSection />
         </section>
 
-        {/* Wholesale / Raw Materials Section */}
-        <section id="mayorista">
-          <WholesaleBuyers />
-        </section>
+        {/* Wholesale / Raw Materials Section — id="mayorista" ya está en el propio componente */}
+        <WholesaleBuyers />
 
         {/* Community / Instagram wall */}
         <Comunidad />

@@ -305,7 +305,8 @@ export function OilsSection() {
             </div>
 
             {/* CTA ancho */}
-            <motion.button
+            <motion.a
+              href="#catalogo"
               whileHover={{ opacity: 0.88, scale: 1.01 }}
               whileTap={{ scale: 0.98 }}
               className="w-full flex items-center justify-between px-7 py-4 text-white text-[11px] tracking-[0.25em] uppercase font-semibold rounded-xl transition-opacity"
@@ -313,7 +314,7 @@ export function OilsSection() {
             >
               Ver detalles del producto
               <ArrowRight className="w-4 h-4" strokeWidth={2} />
-            </motion.button>
+            </motion.a>
           </motion.div>
         </div>
       </div>

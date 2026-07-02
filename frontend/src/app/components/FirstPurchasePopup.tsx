@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X } from 'lucide-react';
+import { openWhatsApp } from '../utils/whatsapp';
 
 export function FirstPurchasePopup() {
   const [isOpen, setIsOpen] = useState(false);
@@ -20,8 +21,10 @@ export function FirstPurchasePopup() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     localStorage.setItem('hasSeenFirstPurchasePopup', 'true');
+    openWhatsApp(
+      `Hola, quiero mi 15% de descuento en mi primera compra. Mi correo es: ${email}`,
+    );
     setIsOpen(false);
-    // Aquí iría la lógica para guardar el email
   };
 
   const handleClose = () => {

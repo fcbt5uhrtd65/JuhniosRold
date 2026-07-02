@@ -94,7 +94,7 @@ const beneficios = [
 
 const mainNavLinks = [
   { href: '#',            label: 'Inicio',          hasDropdown: false },
-  { href: '#productos',   label: 'Productos',       hasDropdown: true  },
+  { href: '#productos',   label: 'Productos',       hasDropdown: false },
   { href: '/catalogo',    label: 'Catálogo',        hasDropdown: false },
   { href: '#diagnostico', label: 'Diagnóstico',     hasDropdown: false },
   { href: '#resultados',  label: 'Antes y Después', hasDropdown: false },

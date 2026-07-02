@@ -95,8 +95,8 @@ function PanelIngredientes() {
                   {String(idx + 1).padStart(2, '0')} / {String(ingredientSlides.length).padStart(2, '0')}
                 </span>
               </div>
-              <h2 className="text-7xl md:text-8xl lg:text-9xl mb-8 font-serif text-white leading-none tracking-tight">{slide.name}</h2>
-              <p className="text-2xl md:text-3xl text-white/90 font-light max-w-3xl leading-relaxed">{slide.tagline}</p>
+              <h2 className="text-5xl sm:text-6xl md:text-8xl lg:text-9xl mb-8 font-serif text-white leading-none tracking-tight">{slide.name}</h2>
+              <p className="text-lg sm:text-xl md:text-3xl text-white/90 font-light max-w-3xl leading-relaxed">{slide.tagline}</p>
               <motion.div initial={{ scaleX: 0 }} animate={{ scaleX: 1 }}
                 transition={{ duration: 1.2, delay: 0.6, ease: 'easeOut' }}
                 className="h-px w-32 bg-white/30 mx-auto mt-12" />

@@ -1,34 +1,35 @@
-import { useState, useRef } from 'react';
-import { motion, AnimatePresence, useInView } from 'motion/react';
+import { useState, useRef, useEffect } from 'react';
+import { motion, useInView } from 'motion/react';
 import { Package, Clock, Shield, Truck } from 'lucide-react';
+import 'leaflet/dist/leaflet.css';
 
 const OLIVE = '#2D3A1F';
 
 interface City {
   name: string;
   department: string;
-  x: number;
-  y: number;
+  lat: number;
+  lng: number;
   clients: number;
   deliveryDays: string;
   size: 'xl' | 'lg' | 'md' | 'sm';
 }
 
 const cities: City[] = [
-  { name: 'Bogotá',       department: 'Cundinamarca',    x: 46, y: 54, clients: 3820, deliveryDays: '2–3 días', size: 'xl' },
-  { name: 'Medellín',     department: 'Antioquia',       x: 37, y: 40, clients: 2140, deliveryDays: '2–3 días', size: 'xl' },
-  { name: 'Cali',         department: 'Valle del Cauca', x: 33, y: 66, clients: 1560, deliveryDays: '3–4 días', size: 'lg' },
-  { name: 'Barranquilla', department: 'Atlántico',       x: 43, y: 16, clients:  980, deliveryDays: '3–4 días', size: 'lg' },
-  { name: 'Cartagena',    department: 'Bolívar',         x: 36, y: 20, clients:  720, deliveryDays: '3–4 días', size: 'md' },
-  { name: 'Bucaramanga',  department: 'Santander',       x: 49, y: 35, clients:  640, deliveryDays: '3–4 días', size: 'md' },
-  { name: 'Pereira',      department: 'Risaralda',       x: 37, y: 54, clients:  530, deliveryDays: '4–5 días', size: 'sm' },
-  { name: 'Manizales',    department: 'Caldas',          x: 38, y: 50, clients:  410, deliveryDays: '4–5 días', size: 'sm' },
+  { name: 'Bogotá',       department: 'Cundinamarca',    lat: 4.7110,  lng: -74.0721, clients: 3820, deliveryDays: '2–3 días', size: 'xl' },
+  { name: 'Medellín',     department: 'Antioquia',       lat: 6.2442,  lng: -75.5812, clients: 2140, deliveryDays: '2–3 días', size: 'xl' },
+  { name: 'Cali',         department: 'Valle del Cauca', lat: 3.4516,  lng: -76.5320, clients: 1560, deliveryDays: '3–4 días', size: 'lg' },
+  { name: 'Barranquilla', department: 'Atlántico',       lat: 10.9639, lng: -74.7964, clients:  980, deliveryDays: '3–4 días', size: 'lg' },
+  { name: 'Cartagena',    department: 'Bolívar',         lat: 10.3910, lng: -75.4794, clients:  720, deliveryDays: '3–4 días', size: 'md' },
+  { name: 'Bucaramanga',  department: 'Santander',       lat: 7.1193,  lng: -73.1227, clients:  640, deliveryDays: '3–4 días', size: 'md' },
+  { name: 'Pereira',      department: 'Risaralda',       lat: 4.8143,  lng: -75.6946, clients:  530, deliveryDays: '4–5 días', size: 'sm' },
+  { name: 'Manizales',    department: 'Caldas',          lat: 5.0689,  lng: -75.5174, clients:  410, deliveryDays: '4–5 días', size: 'sm' },
 ];
 
 const totalCities  = 28;
 const totalClients = cities.reduce((s, c) => s + c.clients, 0);
 
-const dotSize = { xl: 10, lg: 7, md: 6, sm: 5 };
+const radiusBySize = { xl: 11, lg: 9, md: 7, sm: 6 };
 
 function useCounter(target: number, trigger: boolean, duration = 1400) {
   const [val, setVal] = useState(0);
@@ -44,6 +45,98 @@ function useCounter(target: number, trigger: boolean, duration = 1400) {
     }, 16);
   }
   return val;
+}
+
+function CoverageMap({ active, onSelect, inView }: {
+  active: City | null;
+  onSelect: (city: City) => void;
+  inView: boolean;
+}) {
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mapRef = useRef<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const markersRef = useRef<Record<string, any>>({});
+  const [mapReady, setMapReady] = useState(false);
+
+  useEffect(() => {
+    if (!inView || !mapContainerRef.current || mapRef.current) return;
+
+    let cancelled = false;
+
+    (async () => {
+      const leafletModule = await import('leaflet');
+      const L = leafletModule.default ?? leafletModule;
+
+      // Fix default icon paths broken by bundlers (mismo patrón que AddressMap.tsx)
+      // @ts-expect-error – accediendo a propiedad interna de Leaflet
+      delete L.Icon.Default.prototype._getIconUrl;
+      L.Icon.Default.mergeOptions({
+        iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+        iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+      });
+
+      if (cancelled || !mapContainerRef.current) return;
+
+      const map = L.map(mapContainerRef.current, {
+        zoomControl: true,
+        scrollWheelZoom: false,
+        attributionControl: true,
+      }).setView([4.5709, -74.2973], 5);
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>',
+        maxZoom: 18,
+      }).addTo(map);
+
+      cities.forEach((city) => {
+        const marker = L.circleMarker([city.lat, city.lng], {
+          radius: radiusBySize[city.size],
+          color: OLIVE,
+          weight: 2,
+          fillColor: OLIVE,
+          fillOpacity: 0.55,
+        }).addTo(map);
+        marker.bindTooltip(
+          `<strong>${city.name}</strong><br/>+${city.clients.toLocaleString()} clientas · ${city.deliveryDays}`,
+          { direction: 'top', offset: [0, -6] },
+        );
+        marker.on('click', () => onSelect(city));
+        markersRef.current[city.name] = marker;
+      });
+
+      mapRef.current = map;
+      setMapReady(true);
+    })();
+
+    return () => {
+      cancelled = true;
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+        markersRef.current = {};
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inView]);
+
+  // Resalta el marcador activo y centra el mapa sobre él
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return;
+    Object.entries(markersRef.current).forEach(([name, marker]) => {
+      const isActive = active?.name === name;
+      marker.setStyle({
+        fillOpacity: isActive ? 0.9 : 0.55,
+        weight: isActive ? 3 : 2,
+      });
+    });
+    if (active) {
+      mapRef.current.flyTo([active.lat, active.lng], 7, { duration: 0.6 });
+    }
+  }, [active, mapReady]);
+
+  return <div ref={mapContainerRef} className="absolute inset-0 w-full h-full" />;
 }
 
 export function LocationMap() {
@@ -111,104 +204,13 @@ export function LocationMap() {
             transition={{ duration: 0.75 }}
           >
             <div
-              className="relative w-full rounded-2xl overflow-hidden"
-              style={{ aspectRatio: '16/9', background: '#EDEAE4' }}
+              className="relative w-full rounded-2xl overflow-hidden z-0"
+              style={{ aspectRatio: '16/9', minHeight: 280, background: '#EDEAE4' }}
             >
-              {/* SVG Colombia — forma limpia y centrada */}
-              <svg
-                viewBox="0 0 200 220"
-                className="absolute inset-0 w-full h-full"
-                style={{ padding: '6% 18%' }}
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M 68 10 L 82 6 L 98 9 L 112 7 L 122 15 L 128 26 L 126 40 L 132 48 L 138 58
-                     L 136 72 L 128 78 L 133 88 L 130 102 L 126 112 L 122 128 L 116 143 L 108 158
-                     L 103 175 L 98 192 L 90 208 L 83 218 L 76 210 L 70 198 L 64 184 L 59 168
-                     L 54 152 L 49 136 L 44 120 L 38 104 L 34 88 L 29 72 L 26 56 L 28 42
-                     L 34 30 L 44 18 L 56 10 Z"
-                  fill={`${OLIVE}0C`}
-                  stroke={`${OLIVE}30`}
-                  strokeWidth="1.2"
-                  strokeLinejoin="round"
-                />
-              </svg>
-
-              {/* Puntos de ciudad */}
-              {cities.map((city, idx) => {
-                const isAct = active?.name === city.name;
-                const d = dotSize[city.size];
-                return (
-                  <motion.button
-                    key={city.name}
-                    initial={{ opacity: 0, scale: 0 }}
-                    animate={inView ? { opacity: 1, scale: 1 } : {}}
-                    transition={{ delay: 0.3 + idx * 0.07, type: 'spring', stiffness: 300, damping: 20 }}
-                    onClick={() => setActive(city === active ? null : city)}
-                    aria-label={city.name}
-                    className="absolute focus:outline-none"
-                    style={{ left: `${city.x}%`, top: `${city.y}%`, transform: 'translate(-50%,-50%)' }}
-                  >
-                    {/* Halo en ciudades xl cuando activo o siempre */}
-                    {(city.size === 'xl') && (
-                      <motion.span
-                        className="absolute rounded-full"
-                        style={{ width: d * 3.6, height: d * 3.6, top: '50%', left: '50%', transform: 'translate(-50%,-50%)', backgroundColor: `${OLIVE}${isAct ? '20' : '0E'}` }}
-                        animate={{ scale: [1, 1.25, 1] }}
-                        transition={{ repeat: Infinity, duration: 2.8, ease: 'easeInOut', delay: idx * 0.4 }}
-                      />
-                    )}
-                    <span
-                      className="relative block rounded-full transition-all duration-200"
-                      style={{
-                        width: d, height: d,
-                        backgroundColor: isAct ? OLIVE : `${OLIVE}55`,
-                        boxShadow: isAct ? `0 0 0 3px ${OLIVE}25` : 'none',
-                      }}
-                    />
-                  </motion.button>
-                );
-              })}
-
-              {/* Tooltip */}
-              <AnimatePresence>
-                {active && (
-                  <motion.div
-                    key={active.name}
-                    initial={{ opacity: 0, y: -4, scale: 0.96 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.96 }}
-                    transition={{ duration: 0.14 }}
-                    className="absolute z-10 pointer-events-none"
-                    style={{ left: `${active.x}%`, top: `calc(${active.y}% - 64px)`, transform: 'translateX(-50%)' }}
-                  >
-                    <div className="bg-white border border-stone-200 shadow-lg rounded-xl overflow-hidden min-w-[140px]">
-                      <div className="px-3 py-2 border-b border-stone-100">
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: OLIVE }} />
-                          <span className="text-[11px] font-semibold text-stone-900">{active.name}</span>
-                        </div>
-                        <div className="text-[9px] text-stone-400 pl-3">{active.department}</div>
-                      </div>
-                      <div className="grid grid-cols-2 divide-x divide-stone-100">
-                        <div className="px-3 py-1.5">
-                          <div className="text-[8px] uppercase text-stone-400">Clientas</div>
-                          <div className="text-[11px] font-semibold text-stone-900">+{active.clients.toLocaleString()}</div>
-                        </div>
-                        <div className="px-3 py-1.5">
-                          <div className="text-[8px] uppercase text-stone-400">Envío</div>
-                          <div className="text-[11px] font-semibold text-stone-900">{active.deliveryDays}</div>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex justify-center"><div className="w-2 h-2 bg-white border-r border-b border-stone-200 rotate-45 -mt-[1px]" /></div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              <CoverageMap active={active} onSelect={(city) => setActive(city === active ? null : city)} inView={inView} />
 
               {/* Badge esquina */}
-              <div className="absolute bottom-3 left-3 flex items-center gap-1.5 bg-white/85 backdrop-blur-sm border border-stone-200/80 rounded-full px-3 py-1.5">
+              <div className="absolute bottom-3 left-3 z-[500] flex items-center gap-1.5 bg-white/90 backdrop-blur-sm border border-stone-200/80 rounded-full px-3 py-1.5 pointer-events-none">
                 <Truck className="w-3 h-3 flex-shrink-0" style={{ color: OLIVE }} strokeWidth={1.8} />
                 <span className="text-[9px] font-semibold uppercase tracking-wide" style={{ color: OLIVE }}>Envío a toda Colombia</span>
               </div>

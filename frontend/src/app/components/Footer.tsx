@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Mail, MapPin, Phone, X, ArrowRight, Check } from 'lucide-react';
+import { openWhatsApp } from '../utils/whatsapp';
 
 const OLIVE = '#2D3A1F';
 
@@ -79,6 +80,7 @@ export function Footer() {
   const handleSubscribe = (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim() || !/\S+@\S+\.\S+/.test(email)) return;
+    openWhatsApp(`Hola, quiero suscribirme a las novedades de Juhnios Rold. Mi correo es: ${email}`);
     setSubscribed(true);
     setEmail('');
     setTimeout(() => setSubscribed(false), 3500);

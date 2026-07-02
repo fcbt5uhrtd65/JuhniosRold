@@ -363,7 +363,7 @@ export function DiagnosticoCapilar() {
                           exit={{ opacity: 0, y: -10 }}
                           transition={{ duration: 0.2 }}
                         >
-                          <h3 className="text-4xl mb-12 leading-tight">
+                          <h3 className="text-2xl sm:text-3xl md:text-4xl mb-8 md:mb-12 leading-tight">
                             {questions[currentQuestion].question}
                           </h3>
 

@@ -83,10 +83,26 @@ class ResolveVacationRequestByRole:
     }
 
     def execute(self, vacation, decision, reviewer, role, comment=""):
-        if vacation.status in self.TERMINAL_STATUSES:
-            raise BusinessRuleViolation("La solicitud ya fue resuelta.")
         if role not in ("ADMIN", "HR"):
             raise BusinessRuleViolation("Rol no autorizado para resolver solicitudes.")
+
+        already_decided_by_role = (
+            vacation.admin_decision if role == "ADMIN" else vacation.hr_decision
+        )
+        if already_decided_by_role:
+            raise BusinessRuleViolation("Ya registraste tu decisión sobre esta solicitud.")
+
+        # Caso especial permitido: Admin ya aprobó por override unilateral (status=APPROVED)
+        # pero RRHH todavía no había dejado registrada su propia decisión. Se le permite
+        # completar la trazabilidad sin reabrir ni cambiar el resultado final ya aprobado.
+        is_late_hr_trace_on_admin_approval = (
+            role == "HR"
+            and vacation.status == VacationRequest.Status.APPROVED
+            and vacation.admin_decision == VacationRequest.Status.APPROVED
+            and not vacation.hr_decision
+        )
+        if vacation.status in self.TERMINAL_STATUSES and not is_late_hr_trace_on_admin_approval:
+            raise BusinessRuleViolation("La solicitud ya fue resuelta.")
         if decision == VacationRequest.Status.REJECTED and not comment.strip():
             raise BusinessRuleViolation("Debes indicar el motivo del rechazo.")
 
@@ -106,6 +122,35 @@ class ResolveVacationRequestByRole:
             vacation.hr_decided_at = now
             vacation.hr_comment = comment
             update_fields += ["hr_decision", "hr_decided_by", "hr_decided_at", "hr_comment"]
+
+        if is_late_hr_trace_on_admin_approval:
+            # El resultado final ya quedó fijado por el override de Admin; RRHH solo
+            # completa su traza, sin mover el status ni sobreescribir reviewed_by/at.
+            update_fields = [f for f in update_fields if f not in ("status", "reviewed_by", "reviewed_at")]
+            vacation.save(update_fields=update_fields)
+            VacationRequestApprovalStep.objects.update_or_create(
+                request=vacation,
+                step=VacationRequestApprovalStep.Step.HR,
+                defaults={
+                    "sequence": 3,
+                    "status": decision,
+                    "user": reviewer,
+                    "acted_at": now,
+                    "comment": comment,
+                },
+            )
+            VacationRequestHistory.objects.create(
+                request=vacation,
+                action=VacationRequestHistory.Action.COMMENTED,
+                user=reviewer,
+                old_status=vacation.status,
+                new_status=vacation.status,
+                comment=f"[HR] Traza registrada tras aprobación previa del Administrador: {comment}".strip(),
+            )
+            return vacation
+
+        other_decision = vacation.hr_decision if role == "ADMIN" else vacation.admin_decision
+        disagreement = bool(other_decision) and other_decision != decision
 
         if decision == VacationRequest.Status.REJECTED:
             vacation.status = VacationRequest.Status.REJECTED
@@ -138,6 +183,13 @@ class ResolveVacationRequestByRole:
                 "comment": comment,
             },
         )
+        history_comment = f"[{role}] {comment}".strip()
+        if disagreement:
+            other_role = "RRHH" if role == "ADMIN" else "Administrador"
+            history_comment = (
+                f"DESACUERDO: {other_role} había registrado '{other_decision}', "
+                f"{('RRHH' if role == 'HR' else 'Administrador')} registró '{decision}'. {history_comment}"
+            )
         VacationRequestHistory.objects.create(
             request=vacation,
             action=VacationRequestHistory.Action.APPROVED
@@ -146,7 +198,7 @@ class ResolveVacationRequestByRole:
             user=reviewer,
             old_status=old_status,
             new_status=vacation.status,
-            comment=f"[{role}] {comment}".strip(),
+            comment=history_comment,
         )
         return vacation
 

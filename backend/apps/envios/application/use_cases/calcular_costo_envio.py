@@ -74,13 +74,21 @@ class CalculateShippingCost:
         zone = self._match_zone(city, department)
 
         if zone and zone.requires_manual_quote:
+            qualifies_for_free_shipping = (
+                settings_obj.enable_free_shipping
+                and quote_input.subtotal
+                and quote_input.subtotal >= settings_obj.free_shipping_threshold
+            )
+            message = "Tu zona requiere cotización manual. Nuestro equipo se pondrá en contacto contigo."
+            if qualifies_for_free_shipping:
+                message += " Tu pedido ya califica para envío gratis; solo confirmaremos la logística de entrega."
             return ShippingQuoteResult(
                 status=ShippingCalculation.Status.PENDING_MANUAL,
                 method=ShippingCalculation.Method.MANUAL,
                 shipping_cost=Decimal("0"),
                 distance_km=None,
                 zone=zone,
-                message="Tu zona requiere cotización manual. Nuestro equipo se pondrá en contacto contigo.",
+                message=message,
             )
 
         try:
@@ -159,7 +167,11 @@ class CalculateShippingCost:
             cost = max(settings_obj.min_charge, min(cost, settings_obj.max_charge))
             return cost, ShippingCalculation.Method.DISTANCE, distance_km
 
-        zone_type = zone.zone_type if zone else self._infer_zone_type(city, department)
+        # El zone_type SIEMPRE se infiere de la geografía real (ciudad/departamento),
+        # nunca del campo editable de la ShippingZone: una zona especial solo aporta
+        # recargo/cotización manual, no debe poder "abaratar" una ciudad nacional
+        # a tarifa regional/local por una mala configuración en el admin.
+        zone_type = self._infer_zone_type(city, department)
         if zone_type == ShippingZone.ZoneType.LOCAL:
             return settings_obj.local_rate, ShippingCalculation.Method.ZONE, None
         if zone_type == ShippingZone.ZoneType.REGIONAL:

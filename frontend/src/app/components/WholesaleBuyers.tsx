@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { motion, AnimatePresence, useInView } from 'motion/react';
 import { ArrowRight, X, Check } from 'lucide-react';
+import { openWhatsApp } from '../utils/whatsapp';
 
 const OLIVE = '#2D3A1F';
 
@@ -32,7 +33,16 @@ export function WholesaleBuyers() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    alert('Solicitud enviada');
+    const message = [
+      'Hola, quiero solicitar el catálogo mayorista de materias primas.',
+      `Empresa: ${formData.company}`,
+      `Contacto: ${formData.contact}`,
+      `Email: ${formData.email}`,
+      `Teléfono: ${formData.phone}`,
+      `Categoría de interés: ${formData.category}`,
+      `Volumen mensual estimado: ${formData.volume}`,
+    ].join('\n');
+    openWhatsApp(message);
     setShowModal(false);
     setFormData({ company: '', contact: '', email: '', phone: '', category: '', volume: '' });
   };
