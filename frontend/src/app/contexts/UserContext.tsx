@@ -190,6 +190,36 @@ const STORAGE_KEYS = {
   USERS_DB: 'customer_users_db',
 };
 
+function isQuotaExceededError(error: unknown): boolean {
+  return (
+    error instanceof DOMException &&
+    (error.name === 'QuotaExceededError' || error.name === 'NS_ERROR_DOM_QUOTA_REACHED' || error.code === 22)
+  );
+}
+
+// El cache en localStorage es solo un respaldo local: si falla (p.ej.
+// QuotaExceededError, que algunos perfiles de navegador disparan con cuotas
+// muy reducidas incluso con pocos KB en uso), no debe interrumpir el flujo
+// de la app. Se libera espacio limpiando el propio cache del cliente antes
+// de reintentar una vez.
+function safeSetItem(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch (error) {
+    if (!isQuotaExceededError(error)) {
+      console.warn(`No se pudo guardar "${key}" en localStorage:`, error);
+    }
+    try {
+      Object.values(STORAGE_KEYS).forEach(storageKey => {
+        if (storageKey !== key) localStorage.removeItem(storageKey);
+      });
+      localStorage.setItem(key, value);
+    } catch {
+      // Persiste el fallo silenciosamente: los datos en memoria siguen siendo válidos.
+    }
+  }
+}
+
 const CUSTOMER_ROLES = new Set<AuthUser['role']>(['CLIENT', 'PRO']);
 
 interface AuthActionResult {
@@ -369,7 +399,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       const result = await getOrders({ limit: 50 });
       const mapped = result.data.map(mapApiOrder);
       setOrders(mapped);
-      localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(mapped));
+      safeSetItem(STORAGE_KEYS.ORDERS, JSON.stringify(mapped));
     } catch {
       loadLocalOrders();
     }
@@ -390,7 +420,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   // Persist saved products
   useEffect(() => {
     if (savedProducts.length > 0) {
-      localStorage.setItem(STORAGE_KEYS.SAVED, JSON.stringify(savedProducts));
+      safeSetItem(STORAGE_KEYS.SAVED, JSON.stringify(savedProducts));
     }
   }, [savedProducts]);
 
@@ -615,7 +645,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       const updated = exists
         ? prev.filter(sp => sp.productoId !== productoId)
         : [...prev, { id: Date.now().toString(), productoId, fecha: new Date().toISOString() }];
-      localStorage.setItem(STORAGE_KEYS.SAVED, JSON.stringify(updated));
+      safeSetItem(STORAGE_KEYS.SAVED, JSON.stringify(updated));
       return updated;
     });
   };
@@ -634,7 +664,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         const mapped = mapApiOrder(created);
         setOrders(prev => {
           const updated = [...prev, mapped];
-          localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(updated));
+          safeSetItem(STORAGE_KEYS.ORDERS, JSON.stringify(updated));
           return updated;
         });
         return;
@@ -649,7 +679,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     };
     setOrders(prev => {
       const updated = [...prev, newOrder];
-      localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(updated));
+      safeSetItem(STORAGE_KEYS.ORDERS, JSON.stringify(updated));
       return updated;
     });
   }, [backendOnline]);

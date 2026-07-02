@@ -20,13 +20,13 @@ import {
 import { useCart } from '../contexts/CartContext';
 import { useSearch } from '../contexts/SearchContext';
 import { Checkout } from './Checkout';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 
 interface ShoppingCartProps {
   onLoginRequired?: () => void;
 }
 
 const SHIPPING_THRESHOLD = 80000;
-const SHIPPING_COST = 100;
 
 const recommendedProducts = [
   {
@@ -91,8 +91,8 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
   const shippingProgress = Math.min((total / SHIPPING_THRESHOLD) * 100, 100);
   const remaining = Math.max(SHIPPING_THRESHOLD - total, 0);
   const freeShipping = total >= SHIPPING_THRESHOLD;
-  const shippingCost = freeShipping ? 0 : SHIPPING_COST;
-  const finalTotal = total + shippingCost;
+  // El costo de envío real depende de la dirección y se calcula en el checkout; aquí solo sabemos si aplica envío gratis.
+  const finalTotal = freeShipping ? total : null;
   const primaryItem = items[0];
   const restItems = items.slice(1);
 
@@ -106,10 +106,7 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
     return `${itemCount} productos`;
   }, [itemCount]);
 
-  useEffect(() => {
-    document.body.style.overflow = isOpen ? 'hidden' : '';
-    return () => { document.body.style.overflow = ''; };
-  }, [isOpen]);
+  useBodyScrollLock(isOpen);
 
   const openCart = () => {
     setIsOpen(true);
@@ -484,13 +481,13 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
                           </div>
                           <div className="flex justify-between text-sm">
                             <span className="text-stone-500">Envío</span>
-                            <span className={freeShipping ? 'font-semibold text-emerald-700' : 'font-medium text-stone-900'}>
-                              {freeShipping ? 'Gratis' : formatMoney(shippingCost)}
+                            <span className={freeShipping ? 'font-semibold text-emerald-700' : 'font-medium text-stone-500'}>
+                              {freeShipping ? 'Gratis' : 'Por calcular'}
                             </span>
                           </div>
                           <div className="flex justify-between border-t border-stone-200 pt-3 text-lg font-bold text-stone-950">
                             <span>Total</span>
-                            <span>{formatMoney(finalTotal)}</span>
+                            <span>{finalTotal !== null ? formatMoney(finalTotal) : `${formatMoney(total)} + envío`}</span>
                           </div>
                         </div>
                       </div>

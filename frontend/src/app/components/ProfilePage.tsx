@@ -929,6 +929,7 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
                             searchScope={{ state: profileLoc.stateName, country: profileLoc.countryName }}
                             cityOptions={cityNames}
                             onCityResolved={cn => setProfileLoc(p => ({ ...p, cityId: null, cityName: cn }))}
+                            onLocationResolved={setProfileLoc}
                           />
                         </div>
                       </div>

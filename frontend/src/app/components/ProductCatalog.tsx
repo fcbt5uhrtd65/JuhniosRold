@@ -17,6 +17,7 @@ import {
   type Product as CatalogProduct,
   type ProductCategory,
 } from '../services/products.service';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 
 const OLIVE = '#2D3A1F';
 
@@ -166,10 +167,7 @@ function ProductPage({
     scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
   }, [product.id]);
 
-  useEffect(() => {
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = ''; };
-  }, []);
+  useBodyScrollLock(true);
 
   return (
     <motion.div

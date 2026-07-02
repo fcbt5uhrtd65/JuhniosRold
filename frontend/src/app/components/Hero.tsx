@@ -14,6 +14,7 @@ import { useUser } from '../contexts/UserContext';
 import { useNotifications } from '../contexts/NotificationsContext';
 import type { NotificationType } from '../services/notifications.service';
 import { navigateTo } from '../services/navigate';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 
 const OLIVE = '#2D3A1F';
 
@@ -206,10 +207,7 @@ export function Hero({ onLoginClick }: HeroProps = {}) {
     return () => window.removeEventListener('scroll', fn);
   }, []);
 
-  useEffect(() => {
-    document.body.style.overflow = menuOpen ? 'hidden' : '';
-    return () => { document.body.style.overflow = ''; };
-  }, [menuOpen]);
+  useBodyScrollLock(menuOpen);
 
   const handleNavClick = (href: string, e: React.MouseEvent) => {
     if (href.startsWith('/') && href !== '/') {

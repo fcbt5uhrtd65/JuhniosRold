@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { Check, Loader2, LocateFixed, MapPin, Pencil, Search } from 'lucide-react';
 import { useGeolocation } from '../../hooks/useGeolocation';
 import { mapNominatimAddressToFields, reverseGeocode, searchAddress } from '../../services/nominatim.service';
+import { geographyService } from '../../services/geography.service';
 import type { NominatimResult } from '../../services/nominatim.types';
+import type { LocationValue } from '../../services/geography.types';
 import type { DeliveryLocationValue } from '../../services/delivery-location.types';
 import { InteractiveLocationMap } from './InteractiveLocationMap';
 
@@ -18,9 +20,17 @@ interface DeliveryLocationSectionProps {
   cityOptions?: string[];
   /** Called when the resolved address points to a different city than the one picked manually, so the city selector can stay in sync. */
   onCityResolved?: (city: string) => void;
+  /**
+   * Called after geolocation or a marker move resolves a full país/departamento/ciudad against
+   * our catalog (with IDs), so the LocationPicker above can be kept in sync even when the user
+   * hasn't picked a department yet (e.g. right after "Usar mi ubicación actual"). This correctly
+   * normalizes corregimientos/veredas to their parent municipality, unlike onCityResolved which
+   * only receives a bare city name.
+   */
+  onLocationResolved?: (location: LocationValue) => void;
 }
 
-export function DeliveryLocationSection({ value, onChange, searchScope, cityOptions, onCityResolved }: DeliveryLocationSectionProps) {
+export function DeliveryLocationSection({ value, onChange, searchScope, cityOptions, onCityResolved, onLocationResolved }: DeliveryLocationSectionProps) {
   const geolocation = useGeolocation();
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<NominatimResult[]>([]);
@@ -48,21 +58,30 @@ export function DeliveryLocationSection({ value, onChange, searchScope, cityOpti
     const { lat, lng } = geolocation.coords;
     let cancelled = false;
     setReverseLoading(true);
-    reverseGeocode(lat, lng).then(result => {
+    reverseGeocode(lat, lng).then(async result => {
+      if (cancelled) return;
+      const fields = result ? mapNominatimAddressToFields(result, { validCities: cityOptions }) : { city: '', state: '', country: '' };
+      const resolvedLocation = result ? await geographyService.resolveLocationFromGeocode(result) : null;
       if (cancelled) return;
       setReverseLoading(false);
-      const fields = result ? mapNominatimAddressToFields(result, { validCities: cityOptions }) : { city: '', state: '', country: '' };
+      const resolvedCity = resolvedLocation?.cityName || fields.city;
+      const resolvedState = resolvedLocation?.stateName || fields.state;
+      const resolvedCountry = resolvedLocation?.countryName || fields.country;
       onChange({
         ...value,
         lat,
         lng,
         address: result?.display_name || value.address,
-        city: fields.city,
-        state: fields.state,
-        country: fields.country,
+        city: resolvedCity,
+        state: resolvedState,
+        country: resolvedCountry,
         confirmed: false,
       });
-      if (fields.city) onCityResolved?.(fields.city);
+      if (resolvedLocation?.cityId) {
+        onLocationResolved?.(resolvedLocation);
+      } else if (resolvedCity) {
+        onCityResolved?.(resolvedCity);
+      }
     });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -87,19 +106,27 @@ export function DeliveryLocationSection({ value, onChange, searchScope, cityOpti
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, searchScope?.state, searchScope?.country]);
 
-  function handleSelectSuggestion(result: NominatimResult) {
+  async function handleSelectSuggestion(result: NominatimResult) {
     const fields = mapNominatimAddressToFields(result, { validCities: cityOptions });
+    const resolvedLocation = await geographyService.resolveLocationFromGeocode(result);
+    const resolvedCity = resolvedLocation.cityName || fields.city;
+    const resolvedState = resolvedLocation.stateName || fields.state;
+    const resolvedCountry = resolvedLocation.countryName || fields.country;
     onChange({
       ...value,
       address: result.display_name,
-      city: fields.city,
-      state: fields.state,
-      country: fields.country,
+      city: resolvedCity,
+      state: resolvedState,
+      country: resolvedCountry,
       lat: parseFloat(result.lat),
       lng: parseFloat(result.lon),
       confirmed: false,
     });
-    if (fields.city) onCityResolved?.(fields.city);
+    if (resolvedLocation.cityId) {
+      onLocationResolved?.(resolvedLocation);
+    } else if (resolvedCity) {
+      onCityResolved?.(resolvedCity);
+    }
     setQuery('');
     setSuggestions([]);
     setSuggestionsOpen(false);
@@ -108,21 +135,32 @@ export function DeliveryLocationSection({ value, onChange, searchScope, cityOpti
   function handleMarkerMove(lat: number, lng: number) {
     onChange({ ...value, lat, lng, confirmed: false });
     setReverseLoading(true);
-    reverseGeocode(lat, lng).then(result => {
-      setReverseLoading(false);
-      if (!result) return;
+    reverseGeocode(lat, lng).then(async result => {
+      if (!result) {
+        setReverseLoading(false);
+        return;
+      }
       const fields = mapNominatimAddressToFields(result, { validCities: cityOptions });
+      const resolvedLocation = await geographyService.resolveLocationFromGeocode(result);
+      setReverseLoading(false);
+      const resolvedCity = resolvedLocation.cityName || fields.city;
+      const resolvedState = resolvedLocation.stateName || fields.state;
+      const resolvedCountry = resolvedLocation.countryName || fields.country;
       onChange({
         ...value,
         lat,
         lng,
         address: result.display_name,
-        city: fields.city,
-        state: fields.state,
-        country: fields.country,
+        city: resolvedCity,
+        state: resolvedState,
+        country: resolvedCountry,
         confirmed: false,
       });
-      if (fields.city) onCityResolved?.(fields.city);
+      if (resolvedLocation.cityId) {
+        onLocationResolved?.(resolvedLocation);
+      } else if (resolvedCity) {
+        onCityResolved?.(resolvedCity);
+      }
     });
   }
 

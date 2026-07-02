@@ -400,6 +400,7 @@ export function UserProfile({ isOpen, onClose }: UserProfileProps) {
                         onCityResolved={(cityName) =>
                           setProfileLocation((prev) => ({ ...prev, cityId: null, cityName }))
                         }
+                        onLocationResolved={setProfileLocation}
                       />
                     </div>
                   </div>

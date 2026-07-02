@@ -1,9 +1,23 @@
 import { publicApi } from './api';
 import type { NominatimResult } from './nominatim.types';
 
+function normalizeForCompare(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
 export async function searchAddress(
   query: string,
-  opts?: { countryCodes?: string; state?: string; country?: string },
+  opts?: {
+    countryCodes?: string;
+    state?: string;
+    country?: string;
+    /** When true, drops results whose address.state/country don't match opts.state/opts.country — Nominatim's own `state`/`country` params only bias ranking, they don't hard-filter. */
+    strictScope?: boolean;
+  },
 ): Promise<NominatimResult[]> {
   if (!query.trim()) return [];
   try {
@@ -18,7 +32,18 @@ export async function searchAddress(
     const res = await publicApi.get<NominatimResult[]>(
       `/geography/geocoding/search/?${params.toString()}`,
     );
-    return res.data ?? [];
+    const results = res.data ?? [];
+    if (!opts?.strictScope || (!opts.state && !opts.country)) return results;
+
+    const wantState = opts.state ? normalizeForCompare(opts.state) : null;
+    const wantCountry = opts.country ? normalizeForCompare(opts.country) : null;
+    return results.filter((result) => {
+      const resultState = result.address?.state ? normalizeForCompare(result.address.state) : '';
+      const resultCountry = result.address?.country ? normalizeForCompare(result.address.country) : '';
+      if (wantCountry && resultCountry && resultCountry !== wantCountry) return false;
+      if (wantState && resultState && resultState !== wantState) return false;
+      return true;
+    });
   } catch {
     return [];
   }
