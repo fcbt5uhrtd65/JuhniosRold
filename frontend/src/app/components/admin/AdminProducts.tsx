@@ -14,7 +14,7 @@ import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent,
 } from '../ui/dropdown-menu';
-import { requestProductsExport, type ExportFormat, type PdfLayout } from '../../services/products.service';
+import { requestProductsExport, getCategories, type ExportFormat, type PdfLayout } from '../../services/products.service';
 import { getWholesaleSettingsApi, updateWholesaleSettingsApi } from '../../services/cart.service';
 import { pollExportStatus, downloadFile } from '../../utils/pollExportStatus';
 import { resolveBackendUrl } from '../../services/api';
@@ -26,7 +26,6 @@ type SortField = 'nombre' | 'precio' | 'categoria' | 'estado' | 'stock';
 type SortOrder = 'asc' | 'desc';
 type ModalMode = 'create' | 'edit' | 'view' | null;
 
-const CATEGORIAS = ['Capilar', 'Facial', 'Corporal', 'Barbería', 'Baby', 'Personal'];
 const TIPOS = ['Aceite', 'Gel', 'Silicona', 'Shampoo', 'Tratamiento', 'Acondicionador', 'Crema', 'Sérum', 'Mascarilla'];
 const PRESENTATION_UNITS: NonNullable<Product['presentacionUnidad']>[] = ['ML', 'LT', 'GR', 'KG', 'UND'];
 
@@ -235,8 +234,15 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
 
   const [formData, setFormData] = useState<Omit<Product, 'id'>>(EMPTY_FORM);
   const [wholesaleSettings, setWholesaleSettings] = useState(getWholesaleSettings);
+  const [catalogCategories, setCatalogCategories] = useState<string[]>([]);
 
   const set = (patch: Partial<Omit<Product, 'id'>>) => setFormData(prev => ({ ...prev, ...patch }));
+
+  useEffect(() => {
+    getCategories()
+      .then(categories => setCatalogCategories(categories.map(c => c.name)))
+      .catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     getWholesaleSettingsApi()
@@ -311,6 +317,13 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const categoryExists = catalogCategories.some(
+      c => c.toLowerCase() === formData.categoria.toLowerCase(),
+    );
+    if (catalogCategories.length > 0 && !categoryExists) {
+      toast.error(`La categoría "${formData.categoria}" no existe. Elige una de la lista sugerida.`);
+      return;
+    }
     setIsSubmitting(true);
     try {
       if (modalMode === 'edit' && selectedProduct) {
@@ -977,9 +990,10 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
                       <Combobox
                         value={formData.categoria}
                         onChange={v => set({ categoria: v.toLowerCase() })}
-                        options={CATEGORIAS}
+                        options={catalogCategories}
                         required
                       />
+                      <p className="text-[11px] text-gray-400 mt-1">Selecciona una categoría existente de la lista.</p>
                     </div>
 
                     <div>

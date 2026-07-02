@@ -11,6 +11,7 @@ from apps.inventory.infrastructure.models import Stock
 from ..infrastructure.models import Category, Price, Product, ProductImage, ProductVariant
 from ..infrastructure.serializers import (
     CategorySerializer,
+    CompleteProductSerializer,
     PriceSerializer,
     ProductImageSerializer,
     ProductSerializer,
@@ -46,6 +47,25 @@ class ProductViewSet(SoftDeleteModelViewSet):
             Prefetch("variants", queryset=active_variants),
             "images",
         )
+
+
+class ProductCompleteCreateView(generics.GenericAPIView):
+    """Crea Product + ProductVariant + Price en una sola transacción atómica.
+
+    Reemplaza el flujo de 3 POSTs secuenciales del frontend (producto, luego
+    variante, luego precio) que dejaba productos huérfanos en la base de datos
+    cuando la variante o el precio fallaban (p.ej. SKU duplicado) después de
+    que el producto ya se había creado.
+    """
+
+    serializer_class = CompleteProductSerializer
+    permission_classes = (permissions.IsAdminUser,)
+
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        product = serializer.save()
+        return Response(ProductSerializer(product).data, status=201)
 
 
 class ProductExportView(generics.GenericAPIView):

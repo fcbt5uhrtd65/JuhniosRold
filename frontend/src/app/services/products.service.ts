@@ -537,7 +537,34 @@ export async function getLowStockProducts(): Promise<Product[]> {
 
 export async function createProduct(payload: CreateProductPayload): Promise<Product> {
   const categoryId = await resolveCategoryId(payload.category);
-  const res = await api.post<BackendProduct>(PRODUCTS_PATH, {
+
+  const hasVariantData =
+    payload.price !== undefined ||
+    payload.variant_name !== undefined ||
+    payload.sku !== undefined;
+
+  if (!hasVariantData) {
+    // Producto simple sin variante/precio: un único POST es suficiente y seguro.
+    const res = await api.post<BackendProduct>(PRODUCTS_PATH, {
+      category: categoryId,
+      name: payload.name,
+      slug: payload.slug,
+      description: payload.description ?? '',
+      image_url: payload.image_url ?? payload.images?.[0] ?? '',
+      is_active: payload.is_active ?? true,
+      is_featured: payload.is_featured ?? false,
+    });
+    const categoryMap = await getCategoryMap(true);
+    if (!res.data) {
+      throw new Error('No se pudo crear el producto.');
+    }
+    return normalizeProduct(res.data, categoryMap);
+  }
+
+  // Producto con variante/precio: se crea todo en una sola transacción atómica
+  // en el backend, evitando dejar un producto huérfano si el SKU está duplicado
+  // o falla la creación del precio.
+  const res = await api.post<BackendProduct>(`${CATALOG_BASE_PATH}/products/create-complete/`, {
     category: categoryId,
     name: payload.name,
     slug: payload.slug,
@@ -545,50 +572,24 @@ export async function createProduct(payload: CreateProductPayload): Promise<Prod
     image_url: payload.image_url ?? payload.images?.[0] ?? '',
     is_active: payload.is_active ?? true,
     is_featured: payload.is_featured ?? false,
+    sku: payload.sku || `JR-${Date.now()}`,
+    variant_name: payload.variant_name ||
+      (payload.presentation_number && payload.presentation_unit
+        ? `${payload.presentation_number} ${payload.presentation_unit}`
+        : payload.weight_ml ? `${payload.weight_ml} ml` : 'Presentación única'),
+    ...(payload.presentation_number !== undefined ? { presentation_number: String(payload.presentation_number) } : {}),
+    ...(payload.presentation_unit !== undefined ? { presentation_unit: payload.presentation_unit } : {}),
+    variant_attributes: payload.variant_attributes ??
+      (payload.weight_ml ? { weight_ml: payload.weight_ml } : {}),
+    cost: String(payload.cost ?? 0),
+    price: String(payload.price ?? 0),
   });
 
-  const categoryMap = await getCategoryMap(true);
   if (!res.data) {
     throw new Error('No se pudo crear el producto.');
   }
 
-  if (
-    payload.price !== undefined ||
-    payload.variant_name !== undefined ||
-    payload.sku !== undefined
-  ) {
-    const variantResponse = await api.post<BackendVariant>(VARIANTS_PATH, {
-      product: res.data.id,
-      sku: payload.sku || `JR-${Date.now()}`,
-      name: payload.variant_name ||
-        (payload.presentation_number && payload.presentation_unit
-          ? `${payload.presentation_number} ${payload.presentation_unit}`
-          : payload.weight_ml ? `${payload.weight_ml} ml` : 'Presentación única'),
-      ...(payload.presentation_number !== undefined ? { presentation_number: String(payload.presentation_number) } : {}),
-      ...(payload.presentation_unit !== undefined ? { presentation_unit: payload.presentation_unit } : {}),
-      attributes: payload.variant_attributes ??
-        (payload.weight_ml ? { weight_ml: payload.weight_ml } : {}),
-      cost: String(payload.cost ?? 0),
-      is_active: payload.is_active ?? true,
-    });
-    if (!variantResponse.data) {
-      throw new Error('El producto se creo, pero no fue posible crear su variante.');
-    }
-
-    if (payload.price !== undefined) {
-      await api.post<BackendPrice>(PRICES_PATH, {
-        variant: variantResponse.data.id,
-        amount: String(payload.price),
-        currency: 'COP',
-        valid_from: new Date().toISOString(),
-        valid_until: null,
-        is_active: true,
-      });
-    }
-    return getProductById(res.data.id);
-  }
-
-  return normalizeProduct(res.data, categoryMap);
+  return getProductById(res.data.id);
 }
 
 export async function updateProduct(id: string, payload: UpdateProductPayload): Promise<Product> {

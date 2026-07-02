@@ -159,6 +159,7 @@ export function AdminCustomers() {
   const [expandedCustomerId, setExpandedCustomerId] = useState<string | null>(null);
   const [ordersModalCustomer, setOrdersModalCustomer] = useState<Customer | null>(null);
   const [loadingInvoiceId, setLoadingInvoiceId] = useState<string | null>(null);
+  const [isSubmittingCustomer, setIsSubmittingCustomer] = useState(false);
 
   const handleViewInvoice = async (orderId: string) => {
     setLoadingInvoiceId(orderId);
@@ -235,10 +236,19 @@ export function AdminCustomers() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await addCustomer({ ...formData, ciudad: customerLocation.cityName || formData.ciudad });
-    setFormData({ tipoDocumento: 'CC', documento: '', nombre: '', telefono: '', email: '', direccion: '', ciudad: '', modoCompra: 'RETAIL' });
-    setCustomerLocation(EMPTY_LOCATION);
-    setShowModal(false);
+    if (isSubmittingCustomer) return;
+    setIsSubmittingCustomer(true);
+    try {
+      await addCustomer({ ...formData, ciudad: customerLocation.cityName || formData.ciudad });
+      toast.success('Cliente creado correctamente');
+      setFormData({ tipoDocumento: 'CC', documento: '', nombre: '', telefono: '', email: '', direccion: '', ciudad: '', modoCompra: 'RETAIL' });
+      setCustomerLocation(EMPTY_LOCATION);
+      setShowModal(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No fue posible guardar el cliente. Revisa que el documento y el correo no estén repetidos.');
+    } finally {
+      setIsSubmittingCustomer(false);
+    }
   };
 
   const stats = {
@@ -562,9 +572,10 @@ export function AdminCustomers() {
           <div className="flex gap-3 pt-4">
             <button
               type="submit"
-              className="flex-1 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold hover:bg-[#3d5c4e] transition-colors"
+              disabled={isSubmittingCustomer}
+              className="flex-1 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold hover:bg-[#3d5c4e] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Crear Cliente
+              {isSubmittingCustomer ? 'Creando...' : 'Crear Cliente'}
             </button>
             <button
               type="button"
