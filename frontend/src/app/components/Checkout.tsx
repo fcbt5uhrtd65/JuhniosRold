@@ -7,6 +7,7 @@ import {
   Clock3,
   ExternalLink,
   Home,
+  Loader2,
   Lock,
   Mail,
   MapPin,
@@ -28,6 +29,7 @@ import {
   initiatePayment,
   resolveMockPayment,
 } from '../services/payments.service';
+import { getShippingQuote, type ShippingQuoteResponse } from '../services/shipping.service';
 import { usePaymentStatusPolling } from '../hooks/usePaymentStatusPolling';
 import { LocationPicker } from './ui/LocationPicker';
 import { DeliveryLocationSection } from './ui/DeliveryLocationSection';
@@ -87,7 +89,11 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
   const [formErrors, setFormErrors] = useState<Partial<Record<CheckoutFormField, string>>>({});
   const [showAddressForm, setShowAddressForm] = useState(!currentUser?.direccion);
 
-  const shippingCost = total >= 80000 ? 0 : 100;
+  const [shippingQuote, setShippingQuote] = useState<ShippingQuoteResponse | null>(null);
+  const [isQuotingShipping, setIsQuotingShipping] = useState(false);
+  const [shippingQuoteError, setShippingQuoteError] = useState('');
+
+  const shippingCost = shippingQuote ? Number(shippingQuote.shipping_cost) : 0;
   const finalTotal = total + shippingCost;
   const hasRegisteredAddress = Boolean(currentUser?.direccion);
   const registeredAddress = {
@@ -173,6 +179,51 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
       refreshNotificationsSoon();
     }
   }, [wompiState, refreshNotificationsSoon]);
+
+  const quoteCity = shippingLocation.cityName || deliveryLocation.city;
+  const quoteDepartment = shippingLocation.stateName || deliveryLocation.state;
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!quoteCity && !quoteDepartment) {
+      setShippingQuote(null);
+      setShippingQuoteError('');
+      return;
+    }
+    let cancelled = false;
+    const controller = new AbortController();
+    setIsQuotingShipping(true);
+    setShippingQuoteError('');
+    getShippingQuote(
+      {
+        city: quoteCity,
+        department: quoteDepartment,
+        latitude: deliveryLocation.lat,
+        longitude: deliveryLocation.lng,
+        subtotal: total,
+      },
+      controller.signal,
+    )
+      .then((quote) => {
+        if (cancelled) return;
+        setShippingQuote(quote);
+        if (quote.status === 'sin_cobertura') {
+          setShippingQuoteError(quote.message);
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setShippingQuote(null);
+        setShippingQuoteError('No fue posible calcular el envío. Intenta de nuevo.');
+      })
+      .finally(() => {
+        if (!cancelled) setIsQuotingShipping(false);
+      });
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [isOpen, quoteCity, quoteDepartment, deliveryLocation.lat, deliveryLocation.lng, total]);
 
   const close = () => {
     if (!isSubmitting) {
@@ -260,6 +311,10 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
     }
     if (!validateShippingForm()) {
       setError('Revisa los datos obligatorios de envío para continuar.');
+      return;
+    }
+    if (shippingQuote?.status === 'sin_cobertura') {
+      setError('Tu zona aún no tiene cobertura de envío. Contáctanos para coordinar la entrega.');
       return;
     }
 
@@ -642,6 +697,16 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
                 <div className="mx-auto grid max-w-3xl gap-4 md:grid-cols-[1fr_auto] md:items-end">
                   <div className="rounded-3xl border border-stone-200 bg-[#F8F7F4] p-4">
                     <h3 className="mb-3 text-sm font-semibold text-stone-950">Resumen del pedido</h3>
+
+                    <div className="mb-3 rounded-2xl border border-stone-200 bg-white px-3 py-2.5">
+                      <p className="text-[10px] uppercase tracking-wide text-stone-400 mb-1">Dirección de entrega</p>
+                      <p className="text-sm text-stone-800">
+                        {deliveryLocation.address
+                          ? [deliveryLocation.address, quoteCity, quoteDepartment].filter(Boolean).join(', ')
+                          : 'Ingresa tu dirección para calcular el envío'}
+                      </p>
+                    </div>
+
                     <div className="space-y-2">
                       <div className="flex justify-between text-sm">
                         <span className="text-stone-500">Subtotal</span>
@@ -667,10 +732,28 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
                       )}
                       <div className="flex justify-between text-sm">
                         <span className="text-stone-500">Envío</span>
-                        <span className={shippingCost === 0 ? 'font-semibold text-emerald-700' : 'font-medium text-stone-900'}>
-                          {shippingCost === 0 ? 'Gratis' : formatMoney(shippingCost)}
-                        </span>
+                        {!deliveryLocation.address ? (
+                          <span className="text-stone-400">Ingresa tu dirección</span>
+                        ) : isQuotingShipping ? (
+                          <span className="flex items-center gap-1.5 text-stone-400">
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" /> Calculando…
+                          </span>
+                        ) : shippingQuote?.status === 'pendiente_manual' ? (
+                          <span className="font-medium text-amber-600">Pendiente por confirmar</span>
+                        ) : shippingQuote?.status === 'sin_cobertura' ? (
+                          <span className="font-medium text-red-500">Sin cobertura</span>
+                        ) : shippingCost === 0 && shippingQuote ? (
+                          <span className="font-semibold text-emerald-700">Gratis</span>
+                        ) : (
+                          <span className="font-medium text-stone-900">{formatMoney(shippingCost)}</span>
+                        )}
                       </div>
+                      {shippingQuote && !isQuotingShipping && (
+                        <p className="text-[11px] text-stone-400">{shippingQuote.message}</p>
+                      )}
+                      {shippingQuoteError && !isQuotingShipping && (
+                        <p className="text-[11px] text-red-500">{shippingQuoteError}</p>
+                      )}
                       <div className="flex justify-between border-t border-stone-200 pt-3 text-lg font-bold text-stone-950">
                         <span>Total</span>
                         <span>{formatMoney(finalTotal)}</span>

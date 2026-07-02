@@ -17,6 +17,7 @@ import { AdminEmployeePortal } from './AdminEmployeePortal';
 import { AdminRoles } from './AdminRoles';
 import { AdminComponents } from './AdminComponents';
 import { AdminReferrals } from './AdminReferrals';
+import { AdminShipping } from './AdminShipping';
 
 function getDefaultViewForRole(role?: string) {
   switch (role) {
@@ -86,6 +87,8 @@ export function Admin() {
         return <AdminComponents />;
       case 'referrals':
         return <AdminReferrals />;
+      case 'shipping':
+        return <AdminShipping />;
       default:
         return <AdminDashboard />;
     }

@@ -1,3 +1,17 @@
-from .infrastructure.models import EnvioModel, TrackingEventModel, TransportadoraModel
+from .infrastructure.models import (
+    EnvioModel,
+    ShippingCalculation,
+    ShippingSettings,
+    ShippingZone,
+    TrackingEventModel,
+    TransportadoraModel,
+)
 
-__all__ = ("EnvioModel", "TrackingEventModel", "TransportadoraModel")
+__all__ = (
+    "EnvioModel",
+    "ShippingCalculation",
+    "ShippingSettings",
+    "ShippingZone",
+    "TrackingEventModel",
+    "TransportadoraModel",
+)

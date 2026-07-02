@@ -9,7 +9,14 @@ from ..application.dtos import (
     CrearEnvioDTO,
     RegistrarGuiaManualDTO,
 )
-from .models import EnvioModel, TrackingEventModel, TransportadoraModel
+from .models import (
+    EnvioModel,
+    ShippingCalculation,
+    ShippingSettings,
+    ShippingZone,
+    TrackingEventModel,
+    TransportadoraModel,
+)
 
 
 class TransportadoraSerializer(serializers.ModelSerializer):
@@ -175,3 +182,63 @@ class WebhookTrackingSerializer(serializers.Serializer):
                 "Debes enviar envio_id o external_shipment_id."
             )
         return attrs
+
+
+class ShippingSettingsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ShippingSettings
+        fields = (
+            "id",
+            "local_rate",
+            "regional_rate",
+            "national_rate",
+            "enable_distance_calc",
+            "base_rate",
+            "rate_per_km",
+            "min_charge",
+            "max_charge",
+            "enable_free_shipping",
+            "free_shipping_threshold",
+            "enable_manual_quote_fallback",
+            "origin_address",
+            "origin_city",
+            "origin_department",
+            "origin_latitude",
+            "origin_longitude",
+            "updated_at",
+        )
+        read_only_fields = ("id", "updated_at")
+
+
+class ShippingZoneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ShippingZone
+        fields = (
+            "id",
+            "name",
+            "zone_type",
+            "department",
+            "city",
+            "surcharge",
+            "requires_manual_quote",
+            "is_active",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = ("id", "created_at", "updated_at")
+
+
+class ShippingQuoteRequestSerializer(serializers.Serializer):
+    city = serializers.CharField(required=False, allow_blank=True, default="")
+    department = serializers.CharField(required=False, allow_blank=True, default="")
+    latitude = serializers.DecimalField(max_digits=9, decimal_places=6, required=False, allow_null=True, default=None)
+    longitude = serializers.DecimalField(max_digits=9, decimal_places=6, required=False, allow_null=True, default=None)
+    subtotal = serializers.DecimalField(max_digits=14, decimal_places=2, required=False, default=Decimal("0"), min_value=Decimal("0"))
+
+
+class ShippingQuoteResponseSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(choices=ShippingCalculation.Status.choices)
+    method = serializers.ChoiceField(choices=ShippingCalculation.Method.choices)
+    shipping_cost = serializers.DecimalField(max_digits=14, decimal_places=2)
+    distance_km = serializers.DecimalField(max_digits=8, decimal_places=2, allow_null=True)
+    message = serializers.CharField()

@@ -434,4 +434,7 @@ export const api = {
 export const publicApi = {
   get: <T>(endpoint: string, signal?: AbortSignal) =>
     publicApiRequest<T>(endpoint, { method: 'GET', ...(signal ? { signal } : {}) }),
+
+  post: <T>(endpoint: string, body: unknown, signal?: AbortSignal) =>
+    publicApiRequest<T>(endpoint, { method: 'POST', body: prepareBody(body), ...(signal ? { signal } : {}) }),
 };

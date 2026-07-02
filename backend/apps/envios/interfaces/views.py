@@ -1,9 +1,13 @@
+import logging
+
 from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+logger = logging.getLogger(__name__)
 
 from shared.interfaces.viewsets import SoftDeleteModelViewSet
 
@@ -12,17 +16,29 @@ from apps.commerce.infrastructure.models import Order, OrderStatusHistory
 from ..application.use_cases import (
     ActualizarEstadoEnvioUseCase,
     ActualizarTrackingUseCase,
+    CalculateShippingCost,
     CancelarEnvioUseCase,
     CrearEnvioUseCase,
     GenerarGuiaUseCase,
     RegistrarGuiaManualUseCase,
+    ShippingQuoteInput,
 )
-from ..infrastructure.models import EnvioModel, TrackingEventModel, TransportadoraModel
+from ..infrastructure.models import (
+    EnvioModel,
+    ShippingSettings,
+    ShippingZone,
+    TrackingEventModel,
+    TransportadoraModel,
+)
 from ..infrastructure.serializers import (
     ActualizarEstadoEnvioSerializer,
     CrearEnvioSerializer,
     EnvioDetailSerializer,
     RegistrarGuiaManualSerializer,
+    ShippingQuoteRequestSerializer,
+    ShippingQuoteResponseSerializer,
+    ShippingSettingsSerializer,
+    ShippingZoneSerializer,
     TrackingPedidoSerializer,
     TransportadoraSerializer,
 )
@@ -164,3 +180,79 @@ class PedidoTrackingView(APIView):
                 message="No tienes permiso para consultar este pedido.",
             )
         return Response(TrackingPedidoSerializer(order, context={"request": request}).data)
+
+
+class ShippingSettingsView(APIView):
+    """Configuración de la calculadora de envíos. Lectura pública, edición solo admin/operativo."""
+
+    def get_permissions(self):
+        if self.request.method == "GET":
+            return (permissions.AllowAny(),)
+        return (CanManageShipping(),)
+
+    def get(self, request):
+        return Response(ShippingSettingsSerializer(ShippingSettings.current()).data)
+
+    def patch(self, request):
+        instance = ShippingSettings.current()
+        serializer = ShippingSettingsSerializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+
+class ShippingZoneViewSet(SoftDeleteModelViewSet):
+    queryset = ShippingZone.objects.all()
+    serializer_class = ShippingZoneSerializer
+    filterset_fields = ("zone_type", "department", "city", "is_active", "requires_manual_quote")
+    search_fields = ("name", "department", "city")
+
+    def get_permissions(self):
+        if self.action in {"list", "retrieve"}:
+            return (permissions.AllowAny(),)
+        return (CanManageShipping(),)
+
+
+class ShippingQuoteView(APIView):
+    """Cotización pública de envío. El backend siempre recalcula: no confía en costos enviados por el cliente."""
+
+    permission_classes = (permissions.AllowAny,)
+
+    def post(self, request):
+        serializer = ShippingQuoteRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        quote_input = ShippingQuoteInput(
+            city=data.get("city") or "",
+            department=data.get("department") or "",
+            latitude=data.get("latitude"),
+            longitude=data.get("longitude"),
+            subtotal=data.get("subtotal") or 0,
+        )
+        try:
+            result = CalculateShippingCost().execute(quote_input)
+        except Exception:
+            logger.exception("Error calculando costo de envío para %s/%s", quote_input.city, quote_input.department)
+            return Response(
+                {
+                    "status": "sin_cobertura",
+                    "method": "MANUAL",
+                    "shipping_cost": "0",
+                    "distance_km": None,
+                    "message": "No fue posible calcular el envío en este momento.",
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        return Response(
+            ShippingQuoteResponseSerializer(
+                {
+                    "status": result.status,
+                    "method": result.method,
+                    "shipping_cost": result.shipping_cost,
+                    "distance_km": result.distance_km,
+                    "message": result.message,
+                }
+            ).data
+        )

@@ -213,6 +213,20 @@ ENVIA_API_URL = os.getenv("ENVIA_API_URL", "")
 COORDINADORA_API_KEY = os.getenv("COORDINADORA_API_KEY", "")
 COORDINADORA_API_URL = os.getenv("COORDINADORA_API_URL", "")
 
+# Calculadora de costos de envío — semilla inicial (la configuración vigente vive en BD,
+# tabla ShippingSettings, administrable desde el panel admin "Configuración de Envíos").
+SHIPPING_ORIGIN_ADDRESS = os.getenv("SHIPPING_ORIGIN_ADDRESS", "")
+SHIPPING_ORIGIN_CITY = os.getenv("SHIPPING_ORIGIN_CITY", "Barranquilla")
+SHIPPING_ORIGIN_DEPARTMENT = os.getenv("SHIPPING_ORIGIN_DEPARTMENT", "Atlántico")
+SHIPPING_ORIGIN_LAT = (
+    Decimal(os.getenv("SHIPPING_ORIGIN_LAT")) if os.getenv("SHIPPING_ORIGIN_LAT") else None
+)
+SHIPPING_ORIGIN_LNG = (
+    Decimal(os.getenv("SHIPPING_ORIGIN_LNG")) if os.getenv("SHIPPING_ORIGIN_LNG") else None
+)
+SHIPPING_ENABLE_DISTANCE_CALC = os.getenv("SHIPPING_ENABLE_DISTANCE_CALC", "true").lower() == "true"
+SHIPPING_ENABLE_FREE_SHIPPING = os.getenv("SHIPPING_ENABLE_FREE_SHIPPING", "true").lower() == "true"
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",

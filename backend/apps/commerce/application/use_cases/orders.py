@@ -1,3 +1,5 @@
+import json
+import logging
 from decimal import Decimal
 
 from django.conf import settings
@@ -10,6 +12,8 @@ from apps.catalog.infrastructure.models import ProductVariant
 
 from ..services import OrderInventoryService
 from ...infrastructure.models import Cart, Order, OrderItem, OrderStatusHistory, WholesaleSettings
+
+logger = logging.getLogger(__name__)
 
 
 def _presentation_label(variant):
@@ -25,6 +29,68 @@ def _wholesale_discount(subtotal, customer=None):
     if not ws.is_active or subtotal < ws.minimum_purchase:
         return Decimal("0")
     return (subtotal * (ws.discount_percentage / Decimal("100"))).quantize(Decimal("0.01"))
+
+
+def _resolve_shipping(order, payable_subtotal):
+    """Calcula el costo de envío server-side a partir de la dirección del pedido.
+
+    Nunca confía en un valor de envío enviado por el cliente: siempre recalcula
+    con la configuración vigente (ShippingSettings/ShippingZone) y guarda la
+    trazabilidad en ShippingCalculation.
+    """
+    from apps.envios.application.use_cases import CalculateShippingCost, ShippingQuoteInput
+    from apps.envios.infrastructure.models import ShippingCalculation
+
+    try:
+        address = json.loads(order.shipping_address or "{}")
+    except (TypeError, ValueError):
+        address = {}
+
+    quote_input = ShippingQuoteInput(
+        city=address.get("city", ""),
+        department=address.get("department", ""),
+        latitude=address.get("latitude"),
+        longitude=address.get("longitude"),
+        subtotal=payable_subtotal,
+    )
+
+    try:
+        result = CalculateShippingCost().execute(quote_input)
+    except Exception:
+        logger.exception("Error calculando envío para el pedido %s", order.id)
+        result = None
+
+    if result is None:
+        shipping_cost = Decimal(str(settings.ECOMMERCE_SHIPPING_COST))
+        ShippingCalculation.objects.create(
+            order=order,
+            address_snapshot=address,
+            city=address.get("city", ""),
+            department=address.get("department", ""),
+            latitude=address.get("latitude"),
+            longitude=address.get("longitude"),
+            method=ShippingCalculation.Method.MANUAL,
+            shipping_cost=shipping_cost,
+            status=ShippingCalculation.Status.PENDING_MANUAL,
+            notes="Fallback: error en el cálculo automático.",
+        )
+        return shipping_cost
+
+    ShippingCalculation.objects.create(
+        order=order,
+        address_snapshot=address,
+        city=address.get("city", ""),
+        department=address.get("department", ""),
+        latitude=address.get("latitude"),
+        longitude=address.get("longitude"),
+        distance_km=result.distance_km,
+        method=result.method,
+        zone=result.zone,
+        shipping_cost=result.shipping_cost,
+        status=result.status,
+        notes=result.message,
+    )
+    return result.shipping_cost
 
 
 def _enqueue_placed_notification(order_id):
@@ -74,11 +140,7 @@ class CheckoutCart:
 
         discount_amount = _wholesale_discount(total, cart.customer)
         payable_subtotal = max(Decimal("0"), total - discount_amount)
-        shipping_cost = (
-            Decimal("0")
-            if payable_subtotal >= settings.ECOMMERCE_FREE_SHIPPING_THRESHOLD
-            else settings.ECOMMERCE_SHIPPING_COST
-        )
+        shipping_cost = _resolve_shipping(order, payable_subtotal)
         order.subtotal = total
         order.discount_amount = discount_amount
         order.shipping_cost = shipping_cost
@@ -151,11 +213,7 @@ class CreateOrder:
 
         discount_amount = _wholesale_discount(subtotal, customer)
         payable_subtotal = max(Decimal("0"), subtotal - discount_amount)
-        shipping_cost = (
-            Decimal("0")
-            if payable_subtotal >= settings.ECOMMERCE_FREE_SHIPPING_THRESHOLD
-            else settings.ECOMMERCE_SHIPPING_COST
-        )
+        shipping_cost = _resolve_shipping(order, payable_subtotal)
         order.subtotal = subtotal
         order.discount_amount = discount_amount
         order.shipping_cost = shipping_cost
