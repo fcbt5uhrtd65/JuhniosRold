@@ -3,7 +3,7 @@
 // Admin auth + data management with real API + localStorage fallback
 // ============================================================
 
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import type { ReactNode } from 'react';
 import type { User, Product, Inventory, Order, Payment, Customer } from '../types/admin';
 import {
@@ -347,6 +347,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [backendOnline, setBackendOnline] = useState(false);
+  const refreshSeq = useRef(0);
 
   const resetAdminSession = useCallback(() => {
     setCurrentUser(null);
@@ -430,13 +431,22 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   useEffect(() => { if (customers.length > 0) localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers)); }, [customers]);
 
   // ---- Fetch data from API (when online and admin) ----
+  // Guarda de concurrencia: si se disparan varios refreshData() solapados
+  // (p.ej. uno automático + uno manual tras crear un producto), solo la
+  // llamada más reciente puede escribir el estado. Sin esto, una respuesta
+  // vieja que llega tarde podía sobreescribir datos más nuevos y causar que
+  // un producto recién creado "parpadeara" (apareciera y desapareciera).
   const refreshData = useCallback(async () => {
+    const mySeq = ++refreshSeq.current;
+    const isStale = () => refreshSeq.current !== mySeq;
+
     let online = false;
     try {
       online = await isBackendAvailable();
     } catch {
       online = false;
     }
+    if (isStale()) return;
     setBackendOnline(online);
     if (!online || !getAccessToken()) return;
 
@@ -452,13 +462,14 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         try {
           const apiProducts = await getAllProductsForAdmin();
           const mappedProducts = apiProducts.map(mapApiProduct);
+          if (isStale()) return;
           setProducts(mappedProducts);
           localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(mappedProducts));
         } catch (error) {
           console.error('No se pudieron cargar los productos:', error);
-          setProducts([]);
+          if (!isStale()) setProducts([]);
         }
-      } else {
+      } else if (!isStale()) {
         setProducts([]);
       }
 
@@ -469,17 +480,19 @@ export function AdminProvider({ children }: { children: ReactNode }) {
             canViewProducts ? getAllProductsForAdmin() : Promise.resolve([] as ApiProduct[]),
           ]);
           const mappedInventory = mapApiInventory(stock, apiProducts);
+          if (isStale()) return;
           setInventory(mappedInventory);
           localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(mappedInventory));
         } catch {
-          setInventory([]);
+          if (!isStale()) setInventory([]);
         }
-      } else {
+      } else if (!isStale()) {
         setInventory([]);
       }
 
       if (canViewOrders) {
         const ordersRes = await getOrders({ limit: 100 }).catch(() => null);
+        if (isStale()) return;
         if (ordersRes?.data) {
           const mapped = ordersRes.data.map(mapApiOrder);
           setOrders(mapped);
@@ -487,12 +500,13 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         } else {
           setOrders([]);
         }
-      } else {
+      } else if (!isStale()) {
         setOrders([]);
       }
 
       if (canViewCustomers) {
         const customersRes = await getCustomers({ limit: 100 }).catch(() => null);
+        if (isStale()) return;
         if (customersRes?.data) {
           const mapped = customersRes.data.map(mapApiCustomer);
           setCustomers(mapped);
@@ -500,11 +514,11 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         } else {
           setCustomers([]);
         }
-      } else {
+      } else if (!isStale()) {
         setCustomers([]);
       }
     } finally {
-      setIsLoading(false);
+      if (!isStale()) setIsLoading(false);
     }
   }, [currentUser?.rol]);
 
@@ -601,7 +615,14 @@ export function AdminProvider({ children }: { children: ReactNode }) {
           );
         }
       }
-      await refreshData();
+      // Inserta el producto recién creado de inmediato en el estado local: no
+      // depende de que el refresh posterior lo traiga bien a la primera (evita
+      // el parpadeo "aparece y desaparece" si hay lag de propagación en el backend).
+      const mappedNewProduct = mapApiProduct(created);
+      setProducts(prev => (
+        prev.some(p => p.id === mappedNewProduct.id) ? prev : [...prev, mappedNewProduct]
+      ));
+      void refreshData();
       return;
     }
 
@@ -661,7 +682,10 @@ export function AdminProvider({ children }: { children: ReactNode }) {
           }
         }
       }
-      await refreshData();
+      // Igual que en addProduct: refleja el cambio de inmediato para evitar
+      // parpadeo mientras el refresh en background confirma contra el backend.
+      setProducts(prev => prev.map(p => (p.id === id ? { ...p, ...updates } : p)));
+      void refreshData();
       return;
     }
     setProducts(prev => prev.map(p => (p.id === id ? { ...p, ...updates } : p)));
