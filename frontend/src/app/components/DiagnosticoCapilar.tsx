@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, ArrowRight, FlaskConical, Leaf, Heart, MapPin } from 'lucide-react';
+import { X, ArrowRight, FlaskConical, Leaf, Heart, MapPin, Sparkles, Droplet, Wind } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
 import { useToast } from '../contexts/ToastContext';
 import { getProducts } from '../services/products.service';
+import { VideoRodillo } from './VideoRodillo';
 
 const OLIVE = '#2D3A1F';
 const CREAM = '#F7F5F1';
@@ -206,6 +207,46 @@ export function DiagnosticoCapilar() {
                 className="absolute inset-0 hidden md:block"
                 style={{ background: `linear-gradient(to right, transparent 70%, ${CREAM})` }}
               />
+
+              {/* Chip flotante: 3 pasos del diagnóstico */}
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: 0.3, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+                className="absolute bottom-5 left-5 right-5 sm:right-auto sm:w-64 bg-white/95 backdrop-blur-sm rounded-2xl px-5 py-4 shadow-lg"
+              >
+                <div className="flex items-center gap-2 mb-3">
+                  <Sparkles className="w-3.5 h-3.5" style={{ color: OLIVE }} strokeWidth={1.5} />
+                  <span className="text-[9px] tracking-[0.22em] uppercase text-stone-500 font-medium">
+                    Tu ruta capilar
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  {[
+                    { icon: Droplet, label: 'Tipo' },
+                    { icon: Wind, label: 'Reto' },
+                    { icon: FlaskConical, label: 'Fórmula' },
+                  ].map((step, i) => (
+                    <div key={step.label} className="flex items-center gap-3">
+                      <div className="flex flex-col items-center gap-1.5">
+                        <motion.div
+                          initial={{ scale: 0.6, opacity: 0 }}
+                          whileInView={{ scale: 1, opacity: 1 }}
+                          viewport={{ once: true }}
+                          transition={{ delay: 0.5 + i * 0.15, duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                          className="w-8 h-8 rounded-full flex items-center justify-center"
+                          style={{ backgroundColor: `${OLIVE}12` }}
+                        >
+                          <step.icon className="w-3.5 h-3.5" style={{ color: OLIVE }} strokeWidth={1.5} />
+                        </motion.div>
+                        <span className="text-[8px] tracking-wide uppercase text-stone-400">{step.label}</span>
+                      </div>
+                      {i < 2 && <div className="w-3 h-px bg-stone-200 -mt-4" />}
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
             </div>
 
             {/* Derecha: contenido */}
@@ -214,7 +255,7 @@ export function DiagnosticoCapilar() {
               <div className="flex items-center gap-3 mb-5">
                 <div className="w-5 h-px bg-stone-400" />
                 <span className="text-[9px] tracking-[0.38em] uppercase text-stone-500 font-medium">
-                  Diagnóstico personalizado
+                  Diagnóstico personalizado · 60 segundos
                 </span>
               </div>
 
@@ -267,7 +308,7 @@ export function DiagnosticoCapilar() {
                   Comenzar diagnóstico
                   <ArrowRight className="w-3.5 h-3.5" strokeWidth={2.5} />
                 </motion.button>
-               
+
               </div>
             </div>
           </motion.div>
@@ -300,6 +341,9 @@ export function DiagnosticoCapilar() {
           </div>
         </div>
       </section>
+
+      {/* ─── ROLLO DE REELS ─────────────────────────────────── */}
+      <VideoRodillo />
 
       {/* ─── MODAL QUIZ (lógica preservada íntegramente) ──── */}
       <AnimatePresence>
