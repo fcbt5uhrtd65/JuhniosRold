@@ -822,7 +822,11 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                       initial={{ opacity: 0, x: -8 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: index * 0.03 }}
-                      className="group flex gap-4 bg-white rounded-2xl border border-stone-100 p-4 hover:border-stone-200 transition-colors"
+                      onClick={() => setQuickViewProduct(product)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setQuickViewProduct(product); } }}
+                      className="group flex gap-4 bg-white rounded-2xl border border-stone-100 p-4 hover:border-stone-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-300"
                     >
                       <div className="w-24 h-24 rounded-xl overflow-hidden bg-stone-50 flex-shrink-0 relative">
                         <motion.img
@@ -841,7 +845,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                         <div className="flex flex-wrap gap-1.5">
                           {sizes.slice(0, 3).map(s => (
                             <button key={s}
-                              onClick={() => setSelectedSizes({ ...selectedSizes, [product.id]: s })}
+                              onClick={e => { e.stopPropagation(); setSelectedSizes({ ...selectedSizes, [product.id]: s }); }}
                               className={`px-2.5 py-0.5 text-[9px] border rounded-md transition-colors ${
                                 selSize === s ? 'text-white border-transparent' : 'border-stone-200 text-stone-500'
                               }`}
@@ -862,13 +866,13 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                         )}
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() => setQuickViewProduct(product)}
+                            onClick={e => { e.stopPropagation(); setQuickViewProduct(product); }}
                             className="p-2 border border-stone-200 rounded-lg text-stone-400 hover:border-stone-400 hover:text-stone-700 transition-all"
                           >
                             <Eye className="w-3.5 h-3.5" strokeWidth={1.5} />
                           </button>
                           <button
-                            onClick={() => handleAddToCart(product)}
+                            onClick={e => { e.stopPropagation(); handleAddToCart(product); }}
                             disabled={isOutOfStock}
                             className="flex items-center gap-1.5 px-4 py-2 text-white text-[10px] tracking-wide font-medium rounded-lg transition-opacity hover:opacity-85 disabled:opacity-40 disabled:cursor-not-allowed"
                             style={{ backgroundColor: OLIVE }}
@@ -889,7 +893,11 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                     initial={{ opacity: 0, y: 28 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.04, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-                    className="group flex flex-col bg-white rounded-2xl border border-stone-100 overflow-hidden hover:border-stone-200 hover:shadow-sm transition-all duration-300"
+                    onClick={() => setQuickViewProduct(product)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setQuickViewProduct(product); } }}
+                    className="group flex flex-col bg-white rounded-2xl border border-stone-100 overflow-hidden hover:border-stone-200 hover:shadow-sm transition-all duration-300 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-300"
                   >
                     {/* Imagen */}
                     <div className="relative overflow-hidden bg-[#FAFAF8] aspect-[4/5]">
@@ -926,7 +934,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                       >
                         <motion.button
                           whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-                          onClick={() => setQuickViewProduct(product)}
+                          onClick={e => { e.stopPropagation(); setQuickViewProduct(product); }}
                           className="p-2 md:p-3 bg-white rounded-full text-stone-700 shadow-md hover:bg-stone-50 transition-colors"
                           aria-label="Vista rápida"
                         >
@@ -934,7 +942,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                         </motion.button>
                         <motion.button
                           whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-                          onClick={() => handleToggleSave(product.id, product.name)}
+                          onClick={e => { e.stopPropagation(); handleToggleSave(product.id, product.name); }}
                           className={`p-2 md:p-3 rounded-full shadow-md transition-all ${
                             saved ? 'bg-rose-500 text-white' : 'bg-white text-stone-400 hover:bg-stone-50'
                           }`}
@@ -965,7 +973,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                         {sizes.slice(0, 3).map(s => (
                           <button
                             key={s}
-                            onClick={() => setSelectedSizes({ ...selectedSizes, [product.id]: s })}
+                            onClick={e => { e.stopPropagation(); setSelectedSizes({ ...selectedSizes, [product.id]: s }); }}
                             className={`px-2.5 py-0.5 text-[9.5px] border rounded-md transition-colors ${
                               selSize === s ? 'text-white border-transparent' : 'border-stone-200 text-stone-500 hover:border-stone-400'
                             }`}
@@ -993,7 +1001,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                         </span>
                         <motion.button
                           whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-                          onClick={() => handleAddToCart(product)}
+                          onClick={e => { e.stopPropagation(); handleAddToCart(product); }}
                           disabled={isOutOfStock}
                           className="flex items-center gap-1.5 px-3.5 py-2 text-white text-[10px] font-semibold rounded-xl transition-opacity hover:opacity-85 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
                           style={{ backgroundColor: OLIVE }}
