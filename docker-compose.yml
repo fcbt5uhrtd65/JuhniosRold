@@ -41,6 +41,7 @@ services:
       - ./backend:/app
       - static_data:/app/staticfiles
       - media_data:/app/media
+      - ./backend/secrets:/app/secrets:ro
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.development
       DJANGO_SECRET_KEY: development-only-change-me
@@ -55,6 +56,13 @@ services:
       RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-Juhnios Rold <no-reply@juhniosrold.cloud>}
       LOCATIONIQ_API_KEY: ${LOCATIONIQ_API_KEY:-}
       GOOGLE_OAUTH2_CLIENT_ID: ${GOOGLE_OAUTH2_CLIENT_ID:-}
+      GOOGLE_CLOUD_PROJECT_ID: ${GOOGLE_CLOUD_PROJECT_ID:-}
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-/app/secrets/dialogflow-service-account.json}
+      DIALOGFLOW_LANGUAGE_CODE: ${DIALOGFLOW_LANGUAGE_CODE:-es}
+      DIALOGFLOW_WEBHOOK_URL: ${DIALOGFLOW_WEBHOOK_URL:-http://localhost:8001/dialogflow/webhook/}
+      WHATSAPP_NUMBER: ${WHATSAPP_NUMBER:-573000000000}
+      VITE_WHATSAPP_NUMBER: ${VITE_WHATSAPP_NUMBER:-573000000000}
+      CATALOG_URL: ${CATALOG_URL:-/catalogo}
       DB_HOST: db
       DB_PORT: "5432"
       DB_USER: postgres

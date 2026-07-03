@@ -11,5 +11,6 @@
 **/*.pyc
 backend/staticfiles
 backend/media
+backend/secrets
 backend/celerybeat-schedule
 test_invoice_preview.pdf
