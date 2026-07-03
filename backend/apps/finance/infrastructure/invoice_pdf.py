@@ -1,4 +1,5 @@
 import io
+import json
 import os
 from decimal import ROUND_HALF_UP, Decimal
 
@@ -48,6 +49,31 @@ def _safe(value, default="-"):
         return default
     value = str(value).strip()
     return value if value else default
+
+
+def _format_address(raw_address):
+    raw_address = _safe(raw_address, "")
+    if not raw_address:
+        return "-"
+
+    try:
+        data = json.loads(raw_address)
+    except (TypeError, ValueError):
+        return raw_address
+
+    if not isinstance(data, dict):
+        return raw_address
+
+    line1 = _safe(data.get("address_line1"), "")
+    line2 = _safe(data.get("address_line2"), "")
+    city = _safe(data.get("city"), "")
+    department = _safe(data.get("department"), "")
+
+    street = " - ".join(part for part in (line1, line2) if part)
+    locality = ", ".join(part for part in (city, department) if part)
+
+    formatted = " ".join(part for part in (street, locality) if part)
+    return formatted or "-"
 
 
 def _money(value, decimals=False):
@@ -271,7 +297,17 @@ def render_invoice_pdf(invoice):
     _draw_label_value(c, left_x, row_y, "Nombre:", invoice.customer_name, label_w=58, max_width=left_col_w)
     _draw_label_value(c, left_x, row_y - row_gap, "Razón Social:", invoice.customer_name, label_w=58, max_width=left_col_w)
     _draw_label_value(c, left_x, row_y - row_gap * 2, "Nit / C.C.:", invoice.customer_document, label_w=58, max_width=left_col_w)
-    _draw_label_value(c, left_x, row_y - row_gap * 3, "Dirección:", invoice.billing_address or "-", label_w=58, max_width=left_col_w)
+    _draw_text(c, left_x, row_y - row_gap * 3, "Dirección:", size=6.5, bold=True)
+    _draw_wrapped_text(
+        c,
+        left_x + 58,
+        row_y - row_gap * 3,
+        _format_address(invoice.billing_address),
+        max_width=left_col_w,
+        size=6.5,
+        leading=row_gap,
+        max_lines=2,
+    )
 
     _draw_label_value(c, left_x, row_y - row_gap * 5, "Barrio:", getattr(order, "shipping_neighborhood", None), label_w=58, max_width=left_col_w)
     _draw_label_value(c, left_x, row_y - row_gap * 6, "Ciudad:", getattr(order, "shipping_city", None), label_w=58, max_width=left_col_w)
@@ -287,11 +323,10 @@ def render_invoice_pdf(invoice):
     _draw_label_value(c, right_x, right_y - row_gap, "Fecha Expedición:", invoice.issued_at.strftime("%Y-%m-%d %H:%M"), label_w=82, max_width=right_col_w)
     _draw_label_value(c, right_x, right_y - row_gap * 2, "Forma de Pago:", payment.payment_method or "-", label_w=82, max_width=right_col_w)
     _draw_label_value(c, right_x, right_y - row_gap * 3, "Vencimiento:", getattr(invoice, "due_date", None) or "-", label_w=82, max_width=right_col_w)
-    _draw_label_value(c, right_x, right_y - row_gap * 4, "Referencia:", getattr(order, "reference", None), label_w=82, max_width=right_col_w)
+    _draw_label_value(c, right_x, right_y - row_gap * 4, "Pedido:", order.number, label_w=82, max_width=right_col_w)
     _draw_label_value(c, right_x, right_y - row_gap * 5, "Elaborada Por:", getattr(order, "created_by", None), label_w=82, max_width=right_col_w)
     _draw_label_value(c, right_x, right_y - row_gap * 6, "Vendedor:", getattr(order, "salesperson", None), label_w=82, max_width=right_col_w)
 
-    _draw_label_value(c, x0 + 520, right_y - row_gap * 2, "Pedido:", order.number, label_w=45, max_width=right_narrow_w)
     _draw_label_value(c, x0 + 520, right_y - row_gap * 3, "Peso:", getattr(order, "weight", None), label_w=45, max_width=right_narrow_w)
 
     # ---------------------------------------------------------------------
