@@ -510,12 +510,29 @@ def render_invoice_pdf(invoice):
     c.line(x_col3, bottom_bottom, x_col3, bottom_top)
     c.line(x_col4, bottom_bottom, x_col4, bottom_top)
 
+    is_in_store_sale = getattr(order, "channel", None) == "IN_STORE"
+
     # Despacho / vendedor
-    _draw_text(c, x_col1 + col1_w / 2, bottom_top - 10, "FIRMA Y SELLO", size=6.3, bold=True, align="center")
-    _draw_text(c, x_col1 + col1_w / 2, bottom_top - 21, "DESPACHO / VENDEDOR", size=6.3, bold=True, align="center")
-    _draw_text(c, x_col1 + 5, bottom_top - 45, "C.C./NIT: __________________", size=5.8)
-    _draw_text(c, x_col1 + 5, bottom_top - 68, "No.Cajas Empaque: ________", size=5.8)
-    _draw_text(c, x_col1 + 5, bottom_top - 84, "NDEF", size=5.8)
+    if is_in_store_sale:
+        _draw_text(c, x_col1 + col1_w / 2, bottom_top - 10, "FIRMA Y SELLO", size=6.3, bold=True, align="center")
+        _draw_text(c, x_col1 + col1_w / 2, bottom_top - 21, "DESPACHO / VENDEDOR", size=6.3, bold=True, align="center")
+        _draw_text(c, x_col1 + 5, bottom_top - 45, "C.C./NIT: __________________", size=5.8)
+        _draw_text(c, x_col1 + 5, bottom_top - 68, "No.Cajas Empaque: ________", size=5.8)
+        _draw_text(c, x_col1 + 5, bottom_top - 84, "NDEF", size=5.8)
+    else:
+        _draw_text(c, x_col1 + col1_w / 2, bottom_top - 10, "VENTA VIRTUAL", size=6.3, bold=True, align="center")
+        _draw_text(c, x_col1 + col1_w / 2, bottom_top - 21, "SIN DESPACHO EN TIENDA", size=6.3, bold=True, align="center")
+        _draw_wrapped_text(
+            c,
+            x_col1 + 5,
+            bottom_top - 38,
+            "Pedido generado y pagado en linea a traves de la tienda virtual. "
+            "No requiere vendedor ni firma de despacho.",
+            max_width=col1_w - 10,
+            size=5.4,
+            leading=6.5,
+            max_lines=5,
+        )
 
     # QR
     try:
@@ -527,22 +544,46 @@ def render_invoice_pdf(invoice):
         _draw_text(c, x_col2 + col2_w / 2, bottom_bottom + 50, "QR", size=12, bold=True, align="center")
 
     # Recibido
-    _draw_text(c, x_col3 + 5, bottom_top - 10, "RECIBI CONFORME Y ACEPTO EL CONTENIDO", size=6.3, bold=True)
-    _draw_wrapped_text(
-        c,
-        x_col3 + 5,
-        bottom_top - 24,
-        "Se hace constar que la firma distinta del comprador implica autorizacion de este "
-        "para que dicha persona acepte y confiese la deuda a cargo del comprador",
-        max_width=col3_w - 10,
-        size=5.4,
-        leading=6,
-        max_lines=4,
-    )
-    _draw_text(c, x_col3 + 5, bottom_bottom + 40, "NOMBRE: ______________________________", size=5.8)
-    _draw_text(c, x_col3 + 5, bottom_bottom + 24, "CC: _____________ FECHA RECIBE: ____________", size=5.8)
-    c.line(x_col3, bottom_bottom + 12, x_col3 + col3_w, bottom_bottom + 12)
-    _draw_text(c, x_col3 + col3_w / 2, bottom_bottom + 4, "FIRMA Y SELLO DEL CLIENTE:", size=5.6, bold=True, align="center")
+    if is_in_store_sale:
+        _draw_text(c, x_col3 + 5, bottom_top - 10, "RECIBI CONFORME Y ACEPTO EL CONTENIDO", size=6.3, bold=True)
+        _draw_wrapped_text(
+            c,
+            x_col3 + 5,
+            bottom_top - 24,
+            "Se hace constar que la firma distinta del comprador implica autorizacion de este "
+            "para que dicha persona acepte y confiese la deuda a cargo del comprador",
+            max_width=col3_w - 10,
+            size=5.4,
+            leading=6,
+            max_lines=4,
+        )
+        _draw_text(c, x_col3 + 5, bottom_bottom + 40, "NOMBRE: ______________________________", size=5.8)
+        _draw_text(c, x_col3 + 5, bottom_bottom + 24, "CC: _____________ FECHA RECIBE: ____________", size=5.8)
+        c.line(x_col3, bottom_bottom + 12, x_col3 + col3_w, bottom_bottom + 12)
+        _draw_text(c, x_col3 + col3_w / 2, bottom_bottom + 4, "FIRMA Y SELLO DEL CLIENTE:", size=5.6, bold=True, align="center")
+    else:
+        _draw_text(c, x_col3 + 5, bottom_top - 10, "ACEPTACION ELECTRONICA DEL CLIENTE", size=6.3, bold=True)
+        _draw_wrapped_text(
+            c,
+            x_col3 + 5,
+            bottom_top - 24,
+            "El cliente acepto los terminos y condiciones y confirmo la compra en linea "
+            "mediante el pago del pedido, sin necesidad de firma manuscrita.",
+            max_width=col3_w - 10,
+            size=5.4,
+            leading=6,
+            max_lines=4,
+        )
+        _draw_text(c, x_col3 + 5, bottom_bottom + 40, f"CLIENTE: {_safe(invoice.customer_name, '-')}", size=5.8)
+        _draw_text(
+            c,
+            x_col3 + 5,
+            bottom_bottom + 24,
+            f"PEDIDO: {_safe(order.number, '-')}   FECHA: {invoice.issued_at.strftime('%Y-%m-%d %H:%M')}",
+            size=5.8,
+        )
+        c.line(x_col3, bottom_bottom + 12, x_col3 + col3_w, bottom_bottom + 12)
+        _draw_text(c, x_col3 + col3_w / 2, bottom_bottom + 4, "COMPRA CONFIRMADA EN LINEA", size=5.6, bold=True, align="center")
 
     # Totales
     total_rows = [

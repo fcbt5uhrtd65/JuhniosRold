@@ -57,9 +57,14 @@ class Order(BaseModel):
         CANCELLED = "CANCELLED", "Cancelado"
         RETURNED = "RETURNED", "Devuelto"
 
+    class Channel(models.TextChoices):
+        ONLINE = "ONLINE", "Venta virtual"
+        IN_STORE = "IN_STORE", "Venta presencial"
+
     number = models.CharField(max_length=40, unique=True, editable=False)
     customer = models.ForeignKey("customers.Customer", on_delete=models.PROTECT, related_name="orders")
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    channel = models.CharField(max_length=20, choices=Channel.choices, default=Channel.ONLINE)
     subtotal = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     discount_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     wholesale_code = models.CharField(max_length=40, blank=True)

@@ -175,6 +175,7 @@ class OrderSerializer(serializers.ModelSerializer):
             "inventory_reserved_at",
             "inventory_consumed_at",
             "inventory_released_at",
+            "channel",
         )
 
     def get_shipping_address_details(self, order):
