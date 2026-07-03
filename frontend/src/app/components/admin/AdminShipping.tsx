@@ -276,8 +276,8 @@ export function AdminShipping() {
       <div className="grid lg:grid-cols-2 gap-4 mb-6">
         <SectionCard
           icon={Truck}
-          title="Tarifas por zona"
-          hint="Local: Barranquilla y área metropolitana. Regional: resto del Atlántico. Nacional: resto de Colombia."
+          title="Tarifas por zona (respaldo)"
+          hint="Se usan solo si el cálculo por distancia está desactivado o no hay coordenadas disponibles. Local: Barranquilla y área metropolitana. Regional: resto del Atlántico. Nacional: resto de Colombia."
         >
           <div className="grid grid-cols-3 gap-3">
             <Field label="Tarifa local">
@@ -295,7 +295,7 @@ export function AdminShipping() {
         <SectionCard
           icon={Route}
           title="Cálculo por distancia"
-          hint="costo = valor base + (distancia_km × valor por km)"
+          hint="Método principal: costo = valor base + (distancia_km × valor por km), medido en línea recta desde el origen. Cubre todo el país — si el cliente no tiene coordenadas exactas, se aproxima con la capital de su departamento."
           actions={<Switch checked={Boolean(form.enable_distance_calc)} onChange={(v) => updateField('enable_distance_calc', v)} label="Activar" />}
         >
           <div className="grid grid-cols-2 gap-3">

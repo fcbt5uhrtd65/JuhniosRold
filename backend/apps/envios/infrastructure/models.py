@@ -140,26 +140,33 @@ class TrackingEventModel(BaseModel):
 class ShippingSettings(BaseModel):
     """Configuración general y única de la calculadora de costos de envío."""
 
+    # Tarifas planas de referencia (mercado nacional colombiano tipo Servientrega/
+    # Interrapidísimo para paquetería pequeña), usadas solo como último fallback
+    # cuando no hay coordenadas exactas ni capital departamental reconocida.
     local_rate = models.DecimalField(max_digits=14, decimal_places=2, default=8000)
     regional_rate = models.DecimalField(max_digits=14, decimal_places=2, default=15000)
     national_rate = models.DecimalField(max_digits=14, decimal_places=2, default=22000)
 
-    enable_distance_calc = models.BooleanField(default=False)
-    base_rate = models.DecimalField(max_digits=14, decimal_places=2, default=6000)
-    rate_per_km = models.DecimalField(max_digits=10, decimal_places=2, default=800)
-    min_charge = models.DecimalField(max_digits=14, decimal_places=2, default=6000)
-    max_charge = models.DecimalField(max_digits=14, decimal_places=2, default=60000)
+    # Cálculo por distancia real (haversine) desde el origen configurado abajo.
+    # Es el método principal: cubre todo el país con costo proporcional a la
+    # distancia real en vez de tarifas planas por zona.
+    enable_distance_calc = models.BooleanField(default=True)
+    base_rate = models.DecimalField(max_digits=14, decimal_places=2, default=5000)
+    rate_per_km = models.DecimalField(max_digits=10, decimal_places=2, default=60)
+    min_charge = models.DecimalField(max_digits=14, decimal_places=2, default=7000)
+    max_charge = models.DecimalField(max_digits=14, decimal_places=2, default=65000)
 
     enable_free_shipping = models.BooleanField(default=True)
     free_shipping_threshold = models.DecimalField(max_digits=14, decimal_places=2, default=80000)
 
     enable_manual_quote_fallback = models.BooleanField(default=True)
 
-    origin_address = models.CharField(max_length=255, blank=True)
+    # Bodega/punto de despacho: Cl 41 #22-82, barrio San José, Barranquilla.
+    origin_address = models.CharField(max_length=255, blank=True, default="Cl 41 #22-82, San José, Barranquilla")
     origin_city = models.CharField(max_length=120, default="Barranquilla")
     origin_department = models.CharField(max_length=120, default="Atlántico")
-    origin_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-    origin_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    origin_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True, default="10.98833")
+    origin_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True, default="-74.79750")
 
     class Meta:
         verbose_name = "Configuración de envíos"
