@@ -6,8 +6,11 @@ import {
   Briefcase,
   Building2,
   CalendarClock,
+  Check,
   Clock3,
+  Download,
   Edit2,
+  FileDown,
   FileText,
   FileUp,
   HeartPulse,
@@ -16,6 +19,7 @@ import {
   Landmark,
   Loader2,
   MapPin,
+  Paperclip,
   Plus,
   Search,
   Save,
@@ -26,6 +30,7 @@ import {
   Users,
   Wallet,
   X,
+  XCircle,
   ArrowDownAZ,
   ArrowUpAZ,
 } from 'lucide-react';
@@ -2248,22 +2253,57 @@ export function AdminHR() {
                             <div className="text-gray-400 text-[11px] mt-1">{getRequestSubtypeLabel(request.subtype)}</div>
                           </Td>
                           <Td>{parseDate(request.start_date)} - {parseDate(request.end_date)}</Td>
-                          <Td className="max-w-sm">{request.reason || 'Sin motivo'}</Td>
+                          <Td className="max-w-xs">
+                            {request.reason ? (
+                              <button
+                                onClick={() => openRequestDetailModal(request)}
+                                className="text-left group"
+                                title="Ver motivo completo"
+                              >
+                                <span className="line-clamp-2 text-gray-700 group-hover:text-gray-900">{request.reason}</span>
+                                {request.reason.length > 80 && (
+                                  <span className="block text-[11px] font-semibold text-[#2a4038] group-hover:underline mt-0.5">Ver más</span>
+                                )}
+                              </button>
+                            ) : (
+                              <span className="text-gray-400">Sin motivo</span>
+                            )}
+                          </Td>
                           <Td><Badge label={requestStatusLabel(request.status)} color={statusBadge(request.status)} /></Td>
                           <Td>
-                            <div className="flex flex-col items-center gap-2">
-                              {request.support_document ? (
-                                <div className="flex flex-wrap items-center justify-center gap-2">
-                                  <a href={getMediaUrl(request.support_document)} target="_blank" rel="noreferrer" className="px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors">Vista previa</a>
-                                  <a href={getMediaUrl(request.support_document)} download={getSupportDocumentName(request.support_document)} className="px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors">Descargar</a>
-                                </div>
-                              ) : <div className="text-[10px] text-gray-400">Sin soporte</div>}
-                              <div className="flex items-center justify-center gap-2">
-                                <button onClick={() => openRequestDetailModal(request)} className="px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors">Ver detalle</button>
-                                <button onClick={() => handleVacationPdf(request)} className="px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors">Ver PDF</button>
-                                <button onClick={() => handleVacationAction(request, 'approve')} disabled={!['PENDING', 'IN_REVIEW', 'PENDING_HR', 'PENDING_ADMIN'].includes(request.status) || vacationActionId === request.id} className="px-3 py-1.5 border border-emerald-200 rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors disabled:opacity-50">Aprobar</button>
-                                <button onClick={() => handleVacationAction(request, 'reject')} disabled={!['PENDING', 'IN_REVIEW', 'PENDING_HR', 'PENDING_ADMIN'].includes(request.status) || vacationActionId === request.id} className="px-3 py-1.5 border border-red-200 rounded-lg text-red-700 hover:bg-red-50 transition-colors disabled:opacity-50">Rechazar</button>
-                              </div>
+                            <div className="flex items-center justify-center gap-1">
+                              <button onClick={() => openRequestDetailModal(request)} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors" title="Ver detalle">
+                                <Eye size={13} />
+                              </button>
+                              <button onClick={() => handleVacationPdf(request)} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors" title="Ver PDF">
+                                <FileDown size={13} />
+                              </button>
+                              {request.support_document && (
+                                <>
+                                  <a href={getMediaUrl(request.support_document)} target="_blank" rel="noreferrer" className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors" title="Ver soporte adjunto">
+                                    <Paperclip size={13} />
+                                  </a>
+                                  <a href={getMediaUrl(request.support_document)} download={getSupportDocumentName(request.support_document)} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors" title="Descargar soporte">
+                                    <Download size={13} />
+                                  </a>
+                                </>
+                              )}
+                              <button
+                                onClick={() => handleVacationAction(request, 'approve')}
+                                disabled={!['PENDING', 'IN_REVIEW', 'PENDING_HR', 'PENDING_ADMIN'].includes(request.status) || vacationActionId === request.id}
+                                className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-emerald-50 hover:text-emerald-600 transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-gray-400"
+                                title="Aprobar"
+                              >
+                                <Check size={13} />
+                              </button>
+                              <button
+                                onClick={() => handleVacationAction(request, 'reject')}
+                                disabled={!['PENDING', 'IN_REVIEW', 'PENDING_HR', 'PENDING_ADMIN'].includes(request.status) || vacationActionId === request.id}
+                                className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-gray-400"
+                                title="Rechazar"
+                              >
+                                <XCircle size={13} />
+                              </button>
                             </div>
                           </Td>
                         </tr>

@@ -1,5 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CalendarClock, CheckCircle2, Clock3, FileText, Paperclip, Send, UserRound, X } from 'lucide-react';
+import {
+  Briefcase,
+  CalendarClock,
+  CheckCircle2,
+  ChevronRight,
+  Clock3,
+  FileCheck2,
+  FileText,
+  HeartPulse,
+  Paperclip,
+  Plane,
+  Save,
+  Send,
+  UserRound,
+  X,
+} from 'lucide-react';
 import { useAdmin } from '../../contexts/AdminContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getEmployees, type Employee } from '../../services/employees.service';
@@ -15,6 +30,16 @@ import { Pagination } from './Pagination';
 import { SearchBar } from './SearchBar';
 
 const REQUESTS_PAGE_SIZE_OPTIONS = [5, 10, 20, 50];
+const REASON_TRUNCATE_LENGTH = 90;
+
+const REQUEST_TYPE_ICONS: Record<VacationRequestType, React.ComponentType<{ size?: number; className?: string }>> = {
+  PERMISSION: FileCheck2,
+  VACATION: Plane,
+  OVERTIME: Clock3,
+  INCAPACITY: HeartPulse,
+  LEAVE: Briefcase,
+  OTHER: FileText,
+};
 
 type RequestPeriodMode = 'SINGLE_DAY' | 'DATE_RANGE';
 type RequestTimeMode = 'FULL_DAY' | 'FROM_TIME' | 'TIME_RANGE';
@@ -47,6 +72,13 @@ const EMPTY_FORM: VacationFormState = {
 
 function formatDate(value: string): string {
   return new Date(value).toLocaleDateString('es-CO');
+}
+
+function getDayCount(startDate: string, endDate: string): number {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const diff = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+  return Math.max(1, diff + 1);
 }
 
 function formatTime(value: string | null | undefined): string {
@@ -147,6 +179,8 @@ export function AdminEmployeePortal() {
   const [requestsQuery, setRequestsQuery] = useState('');
   const [requestsPage, setRequestsPage] = useState(1);
   const [requestsPageSize, setRequestsPageSize] = useState(5);
+  const [expandedRequestId, setExpandedRequestId] = useState<string | null>(null);
+  const [selectedRequest, setSelectedRequest] = useState<VacationRequest | null>(null);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -292,43 +326,59 @@ export function AdminEmployeePortal() {
         <KpiCard label="Aprobadas" value={String(stats.approved)} icon={CheckCircle2} color="text-emerald-600 bg-emerald-50" />
       </div>
 
-      <div className="grid xl:grid-cols-[1.2fr_0.8fr] gap-6">
+      <div className="grid xl:grid-cols-[1.2fr_0.8fr] gap-6 items-start">
         <Card className="p-6">
           <div className="flex items-center gap-2 mb-4">
             <CalendarClock size={15} className="text-gray-400" />
-            <h3 className="text-sm font-semibold text-gray-900">Crear solicitud</h3>
+            <h3 className="text-sm font-semibold text-gray-900">Nueva solicitud</h3>
           </div>
 
-          <div className="mb-6 p-4 bg-gray-50 border border-gray-100 rounded-xl text-sm">
-            <p className="font-medium text-gray-900 mb-1">{getEmployeeName(employeeProfile)}</p>
-            <p className="text-xs text-gray-400">{employeeProfile.employee_code} · {employeeProfile.email}</p>
+          <div className="mb-6 flex items-center gap-3 p-4 bg-gray-50 border border-gray-100 rounded-xl text-sm">
+            <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center flex-shrink-0">
+              <UserRound size={16} />
+            </div>
+            <div>
+              <p className="font-medium text-gray-900">{getEmployeeName(employeeProfile)}</p>
+              <p className="text-xs text-gray-400">{employeeProfile.employee_code} · {employeeProfile.email}</p>
+            </div>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid sm:grid-cols-2 gap-4">
-              <div>
-                <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Tipo de solicitud</label>
-                <select
-                  value={form.request_type}
-                  onChange={(event) => setForm({ ...form, request_type: event.target.value as VacationRequestType })}
-                  className={selectCls}
-                >
-                  {Object.entries(REQUEST_TYPE_LABELS).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Tipo de solicitud</label>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {(Object.entries(REQUEST_TYPE_LABELS) as [VacationRequestType, string][]).map(([value, label]) => {
+                  const Icon = REQUEST_TYPE_ICONS[value];
+                  const active = form.request_type === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setForm({ ...form, request_type: value })}
+                      className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-medium transition-colors ${
+                        active
+                          ? 'border-[#2a4038] bg-[#2a4038]/5 text-[#2a4038]'
+                          : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      <Icon size={14} className={active ? 'text-[#2a4038]' : 'text-gray-400'} />
+                      {label}
+                    </button>
+                  );
+                })}
               </div>
-              <div>
-                <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Duración</label>
-                <select
-                  value={form.period_mode}
-                  onChange={(event) => setForm({ ...form, period_mode: event.target.value as RequestPeriodMode })}
-                  className={selectCls}
-                >
-                  <option value="SINGLE_DAY">Un solo día</option>
-                  <option value="DATE_RANGE">Varios días</option>
-                </select>
-              </div>
+            </div>
+
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Duración</label>
+              <select
+                value={form.period_mode}
+                onChange={(event) => setForm({ ...form, period_mode: event.target.value as RequestPeriodMode })}
+                className={selectCls}
+              >
+                <option value="SINGLE_DAY">Un solo día</option>
+                <option value="DATE_RANGE">Varios días</option>
+              </select>
             </div>
 
             {form.period_mode === 'SINGLE_DAY' ? (
@@ -480,44 +530,73 @@ export function AdminEmployeePortal() {
               </label>
             </div>
 
-            <div className="bg-gray-50 border border-gray-100 rounded-xl p-4 text-xs text-gray-500 space-y-1">
-              <p className="font-medium text-gray-900">Resumen</p>
-              <p>Tipo: {REQUEST_TYPE_LABELS[form.request_type]}</p>
-              <p>
-                {form.period_mode === 'SINGLE_DAY'
-                  ? `Fecha: ${form.single_date || 'pendiente'}`
-                  : `Fechas: ${form.start_date || 'pendiente'} - ${form.end_date || 'pendiente'}`}
-              </p>
-              <p>
-                Horario:{' '}
-                {form.time_mode === 'FULL_DAY'
-                  ? 'Jornada completa'
-                  : form.time_mode === 'FROM_TIME'
-                    ? `Desde ${form.start_time || 'pendiente'} hasta fin del día`
-                    : `De ${form.start_time || 'pendiente'} a ${form.end_time || 'pendiente'}`}
-              </p>
-              <p>Soporte: {form.support_document ? form.support_document.name : 'Sin adjuntar'}</p>
-            </div>
-
-            <div className="flex items-center gap-3 pt-2">
+            <div className="flex items-center justify-between gap-3 pt-2 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => toast.info('Borrador guardado localmente (próximamente se sincronizará con tu cuenta).')}
+                className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                <Save size={14} />
+                Guardar borrador
+              </button>
               <button
                 type="submit"
                 disabled={saving}
-                className="flex items-center gap-2 px-5 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold hover:bg-[#3d5c4e] transition-colors disabled:opacity-50"
+                className="flex items-center gap-2 px-5 py-2.5 bg-[#2a4038] text-white rounded-xl text-xs font-semibold hover:bg-[#3d5c4e] transition-colors disabled:opacity-50"
               >
                 <Send size={14} />
                 {saving ? 'Enviando...' : 'Enviar solicitud'}
               </button>
-              <p className="text-xs text-gray-400">RRHH revisará y actualizará el estado desde su panel.</p>
             </div>
           </form>
         </Card>
 
-        <Card className="p-6">
+        <div className="flex flex-col gap-6">
+          <Card className="p-6">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4">Resumen de la solicitud</h3>
+            <dl className="space-y-3 text-xs">
+              {[
+                ['Tipo', REQUEST_TYPE_LABELS[form.request_type]],
+                [
+                  'Fecha',
+                  form.period_mode === 'SINGLE_DAY'
+                    ? form.single_date ? formatDate(form.single_date) : '—'
+                    : form.start_date && form.end_date
+                      ? `${formatDate(form.start_date)} – ${formatDate(form.end_date)}`
+                      : '—',
+                ],
+                [
+                  'Duración',
+                  form.period_mode === 'SINGLE_DAY'
+                    ? '1 día'
+                    : form.start_date && form.end_date
+                      ? `${getDayCount(form.start_date, form.end_date)} días`
+                      : '—',
+                ],
+                [
+                  'Cobertura',
+                  form.time_mode === 'FULL_DAY'
+                    ? 'Jornada completa'
+                    : form.time_mode === 'FROM_TIME'
+                      ? `Desde ${form.start_time || '—'}`
+                      : `${form.start_time || '—'} a ${form.end_time || '—'}`,
+                ],
+                ['Motivo', form.reason.trim() || '—'],
+                ['Documento', form.support_document ? form.support_document.name : '—'],
+              ].map(([label, value]) => (
+                <div key={label} className="flex items-start justify-between gap-4">
+                  <dt className="text-gray-400 flex-shrink-0">{label}</dt>
+                  <dd className="text-gray-900 font-medium text-right truncate max-w-[60%]" title={value}>{value}</dd>
+                </div>
+              ))}
+            </dl>
+          </Card>
+
+          <Card className="p-6">
           <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
             <div className="flex items-center gap-2">
               <FileText size={15} className="text-gray-400" />
-              <h3 className="text-sm font-semibold text-gray-900">Mis solicitudes</h3>
+              <h3 className="text-sm font-semibold text-gray-900">Solicitudes recientes</h3>
             </div>
             {requests.length > 0 && (
               <span className="text-xs text-gray-400">
@@ -531,26 +610,57 @@ export function AdminEmployeePortal() {
           )}
 
           <div className="space-y-3">
-            {paginatedRequests.map((request) => (
-              <Card key={request.id} className="p-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">
-                      {getRequestTypeLabel(request.request_type)}
-                    </p>
-                    <p className="text-sm font-medium text-gray-900">{getRequestScheduleLabel(request)}</p>
-                    <p className="text-xs text-gray-400 mt-1">{request.reason || 'Sin motivo'}</p>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mt-2">
-                      Soporte: {request.support_document ? 'Adjunto' : 'Sin adjuntar'}
-                    </p>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mt-2">
-                      Registrada {formatDate(request.created_at)}
-                    </p>
+            {paginatedRequests.map((request) => {
+              const Icon = REQUEST_TYPE_ICONS[request.request_type];
+              const isLongReason = (request.reason ?? '').length > REASON_TRUNCATE_LENGTH;
+              const isExpanded = expandedRequestId === request.id;
+              const reasonText = request.reason || 'Sin motivo';
+              return (
+                <button
+                  key={request.id}
+                  type="button"
+                  onClick={() => setSelectedRequest(request)}
+                  className="w-full text-left rounded-xl border border-gray-100 hover:border-gray-200 hover:bg-gray-50/60 transition-colors p-3"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center flex-shrink-0">
+                      <Icon size={15} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-900">{getRequestTypeLabel(request.request_type)}</p>
+                      <p className="text-xs text-gray-400 truncate">{getRequestScheduleLabel(request)}</p>
+                    </div>
+                    <Badge label={getStatusLabel(request.status)} color={getStatusColor(request.status)} />
+                    <ChevronRight size={16} className="text-gray-300 flex-shrink-0" />
                   </div>
-                  <Badge label={getStatusLabel(request.status)} color={getStatusColor(request.status)} />
-                </div>
-              </Card>
-            ))}
+                  {reasonText !== 'Sin motivo' && (
+                    <div className="mt-2 pl-12 text-xs text-gray-500">
+                      <p className={isExpanded ? '' : 'line-clamp-2'}>{reasonText}</p>
+                      {isLongReason && (
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setExpandedRequestId(isExpanded ? null : request.id);
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              setExpandedRequestId(isExpanded ? null : request.id);
+                            }
+                          }}
+                          className="inline-block mt-0.5 font-semibold text-[#2a4038] hover:underline"
+                        >
+                          {isExpanded ? 'Ver menos' : 'Ver más'}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </button>
+              );
+            })}
 
             {requests.length === 0 && (
               <EmptyState title="No has enviado solicitudes todavía." />
@@ -573,8 +683,48 @@ export function AdminEmployeePortal() {
               />
             </div>
           )}
-        </Card>
+          </Card>
+        </div>
       </div>
+
+      {selectedRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setSelectedRequest(null)} />
+          <div className="relative bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50">
+              <div className="flex items-center gap-2">
+                {(() => {
+                  const Icon = REQUEST_TYPE_ICONS[selectedRequest.request_type];
+                  return <Icon size={16} className="text-gray-400" />;
+                })()}
+                <h3 className="font-semibold text-gray-900">{getRequestTypeLabel(selectedRequest.request_type)}</h3>
+              </div>
+              <button onClick={() => setSelectedRequest(null)} className="p-2 rounded-lg hover:bg-gray-200"><X size={16} /></button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+              <Badge label={getStatusLabel(selectedRequest.status)} color={getStatusColor(selectedRequest.status)} />
+              <dl className="space-y-3 text-sm">
+                <div className="flex items-start justify-between gap-4">
+                  <dt className="text-xs text-gray-400 flex-shrink-0">Fechas</dt>
+                  <dd className="text-gray-900 font-medium text-right">{getRequestScheduleLabel(selectedRequest)}</dd>
+                </div>
+                <div className="flex items-start justify-between gap-4">
+                  <dt className="text-xs text-gray-400 flex-shrink-0">Motivo</dt>
+                  <dd className="text-gray-700 text-right whitespace-pre-wrap">{selectedRequest.reason || 'Sin motivo'}</dd>
+                </div>
+                <div className="flex items-start justify-between gap-4">
+                  <dt className="text-xs text-gray-400 flex-shrink-0">Documento</dt>
+                  <dd className="text-gray-900 font-medium text-right">{selectedRequest.support_document ? 'Adjunto' : 'Sin adjuntar'}</dd>
+                </div>
+                <div className="flex items-start justify-between gap-4">
+                  <dt className="text-xs text-gray-400 flex-shrink-0">Registrada</dt>
+                  <dd className="text-gray-900 font-medium text-right">{formatDate(selectedRequest.created_at)}</dd>
+                </div>
+              </dl>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
