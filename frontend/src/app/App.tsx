@@ -31,6 +31,7 @@ import { ScrollToTop } from './components/ScrollToTop';
 import { PaymentResult } from './components/PaymentResult';
 import { CatalogPage } from './components/CatalogPage';
 import { ProfilePage } from './components/ProfilePage';
+import { ChatbotLauncher } from './components/ChatbotLauncher';
 
 
 function PublicSite({ onLoginClick }: { onLoginClick: () => void }) {
@@ -105,6 +106,7 @@ function PublicSite({ onLoginClick }: { onLoginClick: () => void }) {
       <Footer />
       <WhatsAppButton />
       <ScrollToTop />
+      <ChatbotLauncher />
       <FirstPurchasePopup />
       <ApiStatus />
     </div>
@@ -173,6 +175,7 @@ function AppContent() {
           onGoogleNewUser={() => setShowOnboarding(true)}
         />
         <GoogleOnboardingModal isOpen={showOnboarding} initialStep={onboardingInitialStep} onClose={() => setShowOnboarding(false)} />
+        <ChatbotLauncher />
       </>
     );
   }
@@ -188,6 +191,7 @@ function AppContent() {
           onGoogleNewUser={() => setShowOnboarding(true)}
         />
         <GoogleOnboardingModal isOpen={showOnboarding} initialStep={onboardingInitialStep} onClose={() => setShowOnboarding(false)} />
+        <ChatbotLauncher />
       </>
     );
   }

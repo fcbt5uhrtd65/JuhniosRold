@@ -31,7 +31,7 @@ function createMessage(role: ChatMessage['role'], text: string): ChatMessage {
 }
 
 function getChatbotEndpoint() {
-  return import.meta.env.VITE_CHATBOT_API_URL || '/api/chatbot/message';
+  return import.meta.env.VITE_CHATBOT_API_URL || '/api/chatbot/message/';
 }
 
 export function ChatbotLauncher() {
@@ -110,7 +110,7 @@ export function ChatbotLauncher() {
           setOpen((current) => !current);
           window.setTimeout(() => inputRef.current?.focus(), 120);
         }}
-        className="fixed bottom-5 right-5 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-[#2D3A1F] text-white shadow-[0_16px_42px_rgba(45,58,31,0.28)] transition hover:bg-[#253118]"
+        className="fixed bottom-8 right-24 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-[#2D3A1F] text-white shadow-[0_16px_42px_rgba(45,58,31,0.28)] transition hover:bg-[#253118]"
         whileTap={{ scale: 0.96 }}
         aria-label={open ? 'Cerrar chat' : 'Abrir chat'}
       >
@@ -124,7 +124,7 @@ export function ChatbotLauncher() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 12, scale: 0.98 }}
             transition={{ duration: 0.18 }}
-            className="fixed bottom-24 right-5 z-50 flex h-[560px] w-[calc(100vw-2.5rem)] max-w-[380px] flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-[0_22px_70px_rgba(45,58,31,0.20)]"
+            className="fixed bottom-28 right-5 z-50 flex h-[560px] max-h-[calc(100vh-9rem)] w-[calc(100vw-2.5rem)] max-w-[380px] flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-[0_22px_70px_rgba(45,58,31,0.20)]"
           >
             <header className="flex items-center gap-3 border-b border-stone-100 bg-[#F7F5F1] px-4 py-4">
               <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#2D3A1F] text-white">
@@ -148,13 +148,13 @@ export function ChatbotLauncher() {
                   className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`max-w-[82%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
+                    className={`min-w-0 max-w-[82%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed break-words ${
                       message.role === 'user'
                         ? 'bg-[#2D3A1F] text-white'
                         : 'border border-stone-100 bg-white text-stone-700'
                     }`}
                   >
-                    <p>{message.text}</p>
+                    <p className="whitespace-pre-wrap">{message.text}</p>
                     {(message.catalogUrl || message.whatsappUrl) && (
                       <div className="mt-2 flex flex-wrap gap-2">
                         {message.catalogUrl && (

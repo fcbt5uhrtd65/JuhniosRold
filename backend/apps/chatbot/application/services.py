@@ -373,7 +373,7 @@ class ChatbotService:
     def with_advisor(self, text: str, intent: str, reason: str) -> ChatbotResponse:
         whatsapp_url = self.advisor_link(reason)
         return ChatbotResponse(
-            fulfillment_text=f"{text} Puedes escribirnos por WhatsApp aqui: {whatsapp_url}",
+            fulfillment_text=f"{text} Puedes escribirnos por WhatsApp desde el boton de abajo.",
             intent=intent,
             payload={"whatsappUrl": whatsapp_url},
         )
