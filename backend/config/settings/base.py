@@ -67,6 +67,7 @@ LOCAL_APPS = [
     "apps.analytics",
     "apps.audit",
     "apps.notifications",
+    "apps.chatbot",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -155,6 +156,7 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5174")
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8001")
+WHATSAPP_NUMBER = os.getenv("WHATSAPP_NUMBER", os.getenv("VITE_WHATSAPP_NUMBER", "3000000000"))
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "no-reply@juhniosrold.com")
 EMAIL_PROVIDER = os.getenv("EMAIL_PROVIDER", "django").lower()
 NOMINATIM_CONTACT_EMAIL = os.getenv("NOMINATIM_CONTACT_EMAIL", DEFAULT_FROM_EMAIL)
