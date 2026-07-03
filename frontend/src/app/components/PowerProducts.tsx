@@ -407,8 +407,11 @@ function ProductPage({
                 const rpSaved = isProductSavedFn(rp.id);
                 return (
                   <div key={rp.id}
-                    className="group flex flex-col bg-white rounded-2xl border border-stone-100 overflow-hidden hover:border-stone-200 hover:shadow-sm transition-all duration-300 cursor-pointer"
+                    className="group flex flex-col bg-white rounded-2xl border border-stone-100 overflow-hidden hover:border-stone-200 hover:shadow-sm transition-all duration-300 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-300"
                     onClick={() => onNavigateTo(rp)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onNavigateTo(rp); } }}
                   >
                     <div className="relative overflow-hidden bg-[#FAFAF8] aspect-[3/4]">
                       <motion.img
@@ -480,7 +483,11 @@ function ProductCard({ product, index, isSaved, onToggleSave, onAddToCart, onVie
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-50px' }}
       transition={{ duration: 0.6, delay: index * 0.12, ease: [0.16, 1, 0.3, 1] }}
-      className="group flex flex-col bg-white rounded-2xl border border-stone-100 overflow-hidden hover:border-stone-200 hover:shadow-sm transition-all duration-300"
+      onClick={() => onView(product)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onView(product); } }}
+      className="group flex flex-col bg-white rounded-2xl border border-stone-100 overflow-hidden hover:border-stone-200 hover:shadow-sm transition-all duration-300 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-300"
     >
       {/* Imagen única */}
       <div className="relative aspect-[3/4] overflow-hidden bg-[#FAFAF8]">
@@ -501,24 +508,25 @@ function ProductCard({ product, index, isSaved, onToggleSave, onAddToCart, onVie
           </span>
         </div>
 
-        {/* Hover overlay: ojo + corazón */}
+        {/* Overlay ojo + corazón: siempre visible en mobile/touch, hover en desktop */}
         <motion.div
           initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
           whileHover={{ opacity: 1 }}
-          className="absolute inset-0 bg-black/22 backdrop-blur-[1px] flex items-center justify-center gap-2"
+          className="absolute inset-0 md:bg-black/22 backdrop-blur-0 md:hover:backdrop-blur-[1px] flex items-start justify-end md:items-center md:justify-center gap-2 p-2 md:p-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
         >
           <motion.button
             whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-            onClick={() => onView(product)}
-            className="p-2.5 bg-white rounded-full text-stone-700 shadow-md"
+            onClick={e => { e.stopPropagation(); onView(product); }}
+            className="p-2 md:p-2.5 bg-white rounded-full text-stone-700 shadow-md"
             aria-label="Ver producto"
           >
             <Eye className="w-3.5 h-3.5" strokeWidth={1.5} />
           </motion.button>
           <motion.button
             whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-            onClick={() => onToggleSave(product.id, product.name)}
-            className={`p-2.5 rounded-full shadow-md transition-all ${isSaved ? 'bg-rose-500 text-white' : 'bg-white text-stone-400'}`}
+            onClick={e => { e.stopPropagation(); onToggleSave(product.id, product.name); }}
+            className={`p-2 md:p-2.5 rounded-full shadow-md transition-all ${isSaved ? 'bg-rose-500 text-white' : 'bg-white text-stone-400'}`}
             aria-label="Guardar"
           >
             <Heart className={`w-3.5 h-3.5 ${isSaved ? 'fill-current' : ''}`} strokeWidth={1.5} />
@@ -541,7 +549,7 @@ function ProductCard({ product, index, isSaved, onToggleSave, onAddToCart, onVie
           <span className="text-[14px] font-semibold text-stone-900">${product.price} <span className="text-[9px] text-stone-400 font-normal">COP</span></span>
           <motion.button
             whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-            onClick={() => onAddToCart(product)}
+            onClick={e => { e.stopPropagation(); onAddToCart(product); }}
             className="flex items-center gap-1 px-3 py-1.5 text-white text-[9.5px] font-semibold rounded-xl hover:opacity-85 transition-opacity"
             style={{ backgroundColor: OLIVE }}
           >
