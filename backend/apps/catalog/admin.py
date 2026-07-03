@@ -12,6 +12,7 @@ class ProductVariantInline(admin.TabularInline):
 class ProductImageInline(admin.TabularInline):
     model = ProductImage
     extra = 0
+    max_num = 3
     fields = ("image", "alt_text", "position", "is_primary")
 
 

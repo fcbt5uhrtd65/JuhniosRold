@@ -66,7 +66,7 @@ class Price(BaseModel):
 
 class ProductImage(BaseModel):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="images")
-    image = models.ImageField(upload_to="products/%Y/%m/")
+    image = models.TextField()
     alt_text = models.CharField(max_length=180, blank=True)
     position = models.PositiveSmallIntegerField(default=0)
     is_primary = models.BooleanField(default=False)

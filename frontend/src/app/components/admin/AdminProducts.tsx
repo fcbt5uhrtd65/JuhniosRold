@@ -40,6 +40,7 @@ const EMPTY_FORM: Omit<Product, 'id'> = {
   precioCosto: undefined,
   descripcion: '',
   imagen: '',
+  imagenes: [],
   estado: 'activo',
   codigo: '',
   marca: '',
@@ -291,6 +292,7 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
       precioCosto: product.precioCosto,
       descripcion: product.descripcion,
       imagen: product.imagen,
+      imagenes: product.imagenes ?? (product.imagen ? [product.imagen] : []),
       estado: product.estado,
       codigo: product.codigo ?? '',
       marca: product.marca ?? '',
@@ -1095,8 +1097,25 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
                   </div>
 
                   <div>
-                    <FormLabel>Imagen</FormLabel>
-                    <ImageUploader value={formData.imagen} onChange={v => set({ imagen: v })} />
+                    <FormLabel>Imágenes (hasta 3)</FormLabel>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      {[0, 1, 2].map(slot => (
+                        <ImageUploader
+                          key={slot}
+                          value={formData.imagenes?.[slot] ?? ''}
+                          onChange={v => {
+                            const next = [...(formData.imagenes ?? [])];
+                            if (v) {
+                              next[slot] = v;
+                            } else {
+                              next.splice(slot, 1);
+                            }
+                            const cleaned = next.filter(Boolean);
+                            set({ imagenes: cleaned, imagen: cleaned[0] ?? '' });
+                          }}
+                        />
+                      ))}
+                    </div>
                   </div>
                 </div>
               )}

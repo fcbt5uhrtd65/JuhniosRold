@@ -50,10 +50,21 @@ class ProductVariantSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
+MAX_IMAGES_PER_PRODUCT = 3
+
+
 class ProductImageSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductImage
         fields = "__all__"
+
+    def validate_product(self, product):
+        existing = product.images.exclude(pk=getattr(self.instance, "pk", None))
+        if existing.count() >= MAX_IMAGES_PER_PRODUCT:
+            raise serializers.ValidationError(
+                f"Un producto no puede tener más de {MAX_IMAGES_PER_PRODUCT} imágenes."
+            )
+        return product
 
 
 class ProductSerializer(serializers.ModelSerializer):
@@ -78,6 +89,9 @@ class CompleteProductSerializer(serializers.Serializer):
     slug = serializers.SlugField(max_length=50)
     description = serializers.CharField(required=False, allow_blank=True, default="")
     image_url = serializers.CharField(required=False, allow_blank=True, default="")
+    images = serializers.ListField(
+        child=serializers.CharField(allow_blank=True), required=False, default=list,
+    )
     is_active = serializers.BooleanField(required=False, default=True)
     is_featured = serializers.BooleanField(required=False, default=False)
 
@@ -99,6 +113,13 @@ class CompleteProductSerializer(serializers.Serializer):
             raise serializers.ValidationError("Ya existe un producto con ese slug.")
         return value
 
+    def validate_images(self, value):
+        if len(value) > MAX_IMAGES_PER_PRODUCT:
+            raise serializers.ValidationError(
+                f"Un producto no puede tener más de {MAX_IMAGES_PER_PRODUCT} imágenes."
+            )
+        return value
+
     def validate_sku(self, value):
         if ProductVariant.objects.filter(sku=value).exists():
             raise serializers.ValidationError("Ya existe una variante con ese SKU/código.")
@@ -115,6 +136,15 @@ class CompleteProductSerializer(serializers.Serializer):
             is_active=validated_data.get("is_active", True),
             is_featured=validated_data.get("is_featured", False),
         )
+        for position, image_url in enumerate(validated_data.get("images") or []):
+            if not image_url:
+                continue
+            ProductImage.objects.create(
+                product=product,
+                image=image_url,
+                position=position,
+                is_primary=position == 0,
+            )
         variant = ProductVariant.objects.create(
             product=product,
             sku=validated_data["sku"],

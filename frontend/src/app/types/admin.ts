@@ -21,6 +21,8 @@ export interface Product {
   precioCosto?: number;
   descripcion: string;
   imagen: string;
+  /** Hasta 3 imágenes del producto; imagenes[0] coincide con `imagen`. */
+  imagenes?: string[];
   estado: 'activo' | 'inactivo' | 'agotado';
   // optional fields
   codigo?: string;

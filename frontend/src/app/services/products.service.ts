@@ -10,7 +10,9 @@ const PRODUCTS_PATH = `${CATALOG_BASE_PATH}/products/`;
 const CATEGORIES_PATH = `${CATALOG_BASE_PATH}/categories/`;
 const VARIANTS_PATH = `${CATALOG_BASE_PATH}/variants/`;
 const PRICES_PATH = `${CATALOG_BASE_PATH}/prices/`;
+const IMAGES_PATH = `${CATALOG_BASE_PATH}/images/`;
 const EXPORTS_PATH = `${CATALOG_BASE_PATH}/exports/`;
+const MAX_PRODUCT_IMAGES = 3;
 
 type UUID = string;
 
@@ -556,6 +558,35 @@ export async function getLowStockProducts(): Promise<Product[]> {
   return [];
 }
 
+/**
+ * Reemplaza las imágenes (hasta 3) de un producto: borra las existentes que ya
+ * no están en la lista nueva y crea/actualiza el resto, preservando el orden
+ * (posición 0 = imagen principal).
+ */
+async function syncProductImages(
+  productId: string,
+  images: string[],
+  existing: BackendImage[] = [],
+): Promise<void> {
+  const nextImages = images.filter(Boolean).slice(0, MAX_PRODUCT_IMAGES);
+
+  const toDelete = existing.filter((image) => !nextImages.includes(image.image));
+  await Promise.all(toDelete.map((image) => api.delete(`${IMAGES_PATH}${image.id}/`)));
+
+  const remainingExisting = existing.filter((image) => nextImages.includes(image.image));
+
+  await Promise.all(
+    nextImages.map((url, position) => {
+      const current = remainingExisting.find((image) => image.image === url);
+      const body = { product: productId, image: url, position, is_primary: position === 0 };
+      if (current) {
+        return api.patch(`${IMAGES_PATH}${current.id}/`, body);
+      }
+      return api.post(IMAGES_PATH, body);
+    }),
+  );
+}
+
 export async function createProduct(payload: CreateProductPayload): Promise<Product> {
   const categoryId = await resolveCategoryId(payload.category);
 
@@ -575,10 +606,14 @@ export async function createProduct(payload: CreateProductPayload): Promise<Prod
       is_active: payload.is_active ?? true,
       is_featured: payload.is_featured ?? false,
     });
-    const categoryMap = await getCategoryMap(true);
     if (!res.data) {
       throw new Error('No se pudo crear el producto.');
     }
+    if (payload.images && payload.images.length > 0) {
+      await syncProductImages(res.data.id, payload.images);
+      return getProductById(res.data.id);
+    }
+    const categoryMap = await getCategoryMap(true);
     return normalizeProduct(res.data, categoryMap);
   }
 
@@ -591,6 +626,7 @@ export async function createProduct(payload: CreateProductPayload): Promise<Prod
     slug: payload.slug,
     description: payload.description ?? '',
     image_url: payload.image_url ?? payload.images?.[0] ?? '',
+    images: payload.images ?? [],
     is_active: payload.is_active ?? true,
     is_featured: payload.is_featured ?? false,
     sku: payload.sku || `JR-${Date.now()}`,
@@ -629,10 +665,15 @@ export async function updateProduct(id: string, payload: UpdateProductPayload): 
     ...(payload.is_featured !== undefined ? { is_featured: payload.is_featured } : {}),
   });
 
-  const categoryMap = await getCategoryMap(true);
   if (!res.data) {
     throw new Error('No se pudo actualizar el producto.');
   }
+
+  if (payload.images !== undefined) {
+    await syncProductImages(id, payload.images, res.data.images);
+  }
+
+  const categoryMap = await getCategoryMap(true);
 
   const variant = res.data.variants.find((item) => item.is_active) ?? res.data.variants[0];
   if (
@@ -662,6 +703,10 @@ export async function updateProduct(id: string, payload: UpdateProductPayload): 
       });
       return getProductById(id);
     }
+  }
+
+  if (payload.images !== undefined) {
+    return getProductById(id);
   }
 
   return normalizeProduct(res.data, categoryMap);

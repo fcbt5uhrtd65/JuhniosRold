@@ -110,11 +110,11 @@ export function ChatbotLauncher() {
           setOpen((current) => !current);
           window.setTimeout(() => inputRef.current?.focus(), 120);
         }}
-        className="fixed bottom-8 right-24 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-[#2D3A1F] text-white shadow-[0_16px_42px_rgba(45,58,31,0.28)] transition hover:bg-[#253118]"
+        className="fixed bottom-6 right-20 z-50 flex h-11 w-11 items-center justify-center rounded-full bg-[#2D3A1F] text-white shadow-[0_16px_42px_rgba(45,58,31,0.28)] transition hover:bg-[#253118]"
         whileTap={{ scale: 0.96 }}
         aria-label={open ? 'Cerrar chat' : 'Abrir chat'}
       >
-        {open ? <X className="h-5 w-5" /> : <MessageCircle className="h-5 w-5" />}
+        {open ? <X className="h-4 w-4" /> : <MessageCircle className="h-4 w-4" />}
       </motion.button>
 
       <AnimatePresence>
@@ -124,7 +124,7 @@ export function ChatbotLauncher() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 12, scale: 0.98 }}
             transition={{ duration: 0.18 }}
-            className="fixed bottom-28 right-5 z-50 flex h-[560px] max-h-[calc(100vh-9rem)] w-[calc(100vw-2.5rem)] max-w-[380px] flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-[0_22px_70px_rgba(45,58,31,0.20)]"
+            className="fixed bottom-20 right-5 z-50 flex h-[560px] max-h-[calc(100vh-7rem)] w-[calc(100vw-2.5rem)] max-w-[380px] flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-[0_22px_70px_rgba(45,58,31,0.20)]"
           >
             <header className="flex items-center gap-3 border-b border-stone-100 bg-[#F7F5F1] px-4 py-4">
               <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#2D3A1F] text-white">

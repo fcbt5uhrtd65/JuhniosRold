@@ -59,13 +59,6 @@ function getProductImages(product: CatalogProduct): string[] {
   if (product.primary_image) imgs.push(product.primary_image);
   product.image_urls.forEach(u => { if (u !== product.primary_image) imgs.push(u); });
   if (imgs.length === 0) imgs.push(FALLBACK_IMAGE);
-  // Pad a 3 con fallbacks alternativos
-  const extras = [
-    'https://images.unsplash.com/photo-1587049352846-4a222e784d38?w=600&q=80',
-    'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=600&q=80',
-  ];
-  let ei = 0;
-  while (imgs.length < 3) { imgs.push(extras[ei++ % extras.length]); }
   return imgs.slice(0, 3);
 }
 
