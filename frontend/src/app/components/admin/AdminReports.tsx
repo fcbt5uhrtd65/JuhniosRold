@@ -290,90 +290,113 @@ const DEFAULT_FILTERS: Filters = {
 
 function FilterBar({ filters, onChange }: { filters: Filters; onChange: (f: Filters) => void }) {
   const [open, setOpen] = useState(false);
-  const hasActive = filters.estado || filters.clientType || filters.dateRange !== '30d';
+  const containerRef = useRef<HTMLDivElement>(null);
+  const activeChips: { key: keyof Filters; label: string }[] = [
+    ...(filters.dateRange !== '30d' ? [{ key: 'dateRange' as const, label: DATE_RANGES.find(r => r.id === filters.dateRange)?.label ?? '' }] : []),
+    ...(filters.estado ? [{ key: 'estado' as const, label: STATUS_LABEL[filters.estado] ?? filters.estado }] : []),
+    ...(filters.clientType ? [{ key: 'clientType' as const, label: filters.clientType }] : []),
+    ...(filters.searchQuery ? [{ key: 'searchQuery' as const, label: `"${filters.searchQuery}"` }] : []),
+  ];
+  const hasActive = activeChips.length > 0;
+
+  useEffect(() => {
+    if (!open) return;
+    function onMouseDown(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', onMouseDown);
+    return () => document.removeEventListener('mousedown', onMouseDown);
+  }, [open]);
+
+  const clearChip = (key: keyof Filters) => {
+    if (key === 'dateRange') onChange({ ...filters, dateRange: '30d' });
+    else onChange({ ...filters, [key]: '' });
+  };
 
   return (
-    <div className="mb-6 rounded-2xl border border-stone-200 bg-white">
-      {/* barra superior siempre visible */}
-      <div className="flex flex-wrap items-center gap-2 px-4 py-3">
-        {/* rango de fechas */}
-        <div className="flex flex-wrap gap-1">
-          {DATE_RANGES.map(r => (
-            <button
-              key={r.id}
-              onClick={() => onChange({ ...filters, dateRange: r.id })}
-              className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold transition ${
-                filters.dateRange === r.id
-                  ? 'bg-stone-900 text-white'
-                  : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-              }`}
-            >
-              {r.label}
-            </button>
-          ))}
-        </div>
+    <div className="mb-6 flex flex-wrap items-center gap-2">
+      <div className="relative" ref={containerRef}>
+        <button
+          onClick={() => setOpen(!open)}
+          className={`flex items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-semibold transition ${open || hasActive ? 'border-stone-900 bg-stone-900 text-white' : 'border-stone-200 text-stone-600 hover:bg-stone-50'}`}
+        >
+          <Filter className="w-3.5 h-3.5" strokeWidth={1.5} />
+          Filtros
+          {hasActive && <span className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold ${open ? 'bg-white/20' : 'bg-stone-900 text-white'}`}>{activeChips.length}</span>}
+        </button>
 
-        <div className="ml-auto flex items-center gap-2">
-          {hasActive && (
-            <button
-              onClick={() => onChange(DEFAULT_FILTERS)}
-              className="flex items-center gap-1.5 rounded-lg border border-stone-200 px-2.5 py-1.5 text-[11px] font-semibold text-stone-500 transition hover:bg-stone-50"
-            >
-              <X className="w-3 h-3" /> Limpiar
-            </button>
-          )}
-          <button
-            onClick={() => setOpen(!open)}
-            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition ${open ? 'border-stone-900 bg-stone-900 text-white' : 'border-stone-200 text-stone-600 hover:bg-stone-50'}`}
-          >
-            <Filter className="w-3 h-3" />
-            Filtros
-            {open ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-          </button>
-        </div>
+        {open && (
+          <div className="absolute left-0 top-full z-30 mt-2 w-80 rounded-2xl border border-stone-200 bg-white p-4 shadow-lg">
+            <div className="mb-4">
+              <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-stone-400">Periodo</p>
+              <div className="flex flex-wrap gap-1.5">
+                {DATE_RANGES.map(r => (
+                  <button
+                    key={r.id}
+                    onClick={() => onChange({ ...filters, dateRange: r.id })}
+                    className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold transition ${filters.dateRange === r.id ? 'bg-stone-900 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'}`}
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+              {filters.dateRange === 'custom' && (
+                <div className="mt-2 flex items-center gap-2">
+                  <input type="date" value={filters.customFrom} onChange={e => onChange({ ...filters, customFrom: e.target.value })}
+                    className="w-full rounded-lg border border-stone-200 px-2.5 py-1.5 text-xs text-stone-700 outline-none focus:border-stone-400" />
+                  <span className="text-xs text-stone-400">—</span>
+                  <input type="date" value={filters.customTo} onChange={e => onChange({ ...filters, customTo: e.target.value })}
+                    className="w-full rounded-lg border border-stone-200 px-2.5 py-1.5 text-xs text-stone-700 outline-none focus:border-stone-400" />
+                </div>
+              )}
+            </div>
+
+            <div className="mb-4 grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-stone-400">Estado</label>
+                <select value={filters.estado} onChange={e => onChange({ ...filters, estado: e.target.value })}
+                  className="w-full rounded-lg border border-stone-200 px-2.5 py-1.5 text-xs text-stone-700 outline-none focus:border-stone-400 bg-white">
+                  <option value="">Todos</option>
+                  {Object.entries(STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-stone-400">Tipo cliente</label>
+                <select value={filters.clientType} onChange={e => onChange({ ...filters, clientType: e.target.value })}
+                  className="w-full rounded-lg border border-stone-200 px-2.5 py-1.5 text-xs text-stone-700 outline-none focus:border-stone-400 bg-white">
+                  <option value="">Todos</option>
+                  <option value="mayorista">Mayorista</option>
+                  <option value="nuevo">Nuevo</option>
+                  <option value="recurrente">Recurrente</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-stone-400">Búsqueda</label>
+              <input type="text" placeholder="Número de pedido, cliente, producto…" value={filters.searchQuery}
+                onChange={e => onChange({ ...filters, searchQuery: e.target.value })}
+                className="w-full rounded-lg border border-stone-200 px-2.5 py-1.5 text-xs text-stone-700 outline-none focus:border-stone-400 placeholder:text-stone-300" />
+            </div>
+
+            <div className="flex gap-2 border-t border-stone-100 pt-3">
+              <button onClick={() => onChange(DEFAULT_FILTERS)} className="flex-1 rounded-lg border border-stone-200 py-2 text-xs font-semibold text-stone-500 transition hover:bg-stone-50">Limpiar todo</button>
+              <button onClick={() => setOpen(false)} className="flex-1 rounded-lg bg-stone-900 py-2 text-xs font-semibold text-white transition hover:opacity-90">Aplicar</button>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* fechas personalizadas */}
-      {filters.dateRange === 'custom' && (
-        <div className="border-t border-stone-100 px-4 py-3 flex items-center gap-3">
-          <Calendar className="w-3.5 h-3.5 text-stone-400 flex-shrink-0" strokeWidth={1.5} />
-          <input type="date" value={filters.customFrom} onChange={e => onChange({ ...filters, customFrom: e.target.value })}
-            className="rounded-lg border border-stone-200 px-2.5 py-1.5 text-xs text-stone-700 outline-none focus:border-stone-400" />
-          <span className="text-xs text-stone-400">—</span>
-          <input type="date" value={filters.customTo} onChange={e => onChange({ ...filters, customTo: e.target.value })}
-            className="rounded-lg border border-stone-200 px-2.5 py-1.5 text-xs text-stone-700 outline-none focus:border-stone-400" />
-        </div>
-      )}
-
-      {/* filtros expandibles */}
-      {open && (
-        <div className="border-t border-stone-100 px-4 py-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div>
-            <label className="block text-[10px] font-bold uppercase tracking-widest text-stone-400 mb-1">Estado pedido</label>
-            <select value={filters.estado} onChange={e => onChange({ ...filters, estado: e.target.value })}
-              className="w-full rounded-lg border border-stone-200 px-2.5 py-1.5 text-xs text-stone-700 outline-none focus:border-stone-400 bg-white">
-              <option value="">Todos</option>
-              {Object.entries(STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-[10px] font-bold uppercase tracking-widest text-stone-400 mb-1">Tipo cliente</label>
-            <select value={filters.clientType} onChange={e => onChange({ ...filters, clientType: e.target.value })}
-              className="w-full rounded-lg border border-stone-200 px-2.5 py-1.5 text-xs text-stone-700 outline-none focus:border-stone-400 bg-white">
-              <option value="">Todos</option>
-              <option value="mayorista">Mayorista</option>
-              <option value="nuevo">Nuevo</option>
-              <option value="recurrente">Recurrente</option>
-            </select>
-          </div>
-          <div className="sm:col-span-2">
-            <label className="block text-[10px] font-bold uppercase tracking-widest text-stone-400 mb-1">Búsqueda</label>
-            <input type="text" placeholder="Número de pedido, cliente, producto…" value={filters.searchQuery}
-              onChange={e => onChange({ ...filters, searchQuery: e.target.value })}
-              className="w-full rounded-lg border border-stone-200 px-2.5 py-1.5 text-xs text-stone-700 outline-none focus:border-stone-400 placeholder:text-stone-300" />
-          </div>
-        </div>
-      )}
+      {activeChips.map(chip => (
+        <button
+          key={chip.key}
+          onClick={() => clearChip(chip.key)}
+          className="flex items-center gap-1.5 rounded-lg bg-stone-100 px-2.5 py-1.5 text-[11px] font-semibold text-stone-600 transition hover:bg-stone-200"
+        >
+          {chip.label}
+          <X className="w-3 h-3" />
+        </button>
+      ))}
     </div>
   );
 }
@@ -1620,12 +1643,12 @@ export function AdminReports() {
     }
   };
 
-  const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
-    { id: 'overview', label: 'Resumen', icon: BarChart3 },
-    { id: 'products', label: 'Productos', icon: Package },
-    { id: 'customers', label: 'Clientes', icon: Users },
-    { id: 'operational', label: 'Operacional', icon: AlertCircle },
-    { id: 'orders', label: 'Pedidos', icon: ShoppingCart },
+  const TABS: { id: TabId; label: string; icon: React.ElementType; desc: string }[] = [
+    { id: 'overview', label: 'Resumen', icon: BarChart3, desc: 'KPIs generales de ventas' },
+    { id: 'products', label: 'Productos', icon: Package, desc: 'Ranking y rotación' },
+    { id: 'customers', label: 'Clientes', icon: Users, desc: 'Segmentos y geografía' },
+    { id: 'operational', label: 'Operacional', icon: AlertCircle, desc: 'Cumplimiento y tiempos' },
+    { id: 'orders', label: 'Pedidos', icon: ShoppingCart, desc: 'Listado detallado' },
   ];
 
   return (
@@ -1674,30 +1697,41 @@ export function AdminReports() {
       {/* ── Filtros ── */}
       <FilterBar filters={filters} onChange={f => { setFilters(f); }} />
 
-      {/* ── Tabs ── */}
-      <div className="mb-6 flex gap-1 border-b border-stone-200 overflow-x-auto">
-        {TABS.map(tab => {
-          const Icon = tab.icon;
-          return (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold whitespace-nowrap border-b-2 transition -mb-px ${
-                activeTab === tab.id
-                  ? 'border-stone-900 text-stone-900'
-                  : 'border-transparent text-stone-400 hover:text-stone-700'
-              }`}>
-              <Icon className="w-3.5 h-3.5" strokeWidth={1.5} />
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
+      {/* ── Sidebar de secciones + contenido ── */}
+      <div className="flex flex-col lg:flex-row gap-0 lg:gap-6 -mx-4 sm:-mx-6 md:-mx-8 lg:mx-0">
+        <div className="w-full lg:w-56 flex-shrink-0 bg-stone-50 lg:bg-transparent border-b lg:border-b-0 lg:border-r border-stone-200 lg:pr-4">
+          <nav className="p-3 lg:p-0 lg:sticky lg:top-4">
+            <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-stone-400 px-3 mb-2 hidden lg:block">Secciones</p>
+            <div className="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-visible">
+              {TABS.map(tab => {
+                const Icon = tab.icon;
+                const active = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`flex-shrink-0 lg:w-full flex items-start gap-3 px-3 py-2.5 rounded-xl text-left transition-all group ${active ? 'bg-stone-900 text-white shadow-sm' : 'hover:bg-white hover:shadow-sm text-stone-600'}`}
+                  >
+                    <Icon className={`w-3.5 h-3.5 flex-shrink-0 mt-0.5 ${active ? 'text-white' : 'text-stone-400 group-hover:text-stone-900'}`} strokeWidth={1.5} />
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-xs font-semibold whitespace-nowrap lg:whitespace-normal ${active ? 'text-white' : 'text-stone-700'}`}>{tab.label}</p>
+                      <p className={`text-[10px] leading-tight mt-0.5 hidden lg:block ${active ? 'text-white/70' : 'text-stone-400'}`}>{tab.desc}</p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </nav>
+        </div>
 
-      {/* ── Contenido por tab ── */}
-      {activeTab === 'overview' && <TabOverview a={analytics} report={report} loadingReport={loadingReport} />}
-      {activeTab === 'products' && <TabProducts a={analytics} report={report} loadingReport={loadingReport} />}
-      {activeTab === 'customers' && <TabCustomers a={analytics} report={report} loadingReport={loadingReport} />}
-      {activeTab === 'operational' && <TabOperational a={analytics} />}
-      {activeTab === 'orders' && <TabOrders a={analytics} filters={filters} onFilterChange={setFilters} />}
+        <div className="flex-1 min-w-0 px-4 sm:px-6 md:px-8 lg:px-0 pt-4 lg:pt-0">
+          {activeTab === 'overview' && <TabOverview a={analytics} report={report} loadingReport={loadingReport} />}
+          {activeTab === 'products' && <TabProducts a={analytics} report={report} loadingReport={loadingReport} />}
+          {activeTab === 'customers' && <TabCustomers a={analytics} report={report} loadingReport={loadingReport} />}
+          {activeTab === 'operational' && <TabOperational a={analytics} />}
+          {activeTab === 'orders' && <TabOrders a={analytics} filters={filters} onFilterChange={setFilters} />}
+        </div>
+      </div>
     </div>
   );
 }

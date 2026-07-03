@@ -32,7 +32,7 @@ import {
 
 import { SearchBar } from './SearchBar';
 import { Pagination } from './Pagination';
-import { Badge, type BadgeColor, Card, Table, Th, Td, Modal, EmptyState, LoadingState, inputCls, selectCls, TabBar } from './AdminUI';
+import { Badge, type BadgeColor, Card, Table, Th, Td, Modal, EmptyState, LoadingState, inputCls, selectCls } from './AdminUI';
 import { useToast } from '../../contexts/ToastContext';
 import { ApiError } from '../../services/api';
 import { getRoleLabel } from '../../utils/permissions';
@@ -1920,34 +1920,53 @@ export function AdminHR() {
         })}
       </div>
 
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-        <TabBar
-          value={activeTab}
-          onChange={(id) => {
-            setActiveTab(id);
-            setFilterStatus('all');
-          }}
-          tabs={[
-            { id: 'employees', label: 'Empleados', icon: Users },
-            { id: 'branches', label: 'Sedes', icon: Building2 },
-            { id: 'catalog', label: 'Catálogos', icon: Briefcase },
-            { id: 'vacations', label: 'Solicitudes', icon: CalendarClock },
-          ]}
-        />
-
-        <div className="flex flex-col sm:flex-row gap-3">
-          <SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Buscar por nombre, código, documento, sede..." className="flex-1 min-w-[280px]" />
-          {(activeTab === 'employees' || activeTab === 'vacations') && (
-            <select value={filterDepartment} onChange={(event) => setFilterDepartment(event.target.value)} className={selectCls}>
-              <option value="all">Todos los departamentos</option>
-              {departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
-            </select>
-          )}
-          <select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)} className={selectCls}>
-            {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-          </select>
+      <div className="flex flex-col lg:flex-row gap-0 lg:gap-6 -mx-4 sm:-mx-6 md:-mx-8 lg:mx-0">
+        <div className="w-full lg:w-56 flex-shrink-0 bg-gray-50 lg:bg-transparent border-b lg:border-b-0 lg:border-r border-gray-100 lg:pr-4">
+          <nav className="p-3 lg:p-0 lg:sticky lg:top-4">
+            <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-gray-400 px-3 mb-2 hidden lg:block">Módulos</p>
+            <div className="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-visible">
+              {([
+                { id: 'employees', label: 'Empleados', icon: Users, desc: 'Expedientes y documentos' },
+                { id: 'branches', label: 'Sedes', icon: Building2, desc: 'Sucursales y ubicaciones' },
+                { id: 'catalog', label: 'Catálogos', icon: Briefcase, desc: 'Áreas, cargos y horarios' },
+                { id: 'vacations', label: 'Solicitudes', icon: CalendarClock, desc: 'Vacaciones y permisos' },
+              ] as const).map((item) => {
+                const Icon = item.icon;
+                const active = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setActiveTab(item.id);
+                      setFilterStatus('all');
+                    }}
+                    className={`flex-shrink-0 lg:w-full flex items-start gap-3 px-3 py-2.5 rounded-xl text-left transition-all group ${active ? 'bg-[#2a4038] text-white shadow-sm' : 'hover:bg-white hover:shadow-sm text-gray-600'}`}
+                  >
+                    <Icon size={14} className={`flex-shrink-0 mt-0.5 ${active ? 'text-white' : 'text-gray-400 group-hover:text-[#2a4038]'}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-xs font-semibold whitespace-nowrap lg:whitespace-normal ${active ? 'text-white' : 'text-gray-700'}`}>{item.label}</p>
+                      <p className={`text-[10px] leading-tight mt-0.5 hidden lg:block ${active ? 'text-white/70' : 'text-gray-400'}`}>{item.desc}</p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </nav>
         </div>
-      </div>
+
+        <div className="flex-1 min-w-0 space-y-4 px-4 sm:px-6 md:px-8 lg:px-0 pt-4 lg:pt-0">
+          <SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Buscar por nombre, código, documento, sede..." className="w-full" />
+          <div className="flex flex-col sm:flex-row gap-3">
+            {(activeTab === 'employees' || activeTab === 'vacations') && (
+              <select value={filterDepartment} onChange={(event) => setFilterDepartment(event.target.value)} className={selectCls}>
+                <option value="all">Todos los departamentos</option>
+                {departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
+              </select>
+            )}
+            <select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)} className={selectCls}>
+              {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </div>
 
       {isLoading ? (
         <LoadingState label="Cargando información de RRHH..." />
@@ -2270,6 +2289,8 @@ export function AdminHR() {
           )}
         </>
       )}
+        </div>
+      </div>
 
       {showEmployeeDetailModal && viewingEmployee && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

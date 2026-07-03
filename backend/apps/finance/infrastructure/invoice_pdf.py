@@ -167,17 +167,20 @@ def _draw_wrapped_text(c, x, y, text, max_width, size=7, bold=False, leading=Non
     leading = leading or size + 2
     lines = _wrap_lines(text, max_width, font_name, size)
 
+    truncated = bool(max_lines) and len(lines) > max_lines
     if max_lines:
         lines = lines[:max_lines]
+    if truncated and lines:
+        lines[-1] = _fit_text(f"{lines[-1]} …", max_width, font_name, size)
 
     c.setFont(font_name, size)
     for idx, line in enumerate(lines):
         c.drawString(x, y - (idx * leading), line)
 
 
-def _draw_label_value(c, x, y, label, value, label_w=68, size=6.5):
+def _draw_label_value(c, x, y, label, value, label_w=68, size=6.5, max_width=150):
     _draw_text(c, x, y, label, size=size, bold=True)
-    _draw_text(c, x + label_w, y, _fit_text(value, 150, font_size=size), size=size)
+    _draw_text(c, x + label_w, y, _fit_text(value, max_width, font_size=size), size=size)
 
 
 def _draw_rect(c, x, y, w, h, radius=0):
@@ -257,33 +260,39 @@ def render_invoice_pdf(invoice):
     _draw_rect(c, x0 + 366, info_y, main_w - 366, info_h, radius=8)
 
     left_x = x0 + 5
-    row_y = info_y + info_h - 14
+    row_y = info_y + info_h - 12
+    row_gap = 10.5
 
-    _draw_label_value(c, left_x, row_y, "Nombre:", invoice.customer_name, label_w=58)
-    _draw_label_value(c, left_x, row_y - 13, "Razón Social:", invoice.customer_name, label_w=58)
-    _draw_label_value(c, left_x, row_y - 26, "Nit / C.C.:", invoice.customer_document, label_w=58)
-    _draw_label_value(c, left_x, row_y - 39, "Dirección:", invoice.billing_address or "-", label_w=58)
+    left_col_w = 366 - 5 - 3 - 58
+    left_narrow_w = 366 - 250 - 3 - 45
+    right_col_w = main_w - 371 - 3 - 82
+    right_narrow_w = main_w - 520 - 3 - 45
 
-    _draw_label_value(c, left_x, row_y - 61, "Barrio:", getattr(order, "shipping_neighborhood", None), label_w=58)
-    _draw_label_value(c, left_x, row_y - 74, "Ciudad:", getattr(order, "shipping_city", None), label_w=58)
-    _draw_label_value(c, left_x, row_y - 87, "Teléfono:", getattr(order, "customer_phone", None), label_w=58)
+    _draw_label_value(c, left_x, row_y, "Nombre:", invoice.customer_name, label_w=58, max_width=left_col_w)
+    _draw_label_value(c, left_x, row_y - row_gap, "Razón Social:", invoice.customer_name, label_w=58, max_width=left_col_w)
+    _draw_label_value(c, left_x, row_y - row_gap * 2, "Nit / C.C.:", invoice.customer_document, label_w=58, max_width=left_col_w)
+    _draw_label_value(c, left_x, row_y - row_gap * 3, "Dirección:", invoice.billing_address or "-", label_w=58, max_width=left_col_w)
 
-    _draw_label_value(c, x0 + 250, row_y - 26, "Código:", getattr(order, "customer_code", None), label_w=45)
-    _draw_label_value(c, x0 + 250, row_y - 74, "Placa:", getattr(order, "plate", None), label_w=45)
+    _draw_label_value(c, left_x, row_y - row_gap * 5, "Barrio:", getattr(order, "shipping_neighborhood", None), label_w=58, max_width=left_col_w)
+    _draw_label_value(c, left_x, row_y - row_gap * 6, "Ciudad:", getattr(order, "shipping_city", None), label_w=58, max_width=left_col_w)
+    _draw_label_value(c, left_x, row_y - row_gap * 7, "Teléfono:", getattr(order, "customer_phone", None), label_w=58, max_width=left_col_w)
+
+    _draw_label_value(c, x0 + 250, row_y - row_gap * 2, "Código:", getattr(order, "customer_code", None), label_w=45, max_width=left_narrow_w)
+    _draw_label_value(c, x0 + 250, row_y - row_gap * 6, "Placa:", getattr(order, "plate", None), label_w=45, max_width=left_narrow_w)
 
     right_x = x0 + 371
     right_y = row_y
 
-    _draw_label_value(c, right_x, right_y, "Fecha Generación:", invoice.created_at.strftime("%Y-%m-%d %H:%M"), label_w=82)
-    _draw_label_value(c, right_x, right_y - 13, "Fecha Expedición:", invoice.issued_at.strftime("%Y-%m-%d %H:%M"), label_w=82)
-    _draw_label_value(c, right_x, right_y - 26, "Forma de Pago:", payment.payment_method or "-", label_w=82)
-    _draw_label_value(c, right_x, right_y - 39, "Vencimiento:", getattr(invoice, "due_date", None) or "-", label_w=82)
-    _draw_label_value(c, right_x, right_y - 52, "Referencia:", getattr(order, "reference", None), label_w=82)
-    _draw_label_value(c, right_x, right_y - 65, "Elaborada Por:", getattr(order, "created_by", None), label_w=82)
-    _draw_label_value(c, right_x, right_y - 78, "Vendedor:", getattr(order, "salesperson", None), label_w=82)
+    _draw_label_value(c, right_x, right_y, "Fecha Generación:", invoice.created_at.strftime("%Y-%m-%d %H:%M"), label_w=82, max_width=right_col_w)
+    _draw_label_value(c, right_x, right_y - row_gap, "Fecha Expedición:", invoice.issued_at.strftime("%Y-%m-%d %H:%M"), label_w=82, max_width=right_col_w)
+    _draw_label_value(c, right_x, right_y - row_gap * 2, "Forma de Pago:", payment.payment_method or "-", label_w=82, max_width=right_col_w)
+    _draw_label_value(c, right_x, right_y - row_gap * 3, "Vencimiento:", getattr(invoice, "due_date", None) or "-", label_w=82, max_width=right_col_w)
+    _draw_label_value(c, right_x, right_y - row_gap * 4, "Referencia:", getattr(order, "reference", None), label_w=82, max_width=right_col_w)
+    _draw_label_value(c, right_x, right_y - row_gap * 5, "Elaborada Por:", getattr(order, "created_by", None), label_w=82, max_width=right_col_w)
+    _draw_label_value(c, right_x, right_y - row_gap * 6, "Vendedor:", getattr(order, "salesperson", None), label_w=82, max_width=right_col_w)
 
-    _draw_label_value(c, x0 + 520, right_y - 26, "Pedido:", order.number, label_w=45)
-    _draw_label_value(c, x0 + 520, right_y - 39, "Peso:", getattr(order, "weight", None), label_w=45)
+    _draw_label_value(c, x0 + 520, right_y - row_gap * 2, "Pedido:", order.number, label_w=45, max_width=right_narrow_w)
+    _draw_label_value(c, x0 + 520, right_y - row_gap * 3, "Peso:", getattr(order, "weight", None), label_w=45, max_width=right_narrow_w)
 
     # ---------------------------------------------------------------------
     # Tabla de productos
@@ -311,9 +320,13 @@ def render_invoice_pdf(invoice):
         _draw_text(c, cx + width / 2, table_top - 10, header, size=5.8, bold=True, align="center")
         cx += width
 
-    lines = list(invoice.lines.all())
+    all_lines = list(invoice.lines.all())
     available_h = table_top - header_h - table_bottom - 4
-    row_h = 10 if len(lines) <= 3 else max(7, available_h / max(len(lines), 1))
+    min_row_h = 9
+    max_visible_lines = max(1, int(available_h // min_row_h))
+    hidden_count = max(0, len(all_lines) - max_visible_lines)
+    lines = all_lines[: max_visible_lines - 1] if hidden_count else all_lines[:max_visible_lines]
+    row_h = 10 if len(lines) <= 3 else max(min_row_h, available_h / max(len(lines) + (1 if hidden_count else 0), 1))
 
     y = table_top - header_h - row_h + 2
 
@@ -355,6 +368,17 @@ def render_invoice_pdf(invoice):
 
         if y < table_bottom + 3:
             break
+
+    if hidden_count:
+        _draw_text(
+            c,
+            table_x + table_w / 2,
+            y,
+            f"+ {hidden_count} producto(s) adicional(es) — ver anexo de detalle",
+            size=6,
+            bold=True,
+            align="center",
+        )
 
     # ---------------------------------------------------------------------
     # Impuestos, bancos, letras y retenciones

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Truck, Plus, Trash2, Loader2, Save, Search, MapPin } from 'lucide-react';
+import { Truck, Plus, Trash2, Loader2, Save, Search, MapPin, Route, Gift, Warehouse } from 'lucide-react';
 import {
   getShippingSettings,
   updateShippingSettings,
@@ -38,6 +38,41 @@ const ZONE_TYPE_COLOR: Record<ShippingZoneType, BadgeColor> = {
   REGIONAL: 'blue',
   NATIONAL: 'purple',
 };
+
+function Switch({ checked, onChange, label }: { checked: boolean; onChange: (value: boolean) => void; label: string }) {
+  return (
+    <label className="flex items-center gap-2.5 cursor-pointer select-none">
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        className={`relative h-5 w-9 flex-shrink-0 rounded-full transition-colors ${checked ? 'bg-[#2a4038]' : 'bg-gray-200'}`}
+      >
+        <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-4' : 'translate-x-0.5'}`} />
+      </button>
+      <span className="text-xs font-medium text-gray-600">{label}</span>
+    </label>
+  );
+}
+
+function SectionCard({ icon: Icon, title, hint, children, actions }: { icon: React.ComponentType<{ size?: number; className?: string }>; title: string; hint?: string; children: React.ReactNode; actions?: React.ReactNode }) {
+  return (
+    <Card className="p-5">
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-[#2a4038]/8 flex items-center justify-center text-[#2a4038] flex-shrink-0">
+            <Icon size={15} />
+          </div>
+          <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+        </div>
+        {actions}
+      </div>
+      {children}
+      {hint && <p className="text-[11px] text-gray-400 mt-3 leading-relaxed">{hint}</p>}
+    </Card>
+  );
+}
 
 const EMPTY_ZONE_FORM = {
   name: '',
@@ -239,11 +274,11 @@ export function AdminShipping() {
       />
 
       <div className="grid lg:grid-cols-2 gap-4 mb-6">
-        <Card className="p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <Truck size={16} className="text-[#2a4038]" />
-            <h3 className="text-sm font-semibold text-gray-900">Tarifas por zona</h3>
-          </div>
+        <SectionCard
+          icon={Truck}
+          title="Tarifas por zona"
+          hint="Local: Barranquilla y área metropolitana. Regional: resto del Atlántico. Nacional: resto de Colombia."
+        >
           <div className="grid grid-cols-3 gap-3">
             <Field label="Tarifa local">
               <input type="number" className={inputCls} value={form.local_rate ?? ''} onChange={(e) => updateField('local_rate', e.target.value)} />
@@ -255,19 +290,14 @@ export function AdminShipping() {
               <input type="number" className={inputCls} value={form.national_rate ?? ''} onChange={(e) => updateField('national_rate', e.target.value)} />
             </Field>
           </div>
-          <p className="text-[11px] text-gray-400 mt-3">
-            Local: Barranquilla y área metropolitana. Regional: resto del Atlántico. Nacional: resto de Colombia.
-          </p>
-        </Card>
+        </SectionCard>
 
-        <Card className="p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-gray-900">Cálculo por distancia</h3>
-            <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
-              <input type="checkbox" checked={Boolean(form.enable_distance_calc)} onChange={(e) => updateField('enable_distance_calc', e.target.checked)} />
-              Activar
-            </label>
-          </div>
+        <SectionCard
+          icon={Route}
+          title="Cálculo por distancia"
+          hint="costo = valor base + (distancia_km × valor por km)"
+          actions={<Switch checked={Boolean(form.enable_distance_calc)} onChange={(v) => updateField('enable_distance_calc', v)} label="Activar" />}
+        >
           <div className="grid grid-cols-2 gap-3">
             <Field label="Valor base">
               <input type="number" className={inputCls} value={form.base_rate ?? ''} onChange={(e) => updateField('base_rate', e.target.value)} />
@@ -282,92 +312,93 @@ export function AdminShipping() {
               <input type="number" className={inputCls} value={form.max_charge ?? ''} onChange={(e) => updateField('max_charge', e.target.value)} />
             </Field>
           </div>
-          <p className="text-[11px] text-gray-400 mt-3">costo = valor base + (distancia_km × valor por km)</p>
-        </Card>
+        </SectionCard>
 
-        <Card className="p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-gray-900">Envío gratis</h3>
-            <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
-              <input type="checkbox" checked={Boolean(form.enable_free_shipping)} onChange={(e) => updateField('enable_free_shipping', e.target.checked)} />
-              Activar
-            </label>
-          </div>
+        <SectionCard
+          icon={Gift}
+          title="Envío gratis"
+          actions={<Switch checked={Boolean(form.enable_free_shipping)} onChange={(v) => updateField('enable_free_shipping', v)} label="Activar" />}
+        >
           <Field label="Monto mínimo para envío gratis">
             <input type="number" className={inputCls} value={form.free_shipping_threshold ?? ''} onChange={(e) => updateField('free_shipping_threshold', e.target.value)} />
           </Field>
-          <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer mt-4">
-            <input type="checkbox" checked={Boolean(form.enable_manual_quote_fallback)} onChange={(e) => updateField('enable_manual_quote_fallback', e.target.checked)} />
-            Cotización manual para zonas sin cobertura
-          </label>
-        </Card>
-
-        <Card className="p-5">
-          <h3 className="text-sm font-semibold text-gray-900 mb-4">Origen (bodega)</h3>
-
-          <div className="mb-3">
-            <LocationPicker value={originLoc} onChange={handleOriginLocationChange} />
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <Switch checked={Boolean(form.enable_manual_quote_fallback)} onChange={(v) => updateField('enable_manual_quote_fallback', v)} label="Cotización manual para zonas sin cobertura" />
           </div>
+        </SectionCard>
+      </div>
 
-          <div className="relative mb-3" ref={originSearchContainerRef}>
-            <div className="relative flex items-center rounded-lg border border-gray-200 bg-white">
-              <Search className="absolute left-3 w-4 h-4 text-gray-300" strokeWidth={1.5} />
-              <input
-                type="text"
-                value={originQuery}
-                disabled={!originLoc.stateId}
-                onChange={(e) => { setOriginQuery(e.target.value); setOriginSuggestionsOpen(true); }}
-                onFocus={() => setOriginSuggestionsOpen(true)}
-                placeholder={originLoc.stateId ? `Buscar dirección en ${originLoc.stateName}` : 'Selecciona país y departamento primero'}
-                className="w-full pl-9 pr-8 py-2.5 bg-transparent text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none rounded-lg disabled:cursor-not-allowed"
-              />
-              {originSearching && <Loader2 className="absolute right-3 w-3.5 h-3.5 animate-spin text-gray-300" strokeWidth={1.5} />}
-            </div>
-            {originSuggestionsOpen && originSuggestions.length > 0 && (
-              <div className="absolute z-[1100] left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
-                {originSuggestions.map((result) => (
-                  <button
-                    key={result.place_id}
-                    type="button"
-                    onMouseDown={(e) => { e.preventDefault(); handleSelectOriginSuggestion(result); }}
-                    className="w-full text-left px-3.5 py-2 text-xs text-gray-700 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0"
-                  >
-                    {result.display_name}
-                  </button>
-                ))}
+      <div className="mb-6">
+        <SectionCard icon={Warehouse} title="Origen (bodega)">
+          <div className="grid lg:grid-cols-2 gap-5">
+            <div>
+              <div className="mb-3">
+                <LocationPicker value={originLoc} onChange={handleOriginLocationChange} />
               </div>
-            )}
-          </div>
 
-          <InteractiveLocationMap
-            lat={form.origin_latitude ? Number(form.origin_latitude) : null}
-            lng={form.origin_longitude ? Number(form.origin_longitude) : null}
-            onMarkerMove={handleOriginMarkerMove}
-            className="h-56 rounded-lg overflow-hidden border border-gray-200 mb-3"
-          />
+              <div className="relative mb-3" ref={originSearchContainerRef}>
+                <div className="relative flex items-center rounded-lg border border-gray-200 bg-white">
+                  <Search className="absolute left-3 w-4 h-4 text-gray-300" strokeWidth={1.5} />
+                  <input
+                    type="text"
+                    value={originQuery}
+                    disabled={!originLoc.stateId}
+                    onChange={(e) => { setOriginQuery(e.target.value); setOriginSuggestionsOpen(true); }}
+                    onFocus={() => setOriginSuggestionsOpen(true)}
+                    placeholder={originLoc.stateId ? `Buscar dirección en ${originLoc.stateName}` : 'Selecciona país y departamento primero'}
+                    className="w-full pl-9 pr-8 py-2.5 bg-transparent text-sm text-gray-800 placeholder:text-gray-300 focus:outline-none rounded-lg disabled:cursor-not-allowed"
+                  />
+                  {originSearching && <Loader2 className="absolute right-3 w-3.5 h-3.5 animate-spin text-gray-300" strokeWidth={1.5} />}
+                </div>
+                {originSuggestionsOpen && originSuggestions.length > 0 && (
+                  <div className="absolute z-[1100] left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
+                    {originSuggestions.map((result) => (
+                      <button
+                        key={result.place_id}
+                        type="button"
+                        onMouseDown={(e) => { e.preventDefault(); handleSelectOriginSuggestion(result); }}
+                        className="w-full text-left px-3.5 py-2 text-xs text-gray-700 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0"
+                      >
+                        {result.display_name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
 
-          {form.origin_address && (
-            <div className="flex items-start gap-2 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-600 leading-relaxed mb-3">
-              <MapPin className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-[#2a4038]" strokeWidth={1.5} />
-              <span className="flex-1">
-                {form.origin_address}
-                {originReverseLoading && <Loader2 className="inline w-3 h-3 ml-1.5 animate-spin" strokeWidth={1.5} />}
-              </span>
+              {form.origin_address && (
+                <div className="flex items-start gap-2 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-600 leading-relaxed mb-3">
+                  <MapPin className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-[#2a4038]" strokeWidth={1.5} />
+                  <span className="flex-1">
+                    {form.origin_address}
+                    {originReverseLoading && <Loader2 className="inline w-3 h-3 ml-1.5 animate-spin" strokeWidth={1.5} />}
+                  </span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Dirección de origen">
+                  <input className={inputCls} value={form.origin_address ?? ''} onChange={(e) => updateField('origin_address', e.target.value)} />
+                </Field>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Latitud">
+                    <input type="number" step="any" className={inputCls} value={form.origin_latitude ?? ''} onChange={(e) => updateField('origin_latitude', e.target.value)} />
+                  </Field>
+                  <Field label="Longitud">
+                    <input type="number" step="any" className={inputCls} value={form.origin_longitude ?? ''} onChange={(e) => updateField('origin_longitude', e.target.value)} />
+                  </Field>
+                </div>
+              </div>
             </div>
-          )}
 
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Dirección de origen">
-              <input className={inputCls} value={form.origin_address ?? ''} onChange={(e) => updateField('origin_address', e.target.value)} />
-            </Field>
-            <Field label="Latitud">
-              <input type="number" step="any" className={inputCls} value={form.origin_latitude ?? ''} onChange={(e) => updateField('origin_latitude', e.target.value)} />
-            </Field>
-            <Field label="Longitud">
-              <input type="number" step="any" className={inputCls} value={form.origin_longitude ?? ''} onChange={(e) => updateField('origin_longitude', e.target.value)} />
-            </Field>
+            <InteractiveLocationMap
+              lat={form.origin_latitude ? Number(form.origin_latitude) : null}
+              lng={form.origin_longitude ? Number(form.origin_longitude) : null}
+              onMarkerMove={handleOriginMarkerMove}
+              className="h-full min-h-[280px] rounded-lg overflow-hidden border border-gray-200"
+            />
           </div>
-        </Card>
+        </SectionCard>
       </div>
 
       <PageHeader
