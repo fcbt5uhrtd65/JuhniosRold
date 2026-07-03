@@ -105,6 +105,21 @@ CITY_DELIVERY_DAYS = {
     "bucaramanga": "3-4 dias habiles",
 }
 
+GREETING_MESSAGES = {
+    "hola",
+    "holis",
+    "hello",
+    "hi",
+    "hey",
+    "buenas",
+    "buenos dias",
+    "buenas tardes",
+    "buenas noches",
+    "como estas",
+    "como estas?",
+    "que onda",
+}
+
 INTENT_KEYWORDS = (
     ("Comprar producto", ("comprar", "compra", "quiero comprar", "agregar", "carrito")),
     ("Recomendar producto", ("recom", "frizz", "brillo", "seco", "maltrat", "tintur", "caida", "caída", "suave", "liso")),
@@ -157,6 +172,8 @@ class ChatbotService:
             "Consulta de envio": self.shipping_info,
             "Formas de pago": self.payment_methods,
             "Estado de pedido": self.order_status,
+            "Saludo": self.greeting,
+            "Default Welcome Intent": self.greeting,
             "Catalogo": self.catalog,
             "Promociones": self.promotions,
             "Hablar con asesor": self.human_handoff,
@@ -166,10 +183,16 @@ class ChatbotService:
         return handler(parameters, query_text=query_text)
 
     def detect_local_intent(self, normalized_message: str) -> str:
+        if self.is_greeting(normalized_message):
+            return "Saludo"
         for intent_name, keywords in INTENT_KEYWORDS:
             if any(keyword in normalized_message for keyword in keywords):
                 return intent_name
         return "Fallback"
+
+    def is_greeting(self, normalized_message: str) -> bool:
+        cleaned = normalized_message.strip(" ?!¡¿.,;:")
+        return cleaned in GREETING_MESSAGES
 
     def extract_local_parameters(self, normalized_message: str) -> dict:
         parameters = {}
@@ -341,6 +364,19 @@ class ChatbotService:
             "Las promociones cambian segun disponibilidad. Para no inventar descuentos, revisa el catalogo o habla con un asesor.",
             "Promociones",
             "promociones vigentes",
+        )
+
+    def greeting(self, parameters: dict, *, query_text: str = "") -> ChatbotResponse:
+        return ChatbotResponse(
+            fulfillment_text=(
+                "Hola, que gusto saludarte. Soy el asistente de Juhnios Rold. "
+                "Puedo ayudarte con productos, recomendaciones, envios, pagos, catalogo o compras mayoristas."
+            ),
+            intent="Saludo",
+            payload={
+                "catalogUrl": self.catalog_path,
+                "whatsappUrl": self.advisor_link("asesoria desde saludo"),
+            },
         )
 
     def catalog(self, parameters: dict, *, query_text: str = "") -> ChatbotResponse:

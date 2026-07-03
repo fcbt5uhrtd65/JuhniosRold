@@ -60,6 +60,15 @@ class ChatbotBusinessTests(TestCase):
         self.assertIn("prefiero no inventarla", response.fulfillment_text)
         self.assertIn("whatsappUrl", response.payload)
 
+    def test_greetings_return_welcome_response(self):
+        for message in ("hola", "cómo estás?", "qué onda", "hi", "hello", "holis"):
+            with self.subTest(message=message):
+                response = self.service.respond_to_text(message)
+
+                self.assertEqual(response.intent, "Saludo")
+                self.assertIn("gusto saludarte", response.fulfillment_text)
+                self.assertIn("catalogUrl", response.payload)
+
     def test_order_status_can_read_existing_order_by_number(self):
         user = get_user_model().objects.create_user(
             email="cliente-chatbot@example.com",

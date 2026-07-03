@@ -1,8 +1,16 @@
 [
   { "id": "welcome-1", "data": [{ "text": "hola" }], "isTemplate": false, "count": 0 },
-  { "id": "welcome-2", "data": [{ "text": "buenas" }], "isTemplate": false, "count": 0 },
-  { "id": "welcome-3", "data": [{ "text": "buenos dias" }], "isTemplate": false, "count": 0 },
-  { "id": "welcome-4", "data": [{ "text": "buenas tardes" }], "isTemplate": false, "count": 0 },
-  { "id": "welcome-5", "data": [{ "text": "quiero informacion" }], "isTemplate": false, "count": 0 },
-  { "id": "welcome-6", "data": [{ "text": "me ayudan por favor" }], "isTemplate": false, "count": 0 }
+  { "id": "welcome-2", "data": [{ "text": "holis" }], "isTemplate": false, "count": 0 },
+  { "id": "welcome-3", "data": [{ "text": "hello" }], "isTemplate": false, "count": 0 },
+  { "id": "welcome-4", "data": [{ "text": "hi" }], "isTemplate": false, "count": 0 },
+  { "id": "welcome-5", "data": [{ "text": "hey" }], "isTemplate": false, "count": 0 },
+  { "id": "welcome-6", "data": [{ "text": "buenas" }], "isTemplate": false, "count": 0 },
+  { "id": "welcome-7", "data": [{ "text": "buenos dias" }], "isTemplate": false, "count": 0 },
+  { "id": "welcome-8", "data": [{ "text": "buenas tardes" }], "isTemplate": false, "count": 0 },
+  { "id": "welcome-9", "data": [{ "text": "buenas noches" }], "isTemplate": false, "count": 0 },
+  { "id": "welcome-10", "data": [{ "text": "como estas?" }], "isTemplate": false, "count": 0 },
+  { "id": "welcome-11", "data": [{ "text": "qué onda" }], "isTemplate": false, "count": 0 },
+  { "id": "welcome-12", "data": [{ "text": "que onda" }], "isTemplate": false, "count": 0 },
+  { "id": "welcome-13", "data": [{ "text": "quiero informacion" }], "isTemplate": false, "count": 0 },
+  { "id": "welcome-14", "data": [{ "text": "me ayudan por favor" }], "isTemplate": false, "count": 0 }
 ]
