@@ -2092,13 +2092,13 @@ function ModuloReportes() {
     { id: 'inv-grupo', title: 'Inventario por Grupo', desc: 'Agrupado por grupo de artículo con subtotales', icon: Layers, tags: ['Excel'] },
     { id: 'valorizado', title: 'Valorización de Inventario', desc: 'Valor total sin IVA, con IVA y a precio de venta', icon: BarChart3, tags: ['PDF', 'Excel'] },
     { id: 'movimientos', title: 'Movimientos del Período', desc: 'Todas las entradas y salidas en el rango de fechas', icon: ArrowRightLeft, tags: ['Excel'] },
-    { id: 'trazabilidad', title: 'Trazabilidad por Lote', desc: 'Rastrear un lote desde materia prima hasta PT', icon: ChevronRight, tags: ['PDF'] },
+    { id: 'trazabilidad', title: 'Trazabilidad por Lote', desc: 'Rastrear un lote desde materia prima hasta PT', icon: ChevronRight, tags: ['PDF'], unsupported: true },
     { id: 'produccion', title: 'Órdenes de Producción', desc: 'Estado, rendimiento y mermas de OPs del período', icon: Factory, tags: ['PDF', 'Excel'] },
     { id: 'mermas', title: 'Mermas y Sobrantes', desc: 'Consolidado de pérdidas y excedentes en producción', icon: Beaker, tags: ['Excel'] },
     { id: 'compras', title: 'Órdenes de Compra', desc: 'OC emitidas, recibidas y pendientes del período', icon: ShoppingCart, tags: ['Excel'] },
     { id: 'corte', title: 'Inventario a Fecha de Corte', desc: 'Stock histórico en una fecha específica pasada', icon: FileText, tags: ['Excel'] },
     { id: 'bajo-minimo', title: 'Artículos bajo Mínimo', desc: 'Artículos que requieren reabastecimiento urgente', icon: TrendingDown, tags: ['PDF', 'Excel'] },
-    { id: 'vencimiento', title: 'Control de Vencimientos', desc: 'Lotes por vencer en los próximos 30, 60 y 90 días', icon: Clock, tags: ['PDF'] },
+    { id: 'vencimiento', title: 'Control de Vencimientos', desc: 'Lotes por vencer en los próximos 30, 60 y 90 días', icon: Clock, tags: ['PDF'], unsupported: true },
   ];
 
   const handleExport = async (reportId: string, format: InventoryReportExportFormat) => {
@@ -2133,17 +2133,25 @@ function ModuloReportes() {
       </div>
       <div className="grid grid-cols-2 gap-4">
         {reportes.map(r => (
-          <div key={r.id} className="bg-white border border-gray-100 rounded-2xl p-5 hover:shadow-md transition-shadow group">
+          <div key={r.id} className={`bg-white border border-gray-100 rounded-2xl p-5 transition-shadow group ${r.unsupported ? 'opacity-60' : 'hover:shadow-md'}`}>
             <div className="flex items-start justify-between mb-3">
               <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center group-hover:bg-[#2a4038]/8 transition-colors"><r.icon size={18} className="text-[#2a4038]" /></div>
-              <div className="flex gap-1.5">{r.tags.map(tag => <span key={tag} className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full">{tag}</span>)}</div>
+              <div className="flex gap-1.5">
+                {r.unsupported
+                  ? <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 bg-amber-50 text-amber-600 rounded-full">Próximamente</span>
+                  : r.tags.map(tag => <span key={tag} className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full">{tag}</span>)}
+              </div>
             </div>
             <h3 className="font-semibold text-gray-900 mb-1">{r.title}</h3>
             <p className="text-xs text-gray-500 mb-4">{r.desc}</p>
-            <div className="flex gap-2">
-              {r.tags.includes('PDF') && <button disabled={exporting !== null} onClick={() => handleExport(r.id, 'pdf')} className="flex-1 py-2 text-xs font-semibold border border-[#2a4038] text-[#2a4038] rounded-xl hover:bg-[#2a4038] hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1.5">{exporting === `${r.id}-pdf` ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />} PDF</button>}
-              {r.tags.includes('Excel') && <button disabled={exporting !== null} onClick={() => handleExport(r.id, 'xlsx')} className="flex-1 py-2 text-xs font-semibold bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1.5">{exporting === `${r.id}-xlsx` ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />} Excel</button>}
-            </div>
+            {r.unsupported ? (
+              <p className="text-[11px] text-gray-400 italic py-2">Este reporte aún no está disponible: requiere registrar información de lotes que el sistema todavía no captura.</p>
+            ) : (
+              <div className="flex gap-2">
+                {r.tags.includes('PDF') && <button disabled={exporting !== null} onClick={() => handleExport(r.id, 'pdf')} className="flex-1 py-2 text-xs font-semibold border border-[#2a4038] text-[#2a4038] rounded-xl hover:bg-[#2a4038] hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1.5">{exporting === `${r.id}-pdf` ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />} PDF</button>}
+                {r.tags.includes('Excel') && <button disabled={exporting !== null} onClick={() => handleExport(r.id, 'xlsx')} className="flex-1 py-2 text-xs font-semibold bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1.5">{exporting === `${r.id}-xlsx` ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />} Excel</button>}
+              </div>
+            )}
           </div>
         ))}
       </div>

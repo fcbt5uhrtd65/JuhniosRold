@@ -55,11 +55,21 @@ class SalesReportView(generics.GenericAPIView):
     def get(self, request):
         date_from = request.query_params.get("date_from")
         date_to = request.query_params.get("date_to")
-        return Response(SalesReportQuery().execute(date_from=date_from, date_to=date_to))
+        status = request.query_params.get("status")
+        client_type = request.query_params.get("client_type")
+        return Response(
+            SalesReportQuery().execute(
+                date_from=date_from, date_to=date_to, status=status, client_type=client_type,
+            )
+        )
 
 
 class SalesReportExportSerializer(serializers.Serializer):
     format = serializers.ChoiceField(choices=("xlsx", "pdf"), default="xlsx")
+    date_from = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
+    date_to = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
+    status = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
+    client_type = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
 
 
 class SalesReportExportView(generics.GenericAPIView):
@@ -70,7 +80,10 @@ class SalesReportExportView(generics.GenericAPIView):
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        task = export_sales_report.delay(serializer.validated_data["format"])
+        data = serializer.validated_data
+        task = export_sales_report.delay(
+            data["format"], data.get("date_from"), data.get("date_to"), data.get("status"), data.get("client_type"),
+        )
         return Response({"task_id": task.id, "status": "queued"}, status=202)
 
 

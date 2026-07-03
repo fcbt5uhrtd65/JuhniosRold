@@ -17,7 +17,9 @@ from reportlab.lib.units import cm
 from reportlab.pdfgen import canvas
 from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-from ..application.queries import DashboardQuery, SalesReportQuery
+from apps.commerce.infrastructure.models import Order
+
+from ..application.queries import DashboardQuery, InventoryReportQuery, SalesReportQuery
 
 CHART_COLORS = (
     colors.HexColor("#0a0a0a"),
@@ -39,8 +41,98 @@ def _month_label(month):
     return MONTH_LABELS.get(month.split("-")[-1], month)
 
 
+def _build_period_label(filters):
+    """Arma un texto legible con los filtros aplicados, para mostrarlo en el archivo exportado."""
+    parts = []
+    date_from = filters.get("date_from")
+    date_to = filters.get("date_to")
+    if date_from or date_to:
+        parts.append(f"{date_from or 'inicio'} a {date_to or 'hoy'}")
+    status = filters.get("status")
+    if status:
+        parts.append(f"Estado: {dict(Order.Status.choices).get(status, status)}")
+    client_type = filters.get("client_type")
+    if client_type:
+        client_label = "Mayorista" if client_type == "WHOLESALE" else "Retail"
+        parts.append(f"Tipo de cliente: {client_label}")
+    return " · ".join(parts) if parts else "Todos los datos (sin filtros)"
+
+
+INVENTORY_REPORTS = {
+    "compras", "bajo-minimo", "produccion", "mermas", "corte",
+    "inv-general", "inv-bodega", "inv-grupo", "valorizado", "movimientos",
+}
+
+INVENTORY_REPORT_TITLES = {
+    "compras": "Órdenes de Compra",
+    "bajo-minimo": "Artículos bajo Mínimo",
+    "produccion": "Órdenes de Producción",
+    "mermas": "Mermas y Sobrantes",
+    "corte": "Inventario a Fecha de Corte",
+    "inv-general": "Inventario General",
+    "inv-bodega": "Inventario por Bodega",
+    "inv-grupo": "Inventario por Grupo",
+    "valorizado": "Valorización de Inventario",
+    "movimientos": "Movimientos del Período",
+}
+
+
+def _build_inventory_period_label(filters):
+    parts = []
+    date_from = filters.get("date_from") or filters.get("desde")
+    date_to = filters.get("date_to") or filters.get("hasta")
+    if date_from or date_to:
+        parts.append(f"{date_from or 'inicio'} a {date_to or 'hoy'}")
+    bodega = filters.get("bodega")
+    if bodega:
+        parts.append(f"Bodega: {bodega}")
+    grupo = filters.get("grupo")
+    if grupo:
+        parts.append(f"Grupo: {grupo}")
+    return " · ".join(parts) if parts else "Todos los datos (sin filtros)"
+
+
+def _generate_inventory_report(output_path, report_type, output_format, filters):
+    query = InventoryReportQuery()
+    date_from = filters.get("date_from") or filters.get("desde") or None
+    date_to = filters.get("date_to") or filters.get("hasta") or None
+    bodega = filters.get("bodega") or None
+    grupo = filters.get("grupo") or None
+    period_label = _build_inventory_period_label(filters)
+    title = INVENTORY_REPORT_TITLES[report_type]
+
+    if report_type == "compras":
+        data = query.purchases(date_from=date_from, date_to=date_to, bodega=bodega, grupo=grupo)
+    elif report_type == "bajo-minimo":
+        data = query.low_stock(bodega=bodega, grupo=grupo)
+    elif report_type == "produccion":
+        data = query.production(date_from=date_from, date_to=date_to, grupo=grupo)
+    elif report_type == "mermas":
+        data = query.losses(date_from=date_from, date_to=date_to, bodega=bodega, grupo=grupo)
+    elif report_type == "corte":
+        from datetime import date as date_cls
+        cutoff = date_to or date_from or date_cls.today().isoformat()
+        data = query.stock_at_date(cutoff, bodega=bodega, grupo=grupo)
+    elif report_type == "inv-general":
+        data = query.stock_general(bodega=bodega, grupo=grupo)
+    elif report_type == "inv-bodega":
+        data = query.stock_by_warehouse(bodega=bodega, grupo=grupo)
+    elif report_type == "inv-grupo":
+        data = query.stock_by_group(bodega=bodega, grupo=grupo)
+    elif report_type == "valorizado":
+        data = query.valuation(bodega=bodega, grupo=grupo)
+    else:  # movimientos
+        data = query.movements(date_from=date_from, date_to=date_to, bodega=bodega, grupo=grupo)
+
+    if output_format == "pdf":
+        _write_inventory_report_pdf(output_path, report_type, title, data, period_label)
+    else:
+        _write_inventory_report_xlsx(output_path, report_type, title, data, period_label)
+
+
 @shared_task
 def generate_report(report_type, output_format="xlsx", filters=None):
+    filters = filters or {}
     report_dir = Path(settings.MEDIA_ROOT) / "reports"
     report_dir.mkdir(parents=True, exist_ok=True)
     filename = f"{report_type}-{uuid4().hex}.{output_format}"
@@ -48,16 +140,24 @@ def generate_report(report_type, output_format="xlsx", filters=None):
 
     CUSTOMER_REPORTS = {"customers", "customer_geo", "international_customers"}
     if report_type in CUSTOMER_REPORTS:
-        sales_data = SalesReportQuery().execute()
+        sales_data = SalesReportQuery().execute(
+            date_from=filters.get("date_from"),
+            date_to=filters.get("date_to"),
+            status=filters.get("status"),
+            client_type=filters.get("client_type"),
+        )
+        period_label = _build_period_label(filters)
         if output_format == "pdf":
-            _write_customer_report_pdf(output_path, report_type, sales_data)
+            _write_customer_report_pdf(output_path, report_type, sales_data, period_label)
         else:
             if report_type == "customers":
-                _write_customers_xlsx(output_path, sales_data)
+                _write_customers_xlsx(output_path, sales_data, period_label)
             elif report_type == "customer_geo":
-                _write_customer_geo_xlsx(output_path, sales_data)
+                _write_customer_geo_xlsx(output_path, sales_data, period_label)
             else:
-                _write_international_customers_xlsx(output_path, sales_data)
+                _write_international_customers_xlsx(output_path, sales_data, period_label)
+    elif report_type in INVENTORY_REPORTS:
+        _generate_inventory_report(output_path, report_type, output_format, filters)
     else:
         data = DashboardQuery().execute()
         if output_format == "pdf":
@@ -99,12 +199,21 @@ def _xlsx_row_style(even):
     return fill, alignment, border
 
 
-def _apply_header(sheet, headers):
+def _write_period_label(sheet, period_label):
+    """Escribe el período exportado en la fila 1 y devuelve la fila donde debe ir el header."""
+    if not period_label:
+        return 1
+    from openpyxl.styles import Font
+    sheet.cell(row=1, column=1, value=f"Período exportado: {period_label}").font = Font(italic=True, color="6B7280")
+    return 3
+
+
+def _apply_header(sheet, headers, start_row=1):
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
     font, fill, alignment, border = _xlsx_header_style()
-    sheet.row_dimensions[1].height = 20
+    sheet.row_dimensions[start_row].height = 20
     for col_idx, header in enumerate(headers, 1):
-        cell = sheet.cell(row=1, column=col_idx, value=header)
+        cell = sheet.cell(row=start_row, column=col_idx, value=header)
         cell.font = font
         cell.fill = fill
         cell.alignment = alignment
@@ -120,19 +229,21 @@ def _apply_row(sheet, row_idx, values):
         cell.border = border
 
 
-def _write_customers_xlsx(path, data):
+def _write_customers_xlsx(path, data, period_label=""):
     from openpyxl.styles import Font
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Clientes activos"
 
+    header_row = _write_period_label(sheet, period_label)
     headers = ["#", "Nombre", "Email", "Ciudad", "Pedidos", "Ingresos", "Ticket promedio", "Última compra", "Segmento", "Modo"]
-    _apply_header(sheet, headers)
+    _apply_header(sheet, headers, start_row=header_row)
 
     segment_map = {"VIP": "★ VIP", "Recurrente": "Recurrente", "Nuevo": "Nuevo", "Inactivo": "Inactivo"}
     mode_map = {"WHOLESALE": "Mayorista", "RETAIL": "Retail"}
 
     for i, c in enumerate(data.get("top_customers", []), 1):
+        row_idx = header_row + i
         last_order = ""
         if c.get("last_order"):
             try:
@@ -146,32 +257,34 @@ def _write_customers_xlsx(path, data):
             last_order, segment_map.get(c["segment"], c["segment"]),
             mode_map.get(c["mode"], c["mode"]),
         )
-        _apply_row(sheet, i + 1, values)
+        _apply_row(sheet, row_idx, values)
         if c["segment"] == "VIP":
-            sheet.cell(row=i + 1, column=9).font = Font(bold=True, color="B45309")
+            sheet.cell(row=row_idx, column=9).font = Font(bold=True, color="B45309")
 
     _auto_width(sheet)
 
     # hoja de segmentación
     seg_sheet = workbook.create_sheet("Segmentación")
-    _apply_header(seg_sheet, ["Segmento", "Cantidad", "Porcentaje"])
+    seg_header_row = _write_period_label(seg_sheet, period_label)
+    _apply_header(seg_sheet, ["Segmento", "Cantidad", "Porcentaje"], start_row=seg_header_row)
     for i, s in enumerate(data.get("customer_segments", []), 1):
-        _apply_row(seg_sheet, i + 1, (s["segment"], s["count"], f"{s['percentage']}%"))
+        _apply_row(seg_sheet, seg_header_row + i, (s["segment"], s["count"], f"{s['percentage']}%"))
     _auto_width(seg_sheet)
 
     workbook.save(path)
 
 
-def _write_customer_geo_xlsx(path, data):
+def _write_customer_geo_xlsx(path, data, period_label=""):
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Distribución geográfica"
 
+    header_row = _write_period_label(sheet, period_label)
     headers = ["#", "Ciudad", "Clientes", "Pedidos", "Ingresos totales", "% de la base"]
-    _apply_header(sheet, headers)
+    _apply_header(sheet, headers, start_row=header_row)
 
     for i, g in enumerate(data.get("customer_geo", []), 1):
-        _apply_row(sheet, i + 1, (
+        _apply_row(sheet, header_row + i, (
             i, g["city"], g["customers"], g["orders"],
             _fmt_cop(g["revenue"]), f"{g['percentage']}%",
         ))
@@ -180,17 +293,18 @@ def _write_customer_geo_xlsx(path, data):
     workbook.save(path)
 
 
-def _write_international_customers_xlsx(path, data):
+def _write_international_customers_xlsx(path, data, period_label=""):
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Clientes internacionales"
 
+    header_row = _write_period_label(sheet, period_label)
     headers = ["#", "Nombre", "Email", "País(es)", "Pedidos", "Ingresos", "Modo", "Distribuidor"]
-    _apply_header(sheet, headers)
+    _apply_header(sheet, headers, start_row=header_row)
 
     mode_map = {"WHOLESALE": "Mayorista", "RETAIL": "Retail"}
     for i, c in enumerate(data.get("international_customers", []), 1):
-        _apply_row(sheet, i + 1, (
+        _apply_row(sheet, header_row + i, (
             i, c["name"], c["email"],
             ", ".join(c["countries"]),
             c["orders"], _fmt_cop(c["revenue"]),
@@ -223,7 +337,7 @@ def _pdf_table_style():
     ])
 
 
-def _write_customer_report_pdf(path, report_type, data):
+def _write_customer_report_pdf(path, report_type, data, period_label=""):
     from datetime import date
     document = SimpleDocTemplate(
         str(path), pagesize=letter,
@@ -245,8 +359,10 @@ def _write_customer_report_pdf(path, report_type, data):
         Paragraph("Juhnios Rold", title_style),
         Paragraph(TITLES.get(report_type, "Reporte de Clientes"), h2_style),
         Paragraph(f"Generado el {date.today().strftime('%d/%m/%Y')}", normal),
-        Spacer(1, 16),
     ]
+    if period_label:
+        elements.append(Paragraph(f"Período exportado: {period_label}", normal))
+    elements.append(Spacer(1, 16))
 
     mode_map = {"WHOLESALE": "Mayorista", "RETAIL": "Retail"}
 
@@ -343,17 +459,23 @@ def _write_pdf(path, report_type, data):
 
 
 @shared_task
-def export_sales_report(output_format="xlsx"):
-    data = SalesReportQuery().execute()
+def export_sales_report(output_format="xlsx", date_from=None, date_to=None, status=None, client_type=None):
+    data = SalesReportQuery().execute(
+        date_from=date_from, date_to=date_to, status=status, client_type=client_type,
+    )
     report_dir = Path(settings.MEDIA_ROOT) / "reports"
     report_dir.mkdir(parents=True, exist_ok=True)
     filename = f"reporte-ventas-{uuid4().hex}.{output_format}"
     output_path = report_dir / filename
 
+    period_label = _build_period_label({
+        "date_from": date_from, "date_to": date_to, "status": status, "client_type": client_type,
+    })
+
     if output_format == "pdf":
-        _write_sales_report_pdf(output_path, data)
+        _write_sales_report_pdf(output_path, data, period_label)
     else:
-        _write_sales_report_xlsx(output_path, data)
+        _write_sales_report_xlsx(output_path, data, period_label)
 
     return {
         "status": "generated",
@@ -361,11 +483,14 @@ def export_sales_report(output_format="xlsx"):
     }
 
 
-def _write_sales_report_xlsx(path, data):
+def _write_sales_report_xlsx(path, data, period_label=""):
     workbook = Workbook()
 
     sheet = workbook.active
     sheet.title = "Ventas mensuales"
+    if period_label:
+        sheet.append((f"Período exportado: {period_label}",))
+        sheet.append(())
     sheet.append(("Mes", "Ventas", "Pedidos"))
     for row in data["monthly_sales"]:
         sheet.append((_month_label(row["month"]), row["total"], row["orders"]))
@@ -459,13 +584,15 @@ def _bar_chart_drawing(top_products):
     return drawing
 
 
-def _write_sales_report_pdf(path, data):
+def _write_sales_report_pdf(path, data, period_label=""):
     document = SimpleDocTemplate(str(path), pagesize=letter, topMargin=36, bottomMargin=36)
     styles = getSampleStyleSheet()
     elements = [
         Paragraph("Juhnios Rold - Reporte de ventas", styles["Title"]),
-        Spacer(1, 12),
     ]
+    if period_label:
+        elements.append(Paragraph(f"Período: {period_label}", styles["Normal"]))
+    elements.append(Spacer(1, 12))
 
     if data["monthly_sales"]:
         elements.append(_line_chart_drawing(data["monthly_sales"]))
@@ -512,5 +639,155 @@ def _write_sales_report_pdf(path, data):
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f2f2f2")]),
     ]))
     elements.append(product_table)
+
+    document.build(elements)
+
+
+def _write_inventory_report_xlsx(path, report_type, title, data, period_label=""):
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = title[:31]
+    header_row = _write_period_label(sheet, period_label)
+
+    if report_type == "compras":
+        headers = ["N° OC", "Proveedor", "Estado", "Emitida", "Esperada", "Bodega destino",
+                   "Total", "Cant. pedida", "Cant. recibida", "Cant. pendiente"]
+        _apply_header(sheet, headers, start_row=header_row)
+        for i, o in enumerate(data["orders"], 1):
+            _apply_row(sheet, header_row + i, (
+                o["number"], o["supplier"], o["status_label"], o["issued_at"], o["expected_at"] or "—",
+                o["destination"], _fmt_cop(o["total"]), o["ordered_quantity"], o["received_quantity"], o["pending_quantity"],
+            ))
+    elif report_type == "bajo-minimo":
+        headers = ["SKU", "Producto", "Presentación", "Ubicación", "Existencia", "Mínimo", "Faltante"]
+        _apply_header(sheet, headers, start_row=header_row)
+        for i, item in enumerate(data["items"], 1):
+            _apply_row(sheet, header_row + i, (
+                item["sku"], item["product"], item["presentation"], item["location"],
+                item["quantity"], item["minimum_quantity"], item["shortage"],
+            ))
+    elif report_type == "produccion":
+        headers = ["N° OP", "Fórmula", "Producto", "Estado", "Inicio", "Cierre",
+                   "Planeado", "Real", "Variación", "% Rendimiento"]
+        _apply_header(sheet, headers, start_row=header_row)
+        for i, o in enumerate(data["orders"], 1):
+            _apply_row(sheet, header_row + i, (
+                o["number"], o["formula"], o["output_item"], o["status_label"],
+                o["started_at"] or "—", o["closed_at"] or "—",
+                o["planned_quantity"], o["actual_quantity"], o["variance"], f"{o['yield_percentage']}%",
+            ))
+    elif report_type == "mermas":
+        headers = ["Fecha", "Producto", "Ubicación", "Tipo", "Cantidad", "Motivo"]
+        _apply_header(sheet, headers, start_row=header_row)
+        for i, m in enumerate(data["movements"], 1):
+            _apply_row(sheet, header_row + i, (
+                m["date"], m["product"], m["location"], m["type_label"], m["quantity"], m["reason"],
+            ))
+    elif report_type == "corte":
+        headers = ["SKU", "Producto", "Ubicación", "Existencia actual", f"Existencia al {data['cutoff_date']}"]
+        _apply_header(sheet, headers, start_row=header_row)
+        for i, item in enumerate(data["items"], 1):
+            _apply_row(sheet, header_row + i, (
+                item["sku"], item["product"], item["location"], item["current_quantity"], item["quantity_at_date"],
+            ))
+    elif report_type in ("inv-general", "inv-bodega", "inv-grupo", "valorizado"):
+        headers = ["SKU", "Producto", "Categoría", "Ubicación", "Existencia", "Costo unit.",
+                   "Valor sin IVA", "Valor con IVA", "Precio venta", "Valor a precio venta"]
+        _apply_header(sheet, headers, start_row=header_row)
+        for i, item in enumerate(data["items"], 1):
+            _apply_row(sheet, header_row + i, (
+                item["sku"], item["product"], item["category"], item["location"], item["quantity"],
+                _fmt_cop(item["unit_cost"]), _fmt_cop(item["value_no_vat"]), _fmt_cop(item["value_with_vat"]),
+                _fmt_cop(item["sale_price"]), _fmt_cop(item["value_at_sale_price"]),
+            ))
+        summary_row = header_row + len(data["items"]) + 2
+        sheet.cell(row=summary_row, column=1, value="Totales:")
+        sheet.cell(row=summary_row, column=7, value=_fmt_cop(data["summary"]["total_value_no_vat"]))
+        sheet.cell(row=summary_row, column=8, value=_fmt_cop(data["summary"]["total_value_with_vat"]))
+        if "total_value_at_sale_price" in data["summary"]:
+            sheet.cell(row=summary_row, column=10, value=_fmt_cop(data["summary"]["total_value_at_sale_price"]))
+    else:  # movimientos
+        headers = ["Fecha", "Producto", "Ubicación", "Tipo", "Cantidad", "Motivo", "Registrado por"]
+        _apply_header(sheet, headers, start_row=header_row)
+        for i, m in enumerate(data["movements"], 1):
+            _apply_row(sheet, header_row + i, (
+                m["date"], m["product"], m["location"], m["type_label"], m["quantity"], m["reason"], m["created_by"],
+            ))
+
+    _auto_width(sheet)
+    workbook.save(path)
+
+
+def _write_inventory_report_pdf(path, report_type, title, data, period_label=""):
+    from datetime import date
+    document = SimpleDocTemplate(
+        str(path), pagesize=letter,
+        topMargin=40, bottomMargin=36, leftMargin=36, rightMargin=36,
+    )
+    styles = getSampleStyleSheet()
+    normal = styles["Normal"]
+    normal.fontSize = 8
+
+    elements = [
+        Paragraph("Juhnios Rold", styles["Title"]),
+        Paragraph(title, styles["Heading2"]),
+        Paragraph(f"Generado el {date.today().strftime('%d/%m/%Y')}", normal),
+    ]
+    if period_label:
+        elements.append(Paragraph(f"Filtros: {period_label}", normal))
+    elements.append(Spacer(1, 16))
+
+    if report_type == "compras":
+        rows = [["N° OC", "Proveedor", "Estado", "Emitida", "Bodega", "Total", "Pendiente"]] + [
+            [o["number"], o["supplier"][:22], o["status_label"], o["issued_at"], o["destination"][:16],
+             _fmt_cop(o["total"]), str(o["pending_quantity"])]
+            for o in data["orders"]
+        ]
+        col_widths = [2.2 * cm, 4 * cm, 2 * cm, 2.2 * cm, 3 * cm, 3 * cm, 2.5 * cm]
+    elif report_type == "bajo-minimo":
+        rows = [["SKU", "Producto", "Ubicación", "Existencia", "Mínimo", "Faltante"]] + [
+            [i["sku"], i["product"][:26], i["location"][:16], str(i["quantity"]), str(i["minimum_quantity"]), str(i["shortage"])]
+            for i in data["items"]
+        ]
+        col_widths = [2.2 * cm, 5.5 * cm, 3.5 * cm, 2.3 * cm, 2 * cm, 2.3 * cm]
+    elif report_type == "produccion":
+        rows = [["N° OP", "Producto", "Estado", "Cierre", "Planeado", "Real", "% Rend."]] + [
+            [o["number"], o["output_item"][:22], o["status_label"], o["closed_at"] or "—",
+             str(o["planned_quantity"]), str(o["actual_quantity"]), f"{o['yield_percentage']}%"]
+            for o in data["orders"]
+        ]
+        col_widths = [2.2 * cm, 4.5 * cm, 2.3 * cm, 2.2 * cm, 2.3 * cm, 2.3 * cm, 2.2 * cm]
+    elif report_type == "mermas":
+        rows = [["Fecha", "Producto", "Ubicación", "Tipo", "Cantidad"]] + [
+            [m["date"], m["product"][:24], m["location"][:16], m["type_label"], str(m["quantity"])]
+            for m in data["movements"]
+        ]
+        col_widths = [2.3 * cm, 5 * cm, 3.5 * cm, 3 * cm, 2.5 * cm]
+    elif report_type == "corte":
+        rows = [["SKU", "Producto", "Ubicación", "Actual", f"Al {data['cutoff_date']}"]] + [
+            [i["sku"], i["product"][:26], i["location"][:16], str(i["current_quantity"]), str(i["quantity_at_date"])]
+            for i in data["items"]
+        ]
+        col_widths = [2.2 * cm, 5.5 * cm, 3.5 * cm, 2.5 * cm, 2.5 * cm]
+    elif report_type in ("inv-general", "inv-bodega", "inv-grupo", "valorizado"):
+        rows = [["SKU", "Producto", "Categoría", "Ubicación", "Exist.", "Costo unit.", "Valor sin IVA", "Precio venta"]] + [
+            [i["sku"], i["product"][:20], i["category"][:14], i["location"][:14], str(i["quantity"]),
+             _fmt_cop(i["unit_cost"]), _fmt_cop(i["value_no_vat"]), _fmt_cop(i["sale_price"])]
+            for i in data["items"]
+        ]
+        col_widths = [1.8 * cm, 3.6 * cm, 2.6 * cm, 2.6 * cm, 1.6 * cm, 2.4 * cm, 2.6 * cm, 2.4 * cm]
+    else:  # movimientos
+        rows = [["Fecha", "Producto", "Ubicación", "Tipo", "Cantidad", "Motivo"]] + [
+            [m["date"], m["product"][:22], m["location"][:16], m["type_label"], str(m["quantity"]), m["reason"][:20]]
+            for m in data["movements"]
+        ]
+        col_widths = [2.2 * cm, 4.5 * cm, 3.2 * cm, 2.8 * cm, 2.2 * cm, 3.6 * cm]
+
+    if len(rows) > 1:
+        table = Table(rows, colWidths=col_widths, repeatRows=1)
+        table.setStyle(_pdf_table_style())
+        elements.append(table)
+    else:
+        elements.append(Paragraph("Sin datos para los filtros seleccionados.", normal))
 
     document.build(elements)

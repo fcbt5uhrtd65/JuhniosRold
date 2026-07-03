@@ -101,6 +101,20 @@ const STATUS_LABEL: Record<string, string> = {
   cancelado: 'Cancelado', devuelto: 'Devuelto', fallido: 'Fallido',
 };
 
+// El backend guarda el estado del pedido en inglés/mayúsculas (Order.Status de Django).
+// La UI usa las mismas claves en español que el resto del panel — este mapa las traduce
+// de vuelta antes de mandarlas como filtro a la API.
+const STATUS_TO_BACKEND: Record<string, string> = {
+  pendiente: 'PENDING', confirmado: 'CONFIRMED', procesando: 'PROCESSING',
+  empacado: 'PACKED', pagado: 'PAID', enviado: 'SHIPPED',
+  en_camino: 'IN_TRANSIT', entregado: 'DELIVERED',
+  cancelado: 'CANCELLED', devuelto: 'RETURNED', fallido: 'FAILED',
+};
+
+const CLIENT_TYPE_TO_BACKEND: Record<string, string> = {
+  mayorista: 'WHOLESALE',
+};
+
 const STATUS_COLOR: Record<string, string> = {
   pendiente: 'bg-amber-50 text-amber-700 border-amber-200',
   confirmado: 'bg-blue-50 text-blue-700 border-blue-200',
@@ -867,19 +881,31 @@ async function exportSectionAsPdf(
   pdf.save(`${slug}.pdf`);
 }
 
-function ExportButton({ reportType, sectionTitle, contentRef }: {
+function ExportButton({ reportType, sectionTitle, contentRef, filters }: {
   reportType: string;
   sectionTitle: string;
   contentRef: RefObject<HTMLDivElement | null>;
+  filters: Filters;
 }) {
   const toast = useToast();
   const [loading, setLoading] = useState(false);
+
+  const buildBackendFilters = () => {
+    const { from, to } = getDateBounds(filters);
+    const fmt2 = (d: Date) => d.toISOString().slice(0, 10);
+    return {
+      date_from: fmt2(from),
+      date_to: fmt2(to),
+      status: filters.estado ? STATUS_TO_BACKEND[filters.estado] : undefined,
+      client_type: filters.clientType ? CLIENT_TYPE_TO_BACKEND[filters.clientType] : undefined,
+    };
+  };
 
   const handleXlsx = async () => {
     setLoading(true);
     toast.info('Generando Excel…');
     try {
-      const taskId = await requestGenericReportExport(reportType, 'xlsx');
+      const taskId = await requestGenericReportExport(reportType, 'xlsx', buildBackendFilters());
       const url = await pollExportStatus(taskId, getGenericReportExportStatus);
       await downloadFile(resolveBackendUrl(url));
       toast.success('Excel listo.');
@@ -929,9 +955,9 @@ function ExportButton({ reportType, sectionTitle, contentRef }: {
 }
 
 function CollapsibleSection({
-  title, icon: Icon, children, defaultOpen = true, exportType,
+  title, icon: Icon, children, defaultOpen = true, exportType, filters,
 }: {
-  title: string; icon: React.ElementType; children: ReactNode; defaultOpen?: boolean; exportType?: string;
+  title: string; icon: React.ElementType; children: ReactNode; defaultOpen?: boolean; exportType?: string; filters: Filters;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -959,6 +985,7 @@ function CollapsibleSection({
             reportType={exportType}
             sectionTitle={title}
             contentRef={contentRef}
+            filters={filters}
           />
         )}
       </div>
@@ -967,10 +994,11 @@ function CollapsibleSection({
   );
 }
 
-function TabCustomers({ a, report, loadingReport }: {
+function TabCustomers({ a, report, loadingReport, filters }: {
   a: ReturnType<typeof useAnalytics>;
   report: SalesReport | null;
   loadingReport: boolean;
+  filters: Filters;
 }) {
   const segments = report?.customer_segments ?? [];
   const backendCustomers: TopCustomer[] = report?.top_customers ?? [];
@@ -1020,7 +1048,7 @@ function TabCustomers({ a, report, loadingReport }: {
     <div className="space-y-4">
 
       {/* ════════════════ 1. RESUMEN GENERAL ════════════════ */}
-      <CollapsibleSection title="Resumen general" icon={Users}>
+      <CollapsibleSection title="Resumen general" icon={Users} filters={filters}>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <KpiCard label="Base total de clientes" value={loadingReport ? '—' : fmtN(totalBase)}
             sub={`${convRate.toFixed(1)}% han comprado`} icon={Users} color="blue" />
@@ -1034,7 +1062,7 @@ function TabCustomers({ a, report, loadingReport }: {
       </CollapsibleSection>
 
       {/* ════════════════ 2. SEGMENTACIÓN ════════════════ */}
-      <CollapsibleSection title="Segmentación por comportamiento" icon={BarChart3}>
+      <CollapsibleSection title="Segmentación por comportamiento" icon={BarChart3} filters={filters}>
 
       <div className="grid gap-4 xl:grid-cols-2">
         {/* Barras + pie */}
@@ -1097,7 +1125,7 @@ function TabCustomers({ a, report, loadingReport }: {
       </CollapsibleSection>
 
       {/* ════════════════ 3. RETENCIÓN Y CHURN ════════════════ */}
-      <CollapsibleSection title="Retención y churn" icon={RotateCcw} defaultOpen={false}>
+      <CollapsibleSection title="Retención y churn" icon={RotateCcw} defaultOpen={false} filters={filters}>
         {loadingReport
         ? <ChartSkeleton h={100} />
         : churn
@@ -1142,7 +1170,7 @@ function TabCustomers({ a, report, loadingReport }: {
       </CollapsibleSection>
 
       {/* ════════════════ 4. GEOGRAFÍA ════════════════ */}
-      <CollapsibleSection title="Distribución geográfica" icon={MapPin} defaultOpen={false} exportType="customer_geo">
+      <CollapsibleSection title="Distribución geográfica" icon={MapPin} defaultOpen={false} exportType="customer_geo" filters={filters}>
 
       <div className="grid gap-4 xl:grid-cols-2">
         {/* Top ciudades por ingresos */}
@@ -1206,7 +1234,7 @@ function TabCustomers({ a, report, loadingReport }: {
       </CollapsibleSection>
 
       {/* ════════════════ 5. MAYORISTAS VS RETAIL ════════════════ */}
-      <CollapsibleSection title="Mayoristas vs Retail" icon={Users} defaultOpen={false}>
+      <CollapsibleSection title="Mayoristas vs Retail" icon={Users} defaultOpen={false} filters={filters}>
 
       <div className="grid gap-3 sm:grid-cols-3">
         <KpiCard label="Clientes mayoristas" value={loadingReport ? '—' : fmtN(wholesaleRows.length)}
@@ -1263,7 +1291,7 @@ function TabCustomers({ a, report, loadingReport }: {
       </CollapsibleSection>
 
       {/* ════════════════ 6. CLIENTES INTERNACIONALES ════════════════ */}
-      <CollapsibleSection title="Clientes internacionales" icon={Globe} defaultOpen={false} exportType="international_customers">
+      <CollapsibleSection title="Clientes internacionales" icon={Globe} defaultOpen={false} exportType="international_customers" filters={filters}>
 
       {loadingReport
         ? <ChartSkeleton h={100} />
@@ -1329,7 +1357,7 @@ function TabCustomers({ a, report, loadingReport }: {
       </CollapsibleSection>
 
       {/* ════════════════ 7. TABLA COMPLETA ════════════════ */}
-      <CollapsibleSection title="Todos los clientes activos" icon={Users} defaultOpen={false} exportType="customers">
+      <CollapsibleSection title="Todos los clientes activos" icon={Users} defaultOpen={false} exportType="customers" filters={filters}>
 
       <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
         <div className="px-5 py-4 border-b border-stone-100 flex items-center justify-between">
@@ -1619,9 +1647,11 @@ export function AdminReports() {
   const loadReport = useCallback(() => {
     const { from, to } = getDateBounds(filters);
     const fmt2 = (d: Date) => d.toISOString().slice(0, 10);
+    const backendStatus = filters.estado ? STATUS_TO_BACKEND[filters.estado] : undefined;
+    const backendClientType = filters.clientType ? CLIENT_TYPE_TO_BACKEND[filters.clientType] : undefined;
     setLoadingReport(true);
     setReportError('');
-    getSalesReport(fmt2(from), fmt2(to))
+    getSalesReport(fmt2(from), fmt2(to), backendStatus, backendClientType)
       .then(d => { setReport(d); setLoadingReport(false); })
       .catch(e => { setReportError(e instanceof Error ? e.message : 'Error'); setLoadingReport(false); });
   }, [filters]);
@@ -1632,7 +1662,14 @@ export function AdminReports() {
     setIsExporting(true);
     toast.info('Generando exportación…');
     try {
-      const taskId = await requestSalesReportExport(format);
+      const { from, to } = getDateBounds(filters);
+      const fmt2 = (d: Date) => d.toISOString().slice(0, 10);
+      const taskId = await requestSalesReportExport(format, {
+        dateFrom: fmt2(from),
+        dateTo: fmt2(to),
+        status: filters.estado ? STATUS_TO_BACKEND[filters.estado] : undefined,
+        clientType: filters.clientType ? CLIENT_TYPE_TO_BACKEND[filters.clientType] : undefined,
+      });
       const url = await pollExportStatus(taskId, getSalesReportExportStatus);
       await downloadFile(resolveBackendUrl(url));
       toast.success('Exportación lista.');
@@ -1727,7 +1764,7 @@ export function AdminReports() {
         <div className="flex-1 min-w-0 px-4 sm:px-6 md:px-8 lg:px-0 pt-4 lg:pt-0">
           {activeTab === 'overview' && <TabOverview a={analytics} report={report} loadingReport={loadingReport} />}
           {activeTab === 'products' && <TabProducts a={analytics} report={report} loadingReport={loadingReport} />}
-          {activeTab === 'customers' && <TabCustomers a={analytics} report={report} loadingReport={loadingReport} />}
+          {activeTab === 'customers' && <TabCustomers a={analytics} report={report} loadingReport={loadingReport} filters={filters} />}
           {activeTab === 'operational' && <TabOperational a={analytics} />}
           {activeTab === 'orders' && <TabOrders a={analytics} filters={filters} onFilterChange={setFilters} />}
         </div>

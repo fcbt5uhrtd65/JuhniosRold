@@ -83,10 +83,19 @@ export interface SalesReport {
   customer_churn: CustomerChurn;
 }
 
-export async function getSalesReport(dateFrom?: string, dateTo?: string): Promise<SalesReport> {
+export interface SalesReportFilters {
+  dateFrom?: string;
+  dateTo?: string;
+  status?: string;
+  clientType?: string;
+}
+
+export async function getSalesReport(dateFrom?: string, dateTo?: string, status?: string, clientType?: string): Promise<SalesReport> {
   const params = new URLSearchParams();
   if (dateFrom) params.set('date_from', dateFrom);
   if (dateTo) params.set('date_to', dateTo);
+  if (status) params.set('status', status);
+  if (clientType) params.set('client_type', clientType);
   const path = params.toString() ? `${SALES_REPORT_PATH}?${params}` : SALES_REPORT_PATH;
   const res = await api.get<SalesReport>(path);
   if (!res.data) {
@@ -108,8 +117,14 @@ interface ExportStatusResponse {
   error?: string;
 }
 
-export async function requestSalesReportExport(format: SalesReportExportFormat): Promise<string> {
-  const res = await api.post<ExportQueuedResponse>(SALES_REPORT_EXPORTS_PATH, { format });
+export async function requestSalesReportExport(format: SalesReportExportFormat, filters: SalesReportFilters = {}): Promise<string> {
+  const res = await api.post<ExportQueuedResponse>(SALES_REPORT_EXPORTS_PATH, {
+    format,
+    date_from: filters.dateFrom,
+    date_to: filters.dateTo,
+    status: filters.status,
+    client_type: filters.clientType,
+  });
   if (!res.data?.task_id) {
     throw new Error('No se pudo iniciar la exportación.');
   }
