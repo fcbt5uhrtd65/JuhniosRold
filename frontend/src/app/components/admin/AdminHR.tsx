@@ -26,6 +26,8 @@ import {
   Users,
   Wallet,
   X,
+  ArrowDownAZ,
+  ArrowUpAZ,
 } from 'lucide-react';
 
 import { SearchBar } from './SearchBar';
@@ -96,7 +98,8 @@ function toBranchDecimalString(value: number | string): string {
 
 type HRTab = 'employees' | 'branches' | 'catalog' | 'vacations';
 
-const EMPLOYEES_PAGE_SIZE = 10;
+const DEFAULT_PAGE_SIZE = 12;
+const PAGE_SIZE_OPTIONS = [12, 24, 48, 96];
 type EmployeeModalTab =
   | 'personal'
   | 'labor'
@@ -708,6 +711,30 @@ function ToggleInput({ label, checked, onChange }: { label: string; checked: boo
   );
 }
 
+function SortableTh<T extends string>({ label, sortKey, active, onSort }: { label: string; sortKey: T; active: T; onSort: (key: T) => void }) {
+  const isActive = active === sortKey;
+  return (
+    <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-gray-400 bg-gray-50 border-b border-gray-100 whitespace-nowrap sticky top-0 z-10">
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={`flex items-center gap-1 transition-colors ${isActive ? 'text-[#2a4038]' : 'hover:text-gray-600'}`}
+      >
+        {label}
+        {isActive ? <ArrowDownAZ size={11} /> : <ArrowUpAZ size={11} className="opacity-30" />}
+      </button>
+    </th>
+  );
+}
+
+function ResultsCount({ count, label }: { count: number; label: string }) {
+  return (
+    <p className="text-xs text-gray-500">
+      <span className="text-gray-900 font-semibold">{count}</span> {label}
+    </p>
+  );
+}
+
 export function AdminHR() {
   const toast = useToast();
   const [activeTab, setActiveTab] = useState<HRTab>('employees');
@@ -717,7 +744,12 @@ export function AdminHR() {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [branchSort, setBranchSort] = useState<'name' | 'code' | 'city' | 'status'>('name');
   const [branchPage, setBranchPage] = useState(1);
+  const [branchPageSize, setBranchPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [employeePage, setEmployeePage] = useState(1);
+  const [employeePageSize, setEmployeePageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [vacationPage, setVacationPage] = useState(1);
+  const [vacationPageSize, setVacationPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [employeeSort, setEmployeeSort] = useState<'name' | 'department' | 'status' | 'profile'>('name');
   const [isLoading, setIsLoading] = useState(true);
   const [savingEmployee, setSavingEmployee] = useState(false);
   const [savingDocument, setSavingDocument] = useState(false);
@@ -840,16 +872,34 @@ export function AdminHR() {
     });
   }, [branchById, departmentById, employees, filterDepartment, filterStatus, positionById, searchQuery]);
 
-  const employeeTotalPages = Math.max(1, Math.ceil(filteredEmployees.length / EMPLOYEES_PAGE_SIZE));
+  const sortedEmployees = useMemo(() => {
+    return [...filteredEmployees].sort((left, right) => {
+      const key = (employee: Employee): string => {
+        switch (employeeSort) {
+          case 'department':
+            return (employee.department ? departmentById.get(employee.department)?.name : '') ?? '';
+          case 'status':
+            return employee.status;
+          case 'profile':
+            return employee.profile_status;
+          default:
+            return getEmployeeName(employee);
+        }
+      };
+      return key(left).toLowerCase().localeCompare(key(right).toLowerCase(), 'es');
+    });
+  }, [departmentById, employeeSort, filteredEmployees]);
+
+  const employeeTotalPages = Math.max(1, Math.ceil(sortedEmployees.length / employeePageSize));
 
   const paginatedEmployees = useMemo(() => {
-    const start = (employeePage - 1) * EMPLOYEES_PAGE_SIZE;
-    return filteredEmployees.slice(start, start + EMPLOYEES_PAGE_SIZE);
-  }, [employeePage, filteredEmployees]);
+    const start = (employeePage - 1) * employeePageSize;
+    return sortedEmployees.slice(start, start + employeePageSize);
+  }, [employeePage, employeePageSize, sortedEmployees]);
 
   useEffect(() => {
     setEmployeePage(1);
-  }, [searchQuery, filterDepartment, filterStatus]);
+  }, [searchQuery, filterDepartment, filterStatus, employeePageSize]);
 
   const filteredBranches = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
@@ -876,11 +926,15 @@ export function AdminHR() {
   }, [branchSort, filteredBranches]);
 
   const paginatedBranches = useMemo(() => {
-    const start = (branchPage - 1) * 10;
-    return sortedBranches.slice(start, start + 10);
-  }, [branchPage, sortedBranches]);
+    const start = (branchPage - 1) * branchPageSize;
+    return sortedBranches.slice(start, start + branchPageSize);
+  }, [branchPage, branchPageSize, sortedBranches]);
 
-  const branchTotalPages = Math.max(1, Math.ceil(sortedBranches.length / 10));
+  const branchTotalPages = Math.max(1, Math.ceil(sortedBranches.length / branchPageSize));
+
+  useEffect(() => {
+    setBranchPage(1);
+  }, [branchPageSize]);
 
   const filteredVacationRequests = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
@@ -897,6 +951,17 @@ export function AdminHR() {
       return matchesSearch && matchesDepartment && matchesStatus;
     });
   }, [employeeById, filterDepartment, filterStatus, searchQuery, vacationRequests]);
+
+  const vacationTotalPages = Math.max(1, Math.ceil(filteredVacationRequests.length / vacationPageSize));
+
+  const paginatedVacationRequests = useMemo(() => {
+    const start = (vacationPage - 1) * vacationPageSize;
+    return filteredVacationRequests.slice(start, start + vacationPageSize);
+  }, [vacationPage, vacationPageSize, filteredVacationRequests]);
+
+  useEffect(() => {
+    setVacationPage(1);
+  }, [searchQuery, filterDepartment, filterStatus, vacationPageSize]);
 
   const stats = useMemo(() => ({
     profileCompletion: employees.length
@@ -1889,13 +1954,18 @@ export function AdminHR() {
       ) : (
         <>
           {activeTab === 'employees' && filteredEmployees.length > 0 && (
-            <Table>
+            <div className="flex items-center justify-between mb-3">
+              <ResultsCount count={filteredEmployees.length} label={filteredEmployees.length === 1 ? 'empleado encontrado' : 'empleados encontrados'} />
+            </div>
+          )}
+          {activeTab === 'employees' && filteredEmployees.length > 0 && (
+            <Table scrollable>
                   <thead>
                     <tr>
-                      <Th>Empleado</Th>
-                      <Th>Cargo / Sede</Th>
-                      <Th>Estado</Th>
-                      <Th>Perfil</Th>
+                      <SortableTh label="Empleado" sortKey="name" active={employeeSort} onSort={setEmployeeSort} />
+                      <SortableTh label="Cargo / Sede" sortKey="department" active={employeeSort} onSort={setEmployeeSort} />
+                      <SortableTh label="Estado" sortKey="status" active={employeeSort} onSort={setEmployeeSort} />
+                      <SortableTh label="Perfil" sortKey="profile" active={employeeSort} onSort={setEmployeeSort} />
                       <Th>Documentos</Th>
                       <Th>Acciones</Th>
                     </tr>
@@ -1962,8 +2032,10 @@ export function AdminHR() {
                 currentPage={employeePage}
                 totalPages={employeeTotalPages}
                 totalItems={filteredEmployees.length}
-                itemsPerPage={EMPLOYEES_PAGE_SIZE}
+                itemsPerPage={employeePageSize}
+                itemsPerPageOptions={PAGE_SIZE_OPTIONS}
                 onPageChange={setEmployeePage}
+                onItemsPerPageChange={setEmployeePageSize}
               />
             </div>
           )}
@@ -1985,7 +2057,7 @@ export function AdminHR() {
                   <option value="status">Ordenar por estado</option>
                 </select>
               </Card>
-              <Table>
+              <Table scrollable>
                   <thead>
                     <tr>
                       <Th>Sede</Th>
@@ -2038,8 +2110,10 @@ export function AdminHR() {
                   currentPage={branchPage}
                   totalPages={branchTotalPages}
                   totalItems={sortedBranches.length}
-                  itemsPerPage={10}
+                  itemsPerPage={branchPageSize}
+                  itemsPerPageOptions={PAGE_SIZE_OPTIONS}
                   onPageChange={setBranchPage}
+                  onItemsPerPageChange={setBranchPageSize}
                 />
               )}
               {sortedBranches.length === 0 && (
@@ -2127,7 +2201,10 @@ export function AdminHR() {
                 </>
               )}
 
-              <Table>
+              {filteredVacationRequests.length > 0 && (
+                <ResultsCount count={filteredVacationRequests.length} label={filteredVacationRequests.length === 1 ? 'solicitud encontrada' : 'solicitudes encontradas'} />
+              )}
+              <Table scrollable>
                   <thead>
                     <tr>
                       <Th>Empleado</Th>
@@ -2139,7 +2216,7 @@ export function AdminHR() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredVacationRequests.map((request) => {
+                    {paginatedVacationRequests.map((request) => {
                       const employee = employeeById.get(request.employee);
                       return (
                         <tr key={request.id} className="hover:bg-gray-50/50">
@@ -2175,6 +2252,17 @@ export function AdminHR() {
                     })}
                   </tbody>
             </Table>
+              {filteredVacationRequests.length > 0 && (
+                <Pagination
+                  currentPage={vacationPage}
+                  totalPages={vacationTotalPages}
+                  totalItems={filteredVacationRequests.length}
+                  itemsPerPage={vacationPageSize}
+                  itemsPerPageOptions={PAGE_SIZE_OPTIONS}
+                  onPageChange={setVacationPage}
+                  onItemsPerPageChange={setVacationPageSize}
+                />
+              )}
               {filteredVacationRequests.length === 0 && (
                 <EmptyState title="No hay solicitudes para mostrar" />
               )}

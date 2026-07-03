@@ -11,6 +11,10 @@ import {
   type VacationRequestType,
 } from '../../services/human-resources.service';
 import { Card, KpiCard, Badge, type BadgeColor, LoadingState, EmptyState, inputCls, selectCls } from './AdminUI';
+import { Pagination } from './Pagination';
+import { SearchBar } from './SearchBar';
+
+const REQUESTS_PAGE_SIZE_OPTIONS = [5, 10, 20, 50];
 
 type RequestPeriodMode = 'SINGLE_DAY' | 'DATE_RANGE';
 type RequestTimeMode = 'FULL_DAY' | 'FROM_TIME' | 'TIME_RANGE';
@@ -140,6 +144,9 @@ export function AdminEmployeePortal() {
   const [employeeProfile, setEmployeeProfile] = useState<Employee | null>(null);
   const [requests, setRequests] = useState<VacationRequest[]>([]);
   const [form, setForm] = useState<VacationFormState>(EMPTY_FORM);
+  const [requestsQuery, setRequestsQuery] = useState('');
+  const [requestsPage, setRequestsPage] = useState(1);
+  const [requestsPageSize, setRequestsPageSize] = useState(5);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -176,6 +183,27 @@ export function AdminEmployeePortal() {
       approved: requests.filter((request) => request.status === 'APPROVED').length,
     };
   }, [requests]);
+
+  const filteredRequests = useMemo(() => {
+    const query = requestsQuery.toLowerCase().trim();
+    if (!query) return requests;
+    return requests.filter((request) =>
+      getRequestTypeLabel(request.request_type).toLowerCase().includes(query) ||
+      (request.reason ?? '').toLowerCase().includes(query) ||
+      getStatusLabel(request.status).toLowerCase().includes(query),
+    );
+  }, [requests, requestsQuery]);
+
+  const requestsTotalPages = Math.max(1, Math.ceil(filteredRequests.length / requestsPageSize));
+
+  const paginatedRequests = useMemo(() => {
+    const start = (requestsPage - 1) * requestsPageSize;
+    return filteredRequests.slice(start, start + requestsPageSize);
+  }, [filteredRequests, requestsPage, requestsPageSize]);
+
+  useEffect(() => {
+    setRequestsPage(1);
+  }, [requestsQuery, requestsPageSize]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -486,13 +514,24 @@ export function AdminEmployeePortal() {
         </Card>
 
         <Card className="p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <FileText size={15} className="text-gray-400" />
-            <h3 className="text-sm font-semibold text-gray-900">Mis solicitudes</h3>
+          <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+            <div className="flex items-center gap-2">
+              <FileText size={15} className="text-gray-400" />
+              <h3 className="text-sm font-semibold text-gray-900">Mis solicitudes</h3>
+            </div>
+            {requests.length > 0 && (
+              <span className="text-xs text-gray-400">
+                <span className="text-gray-900 font-semibold">{filteredRequests.length}</span> {filteredRequests.length === 1 ? 'resultado' : 'resultados'}
+              </span>
+            )}
           </div>
 
+          {requests.length > 0 && (
+            <SearchBar value={requestsQuery} onChange={setRequestsQuery} placeholder="Buscar por tipo, motivo o estado..." className="mb-4" />
+          )}
+
           <div className="space-y-3">
-            {requests.map((request) => (
+            {paginatedRequests.map((request) => (
               <Card key={request.id} className="p-4">
                 <div className="flex items-start justify-between gap-4">
                   <div>
@@ -516,7 +555,24 @@ export function AdminEmployeePortal() {
             {requests.length === 0 && (
               <EmptyState title="No has enviado solicitudes todavía." />
             )}
+            {requests.length > 0 && filteredRequests.length === 0 && (
+              <EmptyState title="Ninguna solicitud coincide con tu búsqueda." />
+            )}
           </div>
+
+          {filteredRequests.length > 0 && (
+            <div className="mt-4">
+              <Pagination
+                currentPage={requestsPage}
+                totalPages={requestsTotalPages}
+                totalItems={filteredRequests.length}
+                itemsPerPage={requestsPageSize}
+                itemsPerPageOptions={REQUESTS_PAGE_SIZE_OPTIONS}
+                onPageChange={setRequestsPage}
+                onItemsPerPageChange={setRequestsPageSize}
+              />
+            </div>
+          )}
         </Card>
       </div>
     </div>

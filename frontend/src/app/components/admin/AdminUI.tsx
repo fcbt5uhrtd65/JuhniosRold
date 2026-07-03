@@ -75,10 +75,10 @@ export function Card({ children, className }: { children: ReactNode; className?:
   return <div className={`bg-white border border-gray-100 rounded-2xl shadow-sm ${className ?? ''}`}>{children}</div>;
 }
 
-export function Table({ children }: { children: ReactNode }) {
+export function Table({ children, scrollable }: { children: ReactNode; scrollable?: boolean }) {
   return (
     <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
-      <div className="overflow-x-auto">
+      <div className={`overflow-x-auto ${scrollable ? 'max-h-[600px] overflow-y-auto' : ''}`}>
         <table className="w-full text-sm">{children}</table>
       </div>
     </div>
