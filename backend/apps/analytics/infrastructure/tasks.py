@@ -510,6 +510,40 @@ def _write_sales_report_xlsx(path, data, period_label=""):
     for row in data["customer_segments"]:
         segments_sheet.append((row["segment"], row["count"], row["percentage"]))
 
+    mode_map = {"WHOLESALE": "Mayorista", "RETAIL": "Retail"}
+
+    customers_sheet = workbook.create_sheet("Top clientes")
+    customers_sheet.append(("Nombre", "Email", "Ciudad", "Pedidos", "Ingresos", "Ticket promedio", "Segmento", "Modo"))
+    for row in data["top_customers"]:
+        customers_sheet.append((
+            row["name"], row["email"], row["city"] or "—", row["orders"], row["revenue"],
+            row["avg_ticket"], row["segment"], mode_map.get(row["mode"], row["mode"]),
+        ))
+
+    geo_sheet = workbook.create_sheet("Distribución geográfica")
+    geo_sheet.append(("Ciudad", "Clientes", "Pedidos", "Ingresos", "% de la base"))
+    for row in data["customer_geo"]:
+        geo_sheet.append((row["city"], row["customers"], row["orders"], row["revenue"], f"{row['percentage']}%"))
+
+    intl_sheet = workbook.create_sheet("Clientes internacionales")
+    intl_sheet.append(("Nombre", "Email", "País(es)", "Pedidos", "Ingresos", "Modo", "Distribuidor"))
+    for row in data["international_customers"]:
+        intl_sheet.append((
+            row["name"], row["email"], ", ".join(row["countries"]), row["orders"], row["revenue"],
+            mode_map.get(row["mode"], row["mode"]), "Sí" if row["is_distributor"] else "No",
+        ))
+
+    churn = data["customer_churn"]
+    churn_sheet = workbook.create_sheet("Retención y churn")
+    churn_sheet.append(("Indicador", "Valor"))
+    churn_sheet.append((f"Período actual ({churn['period_days']} días)", churn["current_period_customers"]))
+    churn_sheet.append(("Período anterior", churn["previous_period_customers"]))
+    churn_sheet.append(("Retenidos", churn["retained"]))
+    churn_sheet.append(("Perdidos (churn)", churn["churned"]))
+    churn_sheet.append(("Nuevos en el período", churn["new_this_period"]))
+    churn_sheet.append(("Tasa de retención", f"{churn['retention_rate']}%"))
+    churn_sheet.append(("Tasa de churn", f"{churn['churn_rate']}%"))
+
     workbook.save(path)
 
 
@@ -639,6 +673,64 @@ def _write_sales_report_pdf(path, data, period_label=""):
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f2f2f2")]),
     ]))
     elements.append(product_table)
+
+    mode_map = {"WHOLESALE": "Mayorista", "RETAIL": "Retail"}
+
+    if data["top_customers"]:
+        elements.append(PageBreak())
+        elements.append(Paragraph("Top clientes", styles["Heading2"]))
+        elements.append(Spacer(1, 8))
+        customer_rows = [["Nombre", "Ciudad", "Pedidos", "Ingresos", "Ticket prom.", "Segmento", "Modo"]] + [
+            [row["name"][:24], row["city"] or "—", str(row["orders"]), str(row["revenue"]),
+             str(row["avg_ticket"]), row["segment"], mode_map.get(row["mode"], row["mode"])]
+            for row in data["top_customers"]
+        ]
+        customer_table = Table(customer_rows, colWidths=[4.5 * cm, 3 * cm, 2 * cm, 2.7 * cm, 2.7 * cm, 2.3 * cm, 2 * cm], repeatRows=1)
+        customer_table.setStyle(_pdf_table_style())
+        elements.append(customer_table)
+
+    if data["customer_geo"]:
+        elements.append(Spacer(1, 20))
+        elements.append(Paragraph("Distribución geográfica", styles["Heading2"]))
+        elements.append(Spacer(1, 8))
+        geo_rows = [["Ciudad", "Clientes", "Pedidos", "Ingresos", "% de la base"]] + [
+            [row["city"], str(row["customers"]), str(row["orders"]), str(row["revenue"]), f"{row['percentage']}%"]
+            for row in data["customer_geo"]
+        ]
+        geo_table = Table(geo_rows, colWidths=[5 * cm, 3 * cm, 3 * cm, 4 * cm, 3 * cm], repeatRows=1)
+        geo_table.setStyle(_pdf_table_style())
+        elements.append(geo_table)
+
+    if data["international_customers"]:
+        elements.append(PageBreak())
+        elements.append(Paragraph("Clientes internacionales", styles["Heading2"]))
+        elements.append(Spacer(1, 8))
+        intl_rows = [["Nombre", "País(es)", "Pedidos", "Ingresos", "Modo", "Distribuidor"]] + [
+            [row["name"][:24], ", ".join(row["countries"]), str(row["orders"]), str(row["revenue"]),
+             mode_map.get(row["mode"], row["mode"]), "Sí" if row["is_distributor"] else "No"]
+            for row in data["international_customers"]
+        ]
+        intl_table = Table(intl_rows, colWidths=[4.5 * cm, 4 * cm, 2.2 * cm, 3 * cm, 2.3 * cm, 2.5 * cm], repeatRows=1)
+        intl_table.setStyle(_pdf_table_style())
+        elements.append(intl_table)
+
+    churn = data["customer_churn"]
+    elements.append(Spacer(1, 20))
+    elements.append(Paragraph("Retención y churn", styles["Heading2"]))
+    elements.append(Spacer(1, 8))
+    churn_rows = [
+        ["Indicador", "Valor"],
+        [f"Período actual ({churn['period_days']} días)", str(churn["current_period_customers"])],
+        ["Período anterior", str(churn["previous_period_customers"])],
+        ["Retenidos", str(churn["retained"])],
+        ["Perdidos (churn)", str(churn["churned"])],
+        ["Nuevos en el período", str(churn["new_this_period"])],
+        ["Tasa de retención", f"{churn['retention_rate']}%"],
+        ["Tasa de churn", f"{churn['churn_rate']}%"],
+    ]
+    churn_table = Table(churn_rows, colWidths=[8 * cm, 4 * cm])
+    churn_table.setStyle(_pdf_table_style())
+    elements.append(churn_table)
 
     document.build(elements)
 
