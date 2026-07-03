@@ -1,10 +1,11 @@
 from decimal import Decimal
 
 from django.db import transaction
+from django.db.models import Avg
 from django.utils import timezone
 from rest_framework import serializers
 
-from .models import Category, Price, Product, ProductImage, ProductVariant
+from .models import Category, Price, Product, ProductImage, ProductReview, ProductVariant
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -67,13 +68,47 @@ class ProductImageSerializer(serializers.ModelSerializer):
         return product
 
 
+class ProductReviewSerializer(serializers.ModelSerializer):
+    user_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProductReview
+        fields = ("id", "product", "user", "user_name", "rating", "comment", "created_at", "updated_at")
+        read_only_fields = ("user",)
+
+    def get_user_name(self, obj):
+        full_name = f"{obj.user.first_name} {obj.user.last_name}".strip()
+        return full_name or obj.user.email.split("@")[0]
+
+    def validate(self, attrs):
+        request = self.context.get("request")
+        product = attrs.get("product") or getattr(self.instance, "product", None)
+        if request and not self.instance:
+            if ProductReview.objects.filter(product=product, user=request.user).exists():
+                raise serializers.ValidationError("Ya has escrito una reseña para este producto.")
+        return attrs
+
+    def create(self, validated_data):
+        validated_data["user"] = self.context["request"].user
+        return super().create(validated_data)
+
+
 class ProductSerializer(serializers.ModelSerializer):
     variants = ProductVariantSerializer(many=True, read_only=True)
     images = ProductImageSerializer(many=True, read_only=True)
+    rating_average = serializers.SerializerMethodField()
+    rating_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
         fields = "__all__"
+
+    def get_rating_average(self, obj):
+        result = obj.reviews.aggregate(avg=Avg("rating"))["avg"]
+        return round(result, 1) if result is not None else None
+
+    def get_rating_count(self, obj):
+        return obj.reviews.count()
 
 
 class CompleteProductSerializer(serializers.Serializer):

@@ -91,6 +91,8 @@ interface BackendProduct {
   deleted_at: string | null;
   variants: BackendVariant[];
   images: BackendImage[];
+  rating_average: number | null;
+  rating_count: number;
 }
 
 export interface ProductCategory {
@@ -165,6 +167,8 @@ export interface Product {
   sizes: string[];
   is_active: boolean;
   is_featured: boolean;
+  rating_average: number | null;
+  rating_count: number;
   created_at: string;
   updated_at: string;
 }
@@ -373,6 +377,8 @@ function normalizeProduct(
     sizes: uniqueValues(variants.map((variant) => variant.presentation)),
     is_active: product.is_active,
     is_featured: product.is_featured,
+    rating_average: product.rating_average,
+    rating_count: product.rating_count,
     created_at: product.created_at,
     updated_at: product.updated_at,
   };

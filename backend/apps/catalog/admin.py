@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Category, Price, Product, ProductImage, ProductVariant
+from .models import Category, Price, Product, ProductImage, ProductReview, ProductVariant
 
 
 class ProductVariantInline(admin.TabularInline):
@@ -65,3 +65,11 @@ class ProductImageAdmin(admin.ModelAdmin):
     list_filter = ("is_primary",)
     search_fields = ("product__name", "alt_text")
     list_select_related = ("product",)
+
+
+@admin.register(ProductReview)
+class ProductReviewAdmin(admin.ModelAdmin):
+    list_display = ("product", "user", "rating", "created_at")
+    list_filter = ("rating",)
+    search_fields = ("product__name", "user__email", "comment")
+    list_select_related = ("product", "user")

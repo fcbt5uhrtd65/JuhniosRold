@@ -8,6 +8,7 @@ from .views import (
     ProductExportStatusView,
     ProductExportView,
     ProductImageViewSet,
+    ProductReviewViewSet,
     ProductVariantViewSet,
     ProductViewSet,
 )
@@ -18,6 +19,7 @@ router.register("categories", CategoryViewSet)
 router.register("variants", ProductVariantViewSet)
 router.register("prices", PriceViewSet)
 router.register("images", ProductImageViewSet)
+router.register("reviews", ProductReviewViewSet)
 
 urlpatterns = [
     path("exports/", ProductExportView.as_view(), name="product-export"),
