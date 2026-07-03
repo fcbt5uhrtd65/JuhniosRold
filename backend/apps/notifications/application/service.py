@@ -22,9 +22,11 @@ class NotificationService:
         message: str,
         action_url: str = "",
         send_email: bool = False,
+        order=None,
     ) -> Notification:
         notif = Notification.objects.create(
             customer=customer,
+            order=order,
             type=type,
             title=title,
             message=message,

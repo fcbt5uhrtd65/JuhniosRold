@@ -121,13 +121,13 @@ class ConfirmWompiPayment:
             order.save(
                 update_fields=("inventory_consumed_at", "inventory_released_at")
             )
+            GenerateSalesInvoice().execute(order=order, payment=payment)
             OrderStatusService.change(
                 order=order,
                 status=Order.Status.PAID,
                 notes="Pago aprobado por Wompi.",
                 source="payment",
             )
-            GenerateSalesInvoice().execute(order=order, payment=payment)
         elif incoming_status == Payment.Status.PENDING:
             OrderStatusService.change(
                 order=order,

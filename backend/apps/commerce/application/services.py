@@ -137,6 +137,7 @@ class OrderStatusService:
                 message=message,
                 action_url=action_url,
                 send_email=send_email,
+                order=order,
             )
         except Exception:
             logger.exception("Error al crear notificación para pedido %s.", order.id)

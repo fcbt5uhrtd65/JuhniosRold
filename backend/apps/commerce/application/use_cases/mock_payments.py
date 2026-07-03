@@ -114,6 +114,8 @@ class ResolveMockPayment:
                 "updated_at",
             )
         )
+        if approved:
+            GenerateSalesInvoice().execute(order=order, payment=payment, actor=actor)
         OrderStatusService.change(
             order=order,
             status=Order.Status.PAID if approved else Order.Status.FAILED,
@@ -121,6 +123,4 @@ class ResolveMockPayment:
             notes=notes,
             source="payment",
         )
-        if approved:
-            GenerateSalesInvoice().execute(order=order, payment=payment, actor=actor)
         return payment

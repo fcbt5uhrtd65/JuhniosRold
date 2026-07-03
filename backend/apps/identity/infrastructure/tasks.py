@@ -1,27 +1,35 @@
+import base64
 import json
 
 from celery import shared_task
 from django.conf import settings
-from django.core.mail import send_mail
+from django.core.mail import EmailMessage
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 
-def _send_with_resend(*, subject, message, recipient):
+def _send_with_resend(*, subject, message, recipient, attachments=None):
     if not settings.RESEND_API_KEY:
         raise RuntimeError("RESEND_API_KEY no esta configurada.")
 
-    payload = json.dumps(
-        {
-            "from": settings.RESEND_FROM_EMAIL,
-            "to": [recipient],
-            "subject": subject,
-            "text": message,
-        }
-    ).encode("utf-8")
+    payload = {
+        "from": settings.RESEND_FROM_EMAIL,
+        "to": [recipient],
+        "subject": subject,
+        "text": message,
+    }
+    if attachments:
+        payload["attachments"] = [
+            {
+                "filename": attachment["filename"],
+                "content": base64.b64encode(attachment["content"]).decode("ascii"),
+            }
+            for attachment in attachments
+        ]
+
     request = Request(
         "https://api.resend.com/emails",
-        data=payload,
+        data=json.dumps(payload).encode("utf-8"),
         headers={
             "Authorization": f"Bearer {settings.RESEND_API_KEY}",
             "Content-Type": "application/json",
@@ -40,15 +48,25 @@ def _send_with_resend(*, subject, message, recipient):
         raise RuntimeError("No fue posible enviar el correo con Resend.") from exc
 
 
-def _send_email(*, subject, message, recipient):
+def _send_email(*, subject, message, recipient, attachments=None):
     if settings.EMAIL_PROVIDER == "resend":
-        return _send_with_resend(subject=subject, message=message, recipient=recipient)
-    return send_mail(
+        return _send_with_resend(
+            subject=subject, message=message, recipient=recipient, attachments=attachments
+        )
+
+    email = EmailMessage(
         subject=subject,
-        message=message,
+        body=message,
         from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "no-reply@juhniosrold.com"),
-        recipient_list=[recipient],
+        to=[recipient],
     )
+    for attachment in attachments or []:
+        email.attach(
+            attachment["filename"],
+            attachment["content"],
+            attachment.get("mimetype", "application/octet-stream"),
+        )
+    return email.send()
 
 
 @shared_task

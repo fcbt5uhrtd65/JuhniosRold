@@ -18,6 +18,13 @@ class Notification(BaseModel):
         on_delete=models.CASCADE,
         related_name="notifications",
     )
+    order = models.ForeignKey(
+        "commerce.Order",
+        on_delete=models.CASCADE,
+        related_name="notifications",
+        null=True,
+        blank=True,
+    )
     type = models.CharField(max_length=30, choices=Type.choices)
     title = models.CharField(max_length=200)
     message = models.TextField()
