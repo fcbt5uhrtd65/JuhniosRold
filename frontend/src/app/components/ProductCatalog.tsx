@@ -633,7 +633,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                 value={localSearchQuery}
                 onChange={e => setLocalSearchQuery(e.target.value)}
                 placeholder="Buscar productos..."
-                className="w-full pl-11 pr-4 py-3 bg-white border border-stone-200 rounded-xl text-[13px] text-stone-700 placeholder:text-stone-300 focus:outline-none focus:border-stone-400 transition-colors"
+                className="w-full pl-11 pr-4 py-3 bg-white border border-stone-200 rounded-xl text-base sm:text-[13px] text-stone-700 placeholder:text-stone-300 focus:outline-none focus:border-stone-400 transition-colors"
               />
             </div>
             <div className="flex items-center gap-2">
@@ -800,7 +800,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.3 }}
               className={viewMode === 'grid'
-                ? 'grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3'
+                ? 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3'
                 : 'flex flex-col gap-3'
               }
             >
@@ -917,29 +917,30 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                         </div>
                       )}
 
-                      {/* Hover overlay con botones */}
+                      {/* Overlay con botones: siempre visible en mobile/touch, hover en desktop */}
                       <motion.div
                         initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
                         whileHover={{ opacity: 1 }}
-                        className="absolute inset-0 bg-black/25 backdrop-blur-[1px] flex items-center justify-center gap-2 transition-opacity"
+                        className="absolute inset-0 bg-black/10 md:bg-transparent md:hover:bg-black/25 backdrop-blur-[1px] md:backdrop-blur-0 md:hover:backdrop-blur-[1px] flex items-start justify-end md:items-center md:justify-center gap-2 p-2 md:p-0 transition-all opacity-100 md:opacity-0 md:group-hover:opacity-100"
                       >
                         <motion.button
                           whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
                           onClick={() => setQuickViewProduct(product)}
-                          className="p-3 bg-white rounded-full text-stone-700 shadow-md hover:bg-stone-50 transition-colors"
+                          className="p-2 md:p-3 bg-white rounded-full text-stone-700 shadow-md hover:bg-stone-50 transition-colors"
                           aria-label="Vista rápida"
                         >
-                          <Eye className="w-4 h-4" strokeWidth={1.5} />
+                          <Eye className="w-3.5 h-3.5 md:w-4 md:h-4" strokeWidth={1.5} />
                         </motion.button>
                         <motion.button
                           whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
                           onClick={() => handleToggleSave(product.id, product.name)}
-                          className={`p-3 rounded-full shadow-md transition-all ${
+                          className={`p-2 md:p-3 rounded-full shadow-md transition-all ${
                             saved ? 'bg-rose-500 text-white' : 'bg-white text-stone-400 hover:bg-stone-50'
                           }`}
                           aria-label="Guardar"
                         >
-                          <Heart className={`w-4 h-4 ${saved ? 'fill-current' : ''}`} strokeWidth={1.5} />
+                          <Heart className={`w-3.5 h-3.5 md:w-4 md:h-4 ${saved ? 'fill-current' : ''}`} strokeWidth={1.5} />
                         </motion.button>
                       </motion.div>
                     </div>
@@ -986,7 +987,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                       )}
 
                       {/* Precio + botón */}
-                      <div className="flex items-center justify-between mt-auto pt-3 border-t border-stone-100">
+                      <div className="flex flex-wrap items-center justify-between gap-2 mt-auto pt-3 border-t border-stone-100">
                         <span className="text-base font-semibold text-stone-900">
                           {formatPrice(product.price, product.currency ?? 'COP')}
                         </span>
@@ -994,11 +995,11 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                           whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
                           onClick={() => handleAddToCart(product)}
                           disabled={isOutOfStock}
-                          className="flex items-center gap-1.5 px-3.5 py-2 text-white text-[10px] font-semibold rounded-xl transition-opacity hover:opacity-85 disabled:opacity-40 disabled:cursor-not-allowed"
+                          className="flex items-center gap-1.5 px-3.5 py-2 text-white text-[10px] font-semibold rounded-xl transition-opacity hover:opacity-85 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
                           style={{ backgroundColor: OLIVE }}
                         >
                           {isOutOfStock ? 'Agotado' : 'Añadir al carrito'}
-                          {!isOutOfStock && <span className="w-4 h-4 rounded-full bg-white/20 flex items-center justify-center text-[10px] font-bold leading-none">+</span>}
+                          {!isOutOfStock && <span className="w-4 h-4 rounded-full bg-white/20 flex items-center justify-center text-[10px] font-bold leading-none flex-shrink-0">+</span>}
                         </motion.button>
                       </div>
                     </div>

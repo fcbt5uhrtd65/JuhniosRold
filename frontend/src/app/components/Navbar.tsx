@@ -442,7 +442,7 @@ export function Navbar({ onLoginClick }: NavbarProps = {}) {
             <motion.div
               initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
               transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
-              className="fixed top-0 right-0 bottom-0 z-[160] w-full max-w-xs bg-white shadow-2xl flex flex-col rounded-l-3xl overflow-hidden"
+              className="fixed top-0 right-0 bottom-0 z-[160] w-[86%] max-w-sm bg-white shadow-2xl flex flex-col rounded-l-3xl overflow-hidden"
             >
               <div className="flex items-center justify-between px-7 py-5 border-b border-stone-100">
                 <div>
@@ -459,7 +459,7 @@ export function Navbar({ onLoginClick }: NavbarProps = {}) {
                   <Search className="w-3.5 h-3.5 text-stone-400" strokeWidth={1.5} />
                   <input type="search" placeholder="Buscar productos…"
                     value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                    className="bg-transparent text-[12px] focus:outline-none placeholder:text-stone-400 text-stone-700 w-full"
+                    className="bg-transparent text-base sm:text-[12px] focus:outline-none placeholder:text-stone-400 text-stone-700 w-full"
                   />
                 </div>
               </div>

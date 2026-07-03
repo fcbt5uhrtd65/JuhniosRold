@@ -501,16 +501,17 @@ function ProductCard({ product, index, isSaved, onToggleSave, onAddToCart, onVie
           </span>
         </div>
 
-        {/* Hover overlay: ojo + corazón */}
+        {/* Overlay ojo + corazón: siempre visible en mobile/touch, hover en desktop */}
         <motion.div
           initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
           whileHover={{ opacity: 1 }}
-          className="absolute inset-0 bg-black/22 backdrop-blur-[1px] flex items-center justify-center gap-2"
+          className="absolute inset-0 md:bg-black/22 backdrop-blur-0 md:hover:backdrop-blur-[1px] flex items-start justify-end md:items-center md:justify-center gap-2 p-2 md:p-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
         >
           <motion.button
             whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
             onClick={() => onView(product)}
-            className="p-2.5 bg-white rounded-full text-stone-700 shadow-md"
+            className="p-2 md:p-2.5 bg-white rounded-full text-stone-700 shadow-md"
             aria-label="Ver producto"
           >
             <Eye className="w-3.5 h-3.5" strokeWidth={1.5} />
@@ -518,7 +519,7 @@ function ProductCard({ product, index, isSaved, onToggleSave, onAddToCart, onVie
           <motion.button
             whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
             onClick={() => onToggleSave(product.id, product.name)}
-            className={`p-2.5 rounded-full shadow-md transition-all ${isSaved ? 'bg-rose-500 text-white' : 'bg-white text-stone-400'}`}
+            className={`p-2 md:p-2.5 rounded-full shadow-md transition-all ${isSaved ? 'bg-rose-500 text-white' : 'bg-white text-stone-400'}`}
             aria-label="Guardar"
           >
             <Heart className={`w-3.5 h-3.5 ${isSaved ? 'fill-current' : ''}`} strokeWidth={1.5} />

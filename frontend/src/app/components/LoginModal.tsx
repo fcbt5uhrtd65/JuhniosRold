@@ -23,7 +23,7 @@ const IMAGES = {
 
 /* ─── input compacto ─── */
 const inp = (focused: boolean) =>
-  `w-full pl-8 pr-8 py-2 bg-transparent text-[13px] text-stone-800 placeholder:text-stone-300 focus:outline-none rounded-lg`;
+  `w-full pl-8 pr-8 py-2 bg-transparent text-base sm:text-[13px] text-stone-800 placeholder:text-stone-300 focus:outline-none rounded-lg`;
 
 function Field({
   label, type = 'text', value, onChange, placeholder, icon: Icon,
@@ -372,8 +372,8 @@ export function LoginModal({ isOpen, onClose, onAdminAccess, onGoogleNewUser }: 
             exit={{ opacity: 0, scale: 0.97 }}
             transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
             onClick={e => e.stopPropagation()}
-            className="relative flex w-full overflow-hidden rounded-3xl bg-white shadow-2xl"
-            style={{ maxWidth: modalMaxW, height: 'min(94dvh, 580px)' }}
+            className="relative flex w-full overflow-hidden rounded-2xl sm:rounded-3xl bg-white shadow-2xl"
+            style={{ maxWidth: modalMaxW, height: 'min(96dvh, 580px)' }}
           >
             {/* imagen izquierda */}
             <ImagePanel src={imgSrc} tab={imgTab} />
@@ -546,7 +546,7 @@ export function LoginModal({ isOpen, onClose, onAdminAccess, onGoogleNewUser }: 
                           <div className="flex flex-col gap-1 flex-1 min-w-0">
                             <label className="text-[9px] tracking-[0.22em] uppercase text-stone-400 font-semibold">Tipo de identificación *</label>
                             <select value={tipoIdEmpresa} onChange={e => setTipoIdEmpresa(e.target.value as 'NIT' | 'CC' | 'OTRO')}
-                              className="w-full px-2.5 py-2 rounded-lg border border-[#E5E0D8] bg-white text-[13px] text-stone-800 focus:outline-none focus:border-[#2D3A1F] transition appearance-none"
+                              className="w-full px-2.5 py-2 rounded-lg border border-[#E5E0D8] bg-white text-base sm:text-[13px] text-stone-800 focus:outline-none focus:border-[#2D3A1F] transition appearance-none"
                               style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23A8A29E' stroke-width='1.5'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.5rem center' }}>
                               <option value="NIT">NIT</option>
                               <option value="CC">Cédula</option>
@@ -568,7 +568,7 @@ export function LoginModal({ isOpen, onClose, onAdminAccess, onGoogleNewUser }: 
                         <div className="flex flex-col gap-1">
                           <label className="text-[9px] tracking-[0.22em] uppercase text-stone-400 font-semibold">Tipo de negocio *</label>
                           <select value={tipoNegocio} onChange={e => { setTipoNegocio(e.target.value); if (e.target.value !== 'DISTRIBUIDOR') setEsDistribIntl(false); }}
-                            className="w-full px-2.5 py-2 rounded-lg border border-[#E5E0D8] bg-white text-[13px] text-stone-800 focus:outline-none focus:border-[#2D3A1F] transition appearance-none"
+                            className="w-full px-2.5 py-2 rounded-lg border border-[#E5E0D8] bg-white text-base sm:text-[13px] text-stone-800 focus:outline-none focus:border-[#2D3A1F] transition appearance-none"
                             style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23A8A29E' stroke-width='1.5'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.5rem center' }}>
                             <option value="TIENDA">Tienda</option>
                             <option value="DISTRIBUIDOR">Distribuidor</option>
@@ -622,7 +622,7 @@ export function LoginModal({ isOpen, onClose, onAdminAccess, onGoogleNewUser }: 
                       <div className="flex flex-col gap-1 flex-1 min-w-0">
                         <label className="text-[9px] tracking-[0.22em] uppercase text-stone-400 font-semibold">Tipo doc.</label>
                         <select value={tipoDoc} onChange={e => { setTipoDoc(e.target.value); if (e.target.value !== 'OTHER') setOtroTipoId(''); }}
-                          className="w-full px-2.5 py-2 rounded-lg border border-[#E5E0D8] bg-white text-[13px] text-stone-800 focus:outline-none focus:border-[#2D3A1F] transition appearance-none"
+                          className="w-full px-2.5 py-2 rounded-lg border border-[#E5E0D8] bg-white text-base sm:text-[13px] text-stone-800 focus:outline-none focus:border-[#2D3A1F] transition appearance-none"
                           style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23A8A29E' stroke-width='1.5'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.5rem center' }}>
                           <option value="CC">Cédula</option>
                           <option value="CE">Cédula Ext.</option>
