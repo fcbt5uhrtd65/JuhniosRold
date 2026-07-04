@@ -13,11 +13,14 @@ import {
   Clock,
   CreditCard,
   ExternalLink,
+  Eye,
+  EyeOff,
   FileText,
   Gift,
   Hash,
   Heart,
   Headphones,
+  KeyRound,
   Loader2,
   Lock,
   MapPin,
@@ -420,7 +423,7 @@ function MayoristaSection({
 
 /* ════════════════════════════════════════════════════════ */
 export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => void }) {
-  const { currentUser, updateProfile, orders, loadOrders, backendOnline, savedProducts, toggleSaveProduct } = useUser();
+  const { currentUser, updateProfile, changePassword, orders, loadOrders, backendOnline, savedProducts, toggleSaveProduct } = useUser();
   const { addItem } = useCart();
   const { products } = useAdmin();
   const toast = useToast();
@@ -442,6 +445,14 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
   const [saving, setSaving] = useState(false);
   const [saveOk, setSaveOk] = useState(false);
   const [saveErr, setSaveErr] = useState('');
+
+  /* ── contraseña ── */
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [savingPwd, setSavingPwd] = useState(false);
+  const [pwdErr, setPwdErr] = useState('');
+  const [showPwdFields, setShowPwdFields] = useState(false);
 
   /* ── pedidos ── */
   const [payingId, setPayingId] = useState<string | null>(null);
@@ -586,6 +597,21 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
     setSaving(false);
     if (!r.ok) { setSaveErr(r.message || 'No fue posible guardar.'); return; }
     setSaveOk(true); setTimeout(() => setSaveOk(false), 3000);
+  };
+
+  /* contraseña */
+  const hasPassword = currentUser?.hasUsablePassword ?? true;
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault(); setPwdErr('');
+    if (hasPassword && !currentPassword) { setPwdErr('Ingresa tu contraseña actual.'); return; }
+    if (newPassword.length < 8) { setPwdErr('La nueva contraseña debe tener al menos 8 caracteres.'); return; }
+    if (newPassword !== confirmPassword) { setPwdErr('Las contraseñas no coinciden.'); return; }
+    setSavingPwd(true);
+    const r = await changePassword(newPassword, hasPassword ? currentPassword : undefined);
+    setSavingPwd(false);
+    if (!r.ok) { setPwdErr(r.message || 'No fue posible guardar la contraseña.'); return; }
+    toast.success(hasPassword ? 'Contraseña actualizada.' : 'Contraseña configurada.');
+    setCurrentPassword(''); setNewPassword(''); setConfirmPassword('');
   };
 
   /* pago */
@@ -865,6 +891,93 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
                             style={{ backgroundColor: OLIVE }}>
                             {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" strokeWidth={2} />}
                             {saving ? 'Guardando…' : 'Guardar cambios'}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Tarjeta seguridad / contraseña */}
+                      <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
+                        <div className="px-5 py-3 border-b border-stone-100 flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${OLIVE}12` }}>
+                            <KeyRound className="w-3.5 h-3.5" style={{ color: OLIVE }} strokeWidth={2} />
+                          </div>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">
+                            {hasPassword ? 'Cambiar contraseña' : 'Configurar contraseña'}
+                          </p>
+                        </div>
+
+                        <div className="px-5 py-4 space-y-3">
+                          <AnimatePresence>
+                            {pwdErr && (
+                              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                                className="flex items-center gap-2 rounded-xl bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-700">
+                                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                                {pwdErr}
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+
+                          {!hasPassword && (
+                            <p className="text-[11px] text-stone-400 leading-relaxed">
+                              Tu cuenta no tiene una contraseña configurada todavía (iniciaste sesión con Google). Crea una para poder ingresar también con tu email.
+                            </p>
+                          )}
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {hasPassword && (
+                              <label className="flex flex-col gap-1.5 sm:col-span-2">
+                                <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Contraseña actual *</span>
+                                <div className="relative">
+                                  <input
+                                    type={showPwdFields ? 'text' : 'password'}
+                                    value={currentPassword}
+                                    onChange={e => setCurrentPassword(e.target.value)}
+                                    className={inp}
+                                    placeholder="••••••••"
+                                  />
+                                </div>
+                              </label>
+                            )}
+                            <label className="flex flex-col gap-1.5">
+                              <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Nueva contraseña *</span>
+                              <input
+                                type={showPwdFields ? 'text' : 'password'}
+                                value={newPassword}
+                                onChange={e => setNewPassword(e.target.value)}
+                                className={inp}
+                                placeholder="Mínimo 8 caracteres"
+                              />
+                            </label>
+                            <label className="flex flex-col gap-1.5">
+                              <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Confirmar contraseña *</span>
+                              <input
+                                type={showPwdFields ? 'text' : 'password'}
+                                value={confirmPassword}
+                                onChange={e => setConfirmPassword(e.target.value)}
+                                className={inp}
+                                placeholder="Repite la contraseña"
+                              />
+                            </label>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => setShowPwdFields(v => !v)}
+                            className="flex items-center gap-1.5 text-[11px] font-medium text-stone-400 hover:text-stone-600 transition-colors"
+                          >
+                            {showPwdFields ? <EyeOff className="w-3.5 h-3.5" strokeWidth={1.5} /> : <Eye className="w-3.5 h-3.5" strokeWidth={1.5} />}
+                            {showPwdFields ? 'Ocultar contraseñas' : 'Mostrar contraseñas'}
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={savingPwd}
+                            onClick={handleChangePassword}
+                            className="flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-40"
+                            style={{ backgroundColor: OLIVE }}
+                          >
+                            {savingPwd ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Lock className="w-3.5 h-3.5" strokeWidth={2} />}
+                            {savingPwd ? 'Guardando…' : hasPassword ? 'Actualizar contraseña' : 'Configurar contraseña'}
                           </button>
                         </div>
                       </div>

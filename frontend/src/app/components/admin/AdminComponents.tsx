@@ -307,12 +307,12 @@ function PermRow({ roleId, component, perm, onChanged, onDeleted }: PermRowProps
   };
 
   return (
-    <div className="flex items-center justify-between py-3 px-4 rounded-xl hover:bg-gray-50/60 transition-colors group">
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 py-3 px-4 rounded-xl hover:bg-gray-50/60 transition-colors group">
       <div className="min-w-0 flex-1">
         <p className="text-xs font-medium text-gray-800">{component.name}</p>
         <p className="text-[10px] text-gray-400 font-mono mt-0.5">{component.code}</p>
       </div>
-      <div className="flex items-center gap-2 shrink-0 ml-4">
+      <div className="flex items-center gap-2 shrink-0 sm:ml-4">
         <Toggle type="can_view" label="Ver" activeColor="bg-blue-50 text-blue-600" />
         <Toggle type="can_edit" label="Editar" activeColor="bg-green-50 text-green-600" />
       </div>
@@ -592,10 +592,10 @@ export function AdminComponents() {
 
       {/* ── Permissions tab ── */}
       {tab === 'permissions' && (
-        <div className="flex gap-4 h-[calc(100vh-260px)] min-h-[480px]">
+        <div className="flex flex-col lg:flex-row gap-4 lg:h-[calc(100vh-260px)] lg:min-h-[480px]">
 
           {/* Left: role list */}
-          <div className="w-56 lg:w-64 shrink-0 bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col overflow-hidden">
+          <div className="w-full lg:w-64 shrink-0 bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col overflow-hidden max-h-72 lg:max-h-none">
             <div className="px-4 py-3 border-b border-gray-100">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Roles</p>
               <div className="relative">

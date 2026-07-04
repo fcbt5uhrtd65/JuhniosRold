@@ -196,7 +196,10 @@ class UserViewSet(viewsets.ModelViewSet):
     def change_password(self, request):
         current_password = request.data.get("current_password", "")
         new_password = request.data.get("new_password", "")
-        if not request.user.check_password(current_password):
+        # Si el usuario aun no tiene una contrasena utilizable (p.ej. se registro
+        # con Google), no hay nada que verificar: esta configurando su primera
+        # contrasena en lugar de cambiar una existente.
+        if request.user.has_usable_password() and not request.user.check_password(current_password):
             return Response(
                 {"current_password": ["La contrasena actual no es correcta."]},
                 status=status.HTTP_400_BAD_REQUEST,
