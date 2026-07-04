@@ -237,6 +237,17 @@ function uniqueValues(values: string[]): string[] {
   return Array.from(new Set(values.filter(Boolean)));
 }
 
+/** Genera un SKU corto tipo "JR-8K3P2Q": prefijo de 2 letras + 5-6 caracteres alfanuméricos. */
+function generateShortSku(): string {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sin caracteres ambiguos (0/O, 1/I/L)
+  const length = 5 + Math.round(Math.random());
+  let suffix = '';
+  for (let i = 0; i < length; i++) {
+    suffix += alphabet[Math.floor(Math.random() * alphabet.length)];
+  }
+  return `JR-${suffix}`;
+}
+
 function normalizeImageUrl(url: string): string {
   return url;
 }
@@ -635,7 +646,7 @@ export async function createProduct(payload: CreateProductPayload): Promise<Prod
     images: payload.images ?? [],
     is_active: payload.is_active ?? true,
     is_featured: payload.is_featured ?? false,
-    sku: payload.sku || `JR-${Date.now()}`,
+    sku: payload.sku || generateShortSku(),
     variant_name: payload.variant_name ||
       (payload.presentation_number && payload.presentation_unit
         ? `${payload.presentation_number} ${payload.presentation_unit}`
