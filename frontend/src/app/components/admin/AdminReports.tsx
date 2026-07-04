@@ -1072,8 +1072,8 @@ function TabCustomers({ a, report, loadingReport, filters }: {
             ? <ChartSkeleton />
             : segments.length === 0
               ? <EmptyState icon={Users} title="Sin segmentación" sub="No hay datos del backend" />
-              : <div className="mt-4 grid grid-cols-5 gap-4 items-center">
-                  <div className="col-span-3 space-y-3">
+              : <div className="mt-4 grid grid-cols-1 sm:grid-cols-5 gap-4 items-center">
+                  <div className="sm:col-span-3 space-y-3">
                     {segments.map(s => {
                       const style = SEGMENT_STYLE[s.segment] ?? { bar: 'bg-stone-400', badge: '' };
                       return (
@@ -1090,7 +1090,7 @@ function TabCustomers({ a, report, loadingReport, filters }: {
                       );
                     })}
                   </div>
-                  <div className="col-span-2">
+                  <div className="sm:col-span-2">
                     <ResponsiveContainer width="100%" height={160}>
                       <PieChart>
                         <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%"

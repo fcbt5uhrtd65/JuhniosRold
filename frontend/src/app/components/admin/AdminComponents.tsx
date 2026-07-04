@@ -701,8 +701,8 @@ export function AdminComponents() {
               <p className="text-sm text-gray-400">No se encontraron componentes.</p>
             </div>
           ) : (
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-              <table className="w-full text-xs">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
+              <table className="w-full text-xs min-w-[640px]">
                 <thead>
                   <tr className="bg-gray-50/50 border-b border-gray-100">
                     <th className="text-left px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-400">Nombre</th>

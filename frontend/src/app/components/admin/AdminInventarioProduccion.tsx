@@ -1764,8 +1764,8 @@ function ModuloProduccion() {
                 <div><div className="flex items-center gap-2 mb-1"><span className="font-mono text-xs text-gray-400">{f.code}</span><Badge label={itemName(data, f.output_item)} color="green" /></div><h3 className="font-semibold text-gray-900">{f.name}</h3></div>
                 <div className="text-right"><p className="text-xs text-gray-500">Rendimiento base</p><p className="text-xl font-bold text-[#2a4038]">{numeric(f.yield_quantity)} {unitLabel(data, f.yield_unit)}</p></div>
               </div>
-              <div className="px-5 py-3">
-                <table className="w-full text-sm">
+              <div className="px-5 py-3 overflow-x-auto">
+                <table className="w-full text-sm min-w-[560px]">
                   <thead><tr className="text-[10px] font-bold uppercase tracking-wider text-gray-400"><th className="py-2 text-left">Ingrediente</th><th className="py-2 text-right">Cantidad</th><th className="py-2 text-right">Und</th><th className="py-2 text-right">%</th><th className="py-2 text-right">Stock disp.</th></tr></thead>
                   <tbody>
                     {f.lines.map((l, index) => {
@@ -1827,8 +1827,8 @@ function ModuloProduccion() {
                 <div><p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Verificador</p><p className="text-gray-700">{od.verificador}</p></div>
                 <div><p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Fecha</p><p className="text-gray-700">{od.fecha}</p></div>
               </div>
-              <div className="px-5 py-3">
-                <table className="w-full text-sm">
+              <div className="px-5 py-3 overflow-x-auto">
+                <table className="w-full text-sm min-w-[560px]">
                   <thead><tr className="text-[10px] font-bold uppercase tracking-wider text-gray-400"><th className="py-2 text-left">Materia Prima</th><th className="py-2 text-right">Teórico</th><th className="py-2 text-right">Pesado</th><th className="py-2 text-right">Diferencia</th><th className="py-2 text-right">Und</th><th className="py-2 text-center">OK</th></tr></thead>
                   <tbody>
                     {od.lineas.map(l => {
