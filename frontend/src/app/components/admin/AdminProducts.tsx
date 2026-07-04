@@ -3,7 +3,7 @@ import { useAdmin } from '../../contexts/AdminContext';
 import {
   Plus, Edit2, Trash2, Eye, EyeOff, Grid3x3, List, ArrowUpDown,
   X, Upload, AlertTriangle, ChevronDown, Package, Warehouse,
-  Download, FileSpreadsheet, FileText,
+  Download, FileSpreadsheet, FileText, Star,
 } from 'lucide-react';
 import type { Product } from '../../types/admin';
 import { SearchBar } from './SearchBar';
@@ -15,6 +15,7 @@ import {
   DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent,
 } from '../ui/dropdown-menu';
 import { requestProductsExport, getCategories, type ExportFormat, type PdfLayout } from '../../services/products.service';
+import { getProductReviews, type ProductReview } from '../../services/reviews.service';
 import { getWholesaleSettingsApi, updateWholesaleSettingsApi } from '../../services/cart.service';
 import { pollExportStatus, downloadFile } from '../../utils/pollExportStatus';
 import { resolveBackendUrl } from '../../services/api';
@@ -56,6 +57,98 @@ const EMPTY_FORM: Omit<Product, 'id'> = {
 function margenGanancia(venta: number, costo: number | undefined): string | null {
   if (!costo || costo <= 0 || venta <= 0) return null;
   return (((venta - costo) / venta) * 100).toFixed(1) + '%';
+}
+
+function RatingStars({ rating, size = 12 }: { rating: number; size?: number }) {
+  return (
+    <div className="flex items-center gap-0.5">
+      {Array.from({ length: 5 }, (_, i) => (
+        <Star
+          key={i}
+          size={size}
+          className={i < Math.round(rating) ? 'fill-amber-400 text-amber-400' : 'fill-gray-200 text-gray-200'}
+          strokeWidth={0}
+        />
+      ))}
+    </div>
+  );
+}
+
+function formatReviewDate(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function ProductReviewsPanel({ productId }: { productId: string }) {
+  const [reviews, setReviews] = useState<ProductReview[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAll, setShowAll] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    setLoading(true);
+    setShowAll(false);
+    getProductReviews(productId)
+      .then(data => { if (isMounted) setReviews(data); })
+      .finally(() => { if (isMounted) setLoading(false); });
+    return () => { isMounted = false; };
+  }, [productId]);
+
+  const average = reviews.length > 0
+    ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
+    : null;
+
+  // Colapsado: el CSS muestra solo la 1ra reseña en pantallas pequeñas y hasta 2 en pantallas grandes.
+  const collapsedReviews = reviews.slice(0, 2);
+  const visibleReviews = showAll ? reviews : collapsedReviews;
+  const hasMore = reviews.length > collapsedReviews.length;
+
+  return (
+    <div className="pt-4 border-t border-gray-100">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Reseñas</p>
+        {average !== null && (
+          <div className="flex items-center gap-1.5">
+            <RatingStars rating={average} />
+            <span className="text-xs font-semibold text-gray-700">{average.toFixed(1)}</span>
+            <span className="text-[11px] text-gray-400">({reviews.length})</span>
+          </div>
+        )}
+      </div>
+
+      {loading && <p className="text-xs text-gray-400">Cargando reseñas...</p>}
+
+      {!loading && reviews.length === 0 && (
+        <p className="text-xs text-gray-400">Este producto aún no tiene reseñas.</p>
+      )}
+
+      {!loading && reviews.length > 0 && (
+        <div className="space-y-3">
+          {visibleReviews.map((review, i) => (
+            <div key={review.id} className={`${i >= 1 ? 'hidden sm:block' : ''}`}>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-semibold text-gray-800">{review.userName}</span>
+                <span className="text-[11px] text-gray-400">{formatReviewDate(review.createdAt)}</span>
+              </div>
+              <RatingStars rating={review.rating} size={11} />
+              {review.comment && (
+                <p className="text-xs text-gray-600 mt-1 leading-relaxed">{review.comment}</p>
+              )}
+            </div>
+          ))}
+          {!showAll && hasMore && (
+            <button
+              onClick={() => setShowAll(true)}
+              className="text-[11px] font-semibold text-[#2a4038] hover:underline"
+            >
+              Ver más ({reviews.length - collapsedReviews.length})
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function estadoBadge(estado: Product['estado'], stockActual?: number, stockMinimo?: number) {
@@ -664,6 +757,15 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
                     </div>
                   </div>
 
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <RatingStars rating={product.calificacionPromedio ?? 0} size={11} />
+                    <span className="text-[11px] text-gray-500">
+                      {product.calificacionPromedio != null
+                        ? `${product.calificacionPromedio.toFixed(1)} (${product.cantidadReseñas ?? 0})`
+                        : 'Sin reseñas'}
+                    </span>
+                  </div>
+
                   <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                     <div>
                       <p className="text-sm font-semibold text-gray-900">${product.precio.toLocaleString()}</p>
@@ -932,6 +1034,8 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
                   )}
                 </div>
               )}
+
+              <ProductReviewsPanel productId={selectedProduct.id} />
 
               <div className="flex gap-3 pt-4 border-t border-gray-100">
                 <button

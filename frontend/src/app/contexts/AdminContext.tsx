@@ -253,6 +253,8 @@ function mapApiProduct(p: ApiProduct): Product {
     descripcion: p.description,
     imagen: p.primary_image ?? '',
     imagenes: p.image_urls,
+    calificacionPromedio: p.rating_average,
+    cantidadReseñas: p.rating_count,
     estado: p.is_active ? 'activo' : 'inactivo',
     codigo: typeof codigo === 'string' ? codigo : undefined,
     marca: typeof marca === 'string' ? marca : undefined,
