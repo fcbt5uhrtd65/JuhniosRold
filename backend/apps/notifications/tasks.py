@@ -17,12 +17,22 @@ def send_notification_email(notification_id: str):
         return
 
     attachments = []
+    message = notif.message
     if notif.type == Notification.Type.ORDER_CONFIRMED and notif.order_id:
         attachments = _build_invoice_attachment(notif.order)
+        if attachments:
+            first_name = (notif.customer.first_name or "").strip()
+            greeting = f"Hola {first_name}," if first_name else "Hola,"
+            message = (
+                f"{greeting}\n\n"
+                "¡Gracias por tu compra en Juhnios Rold! Adjunto a este correo "
+                "encontrarás la factura de tu pedido.\n\n"
+                f"{message}"
+            )
 
     _send_email(
         subject=f"{notif.title} - Juhnios Rold",
-        message=notif.message,
+        message=message,
         recipient=notif.customer.email,
         attachments=attachments,
     )
