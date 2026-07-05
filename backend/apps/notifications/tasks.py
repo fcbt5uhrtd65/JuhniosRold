@@ -26,7 +26,8 @@ def send_notification_email(notification_id: str):
     if notif.type == Notification.Type.ORDER_CONFIRMED and notif.order_id:
         attachments = _build_invoice_attachment(notif.order)
 
-        subject = f"Confirmación de compra #{notif.order.id} - Juhnios Rold S.A.S."
+        order_ref = notif.order.number or str(notif.order.id)[:8].upper()
+        subject = f"Confirmación de compra #{order_ref} - Juhnios Rold S.A.S."
         plain_message = _build_order_confirmation_text(notif)
         html_message = _build_order_confirmation_html(notif)
 
@@ -78,17 +79,18 @@ def _build_invoice_attachment(order):
 def _build_order_confirmation_text(notif):
     order = notif.order
     customer = notif.customer
+    order_ref = order.number or str(order.id)[:8].upper()
 
     return f"""
 Hola {getattr(customer, "first_name", "") or customer.email},
 
 Gracias por comprar en Juhnios Rold S.A.S.
 
-Hemos recibido correctamente tu pedido #{order.id}. 
+Hemos recibido correctamente tu pedido #{order_ref}.
 Adjunto encontrarás el documento correspondiente a tu compra, si aplica.
 
 Resumen:
-- Pedido: #{order.id}
+- Pedido: #{order_ref}
 - Cliente: {customer.email}
 - Estado: Compra confirmada
 
@@ -118,7 +120,7 @@ def _build_order_confirmation_html(notif):
         or "cliente"
     )
 
-    order_id = order.id
+    order_ref = order.number or str(order.id)[:8].upper()
     customer_email = customer.email
 
     html = """
@@ -288,6 +290,6 @@ def _build_order_confirmation_html(notif):
 """
 
     html = html.replace("__CUSTOMER_NAME__", str(customer_name))
-    html = html.replace("__ORDER_ID__", str(order_id))
+    html = html.replace("__ORDER_ID__", str(order_ref))
     html = html.replace("__CUSTOMER_EMAIL__", str(customer_email))
     return html
