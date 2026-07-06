@@ -49,7 +49,9 @@ class ProductVariant(BaseModel):
     @property
     def presentation_label(self):
         if self.presentation_number is not None and self.presentation_unit:
-            number = f"{self.presentation_number.normalize():f}".rstrip("0").rstrip(".")
+            number = f"{self.presentation_number:f}"
+            if "." in number:
+                number = number.rstrip("0").rstrip(".")
             return f"{number} {self.presentation_unit}"
         return self.name
 

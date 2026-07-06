@@ -79,6 +79,9 @@ class CatalogSeederTests(TestCase):
         self.assertEqual(aceite_corporal.presentation_number, 250)
         self.assertEqual(aceite_corporal.presentation_unit, "ML")
 
+        aceite_capilar = ProductVariant.objects.get(product__name="ACEITE CAPILAR", presentation_number=120)
+        self.assertEqual(aceite_capilar.presentation_label, "120 ML")
+
         keratina = ProductVariant.objects.get(product__name="TRATAMIENTO NUTRITIVO KERATINA", presentation_number=30)
         self.assertEqual(keratina.presentation_number, 30)
         self.assertEqual(keratina.presentation_unit, "GR")
