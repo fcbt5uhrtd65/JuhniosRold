@@ -65,7 +65,7 @@ function PublicSite({ onLoginClick }: { onLoginClick: () => void }) {
         <ShippingInfo />
 
         {/* Featured products — card grid */}
-        <PowerProducts />
+        <PowerProducts onLoginRequired={onLoginClick} />
 
         {/* Promo banner */}
         <PromoBanner />
