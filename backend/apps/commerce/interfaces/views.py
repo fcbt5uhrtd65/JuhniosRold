@@ -13,6 +13,7 @@ from apps.inventory.infrastructure.models import Location
 
 from ..application.services import OrderStatusService
 from ..application.use_cases import ActiveCartService, CancelOrder, CheckoutCart
+from .filters import PaymentFilter
 from ..infrastructure.models import Cart, Order, Payment, WholesaleSettings
 from ..infrastructure.serializers import (
     AddCartItemSerializer,
@@ -216,6 +217,6 @@ class PaymentListView(generics.ListAPIView):
     serializer_class = PaymentAdminSerializer
     permission_classes = (HasComponentAccess,)
     required_component = "commerce.orders"
-    filterset_fields = ("status", "provider", "order")
+    filterset_class = PaymentFilter
     search_fields = ("reference", "order__number", "order__customer__first_name", "order__customer__last_name")
     ordering_fields = ("created_at", "amount_in_cents")
