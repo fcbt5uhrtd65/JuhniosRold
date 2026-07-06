@@ -1,7 +1,5 @@
-import hashlib
 import re
-import urllib.request
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 
 from django.core.management.base import BaseCommand, CommandError
@@ -13,7 +11,7 @@ from django.utils.text import slugify
 from apps.inventory.infrastructure.models import Location, Stock, Warehouse
 
 from ...infrastructure.models import Category, Price, Product, ProductVariant
-from ...infrastructure.tasks import IMAGE_CACHE_DIR
+from ...infrastructure.tasks import _load_image_bytes
 from ...seed_data import CATEGORY_DATA, iter_catalog_items
 
 
@@ -22,26 +20,10 @@ PRESENTATION_IN_NAME_PATTERN = re.compile(r"\s+\d+(?:[.,]\d+)?\s*(?:ML|GR|G|KG)\
 
 
 def _warm_image_cache(urls):
-    unique_urls = list(set(u for u in urls if u and u.startswith("http")))
-    IMAGE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-
-    def _fetch(url):
-        cache_key = hashlib.sha256(url.encode()).hexdigest()
-        cache_path = IMAGE_CACHE_DIR / cache_key
-        if cache_path.exists():
-            return url, True
-        try:
-            req = urllib.request.Request(url, headers={"User-Agent": "JuhniosRold-Export/1.0"})
-            with urllib.request.urlopen(req, timeout=8) as resp:
-                data = resp.read(5 * 1024 * 1024 + 1)
-            if len(data) <= 5 * 1024 * 1024:
-                cache_path.write_bytes(data)
-            return url, True
-        except Exception:
-            return url, False
+    unique_urls = list(set(u for u in urls if u))
 
     with ThreadPoolExecutor(max_workers=16) as executor:
-        list(executor.map(_fetch, unique_urls))
+        list(executor.map(_load_image_bytes, unique_urls))
 
 
 def category_slug_for(name):
