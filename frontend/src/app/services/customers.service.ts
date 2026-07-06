@@ -46,6 +46,8 @@ export interface CreateCustomerPayload {
   is_active?: boolean;
 }
 
+export type UpdateCustomerPayload = Partial<CreateCustomerPayload>;
+
 export async function getCustomers(params?: {
   page?: number;
   limit?: number;
@@ -68,4 +70,17 @@ export async function createCustomer(
   const res = await api.post<BackendCustomer>('/customers/', payload);
   if (!res.data) throw new Error(res.message);
   return res.data;
+}
+
+export async function updateCustomer(
+  id: string,
+  payload: UpdateCustomerPayload,
+): Promise<BackendCustomer> {
+  const res = await api.patch<BackendCustomer>(`/customers/${id}/`, payload);
+  if (!res.data) throw new Error(res.message);
+  return res.data;
+}
+
+export async function deleteCustomer(id: string): Promise<void> {
+  await api.delete(`/customers/${id}/`);
 }

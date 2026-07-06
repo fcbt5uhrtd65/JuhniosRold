@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAdmin } from '../../contexts/AdminContext';
-import { Users, TrendingUp, DollarSign, Plus, Search, ChevronDown, ChevronUp, X, FileText, Loader2 } from 'lucide-react';
+import { Users, TrendingUp, DollarSign, Plus, Search, ChevronDown, ChevronUp, X, FileText, Loader2, Pencil, Trash2, AlertTriangle } from 'lucide-react';
 import { getInvoiceByOrder, openInvoicePdf } from '../../services/payments.service';
 import { useToast } from '../../contexts/ToastContext';
 import { format } from 'date-fns';
@@ -10,6 +10,17 @@ import { EMPTY_LOCATION, type LocationValue } from '../../services/geography.typ
 import { KpiCard, Card, Badge, type BadgeColor, Modal, Field, inputCls, selectCls } from './AdminUI';
 import { Pagination } from './Pagination';
 import type { Order, Customer } from '../../types/admin';
+
+type CustomerFormData = {
+  tipoDocumento: string;
+  documento: string;
+  nombre: string;
+  telefono: string;
+  email: string;
+  direccion: string;
+  ciudad: string;
+  modoCompra: 'RETAIL' | 'WHOLESALE';
+};
 
 function CustomerOrdersModal({ customer, orders, onClose }: {
   customer: Customer;
@@ -153,13 +164,18 @@ function CustomerOrdersModal({ customer, orders, onClose }: {
 }
 
 export function AdminCustomers() {
-  const { customers, orders, addCustomer } = useAdmin();
+  const { customers, orders, addCustomer, updateCustomer, deleteCustomer } = useAdmin();
   const toast = useToast();
   const [showModal, setShowModal] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [deleteCandidate, setDeleteCandidate] = useState<Customer | null>(null);
+  const [pendingUpdate, setPendingUpdate] = useState<CustomerFormData | null>(null);
   const [expandedCustomerId, setExpandedCustomerId] = useState<string | null>(null);
   const [ordersModalCustomer, setOrdersModalCustomer] = useState<Customer | null>(null);
   const [loadingInvoiceId, setLoadingInvoiceId] = useState<string | null>(null);
   const [isSubmittingCustomer, setIsSubmittingCustomer] = useState(false);
+  const [isUpdatingCustomer, setIsUpdatingCustomer] = useState(false);
+  const [isDeletingCustomer, setIsDeletingCustomer] = useState(false);
 
   const handleViewInvoice = async (orderId: string) => {
     setLoadingInvoiceId(orderId);
@@ -173,16 +189,7 @@ export function AdminCustomers() {
       setLoadingInvoiceId(null);
     }
   };
-  const [formData, setFormData] = useState<{
-    tipoDocumento: string;
-    documento: string;
-    nombre: string;
-    telefono: string;
-    email: string;
-    direccion: string;
-    ciudad: string;
-    modoCompra: 'RETAIL' | 'WHOLESALE';
-  }>({
+  const [formData, setFormData] = useState<CustomerFormData>({
     tipoDocumento: 'CC',
     documento: '',
     nombre: '',
@@ -193,6 +200,17 @@ export function AdminCustomers() {
     modoCompra: 'RETAIL',
   });
   const [customerLocation, setCustomerLocation] = useState<LocationValue>(EMPTY_LOCATION);
+  const [editFormData, setEditFormData] = useState<CustomerFormData>({
+    tipoDocumento: 'CC',
+    documento: '',
+    nombre: '',
+    telefono: '',
+    email: '',
+    direccion: '',
+    ciudad: '',
+    modoCompra: 'RETAIL',
+  });
+  const [editCustomerLocation, setEditCustomerLocation] = useState<LocationValue>(EMPTY_LOCATION);
 
   const [nameFilter, setNameFilter] = useState('');
   const [cityFilter, setCityFilter] = useState('');
@@ -234,6 +252,30 @@ export function AdminCustomers() {
     setDocFilter('');
   };
 
+  const resetCreateForm = () => {
+    setFormData({ tipoDocumento: 'CC', documento: '', nombre: '', telefono: '', email: '', direccion: '', ciudad: '', modoCompra: 'RETAIL' });
+    setCustomerLocation(EMPTY_LOCATION);
+  };
+
+  const openEditCustomer = (customer: Customer) => {
+    setEditingCustomer(customer);
+    setEditFormData({
+      tipoDocumento: customer.tipoDocumento || 'CC',
+      documento: customer.documento || '',
+      nombre: customer.nombre || '',
+      telefono: customer.telefono || '',
+      email: customer.email || '',
+      direccion: customer.direccion || '',
+      ciudad: customer.ciudad || '',
+      modoCompra: customer.modoCompra ?? 'RETAIL',
+    });
+    setEditCustomerLocation({
+      ...EMPTY_LOCATION,
+      cityName: customer.ciudad || '',
+      countryName: 'Colombia',
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmittingCustomer) return;
@@ -241,13 +283,52 @@ export function AdminCustomers() {
     try {
       await addCustomer({ ...formData, ciudad: customerLocation.cityName || formData.ciudad });
       toast.success('Cliente creado correctamente');
-      setFormData({ tipoDocumento: 'CC', documento: '', nombre: '', telefono: '', email: '', direccion: '', ciudad: '', modoCompra: 'RETAIL' });
-      setCustomerLocation(EMPTY_LOCATION);
+      resetCreateForm();
       setShowModal(false);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'No fue posible guardar el cliente. Revisa que el documento y el correo no estén repetidos.');
     } finally {
       setIsSubmittingCustomer(false);
+    }
+  };
+
+  const handleEditSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCustomer || isUpdatingCustomer) return;
+    setPendingUpdate({
+      ...editFormData,
+      ciudad: editCustomerLocation.cityName || editFormData.ciudad,
+    });
+  };
+
+  const confirmUpdateCustomer = async () => {
+    if (!editingCustomer || !pendingUpdate || isUpdatingCustomer) return;
+    setIsUpdatingCustomer(true);
+    try {
+      await updateCustomer(editingCustomer.id, pendingUpdate);
+      toast.success('Cliente actualizado correctamente');
+      setPendingUpdate(null);
+      setEditingCustomer(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No fue posible actualizar el cliente.');
+    } finally {
+      setIsUpdatingCustomer(false);
+    }
+  };
+
+  const confirmDeleteCustomer = async () => {
+    if (!deleteCandidate || isDeletingCustomer) return;
+    setIsDeletingCustomer(true);
+    try {
+      await deleteCustomer(deleteCandidate.id);
+      toast.success('Cliente eliminado correctamente');
+      if (expandedCustomerId === deleteCandidate.id) setExpandedCustomerId(null);
+      if (ordersModalCustomer?.id === deleteCandidate.id) setOrdersModalCustomer(null);
+      setDeleteCandidate(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No fue posible eliminar el cliente.');
+    } finally {
+      setIsDeletingCustomer(false);
     }
   };
 
@@ -371,13 +452,29 @@ export function AdminCustomers() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between gap-3 lg:justify-end">
+                <div className="flex flex-wrap items-center justify-between gap-2 lg:justify-end">
                   <div className="text-left lg:text-right">
                     <p className="text-base font-bold text-gray-900">${customer.totalCompras.toLocaleString()}</p>
                     <p className="text-[10px] uppercase tracking-wider text-gray-400">
                       {customerOrders.length} pedido{customerOrders.length !== 1 ? 's' : ''}
                     </p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => openEditCustomer(customer)}
+                    className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-3 text-[11px] font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+                  >
+                    <Pencil size={13} />
+                    Editar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteCandidate(customer)}
+                    className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-red-100 px-3 text-[11px] font-semibold text-red-600 transition-colors hover:bg-red-50"
+                  >
+                    <Trash2 size={13} />
+                    Eliminar
+                  </button>
                   <button
                     type="button"
                     onClick={() => setExpandedCustomerId(cur => cur === customer.id ? null : customer.id)}
@@ -586,6 +683,202 @@ export function AdminCustomers() {
             </button>
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        title={`Editar Cliente${editingCustomer ? `: ${editingCustomer.nombre}` : ''}`}
+        open={!!editingCustomer}
+        onClose={() => {
+          if (isUpdatingCustomer) return;
+          setEditingCustomer(null);
+          setPendingUpdate(null);
+        }}
+        wide
+      >
+        <form onSubmit={handleEditSubmit} className="space-y-4">
+          <div className="grid md:grid-cols-2 gap-4">
+            <Field label="Tipo de Documento" required>
+              <select
+                value={editFormData.tipoDocumento}
+                onChange={(e) => setEditFormData({ ...editFormData, tipoDocumento: e.target.value })}
+                className={selectCls}
+                required
+              >
+                <option value="CC">CÃ©dula de CiudadanÃ­a</option>
+                <option value="CE">CÃ©dula de ExtranjerÃ­a</option>
+                <option value="PASSPORT">Pasaporte</option>
+                <option value="NIT">NIT</option>
+                <option value="OTHER">Otro</option>
+              </select>
+            </Field>
+
+            <Field label="NÃºmero de Documento" required>
+              <input
+                type="text"
+                value={editFormData.documento}
+                onChange={(e) => setEditFormData({ ...editFormData, documento: e.target.value })}
+                className={inputCls}
+                required
+              />
+            </Field>
+
+            <Field label="Nombre Completo" required>
+              <input
+                type="text"
+                value={editFormData.nombre}
+                onChange={(e) => setEditFormData({ ...editFormData, nombre: e.target.value })}
+                className={inputCls}
+                required
+              />
+            </Field>
+
+            <Field label="TelÃ©fono" required>
+              <input
+                type="tel"
+                value={editFormData.telefono}
+                onChange={(e) => setEditFormData({ ...editFormData, telefono: e.target.value })}
+                className={inputCls}
+                required
+              />
+            </Field>
+
+            <Field label="Email" required>
+              <input
+                type="email"
+                value={editFormData.email}
+                onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+                className={inputCls}
+                required
+              />
+            </Field>
+
+            <Field label="Â¿CÃ³mo deseas comprar?">
+              <select
+                value={editFormData.modoCompra}
+                onChange={(e) => setEditFormData({ ...editFormData, modoCompra: e.target.value as 'RETAIL' | 'WHOLESALE' })}
+                className={selectCls}
+              >
+                <option value="RETAIL">Compra personal / minorista</option>
+                <option value="WHOLESALE">Compra mayorista</option>
+              </select>
+            </Field>
+
+            <div className="sm:col-span-2">
+              <LocationPicker
+                value={editCustomerLocation}
+                onChange={setEditCustomerLocation}
+              />
+            </div>
+          </div>
+
+          <Field label="DirecciÃ³n" required>
+            <input
+              type="text"
+              value={editFormData.direccion}
+              onChange={(e) => setEditFormData({ ...editFormData, direccion: e.target.value })}
+              className={inputCls}
+              required
+            />
+          </Field>
+
+          {(editFormData.direccion || editCustomerLocation.cityName) && (
+            <AddressMap
+              address={editFormData.direccion}
+              city={editCustomerLocation.cityName || editFormData.ciudad}
+              country={editCustomerLocation.countryName || 'Colombia'}
+              className="h-56 rounded-xl border border-gray-200"
+            />
+          )}
+
+          <div className="flex gap-3 pt-4">
+            <button
+              type="submit"
+              disabled={isUpdatingCustomer}
+              className="flex-1 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold hover:bg-[#3d5c4e] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isUpdatingCustomer ? 'Actualizando...' : 'Actualizar Cliente'}
+            </button>
+            <button
+              type="button"
+              disabled={isUpdatingCustomer}
+              onClick={() => {
+                setEditingCustomer(null);
+                setPendingUpdate(null);
+              }}
+              className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal title="Confirmar actualizaciÃ³n" open={!!pendingUpdate} onClose={() => !isUpdatingCustomer && setPendingUpdate(null)}>
+        <div className="space-y-4">
+          <div className="flex gap-3">
+            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+              <AlertTriangle size={18} />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Â¿Deseas guardar los cambios de este cliente?</p>
+              <p className="mt-1 text-xs leading-relaxed text-gray-500">
+                El sistema actualizarÃ¡ los datos de contacto, documento, direcciÃ³n y modo de compra.
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={confirmUpdateCustomer}
+              disabled={isUpdatingCustomer}
+              className="flex-1 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold hover:bg-[#3d5c4e] transition-colors disabled:opacity-50"
+            >
+              {isUpdatingCustomer ? 'Guardando...' : 'SÃ­, actualizar'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setPendingUpdate(null)}
+              disabled={isUpdatingCustomer}
+              className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
+            >
+              Revisar de nuevo
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal title="Eliminar cliente" open={!!deleteCandidate} onClose={() => !isDeletingCustomer && setDeleteCandidate(null)}>
+        <div className="space-y-4">
+          <div className="flex gap-3">
+            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-600">
+              <Trash2 size={18} />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Â¿Seguro que deseas eliminar este cliente?</p>
+              <p className="mt-1 text-xs leading-relaxed text-gray-500">
+                {deleteCandidate?.nombre} dejarÃ¡ de aparecer en el panel de clientes. Esta acciÃ³n requiere permisos de ediciÃ³n.
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={confirmDeleteCustomer}
+              disabled={isDeletingCustomer}
+              className="flex-1 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 transition-colors disabled:opacity-50"
+            >
+              {isDeletingCustomer ? 'Eliminando...' : 'SÃ­, eliminar'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setDeleteCandidate(null)}
+              disabled={isDeletingCustomer}
+              className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
       </Modal>
 
       {ordersModalCustomer && (

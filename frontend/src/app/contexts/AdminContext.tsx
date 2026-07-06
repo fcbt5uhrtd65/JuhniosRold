@@ -31,7 +31,9 @@ import {
 } from '../services/orders.service';
 import {
   createCustomer as apiCreateCustomer,
+  deleteCustomer as apiDeleteCustomer,
   getCustomers,
+  updateCustomer as apiUpdateCustomer,
   type BackendCustomer,
 } from '../services/customers.service';
 import {
@@ -59,6 +61,8 @@ interface AdminContextType {
   updateInventory: (productId: string, stock: number) => void | Promise<void>;
   updateOrderStatus: (orderId: string, status: Order['estado']) => void | Promise<void>;
   addCustomer: (customer: Omit<Customer, 'id' | 'totalCompras'>) => void | Promise<void>;
+  updateCustomer: (id: string, customer: Partial<Customer>) => void | Promise<void>;
+  deleteCustomer: (id: string) => void | Promise<void>;
   refreshData: () => Promise<void>;
 }
 
@@ -331,6 +335,14 @@ function mapApiCustomer(customer: BackendCustomer): Customer {
     businessType: customer.business_type || undefined,
     isInternationalDistributor: customer.is_international_distributor,
     companyPhone: customer.company_phone || undefined,
+  };
+}
+
+function splitCustomerName(name: string) {
+  const nameParts = name.trim().split(/\s+/).filter(Boolean);
+  return {
+    first_name: nameParts[0] ?? name.trim(),
+    last_name: nameParts.slice(1).join(' '),
   };
 }
 
@@ -781,12 +793,10 @@ export function AdminProvider({ children }: { children: ReactNode }) {
 
   const addCustomer = async (customer: Omit<Customer, 'id' | 'totalCompras'>) => {
     if (backendOnline && getAccessToken()) {
-      const nameParts = customer.nombre.trim().split(/\s+/);
       const created = await apiCreateCustomer({
         document_type: customer.tipoDocumento,
         document_number: customer.documento,
-        first_name: nameParts[0] ?? customer.nombre,
-        last_name: nameParts.slice(1).join(' '),
+        ...splitCustomerName(customer.nombre),
         email: customer.email,
         phone: customer.telefono,
         address: customer.direccion,
@@ -800,6 +810,36 @@ export function AdminProvider({ children }: { children: ReactNode }) {
 
     const newCustomer: Customer = { ...customer, id: Date.now().toString(), totalCompras: 0 };
     setCustomers(prev => [...prev, newCustomer]);
+  };
+
+  const updateCustomer = async (id: string, updates: Partial<Customer>) => {
+    if (backendOnline && getAccessToken()) {
+      const updated = await apiUpdateCustomer(id, {
+        ...(updates.tipoDocumento !== undefined ? { document_type: updates.tipoDocumento } : {}),
+        ...(updates.documento !== undefined ? { document_number: updates.documento } : {}),
+        ...(updates.nombre !== undefined ? splitCustomerName(updates.nombre) : {}),
+        ...(updates.email !== undefined ? { email: updates.email } : {}),
+        ...(updates.telefono !== undefined ? { phone: updates.telefono } : {}),
+        ...(updates.direccion !== undefined ? { address: updates.direccion } : {}),
+        ...(updates.ciudad !== undefined ? { city: updates.ciudad } : {}),
+        ...(updates.modoCompra !== undefined ? { purchase_mode: updates.modoCompra } : {}),
+      });
+      setCustomers(prev => prev.map(customer => (
+        customer.id === id ? mapApiCustomer(updated) : customer
+      )));
+      return;
+    }
+
+    setCustomers(prev => prev.map(customer => (
+      customer.id === id ? { ...customer, ...updates } : customer
+    )));
+  };
+
+  const deleteCustomer = async (id: string) => {
+    if (backendOnline && getAccessToken()) {
+      await apiDeleteCustomer(id);
+    }
+    setCustomers(prev => prev.filter(customer => customer.id !== id));
   };
 
   return (
@@ -821,6 +861,8 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         updateInventory,
         updateOrderStatus,
         addCustomer,
+        updateCustomer,
+        deleteCustomer,
         refreshData,
       }}
     >
