@@ -15,8 +15,9 @@ import type { NotificationType } from '../services/notifications.service';
 import { navigateTo } from '../services/navigate';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 
-interface NavbarProps {
+interface NavigationBarProps {
   onLoginClick?: () => void;
+  variant?: 'solid' | 'transparent';
 }
 
 const TikTokIcon = ({ className }: { className?: string }) => (
@@ -81,7 +82,7 @@ function timeAgo(dateStr: string): string {
   return `Hace ${Math.floor(diff / 86400)} d`;
 }
 
-export function Navbar({ onLoginClick }: NavbarProps = {}) {
+export function NavigationBar({ onLoginClick, variant = 'solid' }: NavigationBarProps) {
   const { searchQuery, setSearchQuery, isSearchOpen, setIsSearchOpen } = useSearch();
   const { currentUser, logout, orders, savedProducts } = useUser();
   const { notifications, unreadCount, markRead, markAllRead } = useNotifications();
@@ -90,6 +91,8 @@ export function Navbar({ onLoginClick }: NavbarProps = {}) {
   const [menuOpen, setMenuOpen]                   = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [activeLink, setActiveLink]               = useState('#');
+  const [notifAnchor, setNotifAnchor] = useState<{ top: number; right: number } | null>(null);
+  const notifButtonRef = useRef<HTMLButtonElement>(null);
   const lastScrollY = useRef(0);
 
   useEffect(() => {
@@ -132,21 +135,31 @@ export function Navbar({ onLoginClick }: NavbarProps = {}) {
     setMenuOpen(false);
   };
 
+  const isTransparent = variant === 'transparent';
+
   return (
     <>
-      {/* ── NAVBAR — pill flotante con bordes redondeados ── */}
+      {/* ── NAVBAR ── */}
       <motion.div
         initial={{ y: -20, opacity: 0 }}
         animate={{ y: hidden ? -90 : 0, opacity: 1 }}
         transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-        className="fixed left-3 right-3 md:left-5 md:right-5 lg:left-7 lg:right-7 z-40"
-        style={{ top: '14px' }}
+        className={isTransparent
+          ? 'absolute left-0 right-0 z-40 transition-all duration-300'
+          : 'fixed left-3 right-3 md:left-5 md:right-5 lg:left-7 lg:right-7 z-40'}
+        style={{ top: isTransparent ? '16px' : '14px' }}
       >
-        <div className={`bg-white rounded-[20px] transition-shadow duration-300 ${
-          scrolled ? 'shadow-[0_4px_24px_rgba(0,0,0,0.10)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.06)]'
-        }`}>
-          <div className="px-5 md:px-7 lg:px-9">
-            <div className="flex items-center justify-between h-[68px] gap-4">
+        <div className={
+          isTransparent
+            ? `mx-4 md:mx-6 lg:mx-8 px-5 md:px-7 rounded-[16px] transition-all duration-400 bg-white/90 backdrop-blur-md border border-white/40 ${
+                scrolled ? 'shadow-[0_4px_24px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.06)]'
+              }`
+            : `bg-white rounded-[20px] transition-shadow duration-300 ${
+                scrolled ? 'shadow-[0_4px_24px_rgba(0,0,0,0.10)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.06)]'
+              }`
+        }>
+          <div className={isTransparent ? '' : 'px-5 md:px-7 lg:px-9'}>
+            <div className={`flex items-center justify-between gap-4 ${isTransparent ? 'h-[62px]' : 'h-[68px]'}`}>
 
               {/* LOGO */}
               <a
@@ -180,9 +193,9 @@ export function Navbar({ onLoginClick }: NavbarProps = {}) {
                       key={link.href}
                       href={link.href === '#' ? undefined : link.href}
                       onClick={e => handleNavClick(link.href, e)}
-                      className={`relative flex items-center gap-1 px-4 h-[68px] text-[12px] tracking-[0.07em] transition-colors duration-200 ${
-                        isActive ? 'text-stone-900 font-medium' : 'text-stone-500 hover:text-stone-900'
-                      }`}
+                      className={`relative flex items-center gap-1 px-4 text-[12px] tracking-[0.07em] transition-colors duration-200 ${
+                        isTransparent ? 'h-[62px]' : 'h-[68px]'
+                      } ${isActive ? 'text-stone-900 font-medium' : 'text-stone-500 hover:text-stone-900'}`}
                     >
                       {link.label}
                       {link.hasDropdown && <ChevronDown className="w-3 h-3 opacity-50" strokeWidth={1.5} />}
@@ -247,7 +260,14 @@ export function Navbar({ onLoginClick }: NavbarProps = {}) {
                 {currentUser && (
                   <div className="relative hidden md:block">
                     <button
-                      onClick={() => setShowNotifications(!showNotifications)}
+                      ref={notifButtonRef}
+                      onClick={() => {
+                        const rect = notifButtonRef.current?.getBoundingClientRect();
+                        if (rect) {
+                          setNotifAnchor({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
+                        }
+                        setShowNotifications(v => !v);
+                      }}
                       className="relative p-2 rounded-full hover:bg-stone-100 text-stone-500 hover:text-stone-700 transition-all"
                     >
                       <Bell className="w-4 h-4" strokeWidth={1.5} />
@@ -499,7 +519,8 @@ export function Navbar({ onLoginClick }: NavbarProps = {}) {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 16, scale: 0.98 }}
                 transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-                className="fixed inset-x-0 bottom-0 z-[230] max-h-[80dvh] rounded-t-[28px] bg-white shadow-2xl md:absolute md:inset-x-auto md:bottom-auto md:top-16 md:right-4 md:max-h-none md:w-80 md:rounded-2xl md:border md:border-stone-100 md:shadow-xl"
+                style={notifAnchor ? ({ '--notif-top': `${notifAnchor.top}px`, '--notif-right': `${notifAnchor.right}px` } as React.CSSProperties) : undefined}
+                className="fixed inset-x-0 bottom-0 z-[230] max-h-[80dvh] rounded-t-[28px] bg-white shadow-2xl md:fixed md:inset-x-auto md:bottom-auto md:top-[var(--notif-top)] md:right-[var(--notif-right)] md:max-h-none md:w-80 md:rounded-2xl md:border md:border-stone-100 md:shadow-xl"
               >
                 {/* Header */}
                 <div className="flex items-center justify-between px-4 py-3 border-b border-stone-100">
