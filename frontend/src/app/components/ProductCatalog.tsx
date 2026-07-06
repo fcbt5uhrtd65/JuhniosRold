@@ -31,7 +31,7 @@ const OLIVE = '#2D3A1F';
 type ViewMode = 'grid' | 'list';
 type PriceRange = 'all' | 'low' | 'mid' | 'high';
 type CollectionFilter = 'all' | 'featured' | 'recent';
-type CatalogBadge = 'nuevo' | 'destacado';
+type CatalogBadge = 'nuevo' | 'destacado' | 'oferta';
 
 const FALLBACK_IMAGE =
   'https://images.unsplash.com/photo-1608248597279-f99d160bfcbc?w=900&q=80';
@@ -51,7 +51,25 @@ function isRecentProduct(createdAt: string): boolean {
   return Date.now() - t <= 1000 * 60 * 60 * 24 * 30;
 }
 
+function hasActivePromotion(product: CatalogProduct): boolean {
+  if (product.active_promotion) return true;
+  return product.variants.some(v => v.active_promotion != null);
+}
+
+function getDiscountedPrice(product: CatalogProduct): number | null {
+  const variant = product.variants.find(v => v.discounted_price != null);
+  return variant?.discounted_price ?? null;
+}
+
+function getDiscountPercentage(product: CatalogProduct): number | null {
+  const original = product.price;
+  const discounted = getDiscountedPrice(product);
+  if (original === null || discounted === null || original <= 0) return null;
+  return Math.round(((original - discounted) / original) * 100);
+}
+
 function getProductBadge(product: CatalogProduct): CatalogBadge | undefined {
+  if (hasActivePromotion(product)) return 'oferta';
   if (product.is_featured) return 'destacado';
   if (isRecentProduct(product.created_at)) return 'nuevo';
   return undefined;
@@ -501,9 +519,23 @@ function ProductPage({
               </span>
             </button>
 
-            <p className="text-[28px] font-semibold text-stone-900 mb-6">
-              {formatPrice(product.price, product.currency ?? 'COP')}
-            </p>
+            {getDiscountedPrice(product) !== null ? (
+              <p className="flex items-center gap-3 mb-6">
+                <span className="text-[16px] text-red-500 line-through">
+                  {formatPrice(product.price, product.currency ?? 'COP')}
+                </span>
+                <span className="text-[28px] font-semibold text-emerald-600">
+                  {formatPrice(getDiscountedPrice(product), product.currency ?? 'COP')}
+                </span>
+                <span className="px-2 py-0.5 text-[10px] font-bold text-red-700 bg-red-50 border border-red-200 rounded-full">
+                  -{getDiscountPercentage(product)}%
+                </span>
+              </p>
+            ) : (
+              <p className="text-[28px] font-semibold text-stone-900 mb-6">
+                {formatPrice(product.price, product.currency ?? 'COP')}
+              </p>
+            )}
             <div className="w-full h-px bg-stone-100 mb-6" />
 
             {sizes.length > 0 && (
@@ -1083,9 +1115,20 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                         </div>
                       </div>
                       <div className="flex flex-col items-end justify-between gap-2 flex-shrink-0">
-                        <span className="text-sm font-semibold text-stone-900">
-                          {formatPrice(product.price, product.currency ?? 'COP')}
-                        </span>
+                        {getDiscountedPrice(product) !== null ? (
+                          <span className="flex flex-col items-end">
+                            <span className="text-[10px] text-red-500 line-through">
+                              {formatPrice(product.price, product.currency ?? 'COP')}
+                            </span>
+                            <span className="text-sm font-semibold text-emerald-600">
+                              {formatPrice(getDiscountedPrice(product), product.currency ?? 'COP')}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="text-sm font-semibold text-stone-900">
+                            {formatPrice(product.price, product.currency ?? 'COP')}
+                          </span>
+                        )}
                         {isLowStock && !isOutOfStock && (
                           <p className="text-[10px] font-semibold text-amber-600">¡Solo quedan {availableQty}!</p>
                         )}
@@ -1141,15 +1184,21 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
 
                       {/* Badge */}
                       {badge && (
-                        <div className={`absolute top-3 left-3 flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-semibold border ${
-                          badge === 'nuevo'
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                            : 'bg-amber-50 text-amber-700 border-amber-200'
+                        <div className={`absolute top-3 left-3 z-10 flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-semibold border ${
+                          badge === 'oferta'
+                            ? 'bg-red-50 text-red-700 border-red-200'
+                            : badge === 'nuevo'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : 'bg-amber-50 text-amber-700 border-amber-200'
                         }`}>
-                          {badge === 'nuevo'
-                            ? <Sparkles className="w-2.5 h-2.5" strokeWidth={2} />
-                            : <TrendingUp className="w-2.5 h-2.5" strokeWidth={2} />}
-                          {badge === 'nuevo' ? 'Nuevo' : 'Destacado'}
+                          {badge === 'oferta'
+                            ? null
+                            : badge === 'nuevo'
+                              ? <Sparkles className="w-2.5 h-2.5" strokeWidth={2} />
+                              : <TrendingUp className="w-2.5 h-2.5" strokeWidth={2} />}
+                          {badge === 'oferta'
+                            ? `-${getDiscountPercentage(product) ?? ''}% OFERTA`
+                            : badge === 'nuevo' ? 'Nuevo' : 'Destacado'}
                         </div>
                       )}
 
@@ -1226,9 +1275,20 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
 
                       {/* Precio + botón */}
                       <div className="flex flex-wrap items-center justify-between gap-2 mt-auto pt-3 border-t border-stone-100">
-                        <span className="text-base font-semibold text-stone-900">
-                          {formatPrice(product.price, product.currency ?? 'COP')}
-                        </span>
+                        {getDiscountedPrice(product) !== null ? (
+                          <span className="flex flex-col">
+                            <span className="text-[10px] text-red-500 line-through">
+                              {formatPrice(product.price, product.currency ?? 'COP')}
+                            </span>
+                            <span className="text-base font-semibold text-emerald-600">
+                              {formatPrice(getDiscountedPrice(product), product.currency ?? 'COP')}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="text-base font-semibold text-stone-900">
+                            {formatPrice(product.price, product.currency ?? 'COP')}
+                          </span>
+                        )}
                         <motion.button
                           whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
                           onClick={e => { e.stopPropagation(); handleAddToCart(product); }}

@@ -5,6 +5,9 @@ from django.db.models import Avg
 from django.utils import timezone
 from rest_framework import serializers
 
+from apps.promotions.application.services import resolve_best_promotion
+from apps.promotions.infrastructure.serializers import PromotionSummarySerializer
+
 from .models import Category, Price, Product, ProductImage, ProductReview, ProductVariant
 
 
@@ -20,11 +23,25 @@ class PriceSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
+def _get_current_price_amount(variant) -> Decimal | None:
+    """Replica el criterio del frontend (products.service.ts: getCurrentPrice):
+    el primer precio con is_active=True, o el primero de la lista como fallback."""
+    prices = getattr(variant, "_prefetched_active_prices", None)
+    if prices is None:
+        prices = list(variant.prices.all())
+    if not prices:
+        return None
+    active = next((p for p in prices if p.is_active), prices[0])
+    return active.amount
+
+
 class ProductVariantSerializer(serializers.ModelSerializer):
     prices = PriceSerializer(many=True, read_only=True)
     presentation_label = serializers.CharField(read_only=True)
     available_quantity = serializers.SerializerMethodField()
     minimum_quantity = serializers.SerializerMethodField()
+    active_promotion = serializers.SerializerMethodField()
+    discounted_price = serializers.SerializerMethodField()
 
     def _get_stock(self, obj):
         stocks = getattr(obj, "_prefetched_stocks", None)
@@ -45,6 +62,22 @@ class ProductVariantSerializer(serializers.ModelSerializer):
         if stock is None:
             return None
         return float(stock.minimum_quantity)
+
+    def _resolve_promotion(self, obj):
+        amount = _get_current_price_amount(obj)
+        return resolve_best_promotion(obj, amount)
+
+    def get_active_promotion(self, obj):
+        resolution = self._resolve_promotion(obj)
+        if resolution is None:
+            return None
+        return PromotionSummarySerializer(resolution.promotion).data
+
+    def get_discounted_price(self, obj):
+        resolution = self._resolve_promotion(obj)
+        if resolution is None:
+            return None
+        return resolution.discounted_amount
 
     class Meta:
         model = ProductVariant
@@ -98,6 +131,7 @@ class ProductSerializer(serializers.ModelSerializer):
     images = ProductImageSerializer(many=True, read_only=True)
     rating_average = serializers.SerializerMethodField()
     rating_count = serializers.SerializerMethodField()
+    active_promotion = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -109,6 +143,18 @@ class ProductSerializer(serializers.ModelSerializer):
 
     def get_rating_count(self, obj):
         return obj.reviews.count()
+
+    def get_active_promotion(self, obj):
+        """La mejor promoción activa entre las de sus variantes, usada para el
+        badge de catálogo cuando aún no se ha seleccionado una variante."""
+        best = None
+        for variant in obj.variants.all():
+            resolution = resolve_best_promotion(variant, _get_current_price_amount(variant))
+            if resolution is None:
+                continue
+            if best is None or resolution.promotion.discount_value > best.promotion.discount_value:
+                best = resolution
+        return PromotionSummarySerializer(best.promotion).data if best else None
 
 
 class CompleteProductSerializer(serializers.Serializer):

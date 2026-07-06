@@ -3,12 +3,13 @@ import { useAdmin } from '../../contexts/AdminContext';
 import {
   Plus, Edit2, Trash2, Eye, EyeOff, Grid3x3, List, ArrowUpDown,
   X, Upload, AlertTriangle, ChevronDown, Package, Warehouse,
-  Download, FileSpreadsheet, FileText, Star,
+  Download, FileSpreadsheet, FileText, Star, Tag,
 } from 'lucide-react';
 import type { Product } from '../../types/admin';
 import { SearchBar } from './SearchBar';
 import { FilterPanel, type FilterGroup } from './FilterPanel';
 import { Pagination } from './Pagination';
+import { AdminProductPromotionModal } from './AdminProductPromotionModal';
 import { useToast } from '../../contexts/ToastContext';
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
@@ -313,6 +314,7 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
   const toast = useToast();
   const [modalMode, setModalMode] = useState<ModalMode>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [promotionModalProduct, setPromotionModalProduct] = useState<Product | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [activeSection, setActiveSection] = useState<'general' | 'precios' | 'inventario' | 'adicional'>('general');
@@ -797,6 +799,13 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
                     >
                       <Edit2 size={13} />
                     </button>
+                    <button
+                      onClick={() => setPromotionModalProduct(product)}
+                      className="flex-1 py-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-red-50 hover:text-red-600 transition-colors flex items-center justify-center"
+                      title="Promoción"
+                    >
+                      <Tag size={13} />
+                    </button>
                     {onViewInInventory && (
                       <button
                         onClick={() => onViewInInventory(product.nombre)}
@@ -891,6 +900,7 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
                     <div className="flex items-center gap-1">
                       <button onClick={() => openView(product)} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors" title="Ver"><Eye size={13} /></button>
                       <button onClick={() => openEdit(product)} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-amber-50 hover:text-amber-600 transition-colors" title="Editar"><Edit2 size={13} /></button>
+                      <button onClick={() => setPromotionModalProduct(product)} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors" title="Promoción"><Tag size={13} /></button>
                       {onViewInInventory && (
                         <button onClick={() => onViewInInventory(product.nombre)} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors" title="Ver en Inventario"><Warehouse size={13} /></button>
                       )}
@@ -1044,6 +1054,13 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
                 >
                   <Edit2 size={13} />
                   Editar
+                </button>
+                <button
+                  onClick={() => setPromotionModalProduct(selectedProduct)}
+                  className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"
+                >
+                  <Tag size={13} />
+                  Promoción
                 </button>
                 <button onClick={closeModal} className="px-4 py-2.5 border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
                   Cerrar
@@ -1410,6 +1427,16 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
           </form>
         )}
       </Modal>
+
+      {promotionModalProduct && (
+        <AdminProductPromotionModal
+          open={promotionModalProduct !== null}
+          onClose={() => setPromotionModalProduct(null)}
+          productId={promotionModalProduct.id}
+          productName={promotionModalProduct.nombre}
+          categorySlug={promotionModalProduct.categoria}
+        />
+      )}
     </div>
   );
 }

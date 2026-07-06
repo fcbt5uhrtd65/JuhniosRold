@@ -19,6 +19,7 @@ urlpatterns = [
     path("api/v1/customers/", include("apps.customers.interfaces.urls")),
     path("api/v1/referrals/", include("apps.referrals.interfaces.urls")),
     path("api/v1/catalog/", include("apps.catalog.interfaces.urls")),
+    path("api/v1/promotions/", include("apps.promotions.interfaces.urls")),
     path("api/v1/inventory/", include("apps.inventory.interfaces.urls")),
     path("api/v1/commerce/", include("apps.commerce.interfaces.urls")),
     path("api/v1/", include("apps.envios.interfaces.urls")),

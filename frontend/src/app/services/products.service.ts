@@ -4,6 +4,7 @@
 // ============================================================
 
 import { api, publicApi } from './api';
+import type { PromotionSummary } from './promotions.service';
 
 const CATALOG_BASE_PATH = '/catalog';
 const PRODUCTS_PATH = `${CATALOG_BASE_PATH}/products/`;
@@ -63,6 +64,8 @@ interface BackendVariant {
   updated_at: string;
   deleted_at: string | null;
   prices: BackendPrice[];
+  active_promotion?: PromotionSummary | null;
+  discounted_price?: string | number | null;
 }
 
 interface BackendImage {
@@ -93,6 +96,7 @@ interface BackendProduct {
   images: BackendImage[];
   rating_average: number | null;
   rating_count: number;
+  active_promotion?: PromotionSummary | null;
 }
 
 export interface ProductCategory {
@@ -135,6 +139,8 @@ export interface ProductVariant {
   presentation: string;
   available_quantity: number | null;
   minimum_quantity: number | null;
+  active_promotion: PromotionSummary | null;
+  discounted_price: number | null;
 }
 
 export interface ProductImage {
@@ -169,6 +175,7 @@ export interface Product {
   is_featured: boolean;
   rating_average: number | null;
   rating_count: number;
+  active_promotion: PromotionSummary | null;
   created_at: string;
   updated_at: string;
 }
@@ -302,6 +309,8 @@ function normalizeVariant(variant: BackendVariant): ProductVariant {
     presentation: buildPresentation(variant),
     available_quantity: (variant as any).available_quantity ?? null,
     minimum_quantity: (variant as any).minimum_quantity ?? null,
+    active_promotion: variant.active_promotion ?? null,
+    discounted_price: parseAmount(variant.discounted_price ?? null),
   };
 }
 
@@ -390,6 +399,7 @@ function normalizeProduct(
     is_featured: product.is_featured,
     rating_average: product.rating_average,
     rating_count: product.rating_count,
+    active_promotion: product.active_promotion ?? null,
     created_at: product.created_at,
     updated_at: product.updated_at,
   };
