@@ -41,6 +41,27 @@ const REELS: ReelVideo[] = [
     username: 'juhniosrold',
     caption: 'Testimonio real de la fórmula Menthus',
   },
+  {
+    id: 5,
+    src: '/videos/reels/proteccion-quimicos.mp4',
+    poster: '',
+    username: 'juhniosrold',
+    caption: 'Protección para el cabello expuesto a químicos',
+  },
+  {
+    id: 6,
+    src: '/videos/reels/altas-temperaturas.mp4',
+    poster: '',
+    username: 'juhniosrold',
+    caption: 'El calor extremo puede fracturar tu cabello',
+  },
+  {
+    id: 7,
+    src: '/videos/reels/calidad-juhnios.mp4',
+    poster: '',
+    username: 'juhniosrold',
+    caption: 'Calidad Juhnios para cuidar tu cabello',
+  },
 ];
 
 /**
@@ -131,7 +152,7 @@ export function VideoRodillo() {
         {/* Rodillo de reels */}
         <div
           className="relative flex items-center justify-center select-none"
-          style={{ height: 'min(72vw, 460px)', touchAction: 'pan-y' }}
+          style={{ height: 'min(84vw, 560px)', touchAction: 'pan-y' }}
           onTouchStart={handleTouchStart}
           onTouchEnd={handleTouchEnd}
         >
@@ -153,8 +174,8 @@ export function VideoRodillo() {
               if (!visible) return null;
 
               // Tamaño base (móvil, tarjeta central) escalado por breakpoint vía clamp en px inline.
-              const baseWidth = isActive ? 'min(52vw, 220px)' : 'min(34vw, 150px)';
-              const baseHeight = isActive ? 'min(92vw, 390px)' : 'min(60vw, 266px)';
+              const baseWidth = isActive ? 'min(64vw, 300px)' : 'min(42vw, 200px)';
+              const baseHeight = isActive ? 'min(112vw, 530px)' : 'min(74vw, 354px)';
 
               return (
                 <motion.div
@@ -162,7 +183,7 @@ export function VideoRodillo() {
                   className="absolute rounded-2xl overflow-hidden shadow-xl bg-stone-200"
                   style={{ zIndex: 10 - Math.abs(offset) }}
                   animate={{
-                    x: `${offset * 78}%`,
+                    x: `${offset * 150}%`,
                     scale: isActive ? 1 : 0.86,
                     opacity: isActive ? 1 : 0.55,
                     filter: isActive ? 'blur(0px)' : 'blur(1px)',

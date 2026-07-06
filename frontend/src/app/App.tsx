@@ -19,6 +19,7 @@ import { Comunidad } from './components/Comunidad';
 import { ModoPro } from './components/ModoPro';
 import { ReferralProgram } from './components/ReferralProgram';
 import { DiagnosticoCapilar } from './components/DiagnosticoCapilar';
+import { VideoRodillo } from './components/VideoRodillo';
 import { PromoBanner } from './components/PromoBanner';
 import { LocationMap } from './components/LocationMap';
 import { Footer } from './components/Footer';
@@ -63,6 +64,8 @@ function PublicSite({ onLoginClick }: { onLoginClick: () => void }) {
 
         {/* Trust bar */}
         <ShippingInfo />
+
+        <VideoRodillo />
 
         {/* Featured products — card grid */}
         <PowerProducts onLoginRequired={onLoginClick} />

@@ -4,7 +4,6 @@ import { X, ArrowRight, FlaskConical, Leaf, Heart, MapPin, Sparkles, Droplet, Wi
 import { useCart } from '../contexts/CartContext';
 import { useToast } from '../contexts/ToastContext';
 import { getProducts } from '../services/products.service';
-import { VideoRodillo } from './VideoRodillo';
 
 const OLIVE = '#2D3A1F';
 const CREAM = '#F7F5F1';
@@ -341,9 +340,6 @@ export function DiagnosticoCapilar() {
           </div>
         </div>
       </section>
-
-      {/* ─── ROLLO DE REELS ─────────────────────────────────── */}
-      <VideoRodillo />
 
       {/* ─── MODAL QUIZ (lógica preservada íntegramente) ──── */}
       <AnimatePresence>
