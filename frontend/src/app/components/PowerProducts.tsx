@@ -476,6 +476,7 @@ function ProductCard({ product, index, isSaved, onToggleSave, onAddToCart, onVie
   onView: (p: Product) => void;
 }) {
   const badge = BADGE_CONFIG[product.badge];
+  const sizes = product.sizes?.length ? product.sizes.slice(0, 2) : ['120 ML', '60 ML'];
 
   return (
     <motion.div
@@ -487,73 +488,92 @@ function ProductCard({ product, index, isSaved, onToggleSave, onAddToCart, onVie
       role="button"
       tabIndex={0}
       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onView(product); } }}
-      className="group flex flex-col bg-white rounded-2xl border border-stone-100 overflow-hidden hover:border-stone-200 hover:shadow-sm transition-all duration-300 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-300"
+      className="group flex min-h-full flex-col rounded-[2rem] border border-stone-100 bg-white p-5 shadow-[0_22px_70px_rgba(45,58,31,0.10)] transition-all duration-300 cursor-pointer hover:-translate-y-1 hover:shadow-[0_30px_90px_rgba(45,58,31,0.16)] focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-300 sm:p-6"
     >
       {/* Imagen única */}
-      <div className="relative aspect-[3/4] overflow-hidden bg-[#FAFAF8]">
+      <div className="relative flex min-h-[330px] items-center justify-center rounded-[1.75rem] bg-gradient-to-b from-white via-white to-[#F8F7F2] px-5 pt-14 pb-8 sm:min-h-[390px]">
         <motion.img
-          whileHover={{ scale: 1.05 }}
+          whileHover={{ scale: 1.04 }}
           transition={{ duration: 0.5 }}
           src={product.images[0]}
           alt={product.name}
-          className="w-full h-full object-cover"
+          className="max-h-[285px] w-full object-contain drop-shadow-[0_26px_28px_rgba(45,58,31,0.14)] sm:max-h-[335px]"
           draggable={false}
         />
 
         {/* Badge */}
-        <div className="absolute top-3 left-3">
-          <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[8px] font-semibold border ${badge.bg}`}>
-            <badge.icon className="w-2 h-2" strokeWidth={2} />
+        <div className="absolute left-4 top-4 sm:left-5 sm:top-5">
+          <span className="flex items-center gap-2 rounded-full bg-[#CAD7A6] px-4 py-2 text-xs font-semibold text-[#13250F] shadow-sm">
+            {product.badge === 'nuevo' ? <Leaf className="h-4 w-4 fill-current" strokeWidth={1.7} /> : <badge.icon className="h-4 w-4" strokeWidth={1.7} />}
             {badge.label}
           </span>
         </div>
 
         {/* Overlay ojo + corazón: siempre visible en mobile/touch, hover en desktop */}
         <motion.div
-          initial={{ opacity: 0 }}
+          initial={{ opacity: 1 }}
           animate={{ opacity: 1 }}
-          whileHover={{ opacity: 1 }}
-          className="absolute inset-0 md:bg-black/22 backdrop-blur-0 md:hover:backdrop-blur-[1px] flex items-start justify-end md:items-center md:justify-center gap-2 p-2 md:p-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
+          className="absolute right-4 top-4 flex items-center gap-3 sm:right-5 sm:top-5"
         >
           <motion.button
             whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-            onClick={e => { e.stopPropagation(); onView(product); }}
-            className="p-2 md:p-2.5 bg-white rounded-full text-stone-700 shadow-md"
-            aria-label="Ver producto"
+            onClick={e => { e.stopPropagation(); onToggleSave(product.id, product.name); }}
+            className={`flex h-11 w-11 items-center justify-center rounded-full bg-white shadow-[0_12px_28px_rgba(0,0,0,0.08)] transition-all ${isSaved ? 'text-rose-500' : 'text-stone-900'}`}
+            aria-label="Guardar"
           >
-            <Eye className="w-3.5 h-3.5" strokeWidth={1.5} />
+            <Heart className={`h-5 w-5 ${isSaved ? 'fill-current' : ''}`} strokeWidth={1.9} />
           </motion.button>
           <motion.button
             whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-            onClick={e => { e.stopPropagation(); onToggleSave(product.id, product.name); }}
-            className={`p-2 md:p-2.5 rounded-full shadow-md transition-all ${isSaved ? 'bg-rose-500 text-white' : 'bg-white text-stone-400'}`}
-            aria-label="Guardar"
+            onClick={e => { e.stopPropagation(); onView(product); }}
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-stone-900 shadow-[0_12px_28px_rgba(0,0,0,0.08)]"
+            aria-label="Ver producto"
           >
-            <Heart className={`w-3.5 h-3.5 ${isSaved ? 'fill-current' : ''}`} strokeWidth={1.5} />
+            <Eye className="h-5 w-5" strokeWidth={1.9} />
           </motion.button>
         </motion.div>
       </div>
 
       {/* Info */}
-      <div className="flex flex-col flex-1 p-3.5">
-        <p className="text-[9px] tracking-[0.2em] uppercase text-stone-400 mb-1">{product.category}</p>
-        <h3 className="text-[13px] font-medium text-stone-900 leading-snug mb-1">{product.name}</h3>
-        <p className="text-[10.5px] text-stone-400 leading-snug mb-2.5 line-clamp-1">{product.shortDesc}</p>
+      <div className="flex flex-1 flex-col pt-6">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-[#9AA57C]">{product.category}</p>
+        <h3 className="mb-3 text-2xl font-semibold leading-tight text-[#10210D] sm:text-[1.7rem]">{product.name}</h3>
 
-        <div className="flex items-center gap-2 mb-2.5">
+        <div className="mb-5 flex flex-wrap items-center gap-2.5">
           <Stars rating={product.rating} />
-          <span className="text-[9.5px] text-stone-400">{product.rating} ({product.reviews})</span>
+          <span className="text-sm font-medium text-stone-500">{product.rating}</span>
+          <span className="h-1 w-1 rounded-full bg-stone-300" />
+          <span className="text-sm font-medium text-[#4D7A37]">{badge.label}</span>
         </div>
 
-        <div className="flex items-center justify-between mt-auto pt-2.5 border-t border-stone-100">
-          <span className="text-[14px] font-semibold text-stone-900">${product.price} <span className="text-[9px] text-stone-400 font-normal">COP</span></span>
+        <div className="mb-6 flex flex-wrap gap-3">
+          {sizes.map((size, sizeIndex) => (
+            <button
+              key={`${product.id}-${size}`}
+              type="button"
+              onClick={e => e.stopPropagation()}
+              className={`min-w-[104px] rounded-full px-5 py-3 text-sm font-semibold transition-all ${
+                sizeIndex === 0
+                  ? 'bg-[#1F3B16] text-white shadow-[0_10px_20px_rgba(31,59,22,0.18)]'
+                  : 'border border-stone-200 bg-white text-stone-500'
+              }`}
+            >
+              {size.toUpperCase()}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-auto flex items-center justify-between gap-4 border-t border-stone-100 pt-6">
+          <span className="text-4xl font-bold leading-none text-[#10210D]">${product.price}</span>
           <motion.button
             whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
             onClick={e => { e.stopPropagation(); onAddToCart(product); }}
-            className="flex items-center gap-1 px-3 py-1.5 text-white text-[9.5px] font-semibold rounded-xl hover:opacity-85 transition-opacity"
+            className="flex min-w-[150px] flex-row-reverse items-center justify-center gap-3 rounded-full px-5 py-4 text-base font-semibold text-white transition-opacity hover:opacity-90"
             style={{ backgroundColor: OLIVE }}
           >
-            <ShoppingBag className="w-3 h-3" strokeWidth={1.5} />
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20">
+              <Plus className="h-5 w-5" strokeWidth={2} />
+            </span>
             Añadir
           </motion.button>
         </div>
@@ -709,7 +729,7 @@ export function PowerProducts({ onLoginRequired }: { onLoginRequired?: () => voi
         </motion.div>
 
         {/* Grid */}
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+        <div className="grid gap-7 sm:grid-cols-2 lg:grid-cols-3 xl:gap-8 mb-8">
           {isLoading
             ? Array.from({ length: 3 }, (_, i) => <ProductCardSkeleton key={i} index={i} />)
             : products.map((p, i) => (
