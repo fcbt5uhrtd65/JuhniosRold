@@ -499,20 +499,6 @@ export function LoginModal({ isOpen, onClose, onAdminAccess, onGoogleNewUser }: 
                         Regístrate gratis
                       </button>
                     </p>
-
-                    {/* demo admin */}
-                    <div className="border-t border-stone-100 pt-3 mt-auto">
-                      <p className="text-[9px] tracking-[0.2em] uppercase text-stone-300 mb-1.5 text-center">Demo Admin</p>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        {[{ label: 'Admin 1', email: 'admin@juhnios.com' }, { label: 'Admin 2', email: 'administrador2@juhnios.com' }].map(({ label, email: ae }) => (
-                          <button key={ae} type="button" onClick={() => setEmail(ae)} className="px-2.5 py-1.5 rounded-lg border border-stone-100 hover:bg-stone-50 transition-colors text-left">
-                            <span className="block text-[9px] text-stone-400">{label}</span>
-                            <span className="block text-[10px] font-medium text-stone-600 truncate">{ae}</span>
-                          </button>
-                        ))}
-                      </div>
-                      <p className="text-[9px] text-stone-300 text-center mt-1">Pass: Admin123!</p>
-                    </div>
                   </form>
                 )}
 

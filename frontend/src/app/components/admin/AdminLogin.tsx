@@ -78,17 +78,6 @@ export function AdminLogin() {
             {isSubmitting ? 'Validando...' : 'Iniciar sesión'}
           </button>
         </form>
-
-        <div className="mt-6 p-4 bg-white border border-gray-100 rounded-2xl shadow-sm">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">Demo - Usuarios internos:</p>
-          <div className="space-y-2 text-xs text-gray-600">
-            <p><strong className="text-gray-900">Admin:</strong> admin@juhnios.com</p>
-            <p><strong className="text-gray-900">RRHH:</strong> rrhh@juhnios.com</p>
-            <p><strong className="text-gray-900">Pedidos:</strong> pedidos@juhnios.com</p>
-            <p><strong className="text-gray-900">Empleado:</strong> empleado@juhnios.com</p>
-            <p className="text-[11px] text-gray-400 mt-2">Contraseña demo: Admin123!</p>
-          </div>
-        </div>
       </motion.div>
     </div>
   );
