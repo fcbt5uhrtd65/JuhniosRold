@@ -240,12 +240,15 @@ def _write_xlsx(path, rows):
     workbook.save(path)
 
 
+PDF_IMAGE_PX_PER_CM = 118  # ~300 DPI, nítido tanto en pantalla como impreso
+
+
 def _image_to_jpeg_bytes(image, max_size_cm=1.6):
-    max_px = int(max_size_cm * 40)
+    max_px = int(max_size_cm * PDF_IMAGE_PX_PER_CM)
     thumb = image.copy()
     thumb.thumbnail((max_px, max_px), PILImage.LANCZOS)
     buf = io.BytesIO()
-    thumb.save(buf, format="JPEG", quality=72, optimize=True)
+    thumb.save(buf, format="JPEG", quality=90, optimize=True)
     return buf.getvalue(), thumb.size
 
 
