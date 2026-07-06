@@ -4,7 +4,8 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from decimal import Decimal
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
+from django.db.models import ProtectedError
 from django.db import transaction
 from django.utils import timezone
 from django.utils.text import slugify
@@ -111,10 +112,26 @@ def product_name_for(name):
     return re.sub(r"\s{2,}", " ", base_name).strip()
 
 
+def _replace_seed_catalog():
+    seeded_variants = ProductVariant.all_objects.filter(sku__startswith="JR-CAT-")
+    product_ids = list(seeded_variants.order_by().values_list("product_id", flat=True).distinct())
+    if not product_ids:
+        return {"products": 0, "variants": 0, "stocks": 0}
+
+    stock_count, _ = Stock.all_objects.filter(variant__in=seeded_variants).delete()
+    variant_count = seeded_variants.count()
+    product_count = len(product_ids)
+    Product.all_objects.filter(id__in=product_ids).delete()
+    return {"products": product_count, "variants": variant_count, "stocks": stock_count}
+
+
 @transaction.atomic
-def seed_catalog():
-    if Product.objects.exists():
-        return 0
+def seed_catalog(replace=False):
+    replaced = None
+    if replace:
+        replaced = _replace_seed_catalog()
+    elif Product.objects.exists():
+        return 0, None
 
     categories = {}
     for slug, data in CATEGORY_DATA.items():
@@ -179,6 +196,7 @@ def seed_catalog():
             name=presentation,
             presentation_number=presentation_number,
             presentation_unit=presentation_unit,
+            image_url=item.get("image_url", ""),
             attributes={
                 "catalog_name": item["name"],
                 "units_per_display": item["units_per_display"],
@@ -205,7 +223,7 @@ def seed_catalog():
     category_image_urls = [data["image_url"] for data in CATEGORY_DATA.values()]
     _warm_image_cache(all_image_urls + category_image_urls)
 
-    return created_products
+    return created_products, replaced
 
 
 class Command(BaseCommand):
@@ -213,8 +231,16 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--warm-cache", action="store_true", help="Precarga imágenes en cache sin recrear el catálogo.")
+        parser.add_argument(
+            "--replace",
+            action="store_true",
+            help="Reemplaza únicamente los productos creados por este seed (SKU JR-CAT-*).",
+        )
 
     def handle(self, *args, **options):
+        if options["warm_cache"] and options["replace"]:
+            raise CommandError("No puedes usar --warm-cache y --replace al mismo tiempo.")
+
         if options["warm_cache"]:
             urls = [p.image_url for p in Product.objects.exclude(image_url="")]
             urls += [data["image_url"] for data in CATEGORY_DATA.values()]
@@ -222,7 +248,22 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f"Cache de imágenes precargado ({len(set(urls))} URLs únicas)."))
             return
 
-        created = seed_catalog()
+        try:
+            created, replaced = seed_catalog(replace=options["replace"])
+        except ProtectedError as exc:
+            raise CommandError(
+                "No se pudo reemplazar el catálogo porque existen pedidos, carritos, "
+                "movimientos de inventario u otros registros históricos asociados a productos del seed."
+            ) from exc
+
+        if replaced is not None:
+            self.stdout.write(
+                self.style.WARNING(
+                    "Catalogo anterior removido: "
+                    f"{replaced['products']} productos, {replaced['variants']} variantes, {replaced['stocks']} stocks."
+                )
+            )
+
         if created:
             self.stdout.write(self.style.SUCCESS(f"Catalogo inicial cargado: {created} productos."))
         else:

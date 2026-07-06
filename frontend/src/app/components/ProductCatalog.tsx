@@ -16,6 +16,7 @@ import {
   getProducts,
   type Product as CatalogProduct,
   type ProductCategory,
+  type ProductVariant,
 } from '../services/products.service';
 import {
   getProductReviews,
@@ -75,14 +76,15 @@ function getProductBadge(product: CatalogProduct): CatalogBadge | undefined {
   return undefined;
 }
 
-function getProductImage(product: CatalogProduct): string {
-  return product.primary_image ?? product.image_urls[0] ?? FALLBACK_IMAGE;
+function getProductImage(product: CatalogProduct, variant?: ProductVariant | null): string {
+  return variant?.image_url || product.primary_image || product.image_urls[0] || FALLBACK_IMAGE;
 }
 
-function getProductImages(product: CatalogProduct): string[] {
+function getProductImages(product: CatalogProduct, variant?: ProductVariant | null): string[] {
   const imgs: string[] = [];
-  if (product.primary_image) imgs.push(product.primary_image);
-  product.image_urls.forEach(u => { if (u !== product.primary_image) imgs.push(u); });
+  if (variant?.image_url) imgs.push(variant.image_url);
+  if (product.primary_image && product.primary_image !== variant?.image_url) imgs.push(product.primary_image);
+  product.image_urls.forEach(u => { if (u !== product.primary_image && u !== variant?.image_url) imgs.push(u); });
   if (imgs.length === 0) imgs.push(FALLBACK_IMAGE);
   return imgs.slice(0, 3);
 }
@@ -331,13 +333,14 @@ export function ProductPage({
   onNavigateTo: (p: CatalogProduct) => void;
   onLoginRequired?: () => void;
 }) {
-  const images = getProductImages(product);
+  const sizes = getProductSizes(product);
+  const selSize = selectedSizes[product.id] ?? sizes[0];
+  const selVariant = product.variants.find(v => v.presentation === selSize) ?? product.variants[0];
+  const images = getProductImages(product, selVariant);
   const [activeImg, setActiveImg] = useState(0);
   const [qty, setQty] = useState(1);
   const scrollRef = useRef<HTMLDivElement>(null);
   const reviewsRef = useRef<HTMLDivElement>(null);
-  const sizes = getProductSizes(product);
-  const selSize = selectedSizes[product.id] ?? sizes[0];
   const { currentUser } = useUser();
   const toast = useToast();
 
@@ -354,6 +357,11 @@ export function ProductPage({
     setQty(1);
     scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
   }, [product.id]);
+
+  // Volver a la imagen principal al cambiar de talla/variante
+  useEffect(() => {
+    setActiveImg(0);
+  }, [selSize]);
 
   useEffect(() => {
     let isMounted = true;
@@ -833,7 +841,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
       category: product.category_name,
       size,
       price: variant?.current_price ?? product.price ?? 0,
-      image: getProductImage(product),
+      image: getProductImage(product, variant),
     });
     if (added) toast.success(`${product.name} añadido al carrito`);
     if (closeModal) setQuickViewProduct(null);
@@ -1089,7 +1097,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                       <div className="w-24 h-24 rounded-xl overflow-hidden bg-stone-50 flex-shrink-0 relative">
                         <motion.img
                           whileHover={{ scale: 1.06 }} transition={{ duration: 0.4 }}
-                          src={getProductImage(product)} alt={product.name}
+                          src={getProductImage(product, selVariant)} alt={product.name}
                           className="w-full h-full object-cover"
                         />
                       </div>
@@ -1175,7 +1183,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                       <motion.img
                         whileHover={{ scale: 1.06 }}
                         transition={{ duration: 0.55 }}
-                        src={getProductImage(product)}
+                        src={getProductImage(product, selVariant)}
                         alt={product.name}
                         className="w-full h-full object-cover"
                         loading="lazy"

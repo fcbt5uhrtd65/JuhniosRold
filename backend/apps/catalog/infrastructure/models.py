@@ -42,6 +42,7 @@ class ProductVariant(BaseModel):
     name = models.CharField(max_length=150)
     presentation_number = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True)
     presentation_unit = models.CharField(max_length=3, choices=PresentationUnit.choices, blank=True)
+    image_url = models.TextField(blank=True)
     attributes = models.JSONField(default=dict, blank=True)
     cost = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     is_active = models.BooleanField(default=True)

@@ -57,6 +57,7 @@ interface BackendVariant {
   presentation_number?: string | number | null;
   presentation_unit?: 'ML' | 'LT' | 'GR' | 'KG' | 'UND' | '';
   presentation_label?: string;
+  image_url?: string;
   attributes: Record<string, unknown>;
   cost: string;
   is_active: boolean;
@@ -129,6 +130,7 @@ export interface ProductVariant {
   name: string;
   presentation_number?: number | null;
   presentation_unit?: 'ML' | 'LT' | 'GR' | 'KG' | 'UND' | '';
+  image_url: string;
   attributes: Record<string, unknown>;
   cost: number;
   is_active: boolean;
@@ -304,6 +306,7 @@ function normalizeVariant(variant: BackendVariant): ProductVariant {
     cost: parseAmount(variant.cost) ?? 0,
     presentation_number: parseAmount(variant.presentation_number),
     presentation_unit: variant.presentation_unit ?? '',
+    image_url: variant.image_url ? normalizeImageUrl(variant.image_url) : '',
     prices: variant.prices.map(normalizePrice),
     current_price: currentPrice?.amount ?? null,
     presentation: buildPresentation(variant),

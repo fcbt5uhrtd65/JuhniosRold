@@ -84,7 +84,11 @@ class CatalogSeederTests(TestCase):
 
         coco = ProductVariant.objects.get(product__name="ACEITE CAPILAR COCO", presentation_number=8)
         self.assertEqual(coco.prices.get(is_active=True).amount, 747)
-        self.assertIn("Aceite Capilar Coco 8ml.png", coco.product.image_url)
+        self.assertIn("Aceite Capilar Coco 8ml.png", coco.image_url)
+
+        coco_120 = ProductVariant.objects.get(product__name="ACEITE CAPILAR COCO", presentation_number=120)
+        self.assertIn("Aceite Capilar Coco 120", coco_120.image_url)
+        self.assertNotEqual(coco.image_url, coco_120.image_url)
 
         keratina = ProductVariant.objects.get(product__name="TRATAMIENTO NUTRITIVO CAPILAR KERATINA CEBOLLA", presentation_number=30)
         self.assertEqual(keratina.presentation_number, 30)
@@ -94,3 +98,20 @@ class CatalogSeederTests(TestCase):
 
         self.assertEqual(Product.objects.count(), 93)
         self.assertEqual(Stock.objects.count(), 150)
+
+    def test_seed_catalog_replace_recreates_seeded_products(self):
+        call_command("seed_catalog")
+        first_product_id = Product.objects.get(name="ACEITE CAPILAR COCO").id
+
+        call_command("seed_catalog", "--replace")
+
+        self.assertEqual(Category.objects.count(), 7)
+        self.assertEqual(Product.objects.count(), 93)
+        self.assertEqual(ProductVariant.objects.count(), 150)
+        self.assertEqual(Price.objects.count(), 150)
+        self.assertEqual(Stock.objects.count(), 150)
+        self.assertFalse(Product.objects.filter(id=first_product_id).exists())
+
+        coco = ProductVariant.objects.get(product__name="ACEITE CAPILAR COCO", presentation_number=8)
+        self.assertEqual(coco.sku, "JR-CAT-009")
+        self.assertEqual(coco.prices.get(is_active=True).amount, 747)
