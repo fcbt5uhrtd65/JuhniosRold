@@ -22,6 +22,11 @@ RUN pip install --upgrade pip \
 
 COPY . .
 
+RUN groupadd --gid 1000 app \
+    && useradd --uid 1000 --gid app --no-create-home --shell /usr/sbin/nologin app \
+    && chown -R app:app /app
+USER app
+
 EXPOSE 8000
 
 CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3", "--timeout", "120"]
