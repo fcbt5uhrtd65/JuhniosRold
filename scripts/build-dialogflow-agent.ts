@@ -23,10 +23,9 @@ async function buildAgentZip() {
   const output = createWriteStream(outputFile);
   const archive = archiver('zip', { zlib: { level: 9 } });
   const rawAgent = await readFile(path.join(agentDir, 'agent.json'), 'utf8');
-  const agentJson = rawAgent.replace(
-    '${DIALOGFLOW_WEBHOOK_URL}',
-    process.env.DIALOGFLOW_WEBHOOK_URL || ''
-  );
+  const agentJson = rawAgent
+    .replace('${DIALOGFLOW_WEBHOOK_URL}', process.env.DIALOGFLOW_WEBHOOK_URL || '')
+    .replace('${DIALOGFLOW_WEBHOOK_TOKEN}', process.env.DIALOGFLOW_WEBHOOK_TOKEN || '');
 
   const finished = new Promise<void>((resolve, reject) => {
     output.on('close', resolve);

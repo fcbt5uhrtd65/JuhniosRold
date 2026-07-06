@@ -215,6 +215,8 @@ ENVIA_API_URL = os.getenv("ENVIA_API_URL", "")
 COORDINADORA_API_KEY = os.getenv("COORDINADORA_API_KEY", "")
 COORDINADORA_API_URL = os.getenv("COORDINADORA_API_URL", "")
 
+DIALOGFLOW_WEBHOOK_TOKEN = os.getenv("DIALOGFLOW_WEBHOOK_TOKEN", "")
+
 # Calculadora de costos de envío — semilla inicial (la configuración vigente vive en BD,
 # tabla ShippingSettings, administrable desde el panel admin "Configuración de Envíos").
 SHIPPING_ORIGIN_ADDRESS = os.getenv("SHIPPING_ORIGIN_ADDRESS", "")

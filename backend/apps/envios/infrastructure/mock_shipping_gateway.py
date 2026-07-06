@@ -66,7 +66,9 @@ class MockShippingGateway(ShippingGateway):
     def validate_webhook(self, *, payload, signature):
         secret = settings.SHIPPING_WEBHOOK_SECRET
         if not secret:
-            return
+            raise ShippingGatewayError(
+                "SHIPPING_WEBHOOK_SECRET no está configurado; el webhook logístico está deshabilitado."
+            )
         expected = hmac.new(secret.encode(), payload, sha256).hexdigest()
         if not hmac.compare_digest(expected, signature):
             raise ShippingGatewayError("La firma del webhook logístico no es válida.")

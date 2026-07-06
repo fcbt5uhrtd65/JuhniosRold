@@ -1,3 +1,6 @@
+import hmac
+
+from django.conf import settings
 from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -29,6 +32,15 @@ class DialogflowWebhookView(APIView):
     service_class = ChatbotService
 
     def post(self, request):
+        expected_token = settings.DIALOGFLOW_WEBHOOK_TOKEN
+        if expected_token:
+            received_token = request.headers.get("X-Webhook-Token", "")
+            if not hmac.compare_digest(received_token, expected_token):
+                return Response(
+                    {"detail": "Token de webhook invalido."},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
+
         serializer = DialogflowWebhookSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 

@@ -243,6 +243,16 @@ export function buildWebhookResponse(queryResult?: DialogflowQueryResult): Fulfi
 }
 
 export function dialogflowWebhook(req: Request, res: Response) {
+  const expectedToken = process.env.DIALOGFLOW_WEBHOOK_TOKEN;
+
+  if (expectedToken) {
+    const receivedToken = req.header('X-Webhook-Token');
+    if (receivedToken !== expectedToken) {
+      res.status(401).json({ message: 'Token de webhook invalido.' });
+      return;
+    }
+  }
+
   const body = req.body as DialogflowWebhookRequest;
   const response = buildWebhookResponse(body.queryResult);
 

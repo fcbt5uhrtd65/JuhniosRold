@@ -11,7 +11,9 @@
   "webhook": {
     "url": "${DIALOGFLOW_WEBHOOK_URL}",
     "username": "",
-    "headers": {},
+    "headers": {
+      "X-Webhook-Token": "${DIALOGFLOW_WEBHOOK_TOKEN}"
+    },
     "available": true,
     "useForDomains": false,
     "cloudFunctionsEnabled": false,
