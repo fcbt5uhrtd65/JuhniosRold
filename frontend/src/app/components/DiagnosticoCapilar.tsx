@@ -11,7 +11,7 @@ const CREAM = '#F7F5F1';
 interface Question {
   id: number;
   question: string;
-  options: { value: string; label: string }[];
+  options: { value: string; label: string; description: string; icon: typeof Leaf }[];
 }
 
 export function DiagnosticoCapilar() {
@@ -28,40 +28,44 @@ export function DiagnosticoCapilar() {
       id: 0,
       question: "¿Cómo describes tu cabello?",
       options: [
-        { value: "seco", label: "Seco y maltratado" },
-        { value: "graso", label: "Graso en raíz" },
-        { value: "normal", label: "Normal y balanceado" },
-        { value: "mixto", label: "Mixto" }
+        { value: "seco", label: "Seco y maltratado", description: "Opaco, áspero y con tendencia al quiebre.", icon: Wind },
+        { value: "graso", label: "Graso en raíz", description: "Raíz grasa y puntas normales o secas.", icon: Droplet },
+        { value: "normal", label: "Normal y balanceado", description: "Brillante, suave y sin exceso de grasa.", icon: Sparkles },
+        { value: "mixto", label: "Mixto", description: "Raíz grasa y puntas secas o maltratadas.", icon: Heart }
       ]
     },
     {
       id: 1,
       question: "¿Cuál es tu mayor preocupación?",
       options: [
-        { value: "caida", label: "Caída del cabello" },
-        { value: "frizz", label: "Frizz incontrolable" },
-        { value: "brillo", label: "Falta de brillo" },
-        { value: "volumen", label: "Sin volumen" }
+        { value: "caida", label: "Caída del cabello", description: "Buscas fortalecer desde la raíz y reducir el quiebre.", icon: Leaf },
+        { value: "frizz", label: "Frizz incontrolable", description: "Necesitas suavidad, control y mejor sellado.", icon: Wind },
+        { value: "brillo", label: "Falta de brillo", description: "Quieres recuperar luminosidad y tacto sedoso.", icon: Sparkles },
+        { value: "volumen", label: "Sin volumen", description: "Sientes el cabello pesado, plano o sin movimiento.", icon: Droplet }
       ]
     },
     {
       id: 2,
       question: "¿Con qué frecuencia lavas tu cabello?",
       options: [
-        { value: "diario", label: "Diario" },
-        { value: "interdiario", label: "Interdiario" },
-        { value: "2-3veces", label: "2-3 veces/semana" },
-        { value: "semanal", label: "1 vez/semana" }
+        { value: "diario", label: "Diario", description: "Tu rutina necesita ligereza y protección diaria.", icon: Droplet },
+        { value: "interdiario", label: "Interdiario", description: "Buscas equilibrio entre limpieza y nutrición.", icon: Sparkles },
+        { value: "2-3veces", label: "2-3 veces/semana", description: "Prefieres tratamientos que mantengan efecto varios días.", icon: Leaf },
+        { value: "semanal", label: "1 vez/semana", description: "Tu cabello necesita nutrición profunda y duradera.", icon: Heart }
       ]
     }
   ];
 
   const handleAnswer = (value: string) => {
     setAnswers({ ...answers, [currentQuestion]: value });
+  };
+
+  const handleNextQuestion = () => {
+    if (!answers[currentQuestion]) return;
     if (currentQuestion < questions.length - 1) {
-      setTimeout(() => setCurrentQuestion(currentQuestion + 1), 300);
+      setCurrentQuestion(currentQuestion + 1);
     } else {
-      setTimeout(() => setShowResults(true), 300);
+      setShowResults(true);
     }
   };
 
@@ -349,7 +353,7 @@ export function DiagnosticoCapilar() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 bg-background/95 z-50 flex items-center justify-center p-4"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-[#F4F1EA]/95 p-4"
             onClick={() => { setIsModalOpen(false); resetQuiz(); }}
           >
             <motion.div
@@ -358,17 +362,17 @@ export function DiagnosticoCapilar() {
               exit={{ opacity: 0, scale: 0.98 }}
               transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
               onClick={e => e.stopPropagation()}
-              className="relative bg-background border border-border max-w-4xl w-full max-h-[90vh] overflow-y-auto rounded-3xl"
+              className="relative flex max-h-[92vh] w-full max-w-[980px] flex-col overflow-hidden rounded-[2rem] border border-stone-200/70 bg-[#FBFAF7] shadow-[0_30px_120px_rgba(45,58,31,0.18)]"
             >
               {/* Cerrar */}
               <button
                 onClick={() => { setIsModalOpen(false); resetQuiz(); }}
-                className="absolute top-4 right-4 sm:top-6 sm:right-6 p-2 hover:opacity-50 transition-opacity z-10"
+                className="absolute right-6 top-6 z-20 p-2 text-[#5A673F] transition-opacity hover:opacity-50"
               >
                 <X className="w-5 h-5" strokeWidth={1} />
               </button>
 
-              <div className="p-5 sm:p-8 md:p-12">
+              <div className={!showResults ? 'overflow-y-auto' : 'overflow-y-auto p-5 sm:p-8 md:p-12'}>
                 <AnimatePresence mode="wait">
                   {!showResults ? (
                     <motion.div
@@ -377,56 +381,106 @@ export function DiagnosticoCapilar() {
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
                       transition={{ duration: 0.2 }}
+                      className="flex min-h-[680px] flex-col"
                     >
-                      {/* Progreso */}
-                      <div className="mb-12">
-                        <div className="flex justify-between text-[10px] tracking-[0.2em] uppercase text-muted-foreground mb-3">
-                          <span>Pregunta {currentQuestion + 1} de {questions.length}</span>
-                          <span>{Math.round(progress)}%</span>
-                        </div>
-                        <div className="h-px bg-border">
-                          <motion.div
-                            initial={{ width: 0 }}
-                            animate={{ width: `${progress}%` }}
-                            transition={{ duration: 0.3, ease: "easeOut" }}
-                            className="h-full"
-                            style={{ backgroundColor: OLIVE }}
-                          />
+                      <div className="flex items-center justify-between border-b border-stone-200/70 px-8 py-6 sm:px-10">
+                        <div className="flex items-center gap-4">
+                          <div className="flex h-12 w-12 items-center justify-center rounded-full border border-stone-200 bg-white text-[#667246] shadow-sm">
+                            <Leaf className="h-5 w-5" strokeWidth={1.5} />
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#5A673F]">Diagnóstico capilar</p>
+                            <p className="mt-1 text-sm text-stone-500">Conócenos para recomendarte lo mejor</p>
+                          </div>
                         </div>
                       </div>
 
-                      <AnimatePresence mode="wait">
-                        <motion.div
-                          key={currentQuestion}
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -10 }}
-                          transition={{ duration: 0.2 }}
-                        >
-                          <h3 className="text-2xl sm:text-3xl md:text-4xl mb-8 md:mb-12 leading-tight">
-                            {questions[currentQuestion].question}
-                          </h3>
-
-                          <div className="space-y-3">
-                            {questions[currentQuestion].options.map((option, idx) => (
-                              <motion.button
-                                key={option.value}
-                                initial={{ opacity: 0, x: -10 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                transition={{ delay: idx * 0.05, duration: 0.2 }}
-                                onClick={() => handleAnswer(option.value)}
-                                className={`w-full text-left py-4 px-6 border transition-all rounded-xl ${
-                                  answers[currentQuestion] === option.value
-                                    ? 'border-foreground bg-foreground text-background'
-                                    : 'border-border hover:border-foreground'
-                                }`}
-                              >
-                                <span className="text-sm">{option.label}</span>
-                              </motion.button>
-                            ))}
+                      <div className="flex-1 px-8 py-8 sm:px-10">
+                        <div className="mb-8">
+                          <div className="mb-3 flex justify-between text-[11px] font-semibold uppercase tracking-[0.12em] text-[#5A673F]">
+                            <span>Pregunta {currentQuestion + 1} de {questions.length}</span>
+                            <span>{Math.round(progress)}%</span>
                           </div>
-                        </motion.div>
-                      </AnimatePresence>
+                          <div className="h-2 overflow-hidden rounded-full bg-stone-200/80">
+                            <motion.div
+                              initial={{ width: 0 }}
+                              animate={{ width: `${progress}%` }}
+                              transition={{ duration: 0.35, ease: 'easeOut' }}
+                              className="h-full rounded-full"
+                              style={{ backgroundColor: '#667246' }}
+                            />
+                          </div>
+                        </div>
+
+                        <AnimatePresence mode="wait">
+                          <motion.div
+                            key={currentQuestion}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            transition={{ duration: 0.2 }}
+                          >
+                            <h3
+                              className="mb-2 text-3xl font-light leading-tight text-stone-950 sm:text-4xl md:text-[2.65rem]"
+                              style={{ fontFamily: "'Playfair Display', serif" }}
+                            >
+                              {questions[currentQuestion].question}
+                            </h3>
+                            <p className="mb-7 text-sm text-stone-500">Selecciona la opción que mejor se adapte a ti.</p>
+
+                            <div className="space-y-3">
+                              {questions[currentQuestion].options.map((option, idx) => {
+                                const OptionIcon = option.icon;
+                                const selected = answers[currentQuestion] === option.value;
+
+                                return (
+                                  <motion.button
+                                    key={option.value}
+                                    initial={{ opacity: 0, x: -10 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    transition={{ delay: idx * 0.05, duration: 0.2 }}
+                                    onClick={() => handleAnswer(option.value)}
+                                    className={`flex w-full items-center gap-5 rounded-2xl border bg-white px-5 py-4 text-left shadow-sm transition-all ${
+                                      selected
+                                        ? 'border-[#667246] ring-2 ring-[#667246]/15'
+                                        : 'border-stone-200 hover:border-[#667246]/60 hover:shadow-md'
+                                    }`}
+                                  >
+                                    <span className={`flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full ${selected ? 'bg-[#EEF3DF] text-[#4D5E2E]' : 'bg-[#F4F1EA] text-[#7D7A61]'}`}>
+                                      <OptionIcon className="h-6 w-6" strokeWidth={1.4} />
+                                    </span>
+                                    <span className="min-w-0 flex-1">
+                                      <span className="block text-base font-semibold text-stone-950">{option.label}</span>
+                                      <span className="mt-1 block text-sm leading-relaxed text-stone-500">{option.description}</span>
+                                    </span>
+                                    <ArrowRight className="h-5 w-5 flex-shrink-0 text-stone-700" strokeWidth={1.5} />
+                                  </motion.button>
+                                );
+                              })}
+                            </div>
+                          </motion.div>
+                        </AnimatePresence>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-4 border-t border-stone-200/70 bg-white/70 px-8 py-5 backdrop-blur sm:px-10">
+                        <div className="flex items-center gap-3 text-sm text-stone-500">
+                          <span className="flex h-10 w-10 items-center justify-center rounded-full border border-stone-200 bg-white text-[#667246]">
+                            <Leaf className="h-4 w-4" strokeWidth={1.5} />
+                          </span>
+                          <span>Responde 3 preguntas y recibe tu recomendación personalizada</span>
+                        </div>
+                        <motion.button
+                          whileHover={answers[currentQuestion] ? { scale: 1.02 } : undefined}
+                          whileTap={answers[currentQuestion] ? { scale: 0.98 } : undefined}
+                          onClick={handleNextQuestion}
+                          disabled={!answers[currentQuestion]}
+                          className="flex min-w-[170px] items-center justify-center gap-3 rounded-full px-7 py-4 text-sm font-semibold text-white transition-all disabled:cursor-not-allowed disabled:opacity-40"
+                          style={{ backgroundColor: OLIVE }}
+                        >
+                          {currentQuestion === questions.length - 1 ? 'Ver resultado' : 'Siguiente'}
+                          <ArrowRight className="h-4 w-4" strokeWidth={1.7} />
+                        </motion.button>
+                      </div>
                     </motion.div>
                   ) : (
                     <motion.div
