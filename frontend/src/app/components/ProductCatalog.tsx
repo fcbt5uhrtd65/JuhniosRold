@@ -306,7 +306,7 @@ function ProductReviewsSection({
 }
 
 /* ── Página de producto completa (overlay) ── */
-function ProductPage({
+export function ProductPage({
   product,
   allProducts,
   selectedSizes,
