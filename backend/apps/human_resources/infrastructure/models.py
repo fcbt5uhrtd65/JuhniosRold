@@ -250,7 +250,11 @@ class EmployeeDocument(BaseModel):
     employee = models.ForeignKey("employees.Employee", on_delete=models.CASCADE, related_name="documents")
     document_type = models.CharField(max_length=100, choices=DocumentType.choices)
     name = models.CharField(max_length=180)
-    file = models.FileField(upload_to="employees/documents/", blank=True)
+    file = models.FileField(
+        upload_to="employees/documents/",
+        blank=True,
+        validators=[FileExtensionValidator(allowed_extensions=("pdf", "png", "jpg", "jpeg", "doc", "docx"))],
+    )
     issued_at = models.DateField(null=True, blank=True)
     expires_at = models.DateField(null=True, blank=True)
     uploaded_at = models.DateTimeField(auto_now_add=True)
