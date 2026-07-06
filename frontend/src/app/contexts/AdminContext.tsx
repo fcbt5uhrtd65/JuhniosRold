@@ -249,7 +249,7 @@ function mapApiProduct(p: ApiProduct): Product {
     nombre: p.name,
     categoria: p.category_slug || p.category,
     tipo: typeof productType === 'string' ? productType : p.category_name,
-    presentacion: p.sizes[0] ?? '',
+    presentacion: primaryVariant?.presentation ?? p.sizes[0] ?? '',
     presentacionNumero: primaryVariant?.presentation_number ?? undefined,
     presentacionUnidad: primaryVariant?.presentation_unit || undefined,
     precio: p.price ?? 0,

@@ -47,6 +47,9 @@ class ProductVariant(BaseModel):
     cost = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     is_active = models.BooleanField(default=True)
 
+    class Meta:
+        ordering = ["presentation_number", "sku"]
+
     @property
     def presentation_label(self):
         if self.presentation_number is not None and self.presentation_unit:

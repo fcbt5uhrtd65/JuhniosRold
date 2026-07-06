@@ -66,7 +66,7 @@ export function AdminProductPromotionModal({ open, onClose, productId, productNa
     if (!open) return;
     setForm(EMPTY_FORM);
     setIsLoading(true);
-    Promise.all([getPromotionsForProduct(productId), getCategories()])
+    Promise.all([getPromotionsForProduct(productId), getCategories(true)])
       .then(([promos, categories]) => {
         setPromotions(promos);
         setCategoryId(categories.find(c => c.slug === categorySlug)?.id ?? null);

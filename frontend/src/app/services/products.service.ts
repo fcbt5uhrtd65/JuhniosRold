@@ -231,8 +231,6 @@ export interface CreateProductPayload {
 
 export type UpdateProductPayload = Partial<CreateProductPayload>;
 
-let categoriesCache: ProductCategory[] | null = null;
-
 function parseAmount(value: string | number | null | undefined): number | null {
   if (value === null || value === undefined || value === '') {
     return null;
@@ -453,17 +451,13 @@ function buildCategoriesQuery(limit = 100): string {
   return `?${query.toString()}`;
 }
 
-async function getCategoryMap(forceRefresh = false): Promise<Map<string, ProductCategory>> {
-  if (!forceRefresh && categoriesCache) {
-    return new Map(categoriesCache.map((category) => [category.id, category]));
-  }
-
-  const categories = await getCategories(forceRefresh);
+async function getCategoryMap(useAuth = false, forceRefresh = false): Promise<Map<string, ProductCategory>> {
+  const categories = await getCategories(useAuth, forceRefresh);
   return new Map(categories.map((category) => [category.id, category]));
 }
 
 async function resolveCategoryId(value: string): Promise<string> {
-  const categories = await getCategories();
+  const categories = await getCategories(true);
   const category = categories.find((item) => item.id === value || item.slug === value);
   if (!category) {
     throw new Error('La categoria seleccionada no existe.');
@@ -471,17 +465,30 @@ async function resolveCategoryId(value: string): Promise<string> {
   return category.id;
 }
 
-export async function getCategories(forceRefresh = false): Promise<ProductCategory[]> {
-  if (!forceRefresh && categoriesCache) {
-    return categoriesCache;
+// El panel admin debe ver todas las categorías (incluidas las inactivas) para
+// poder resolver y gestionar productos cuya categoría fue desactivada; el
+// storefront público solo debe ver las activas. Se cachean por separado para
+// que una consulta no contamine el resultado de la otra.
+let publicCategoriesCache: ProductCategory[] | null = null;
+let adminCategoriesCache: ProductCategory[] | null = null;
+
+export async function getCategories(useAuth = false, forceRefresh = false): Promise<ProductCategory[]> {
+  const cache = useAuth ? adminCategoriesCache : publicCategoriesCache;
+  if (!forceRefresh && cache) {
+    return cache;
   }
 
-  const res = await publicApi.get<PaginatedResponse<BackendCategory>>(
+  const client = useAuth ? api : publicApi;
+  const res = await client.get<PaginatedResponse<BackendCategory>>(
     `${CATEGORIES_PATH}${buildCategoriesQuery()}`,
   );
 
   const categories = (res.data?.results ?? []).map(normalizeCategory);
-  categoriesCache = categories;
+  if (useAuth) {
+    adminCategoriesCache = categories;
+  } else {
+    publicCategoriesCache = categories;
+  }
   return categories;
 }
 
@@ -492,7 +499,7 @@ async function fetchProducts(
   const client = useAuth ? api : publicApi;
   const [res, categoryMap] = await Promise.all([
     client.get<PaginatedResponse<BackendProduct>>(`${PRODUCTS_PATH}${buildProductsQuery(params)}`),
-    getCategoryMap(),
+    getCategoryMap(useAuth),
   ]);
 
   const payload = res.data;

@@ -335,7 +335,7 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
   const set = (patch: Partial<Omit<Product, 'id'>>) => setFormData(prev => ({ ...prev, ...patch }));
 
   useEffect(() => {
-    getCategories()
+    getCategories(true)
       .then(categories => setCatalogCategories(categories.map(c => c.name)))
       .catch(() => undefined);
   }, []);
