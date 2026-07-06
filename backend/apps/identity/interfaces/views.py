@@ -39,6 +39,7 @@ def _verification_response_data(verification, message):
 
 class CheckAvailabilityView(generics.GenericAPIView):
     permission_classes = (permissions.AllowAny,)
+    throttle_scope = "auth_sensitive"
 
     def post(self, request):
         email = request.data.get("email", "").strip().lower()
@@ -56,6 +57,7 @@ class CheckAvailabilityView(generics.GenericAPIView):
 class RegisterView(generics.GenericAPIView):
     serializer_class = RegisterSerializer
     permission_classes = (permissions.AllowAny,)
+    throttle_scope = "auth_sensitive"
 
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
@@ -73,6 +75,7 @@ class RegisterView(generics.GenericAPIView):
 class RegisterVerifyView(generics.GenericAPIView):
     serializer_class = RegisterVerifySerializer
     permission_classes = (permissions.AllowAny,)
+    throttle_scope = "auth_sensitive"
 
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
@@ -91,6 +94,7 @@ class RegisterVerifyView(generics.GenericAPIView):
 class RegisterResendCodeView(generics.GenericAPIView):
     serializer_class = RegisterResendCodeSerializer
     permission_classes = (permissions.AllowAny,)
+    throttle_scope = "auth_sensitive"
 
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
@@ -108,6 +112,7 @@ class RegisterResendCodeView(generics.GenericAPIView):
 class PasswordResetRequestView(generics.GenericAPIView):
     permission_classes = (permissions.AllowAny,)
     serializer_class = PasswordResetRequestSerializer
+    throttle_scope = "auth_sensitive"
 
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
@@ -130,6 +135,7 @@ class PasswordResetRequestView(generics.GenericAPIView):
 class PasswordResetVerifyCodeView(generics.GenericAPIView):
     permission_classes = (permissions.AllowAny,)
     serializer_class = PasswordResetVerifyCodeSerializer
+    throttle_scope = "auth_sensitive"
 
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
@@ -146,6 +152,7 @@ class PasswordResetVerifyCodeView(generics.GenericAPIView):
 class PasswordResetConfirmView(generics.GenericAPIView):
     permission_classes = (permissions.AllowAny,)
     serializer_class = PasswordResetConfirmSerializer
+    throttle_scope = "auth_sensitive"
 
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
@@ -196,7 +203,10 @@ class UserViewSet(viewsets.ModelViewSet):
     def change_password(self, request):
         current_password = request.data.get("current_password", "")
         new_password = request.data.get("new_password", "")
-        if not request.user.check_password(current_password):
+        # Si el usuario aun no tiene una contrasena utilizable (p.ej. se registro
+        # con Google), no hay nada que verificar: esta configurando su primera
+        # contrasena en lugar de cambiar una existente.
+        if request.user.has_usable_password() and not request.user.check_password(current_password):
             return Response(
                 {"current_password": ["La contrasena actual no es correcta."]},
                 status=status.HTTP_400_BAD_REQUEST,

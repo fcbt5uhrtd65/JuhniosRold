@@ -1,0 +1,12 @@
+[
+  { "value": "frizz", "synonyms": ["frizz", "cabello esponjado", "pelo esponjado", "encrespamiento"] },
+  { "value": "cabello seco", "synonyms": ["cabello seco", "pelo seco", "resequedad", "cabello reseco"] },
+  { "value": "cabello maltratado", "synonyms": ["cabello maltratado", "pelo maltratado", "cabello danado", "cabello procesado"] },
+  { "value": "cabello tinturado", "synonyms": ["cabello tinturado", "pelo tinturado", "cabello con tinte", "coloracion"] },
+  { "value": "cabello opaco", "synonyms": ["cabello opaco", "pelo opaco", "sin brillo", "cabello apagado"] },
+  { "value": "puntas secas", "synonyms": ["puntas secas", "puntas abiertas", "puntas maltratadas"] },
+  { "value": "alisar", "synonyms": ["alisar", "liso", "alisado", "cabello liso", "controlar volumen"] },
+  { "value": "caida", "synonyms": ["caida", "caida del cabello", "se me cae el cabello", "fortalecer"] },
+  { "value": "brillo", "synonyms": ["brillo", "dar brillo", "cabello brillante", "pelo brillante"] },
+  { "value": "suavidad", "synonyms": ["suavidad", "cabello suave", "pelo suave", "sedosidad"] }
+]

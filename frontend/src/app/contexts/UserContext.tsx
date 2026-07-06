@@ -22,6 +22,7 @@ import {
   requestPasswordResetCode,
   verifyPasswordResetCode,
   confirmPasswordReset,
+  changePassword,
   type AuthUser,
 } from '../services/auth.service';
 import {
@@ -72,6 +73,8 @@ export interface CustomerUser {
   isInternationalDistributor?: boolean;
   companyPhone?: string;
   role?: AuthUser['role'];
+  /** false cuando el usuario aún no tiene contraseña (p.ej. se registró con Google). */
+  hasUsablePassword?: boolean;
   /** true when session comes from real backend JWT */
   fromApi?: boolean;
 }
@@ -178,6 +181,10 @@ interface UserContextType {
     resetToken: string,
     newPassword: string,
   ) => Promise<AuthActionResult>;
+  changePassword: (
+    newPassword: string,
+    currentPassword?: string,
+  ) => Promise<AuthActionResult>;
   updateProfile: (updates: Partial<CustomerUser>) => Promise<AuthActionResult>;
 }
 
@@ -256,6 +263,7 @@ function mapAuthUser(u: AuthUser): CustomerUser {
     email: u.email,
     telefono: u.phone,
     role: u.role,
+    hasUsablePassword: u.has_usable_password,
     fromApi: true,
   };
 }
@@ -765,6 +773,27 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const changeUserPassword = async (
+    newPassword: string,
+    currentPassword?: string,
+  ): Promise<AuthActionResult> => {
+    try {
+      await changePassword(newPassword, currentPassword);
+      setBackendOnline(true);
+      setCurrentUser(prev => (prev ? { ...prev, hasUsablePassword: true } : prev));
+      return { ok: true };
+    } catch (error) {
+      const serverResponded = error instanceof ApiError;
+      setBackendOnline(serverResponded);
+      return {
+        ok: false,
+        message: serverResponded
+          ? authErrorMessage(error, 'No fue posible guardar la contraseña.')
+          : 'No hay conexión con el servidor.',
+      };
+    }
+  };
+
   // ---- UPDATE PROFILE ----
   const updateProfile = async (updates: Partial<CustomerUser>): Promise<AuthActionResult> => {
     if (!currentUser) return { ok: false, message: 'No hay una sesión activa.' };
@@ -832,6 +861,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         resetPassword,
         verifyPasswordReset,
         confirmPasswordReset: confirmResetPassword,
+        changePassword: changeUserPassword,
         updateProfile,
       }}
     >

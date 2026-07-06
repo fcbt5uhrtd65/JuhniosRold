@@ -1,3 +1,5 @@
+from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
 from shared.infrastructure.models import BaseModel
@@ -66,7 +68,22 @@ class Price(BaseModel):
 
 class ProductImage(BaseModel):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="images")
-    image = models.ImageField(upload_to="products/%Y/%m/")
+    image = models.TextField()
     alt_text = models.CharField(max_length=180, blank=True)
     position = models.PositiveSmallIntegerField(default=0)
     is_primary = models.BooleanField(default=False)
+
+
+class ProductReview(BaseModel):
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="reviews")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="product_reviews")
+    rating = models.PositiveSmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)])
+    comment = models.TextField(blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["product", "user"], name="unique_review_per_user_product"),
+        ]
+
+    def __str__(self):
+        return f"{self.product.name} - {self.user} ({self.rating}★)"

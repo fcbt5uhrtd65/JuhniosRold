@@ -1,9 +1,12 @@
+import io
 import json
 from pathlib import Path
 from uuid import uuid4
 
 from celery import shared_task
 from django.conf import settings
+from django.core.exceptions import ObjectDoesNotExist
+from django.db import models
 from openpyxl import Workbook
 from reportlab.graphics.charts.barcharts import VerticalBarChart
 from reportlab.graphics.charts.legends import Legend
@@ -17,7 +20,7 @@ from reportlab.lib.units import cm
 from reportlab.pdfgen import canvas
 from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-from apps.commerce.infrastructure.models import Order
+from apps.commerce.infrastructure.models import Order, Payment
 
 from ..application.queries import DashboardQuery, InventoryReportQuery, SalesReportQuery
 
@@ -92,6 +95,129 @@ def _build_inventory_period_label(filters):
     return " · ".join(parts) if parts else "Todos los datos (sin filtros)"
 
 
+PAYMENT_STATUS_LABELS = {
+    "PENDING": "Pendiente",
+    "APPROVED": "Aprobado",
+    "DECLINED": "Rechazado",
+    "ERROR": "Error",
+    "VOIDED": "Anulado",
+    "EXPIRED": "Expirado",
+}
+
+PAYMENT_PROVIDER_LABELS = {
+    "MOCK": "Simulado",
+    "WOMPI": "Wompi",
+}
+
+
+def _build_payments_period_label(filters):
+    parts = []
+    date_from = filters.get("date_from")
+    date_to = filters.get("date_to")
+    if date_from or date_to:
+        parts.append(f"{date_from or 'inicio'} a {date_to or 'hoy'}")
+    status = filters.get("status")
+    if status:
+        parts.append(f"Estado: {PAYMENT_STATUS_LABELS.get(status, status)}")
+    return " · ".join(parts) if parts else "Todos los datos (sin filtros)"
+
+
+def _query_payments(filters):
+    queryset = Payment.objects.select_related("order", "order__customer", "invoice").order_by("-created_at")
+    date_from = filters.get("date_from")
+    date_to = filters.get("date_to")
+    status = filters.get("status")
+    search = filters.get("search")
+    if date_from:
+        queryset = queryset.filter(created_at__date__gte=date_from)
+    if date_to:
+        queryset = queryset.filter(created_at__date__lte=date_to)
+    if status:
+        queryset = queryset.filter(status=status)
+    if search:
+        queryset = queryset.filter(
+            models.Q(reference__icontains=search)
+            | models.Q(order__number__icontains=search)
+            | models.Q(order__customer__first_name__icontains=search)
+            | models.Q(order__customer__last_name__icontains=search)
+        )
+    return queryset
+
+
+def _get_payment_invoice(payment):
+    try:
+        return payment.invoice
+    except ObjectDoesNotExist:
+        return None
+
+
+def _payment_row(payment):
+    customer = payment.order.customer if payment.order and payment.order.customer_id else None
+    customer_name = f"{customer.first_name} {customer.last_name}".strip() if customer else "—"
+    invoice = _get_payment_invoice(payment)
+    invoice_number = invoice.number if invoice else None
+    return (
+        payment.order.number if payment.order else "—",
+        customer_name,
+        PAYMENT_PROVIDER_LABELS.get(payment.provider, payment.provider),
+        _fmt_cop(payment.amount_in_cents / 100),
+        PAYMENT_STATUS_LABELS.get(payment.status, payment.status),
+        payment.reference,
+        invoice_number or "—",
+        payment.created_at.strftime("%d/%m/%Y %H:%M"),
+    )
+
+
+def _write_payments_xlsx(path, payments, period_label=""):
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Pagos"
+    header_row = _write_period_label(sheet, period_label)
+    headers = ["Pedido", "Cliente", "Proveedor", "Monto", "Estado", "Referencia", "Factura", "Fecha"]
+    _apply_header(sheet, headers, start_row=header_row)
+    for i, payment in enumerate(payments, 1):
+        _apply_row(sheet, header_row + i, _payment_row(payment))
+    _auto_width(sheet)
+    workbook.save(path)
+
+
+def _write_payments_invoices_pdf(path, payments):
+    """Combina la factura real (misma plantilla de finance) de cada pago en un solo PDF."""
+    from pypdf import PdfWriter
+
+    from apps.finance.infrastructure.invoice_pdf import render_invoice_pdf
+
+    writer = PdfWriter()
+    for payment in payments:
+        invoice = _get_payment_invoice(payment)
+        if not invoice:
+            continue
+        buffer = render_invoice_pdf(invoice)
+        writer.append(buffer)
+
+    if len(writer.pages) == 0:
+        # placeholder cuando no hay facturas: evita un archivo corrupto/vacío
+        from reportlab.pdfgen import canvas as _canvas
+        empty_buffer = io.BytesIO()
+        c = _canvas.Canvas(empty_buffer, pagesize=letter)
+        c.drawString(50, 750, "No hay facturas para los filtros seleccionados.")
+        c.save()
+        empty_buffer.seek(0)
+        writer.append(empty_buffer)
+
+    with open(path, "wb") as f:
+        writer.write(f)
+
+
+def _generate_payments_report(output_path, output_format, filters):
+    payments = _query_payments(filters)
+    if output_format == "pdf":
+        _write_payments_invoices_pdf(output_path, payments)
+    else:
+        period_label = _build_payments_period_label(filters)
+        _write_payments_xlsx(output_path, payments, period_label)
+
+
 def _generate_inventory_report(output_path, report_type, output_format, filters):
     query = InventoryReportQuery()
     date_from = filters.get("date_from") or filters.get("desde") or None
@@ -158,6 +284,8 @@ def generate_report(report_type, output_format="xlsx", filters=None):
                 _write_international_customers_xlsx(output_path, sales_data, period_label)
     elif report_type in INVENTORY_REPORTS:
         _generate_inventory_report(output_path, report_type, output_format, filters)
+    elif report_type == "payments":
+        _generate_payments_report(output_path, output_format, filters)
     else:
         data = DashboardQuery().execute()
         if output_format == "pdf":

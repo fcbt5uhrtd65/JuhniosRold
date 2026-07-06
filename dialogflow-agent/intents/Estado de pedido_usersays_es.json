@@ -1,0 +1,8 @@
+[
+  { "id": "order-1", "data": [{ "text": "quiero saber el estado de mi pedido" }], "isTemplate": false, "count": 0 },
+  { "id": "order-2", "data": [{ "text": "donde esta mi compra" }], "isTemplate": false, "count": 0 },
+  { "id": "order-3", "data": [{ "text": "rastrear pedido" }], "isTemplate": false, "count": 0 },
+  { "id": "order-4", "data": [{ "text": "mi guia es " }, { "text": "12345", "alias": "numero_pedido", "meta": "@sys.any", "userDefined": true }], "isTemplate": false, "count": 0 },
+  { "id": "order-5", "data": [{ "text": "necesito seguimiento de mi pedido" }], "isTemplate": false, "count": 0 },
+  { "id": "order-6", "data": [{ "text": "no me ha llegado el pedido" }], "isTemplate": false, "count": 0 }
+]

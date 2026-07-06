@@ -264,10 +264,42 @@ def _prefetch_images(rows, max_size_cm=1.6, max_workers=16):
     return cache
 
 
+PDF_TABLE_MARGIN = 1 * cm
+
+# Ancho relativo de cada columna (Imagen + COLUMNS); se escala para llenar
+# exactamente el ancho imprimible de la página y así evitar que la tabla se
+# salga del PDF en orientación landscape.
+PDF_TABLE_COLUMN_WEIGHTS = (
+    1.3,  # Imagen
+    2.2,  # Nombre
+    1.3,  # Categoría
+    1.1,  # Tipo
+    1.1,  # Marca
+    1.3,  # SKU
+    1.0,  # Precio
+    1.1,  # Precio costo
+    0.8,  # Margen %
+    0.9,  # Estado
+    0.9,  # Stock actual
+    0.9,  # Stock mínimo
+    1.2,  # Fecha creación
+)
+
+
 def _write_pdf_table(path, rows):
     image_cache = _prefetch_images(rows, max_size_cm=1.6)
-    document = SimpleDocTemplate(str(path), pagesize=landscape(letter))
+    document = SimpleDocTemplate(
+        str(path),
+        pagesize=landscape(letter),
+        leftMargin=PDF_TABLE_MARGIN,
+        rightMargin=PDF_TABLE_MARGIN,
+        topMargin=PDF_TABLE_MARGIN,
+        bottomMargin=PDF_TABLE_MARGIN,
+    )
     styles = getSampleStyleSheet()
+    cell_style = styles["BodyText"]
+    cell_style.fontSize = 6.5
+    cell_style.leading = 8
     elements = [Paragraph("Juhnios Rold - Exportación de productos", styles["Title"]), Spacer(1, 12)]
 
     header = ["Imagen"] + [label for _, label in COLUMNS]
@@ -275,9 +307,13 @@ def _write_pdf_table(path, rows):
     for row in rows:
         cached = image_cache.get(row["image_url"])
         cell = _make_rlimage(*cached) if cached else ""
-        data.append([cell] + [str(row[key]) for key, _ in COLUMNS])
+        data.append([cell] + [Paragraph(str(row[key]), cell_style) for key, _ in COLUMNS])
 
-    table = Table(data, repeatRows=1)
+    printable_width = document.width
+    total_weight = sum(PDF_TABLE_COLUMN_WEIGHTS)
+    col_widths = [printable_width * weight / total_weight for weight in PDF_TABLE_COLUMN_WEIGHTS]
+
+    table = Table(data, colWidths=col_widths, repeatRows=1)
     table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#222222")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
@@ -285,6 +321,8 @@ def _write_pdf_table(path, rows):
         ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f2f2f2")]),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 3),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 3),
     ]))
     elements.append(table)
     document.build(elements)

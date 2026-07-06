@@ -70,12 +70,20 @@ class CatalogSeederTests(TestCase):
         call_command("seed_catalog")
 
         self.assertEqual(Category.objects.count(), 7)
-        self.assertEqual(Product.objects.count(), 94)
-        self.assertEqual(ProductVariant.objects.count(), 94)
-        self.assertEqual(Price.objects.count(), 94)
-        self.assertEqual(Stock.objects.count(), 94)
+        self.assertEqual(Product.objects.count(), 52)
+        self.assertEqual(ProductVariant.objects.count(), 104)
+        self.assertEqual(Price.objects.count(), 104)
+        self.assertEqual(Stock.objects.count(), 104)
+
+        aceite_corporal = ProductVariant.objects.get(product__name="ACEITE CORPORAL", presentation_number=250)
+        self.assertEqual(aceite_corporal.presentation_number, 250)
+        self.assertEqual(aceite_corporal.presentation_unit, "ML")
+
+        keratina = ProductVariant.objects.get(product__name="TRATAMIENTO NUTRITIVO KERATINA", presentation_number=30)
+        self.assertEqual(keratina.presentation_number, 30)
+        self.assertEqual(keratina.presentation_unit, "GR")
 
         call_command("seed_catalog")
 
-        self.assertEqual(Product.objects.count(), 94)
-        self.assertEqual(Stock.objects.count(), 94)
+        self.assertEqual(Product.objects.count(), 52)
+        self.assertEqual(Stock.objects.count(), 104)

@@ -1,0 +1,31 @@
+{
+  "description": "Asistente virtual ecommerce para Productos Juhnios Rold S.A.S.",
+  "language": "es",
+  "shortDescription": "Bot comercial para cosméticos capilares y corporales",
+  "examples": "Quiero comprar un producto\nQue me recomiendas para el frizz\nCuanto tarda el envio a Bogota\nQuiero hablar con un asesor",
+  "linkToDocs": "",
+  "displayName": "Productos Juhnios Rold",
+  "disableInteractionLogs": false,
+  "disableStackdriverLogs": true,
+  "defaultTimezone": "America/Bogota",
+  "webhook": {
+    "url": "${DIALOGFLOW_WEBHOOK_URL}",
+    "username": "",
+    "headers": {
+      "X-Webhook-Token": "${DIALOGFLOW_WEBHOOK_TOKEN}"
+    },
+    "available": true,
+    "useForDomains": false,
+    "cloudFunctionsEnabled": false,
+    "cloudFunctionsInitialized": false
+  },
+  "isPrivate": true,
+  "mlMinConfidence": 0.35,
+  "supportedLanguages": [],
+  "enableOnePlatformApi": true,
+  "onePlatformApiVersion": "v2",
+  "secondaryKey": "",
+  "analyzeQueryTextSentiment": false,
+  "enabledKnowledgeBaseNames": [],
+  "knowledgeServiceConfidenceAdjustment": 0
+}

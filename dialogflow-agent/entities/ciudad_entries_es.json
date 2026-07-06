@@ -1,0 +1,22 @@
+[
+  { "value": "Bogota", "synonyms": ["Bogota", "Bogotá", "bogota"] },
+  { "value": "Medellin", "synonyms": ["Medellin", "Medellín", "medellin"] },
+  { "value": "Cali", "synonyms": ["Cali", "cali"] },
+  { "value": "Barranquilla", "synonyms": ["Barranquilla", "barranquilla"] },
+  { "value": "Cartagena", "synonyms": ["Cartagena", "cartagena"] },
+  { "value": "Bucaramanga", "synonyms": ["Bucaramanga", "bucaramanga"] },
+  { "value": "Pereira", "synonyms": ["Pereira", "pereira"] },
+  { "value": "Manizales", "synonyms": ["Manizales", "manizales"] },
+  { "value": "Armenia", "synonyms": ["Armenia", "armenia"] },
+  { "value": "Ibague", "synonyms": ["Ibague", "Ibagué", "ibague"] },
+  { "value": "Cucuta", "synonyms": ["Cucuta", "Cúcuta", "cucuta"] },
+  { "value": "Santa Marta", "synonyms": ["Santa Marta", "santa marta"] },
+  { "value": "Monteria", "synonyms": ["Monteria", "Montería", "monteria"] },
+  { "value": "Sincelejo", "synonyms": ["Sincelejo", "sincelejo"] },
+  { "value": "Valledupar", "synonyms": ["Valledupar", "valledupar"] },
+  { "value": "Riohacha", "synonyms": ["Riohacha", "riohacha"] },
+  { "value": "Pasto", "synonyms": ["Pasto", "pasto"] },
+  { "value": "Popayan", "synonyms": ["Popayan", "Popayán", "popayan"] },
+  { "value": "Neiva", "synonyms": ["Neiva", "neiva"] },
+  { "value": "Villavicencio", "synonyms": ["Villavicencio", "villavicencio"] }
+]

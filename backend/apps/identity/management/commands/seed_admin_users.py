@@ -1,6 +1,7 @@
 import os
 
-from django.core.management.base import BaseCommand
+from django.conf import settings
+from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils import timezone
 
@@ -123,11 +124,14 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        password = (
-            options["password"]
-            or os.getenv("ADMIN_SEED_PASSWORD")
-            or DEFAULT_ADMIN_PASSWORD
-        )
+        password = options["password"] or os.getenv("ADMIN_SEED_PASSWORD")
+        if not password:
+            if not settings.DEBUG:
+                raise CommandError(
+                    "Debe proveerse --password o ADMIN_SEED_PASSWORD; "
+                    "no se permite la contraseña por defecto fuera de DEBUG."
+                )
+            password = DEFAULT_ADMIN_PASSWORD
         created, updated = seed_admin_users(
             password=password,
             reset_passwords=options["reset_passwords"],

@@ -1,5 +1,5 @@
 import { ArrowLeft, BookOpen } from 'lucide-react';
-import { Navbar } from './Navbar';
+import { NavigationBar } from './NavigationBar';
 import { Footer } from './Footer';
 import { WhatsAppButton } from './WhatsAppButton';
 import { navigateBack } from '../services/navigate';
@@ -9,7 +9,7 @@ const FLIPBOOK_URL = 'https://heyzine.com/flip-book/a6b0e5b2d6.html';
 export function CatalogPage({ onLoginClick }: { onLoginClick: () => void }) {
   return (
     <div className="min-h-screen bg-[#F7F5F1] text-stone-950">
-      <Navbar onLoginClick={onLoginClick} />
+      <NavigationBar variant="solid" onLoginClick={onLoginClick} />
       <main className="px-4 pb-16 pt-28 md:px-8 lg:px-14">
         <section className="mx-auto max-w-6xl">
 

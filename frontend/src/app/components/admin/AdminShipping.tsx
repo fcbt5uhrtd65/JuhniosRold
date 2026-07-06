@@ -41,7 +41,7 @@ const ZONE_TYPE_COLOR: Record<ShippingZoneType, BadgeColor> = {
 
 function Switch({ checked, onChange, label }: { checked: boolean; onChange: (value: boolean) => void; label: string }) {
   return (
-    <label className="flex items-center gap-2.5 cursor-pointer select-none">
+    <label className="flex items-center gap-2.5 cursor-pointer select-none flex-shrink-0">
       <button
         type="button"
         role="switch"
@@ -49,9 +49,9 @@ function Switch({ checked, onChange, label }: { checked: boolean; onChange: (val
         onClick={() => onChange(!checked)}
         className={`relative h-5 w-9 flex-shrink-0 rounded-full transition-colors ${checked ? 'bg-[#2a4038]' : 'bg-gray-200'}`}
       >
-        <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-4' : 'translate-x-0.5'}`} />
+        <span className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-4' : 'translate-x-0'}`} />
       </button>
-      <span className="text-xs font-medium text-gray-600">{label}</span>
+      <span className="text-xs font-medium text-gray-600 whitespace-nowrap">{label}</span>
     </label>
   );
 }
@@ -59,12 +59,12 @@ function Switch({ checked, onChange, label }: { checked: boolean; onChange: (val
 function SectionCard({ icon: Icon, title, hint, children, actions }: { icon: React.ComponentType<{ size?: number; className?: string }>; title: string; hint?: string; children: React.ReactNode; actions?: React.ReactNode }) {
   return (
     <Card className="p-5">
-      <div className="flex items-center justify-between gap-3 mb-4">
-        <div className="flex items-center gap-2.5">
+      <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+        <div className="flex items-center gap-2.5 min-w-0">
           <div className="w-8 h-8 rounded-xl bg-[#2a4038]/8 flex items-center justify-center text-[#2a4038] flex-shrink-0">
             <Icon size={15} />
           </div>
-          <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+          <h3 className="text-sm font-semibold text-gray-900 truncate">{title}</h3>
         </div>
         {actions}
       </div>

@@ -8,15 +8,17 @@ from apps.identity.interfaces.permissions import HasComponentAccess
 from shared.interfaces.viewsets import SoftDeleteModelViewSet
 
 from apps.inventory.infrastructure.models import Stock
-from ..infrastructure.models import Category, Price, Product, ProductImage, ProductVariant
+from ..infrastructure.models import Category, Price, Product, ProductImage, ProductReview, ProductVariant
 from ..infrastructure.serializers import (
     CategorySerializer,
     CompleteProductSerializer,
     PriceSerializer,
     ProductImageSerializer,
+    ProductReviewSerializer,
     ProductSerializer,
     ProductVariantSerializer,
 )
+from .permissions import IsReviewOwnerOrReadOnly
 from ..infrastructure.tasks import export_products
 from .export_serializers import ProductExportRequestSerializer
 from .filters import ProductFilter
@@ -137,3 +139,17 @@ class ProductImageViewSet(SoftDeleteModelViewSet):
     serializer_class = ProductImageSerializer
     permission_classes = (permissions.IsAdminUser,)
     filterset_fields = ("product", "is_primary")
+
+
+class ProductReviewViewSet(SoftDeleteModelViewSet):
+    queryset = ProductReview.objects.select_related("user", "product")
+    serializer_class = ProductReviewSerializer
+    filterset_fields = ("product", "rating")
+    ordering_fields = ("created_at", "rating")
+
+    def get_permissions(self):
+        if self.action in ("list", "retrieve"):
+            return (permissions.AllowAny(),)
+        if self.action == "create":
+            return (permissions.IsAuthenticated(),)
+        return (permissions.IsAuthenticated(), IsReviewOwnerOrReadOnly())

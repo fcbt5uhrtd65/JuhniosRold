@@ -105,12 +105,16 @@ export async function getAdminPayments(params?: {
   pageSize?: number;
   search?: string;
   status?: AdminPaymentStatus;
+  dateFrom?: string;
+  dateTo?: string;
 }): Promise<{ data: AdminPayment[]; total: number; totalPages: number; page: number }> {
   const query = new URLSearchParams();
   if (params?.page) query.set('page', String(params.page));
   query.set('page_size', String(params?.pageSize ?? 20));
   if (params?.search) query.set('search', params.search);
   if (params?.status) query.set('status', params.status);
+  if (params?.dateFrom) query.set('date_from', params.dateFrom);
+  if (params?.dateTo) query.set('date_to', params.dateTo);
 
   const res = await api.get<PaginatedResponse<BackendAdminPayment>>(`/commerce/payments/?${query}`);
   if (!res.data) throw new Error(res.message || 'No se pudieron cargar los pagos.');

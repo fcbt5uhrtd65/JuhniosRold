@@ -1,0 +1,24 @@
+{
+  "id": "catalogo",
+  "name": "Catalogo",
+  "auto": true,
+  "contexts": [],
+  "responses": [
+    {
+      "resetContexts": false,
+      "action": "commerce.catalog",
+      "affectedContexts": [],
+      "parameters": [],
+      "messages": [
+        { "type": 0, "lang": "es", "speech": ["Te comparto el catalogo para que elijas tus productos favoritos."] }
+      ],
+      "defaultResponsePlatforms": {},
+      "speech": []
+    }
+  ],
+  "priority": 500000,
+  "webhookUsed": true,
+  "webhookForSlotFilling": false,
+  "fallbackIntent": false,
+  "events": []
+}

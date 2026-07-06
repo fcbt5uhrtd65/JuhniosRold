@@ -1,5 +1,5 @@
 from django.conf import settings
-from django.core.validators import MinValueValidator
+from django.core.validators import FileExtensionValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
 
@@ -203,7 +203,11 @@ class Employee(BaseModel):
     address = models.TextField(blank=True)
     city = models.CharField(max_length=120, blank=True)
     residence_department = models.CharField(max_length=120, blank=True)
-    photo = models.FileField(upload_to="employees/photos/", blank=True)
+    photo = models.FileField(
+        upload_to="employees/photos/",
+        blank=True,
+        validators=[FileExtensionValidator(allowed_extensions=("png", "jpg", "jpeg"))],
+    )
     nationality = models.CharField(max_length=80, blank=True, default="Colombiana")
     gender = models.CharField(max_length=20, choices=Gender.choices, blank=True)
     marital_status = models.CharField(max_length=20, choices=MaritalStatus.choices, blank=True)
@@ -429,4 +433,8 @@ class EmploymentContract(BaseModel):
     end_date = models.DateField(null=True, blank=True)
     base_salary = models.DecimalField(max_digits=14, decimal_places=2)
     is_active = models.BooleanField(default=True)
-    document = models.FileField(upload_to="employees/contracts/", blank=True)
+    document = models.FileField(
+        upload_to="employees/contracts/",
+        blank=True,
+        validators=[FileExtensionValidator(allowed_extensions=("pdf", "png", "jpg", "jpeg", "doc", "docx"))],
+    )

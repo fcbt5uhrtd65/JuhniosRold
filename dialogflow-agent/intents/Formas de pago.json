@@ -1,0 +1,24 @@
+{
+  "id": "formas-de-pago",
+  "name": "Formas de pago",
+  "auto": true,
+  "contexts": [],
+  "responses": [
+    {
+      "resetContexts": false,
+      "action": "commerce.payment_methods",
+      "affectedContexts": [],
+      "parameters": [],
+      "messages": [
+        { "type": 0, "lang": "es", "speech": ["Puedes pagar desde el checkout con los medios disponibles en la tienda. Si tienes dudas, te paso con un asesor."] }
+      ],
+      "defaultResponsePlatforms": {},
+      "speech": []
+    }
+  ],
+  "priority": 500000,
+  "webhookUsed": true,
+  "webhookForSlotFilling": false,
+  "fallbackIntent": false,
+  "events": []
+}

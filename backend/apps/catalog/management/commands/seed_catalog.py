@@ -1,6 +1,8 @@
 import hashlib
+import re
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from decimal import Decimal
 
 from django.core.management.base import BaseCommand
 from django.db import transaction
@@ -12,6 +14,10 @@ from apps.inventory.infrastructure.models import Location, Stock, Warehouse
 from ...infrastructure.models import Category, Price, Product, ProductVariant
 from ...infrastructure.tasks import IMAGE_CACHE_DIR
 from ...seed_data import CATEGORY_DATA, iter_catalog_items
+
+
+PRESENTATION_PATTERN = re.compile(r"(?P<number>\d+(?:[.,]\d+)?)\s*(?P<unit>ML|GR|G|KG)\b")
+PRESENTATION_IN_NAME_PATTERN = re.compile(r"\s+\d+(?:[.,]\d+)?\s*(?:ML|GR|G|KG)\b")
 
 
 def _warm_image_cache(urls):
@@ -43,7 +49,7 @@ def category_slug_for(name):
         return "laboratorio"
     if "GEL ANTIBACTERIAL" in normalized:
         return "antibacterial"
-    if "BEBE" in normalized:
+    if "BEBE" in normalized or "AGUACATE" in normalized:
         return "baby"
     if any(
         keyword in normalized
@@ -58,7 +64,10 @@ def category_slug_for(name):
             "CREMA DE PEINAR",
             "SILICONA",
             "TONO SOBRE TONO",
+            "MASCARILLA",
             "TRATAMIENTO KERATINA",
+            "TRATAMIENTO NUTRITIVO",
+            "ACEITE ES 3 MAS",
         )
     ):
         return "capilar"
@@ -78,6 +87,26 @@ def category_slug_for(name):
     if any(keyword in normalized for keyword in ("DESODORANTE", "REMOVEDOR")):
         return "personal"
     return "aseo"
+
+
+def presentation_fields_for(name):
+    normalized = name.upper()
+    match = PRESENTATION_PATTERN.search(normalized)
+    if match:
+        unit = match.group("unit")
+        return Decimal(match.group("number").replace(",", ".")), "GR" if unit == "G" else unit
+    if "GALON" in normalized:
+        return Decimal("3750"), "ML"
+    if "PIMPINA" in normalized:
+        return Decimal("20000"), "ML"
+    return None, ""
+
+
+def product_name_for(name):
+    normalized = name.upper()
+    base_name = PRESENTATION_IN_NAME_PATTERN.sub("", normalized)
+    base_name = re.sub(r"\s+(GALON|PIMPINA)$", "", base_name)
+    return re.sub(r"\s{2,}", " ", base_name).strip()
 
 
 @transaction.atomic
@@ -118,27 +147,41 @@ def seed_catalog():
     )
 
     now = timezone.now()
-    created = 0
+    created_products = 0
+    products = {}
     for item in iter_catalog_items():
-        product = Product.objects.create(
-            category=categories[category_slug_for(item["name"])],
-            name=item["name"],
-            slug=f"{slugify(item['name'])[:42]}-{item['id']:03d}",
-            description="Producto del catalogo inicial de Juhnios Rold.",
-            image_url=item.get("image_url", ""),
-            is_active=True,
-            is_featured=item["id"] <= 8,
-        )
-        presentation = (
-            "Unidad"
-            if item["units_per_display"] == "N/A"
-            else f"Display x {item['units_per_display']}"
-        )
+        product_name = product_name_for(item["name"])
+        product = products.get(product_name)
+        if product is None:
+            product = Product.objects.create(
+                category=categories[category_slug_for(item["name"])],
+                name=product_name,
+                slug=f"{slugify(product_name)[:42]}-{item['id']:03d}",
+                description="Producto del catalogo inicial de Juhnios Rold.",
+                image_url=item.get("image_url", ""),
+                is_active=True,
+                is_featured=item["id"] <= 8,
+            )
+            products[product_name] = product
+            created_products += 1
+        if item["units_per_display"] == "N/A":
+            presentation = "Unidad"
+        elif item["units_per_display"] == "DISPLAY":
+            presentation = "Kit"
+        else:
+            presentation = f"Display x {item['units_per_display']}"
+        presentation_number, presentation_unit = presentation_fields_for(item["name"])
         variant = ProductVariant.objects.create(
             product=product,
             sku=f"JR-CAT-{item['id']:03d}",
             name=presentation,
-            attributes={"units_per_display": item["units_per_display"]},
+            presentation_number=presentation_number,
+            presentation_unit=presentation_unit,
+            attributes={
+                "catalog_name": item["name"],
+                "units_per_display": item["units_per_display"],
+                "units_per_box": item["stock"],
+            },
             cost=0,
             is_active=True,
         )
@@ -155,13 +198,12 @@ def seed_catalog():
             quantity=item["stock"],
             minimum_quantity=0,
         )
-        created += 1
 
     all_image_urls = [item.get("image_url", "") for item in iter_catalog_items()]
     category_image_urls = [data["image_url"] for data in CATEGORY_DATA.values()]
     _warm_image_cache(all_image_urls + category_image_urls)
 
-    return created
+    return created_products
 
 
 class Command(BaseCommand):

@@ -1,0 +1,8 @@
+[
+  { "id": "pay-1", "data": [{ "text": "que formas de pago tienen" }], "isTemplate": false, "count": 0 },
+  { "id": "pay-2", "data": [{ "text": "puedo pagar con tarjeta" }], "isTemplate": false, "count": 0 },
+  { "id": "pay-3", "data": [{ "text": "aceptan transferencia" }], "isTemplate": false, "count": 0 },
+  { "id": "pay-4", "data": [{ "text": "como pago mi pedido" }], "isTemplate": false, "count": 0 },
+  { "id": "pay-5", "data": [{ "text": "tienen pago contra entrega" }], "isTemplate": false, "count": 0 },
+  { "id": "pay-6", "data": [{ "text": "medios de pago" }], "isTemplate": false, "count": 0 }
+]

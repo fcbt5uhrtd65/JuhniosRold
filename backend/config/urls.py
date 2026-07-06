@@ -5,6 +5,8 @@ from django.urls import include, path, re_path
 from django.views.static import serve
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
+from apps.chatbot.interfaces.views import DialogflowWebhookView
+
 
 def health_check(_request):
     return JsonResponse({"status": "ok", "service": "juhnios-rold-api"})
@@ -17,6 +19,7 @@ urlpatterns = [
     path("api/v1/customers/", include("apps.customers.interfaces.urls")),
     path("api/v1/referrals/", include("apps.referrals.interfaces.urls")),
     path("api/v1/catalog/", include("apps.catalog.interfaces.urls")),
+    path("api/v1/promotions/", include("apps.promotions.interfaces.urls")),
     path("api/v1/inventory/", include("apps.inventory.interfaces.urls")),
     path("api/v1/commerce/", include("apps.commerce.interfaces.urls")),
     path("api/v1/", include("apps.envios.interfaces.urls")),
@@ -30,6 +33,9 @@ urlpatterns = [
     path("api/v1/analytics/", include("apps.analytics.interfaces.urls")),
     path("api/v1/audit/", include("apps.audit.interfaces.urls")),
     path("api/v1/notifications/", include("apps.notifications.interfaces.urls")),
+    path("api/v1/chatbot/", include("apps.chatbot.interfaces.urls")),
+    path("api/chatbot/", include("apps.chatbot.interfaces.urls")),
+    path("dialogflow/webhook/", DialogflowWebhookView.as_view(), name="dialogflow-webhook"),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
     path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),

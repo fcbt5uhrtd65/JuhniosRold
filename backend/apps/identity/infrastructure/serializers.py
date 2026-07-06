@@ -95,6 +95,7 @@ class UserSerializer(serializers.ModelSerializer):
     )
     created_at = serializers.DateTimeField(source="date_joined", read_only=True)
     updated_at = serializers.SerializerMethodField()
+    has_usable_password = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -113,8 +114,12 @@ class UserSerializer(serializers.ModelSerializer):
             "date_joined",
             "created_at",
             "updated_at",
+            "has_usable_password",
         )
-        read_only_fields = ("id", "date_joined", "created_at", "updated_at", "role")
+        read_only_fields = ("id", "date_joined", "created_at", "updated_at", "role", "has_usable_password")
+
+    def get_has_usable_password(self, user):
+        return user.has_usable_password()
 
     def get_role(self, user):
         return user.role.code if user.role_id else ""

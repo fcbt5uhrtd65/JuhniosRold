@@ -1,0 +1,7 @@
+[
+  { "value": "unidad", "synonyms": ["unidad", "uno", "producto individual"] },
+  { "value": "kit", "synonyms": ["kit", "combo", "set", "paquete"] },
+  { "value": "mayorista", "synonyms": ["mayorista", "caja", "docena", "varias unidades"] },
+  { "value": "grande", "synonyms": ["grande", "litro", "presentacion grande", "tamano grande"] },
+  { "value": "pequena", "synonyms": ["pequena", "pequeña", "mini", "presentacion pequena"] }
+]

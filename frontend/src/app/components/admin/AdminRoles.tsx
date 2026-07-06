@@ -427,8 +427,8 @@ export function AdminRoles() {
           <p className="text-sm text-gray-400">No se encontraron roles.</p>
         </div>
       ) : (
-        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
-          <table className="w-full text-xs">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
+          <table className="w-full text-xs min-w-[720px]">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50">
                 <th className="text-left px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-400">Rol</th>

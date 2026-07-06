@@ -3,12 +3,12 @@ import json
 
 from celery import shared_task
 from django.conf import settings
-from django.core.mail import EmailMessage
+from django.core.mail import EmailMessage, EmailMultiAlternatives
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 
-def _send_with_resend(*, subject, message, recipient, attachments=None):
+def _send_with_resend(*, subject, message, recipient, attachments=None, html_message=None):
     if not settings.RESEND_API_KEY:
         raise RuntimeError("RESEND_API_KEY no esta configurada.")
 
@@ -18,6 +18,8 @@ def _send_with_resend(*, subject, message, recipient, attachments=None):
         "subject": subject,
         "text": message,
     }
+    if html_message:
+        payload["html"] = html_message
     if attachments:
         payload["attachments"] = [
             {
@@ -48,18 +50,25 @@ def _send_with_resend(*, subject, message, recipient, attachments=None):
         raise RuntimeError("No fue posible enviar el correo con Resend.") from exc
 
 
-def _send_email(*, subject, message, recipient, attachments=None):
+def _send_email(*, subject, message, recipient, attachments=None, html_message=None):
     if settings.EMAIL_PROVIDER == "resend":
         return _send_with_resend(
-            subject=subject, message=message, recipient=recipient, attachments=attachments
+            subject=subject,
+            message=message,
+            recipient=recipient,
+            attachments=attachments,
+            html_message=html_message,
         )
 
-    email = EmailMessage(
+    email_cls = EmailMultiAlternatives if html_message else EmailMessage
+    email = email_cls(
         subject=subject,
         body=message,
         from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "no-reply@juhniosrold.com"),
         to=[recipient],
     )
+    if html_message:
+        email.attach_alternative(html_message, "text/html")
     for attachment in attachments or []:
         email.attach(
             attachment["filename"],

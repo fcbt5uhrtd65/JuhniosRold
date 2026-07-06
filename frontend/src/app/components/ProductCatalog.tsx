@@ -17,6 +17,13 @@ import {
   type Product as CatalogProduct,
   type ProductCategory,
 } from '../services/products.service';
+import {
+  getProductReviews,
+  createProductReview,
+  updateProductReview,
+  deleteProductReview,
+  type ProductReview,
+} from '../services/reviews.service';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 
 const OLIVE = '#2D3A1F';
@@ -24,7 +31,7 @@ const OLIVE = '#2D3A1F';
 type ViewMode = 'grid' | 'list';
 type PriceRange = 'all' | 'low' | 'mid' | 'high';
 type CollectionFilter = 'all' | 'featured' | 'recent';
-type CatalogBadge = 'nuevo' | 'destacado';
+type CatalogBadge = 'nuevo' | 'destacado' | 'oferta';
 
 const FALLBACK_IMAGE =
   'https://images.unsplash.com/photo-1608248597279-f99d160bfcbc?w=900&q=80';
@@ -44,7 +51,25 @@ function isRecentProduct(createdAt: string): boolean {
   return Date.now() - t <= 1000 * 60 * 60 * 24 * 30;
 }
 
+function hasActivePromotion(product: CatalogProduct): boolean {
+  if (product.active_promotion) return true;
+  return product.variants.some(v => v.active_promotion != null);
+}
+
+function getDiscountedPrice(product: CatalogProduct): number | null {
+  const variant = product.variants.find(v => v.discounted_price != null);
+  return variant?.discounted_price ?? null;
+}
+
+function getDiscountPercentage(product: CatalogProduct): number | null {
+  const original = product.price;
+  const discounted = getDiscountedPrice(product);
+  if (original === null || discounted === null || original <= 0) return null;
+  return Math.round(((original - discounted) / original) * 100);
+}
+
 function getProductBadge(product: CatalogProduct): CatalogBadge | undefined {
+  if (hasActivePromotion(product)) return 'oferta';
   if (product.is_featured) return 'destacado';
   if (isRecentProduct(product.created_at)) return 'nuevo';
   return undefined;
@@ -59,13 +84,6 @@ function getProductImages(product: CatalogProduct): string[] {
   if (product.primary_image) imgs.push(product.primary_image);
   product.image_urls.forEach(u => { if (u !== product.primary_image) imgs.push(u); });
   if (imgs.length === 0) imgs.push(FALLBACK_IMAGE);
-  // Pad a 3 con fallbacks alternativos
-  const extras = [
-    'https://images.unsplash.com/photo-1587049352846-4a222e784d38?w=600&q=80',
-    'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=600&q=80',
-  ];
-  let ei = 0;
-  while (imgs.length < 3) { imgs.push(extras[ei++ % extras.length]); }
   return imgs.slice(0, 3);
 }
 
@@ -83,12 +101,12 @@ function getErrorMessage(error: unknown): string {
 }
 
 /* ── Stars ── */
-function Stars({ n = 4 }: { n?: number }) {
+function Stars({ n = 4, size = 'w-3 h-3' }: { n?: number; size?: string }) {
   return (
     <div className="flex items-center gap-0.5">
       {Array.from({ length: 5 }, (_, i) => (
         <Star key={i}
-          className={`w-3 h-3 ${i < n ? 'fill-amber-400 text-amber-400' : 'fill-stone-200 text-stone-200'}`}
+          className={`${size} ${i < n ? 'fill-amber-400 text-amber-400' : 'fill-stone-200 text-stone-200'}`}
           strokeWidth={0}
         />
       ))}
@@ -125,8 +143,170 @@ function Accordion({ label, children }: { label: string; children: React.ReactNo
   );
 }
 
+/* ── Selector de estrellas interactivo ── */
+function StarPicker({ value, onChange }: { value: number; onChange: (n: number) => void }) {
+  const [hover, setHover] = useState(0);
+  return (
+    <div className="flex items-center gap-1" onMouseLeave={() => setHover(0)}>
+      {Array.from({ length: 5 }, (_, i) => {
+        const n = i + 1;
+        const filled = n <= (hover || value);
+        return (
+          <button
+            key={n}
+            type="button"
+            onMouseEnter={() => setHover(n)}
+            onClick={() => onChange(n)}
+            className="p-0.5"
+            aria-label={`${n} estrella${n === 1 ? '' : 's'}`}
+          >
+            <Star
+              className={`w-6 h-6 transition-colors ${filled ? 'fill-amber-400 text-amber-400' : 'fill-stone-200 text-stone-200'}`}
+              strokeWidth={0}
+            />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function formatReviewDate(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+/* ── Sección de reseñas estilo Play Store ── */
+function ProductReviewsSection({
+  productId,
+  reviews,
+  loading,
+  currentUserId,
+  onLoginRequired,
+  onSubmit,
+  onDelete,
+}: {
+  productId: string;
+  reviews: ProductReview[];
+  loading: boolean;
+  currentUserId: string | null | undefined;
+  onLoginRequired: () => void;
+  onSubmit: (rating: number, comment: string) => Promise<void>;
+  onDelete: (reviewId: string) => Promise<void>;
+}) {
+  const myReview = reviews.find(r => r.user === currentUserId) ?? null;
+  const [rating, setRating] = useState(myReview?.rating ?? 0);
+  const [comment, setComment] = useState(myReview?.comment ?? '');
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    setRating(myReview?.rating ?? 0);
+    setComment(myReview?.comment ?? '');
+  }, [myReview?.id, productId]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (currentUserId === null || currentUserId === undefined) {
+      onLoginRequired();
+      return;
+    }
+    if (rating === 0) return;
+    setSubmitting(true);
+    try {
+      await onSubmit(rating, comment.trim());
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="mt-16 pt-10 border-t border-stone-100">
+      <h2 className="text-[20px] font-light text-stone-900 mb-6" style={{ fontFamily: "'Playfair Display', serif" }}>
+        Reseñas de clientes
+      </h2>
+
+      <div className="grid md:grid-cols-2 gap-8">
+        {/* Formulario para escribir/editar reseña */}
+        <div className="bg-stone-50 rounded-xl p-5">
+          <p className="text-[12.5px] font-semibold text-stone-700 mb-3">
+            {myReview ? 'Edita tu reseña' : '¿Ya probaste este producto?'}
+          </p>
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <StarPicker value={rating} onChange={setRating} />
+            <textarea
+              value={comment}
+              onChange={e => setComment(e.target.value)}
+              placeholder="Cuéntanos qué te pareció..."
+              rows={3}
+              className="w-full rounded-lg border border-stone-200 px-3 py-2.5 text-[13px] text-stone-700 outline-none focus:border-stone-400 resize-none bg-white"
+            />
+            <button
+              type="submit"
+              disabled={submitting || rating === 0}
+              className="px-5 py-2.5 text-[11px] tracking-[0.2em] uppercase font-semibold rounded-lg text-white disabled:opacity-40 transition-opacity"
+              style={{ backgroundColor: OLIVE }}
+            >
+              {submitting ? 'Enviando...' : myReview ? 'Actualizar reseña' : 'Publicar reseña'}
+            </button>
+          </form>
+        </div>
+
+        {/* Resumen */}
+        <div className="flex items-center justify-center bg-stone-50 rounded-xl p-5">
+          {reviews.length > 0 ? (
+            <div className="text-center">
+              <p className="text-[36px] font-semibold text-stone-900 leading-none mb-1">
+                {(reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1)}
+              </p>
+              <Stars n={Math.round(reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length)} size="w-4 h-4" />
+              <p className="text-[11.5px] text-stone-500 mt-2">{reviews.length} reseña{reviews.length === 1 ? '' : 's'}</p>
+            </div>
+          ) : (
+            <p className="text-[13px] text-stone-400">Aún no hay reseñas para este producto.</p>
+          )}
+        </div>
+      </div>
+
+      {/* Lista de reseñas */}
+      <div className="mt-8 space-y-5">
+        {loading && <p className="text-[13px] text-stone-400">Cargando reseñas...</p>}
+        {!loading && reviews.map(review => (
+          <div key={review.id} className="border-b border-stone-100 pb-5">
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full bg-stone-200 flex items-center justify-center text-[12px] font-semibold text-stone-600">
+                  {review.userName.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <p className="text-[12.5px] font-semibold text-stone-800">{review.userName}</p>
+                  <div className="flex items-center gap-2">
+                    <Stars n={review.rating} size="w-3 h-3" />
+                    <span className="text-[10.5px] text-stone-400">{formatReviewDate(review.createdAt)}</span>
+                  </div>
+                </div>
+              </div>
+              {review.user === currentUserId && (
+                <button
+                  onClick={() => onDelete(review.id)}
+                  className="text-[10.5px] text-stone-400 hover:text-rose-500 transition-colors"
+                >
+                  Eliminar
+                </button>
+              )}
+            </div>
+            {review.comment && (
+              <p className="text-[13px] text-stone-600 leading-relaxed pl-[42px]">{review.comment}</p>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* ── Página de producto completa (overlay) ── */
-function ProductPage({
+export function ProductPage({
   product,
   allProducts,
   selectedSizes,
@@ -137,6 +317,7 @@ function ProductPage({
   onClose,
   isProductSaved,
   onNavigateTo,
+  onLoginRequired,
 }: {
   product: CatalogProduct;
   allProducts: CatalogProduct[];
@@ -148,13 +329,20 @@ function ProductPage({
   onClose: () => void;
   isProductSaved: (id: string) => boolean;
   onNavigateTo: (p: CatalogProduct) => void;
+  onLoginRequired?: () => void;
 }) {
   const images = getProductImages(product);
   const [activeImg, setActiveImg] = useState(0);
   const [qty, setQty] = useState(1);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const reviewsRef = useRef<HTMLDivElement>(null);
   const sizes = getProductSizes(product);
   const selSize = selectedSizes[product.id] ?? sizes[0];
+  const { currentUser } = useUser();
+  const toast = useToast();
+
+  const [reviews, setReviews] = useState<ProductReview[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(true);
 
   const related = allProducts
     .filter(p => p.id !== product.id && p.category_id === product.category_id)
@@ -166,6 +354,49 @@ function ProductPage({
     setQty(1);
     scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
   }, [product.id]);
+
+  useEffect(() => {
+    let isMounted = true;
+    setReviewsLoading(true);
+    getProductReviews(product.id)
+      .then(data => { if (isMounted) setReviews(data); })
+      .catch(() => { if (isMounted) toast.error('No se pudieron cargar las reseñas.'); })
+      .finally(() => { if (isMounted) setReviewsLoading(false); });
+    return () => { isMounted = false; };
+  }, [product.id]);
+
+  const reviewSummary = useMemo(() => {
+    if (reviews.length === 0) return { average: null as number | null, count: 0 };
+    const average = reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length;
+    return { average, count: reviews.length };
+  }, [reviews]);
+
+  const handleReviewSubmit = async (rating: number, comment: string) => {
+    const existing = reviews.find(r => r.user === currentUser?.id);
+    try {
+      if (existing) {
+        const updated = await updateProductReview(existing.id, { rating, comment });
+        setReviews(prev => prev.map(r => (r.id === updated.id ? updated : r)));
+        toast.success('Reseña actualizada');
+      } else {
+        const created = await createProductReview(product.id, { rating, comment });
+        setReviews(prev => [created, ...prev]);
+        toast.success('¡Gracias por tu reseña!');
+      }
+    } catch (e) {
+      toast.error(getErrorMessage(e));
+    }
+  };
+
+  const handleReviewDelete = async (reviewId: string) => {
+    try {
+      await deleteProductReview(reviewId);
+      setReviews(prev => prev.filter(r => r.id !== reviewId));
+      toast.success('Reseña eliminada');
+    } catch (e) {
+      toast.error(getErrorMessage(e));
+    }
+  };
 
   useBodyScrollLock(true);
 
@@ -276,21 +507,35 @@ function ProductPage({
             </h1>
             <p className="text-[13px] text-stone-500 leading-relaxed mb-4">{getProductDescription(product)}</p>
 
-            <div className="flex items-center gap-2 mb-5">
-              <div className="flex items-center gap-0.5">
-                {Array.from({ length: 5 }, (_, i) => (
-                  <Star key={i}
-                    className={`w-3.5 h-3.5 ${i < 4 ? 'fill-amber-400 text-amber-400' : 'fill-stone-200 text-stone-200'}`}
-                    strokeWidth={0}
-                  />
-                ))}
-              </div>
-              <span className="text-[11.5px] text-stone-500">4.8 · 189 reseñas</span>
-            </div>
+            <button
+              onClick={() => reviewsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+              className="flex items-center gap-2 mb-5 w-fit"
+            >
+              <Stars n={Math.round(reviewSummary.average ?? 0)} size="w-3.5 h-3.5" />
+              <span className="text-[11.5px] text-stone-500 hover:text-stone-700 transition-colors">
+                {reviewSummary.count > 0
+                  ? `${reviewSummary.average?.toFixed(1)} · ${reviewSummary.count} reseña${reviewSummary.count === 1 ? '' : 's'}`
+                  : 'Sé el primero en opinar'}
+              </span>
+            </button>
 
-            <p className="text-[28px] font-semibold text-stone-900 mb-6">
-              {formatPrice(product.price, product.currency ?? 'COP')}
-            </p>
+            {getDiscountedPrice(product) !== null ? (
+              <p className="flex items-center gap-3 mb-6">
+                <span className="text-[16px] text-red-500 line-through">
+                  {formatPrice(product.price, product.currency ?? 'COP')}
+                </span>
+                <span className="text-[28px] font-semibold text-emerald-600">
+                  {formatPrice(getDiscountedPrice(product), product.currency ?? 'COP')}
+                </span>
+                <span className="px-2 py-0.5 text-[10px] font-bold text-red-700 bg-red-50 border border-red-200 rounded-full">
+                  -{getDiscountPercentage(product)}%
+                </span>
+              </p>
+            ) : (
+              <p className="text-[28px] font-semibold text-stone-900 mb-6">
+                {formatPrice(product.price, product.currency ?? 'COP')}
+              </p>
+            )}
             <div className="w-full h-px bg-stone-100 mb-6" />
 
             {sizes.length > 0 && (
@@ -368,6 +613,21 @@ function ProductPage({
           </div>
         </div>
 
+        <div ref={reviewsRef}>
+          <ProductReviewsSection
+            productId={product.id}
+            reviews={reviews}
+            loading={reviewsLoading}
+            currentUserId={currentUser?.id}
+            onLoginRequired={() => {
+              toast.info('Inicia sesión para escribir una reseña');
+              onLoginRequired?.();
+            }}
+            onSubmit={handleReviewSubmit}
+            onDelete={handleReviewDelete}
+          />
+        </div>
+
         {/* ── También te puede interesar ── */}
         {related.length > 0 && (
           <div className="mt-20 pt-10 border-t border-stone-100">
@@ -416,12 +676,10 @@ function ProductPage({
                       <p className="text-[9px] tracking-[0.2em] uppercase text-stone-400 mb-1">{rp.category_name}</p>
                       <h3 className="text-[13.5px] font-medium text-stone-900 mb-2 leading-snug">{rp.name}</h3>
                       <div className="flex items-center gap-1.5 mb-3">
-                        <div className="flex gap-0.5">
-                          {Array.from({ length: 5 }, (_, i) => (
-                            <Star key={i} className={`w-3 h-3 ${i < 4 ? 'fill-amber-400 text-amber-400' : 'fill-stone-200 text-stone-200'}`} strokeWidth={0} />
-                          ))}
-                        </div>
-                        <span className="text-[9px] text-stone-400">4.8</span>
+                        <Stars n={Math.round(rp.rating_average ?? 0)} size="w-3 h-3" />
+                        <span className="text-[9px] text-stone-400">
+                          {rp.rating_average !== null ? rp.rating_average.toFixed(1) : 'Nuevo'}
+                        </span>
                       </div>
                       <div className="flex items-center justify-between mt-auto pt-3 border-t border-stone-100">
                         <span className="text-sm font-semibold text-stone-900">
@@ -839,8 +1097,10 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                         <p className="text-[9px] tracking-[0.22em] uppercase text-stone-400 mb-0.5">{product.category_name}</p>
                         <h3 className="text-sm font-medium text-stone-900 mb-1 leading-snug">{product.name}</h3>
                         <div className="flex items-center gap-1.5 mb-2">
-                          <Stars n={4} />
-                          <span className="text-[9px] text-stone-400">4.8</span>
+                          <Stars n={Math.round(product.rating_average ?? 0)} />
+                          <span className="text-[9px] text-stone-400">
+                            {product.rating_average !== null ? product.rating_average.toFixed(1) : 'Nuevo'}
+                          </span>
                         </div>
                         <div className="flex flex-wrap gap-1.5">
                           {sizes.slice(0, 3).map(s => (
@@ -855,9 +1115,20 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                         </div>
                       </div>
                       <div className="flex flex-col items-end justify-between gap-2 flex-shrink-0">
-                        <span className="text-sm font-semibold text-stone-900">
-                          {formatPrice(product.price, product.currency ?? 'COP')}
-                        </span>
+                        {getDiscountedPrice(product) !== null ? (
+                          <span className="flex flex-col items-end">
+                            <span className="text-[10px] text-red-500 line-through">
+                              {formatPrice(product.price, product.currency ?? 'COP')}
+                            </span>
+                            <span className="text-sm font-semibold text-emerald-600">
+                              {formatPrice(getDiscountedPrice(product), product.currency ?? 'COP')}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="text-sm font-semibold text-stone-900">
+                            {formatPrice(product.price, product.currency ?? 'COP')}
+                          </span>
+                        )}
                         {isLowStock && !isOutOfStock && (
                           <p className="text-[10px] font-semibold text-amber-600">¡Solo quedan {availableQty}!</p>
                         )}
@@ -913,15 +1184,21 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
 
                       {/* Badge */}
                       {badge && (
-                        <div className={`absolute top-3 left-3 flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-semibold border ${
-                          badge === 'nuevo'
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                            : 'bg-amber-50 text-amber-700 border-amber-200'
+                        <div className={`absolute top-3 left-3 z-10 flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-semibold border ${
+                          badge === 'oferta'
+                            ? 'bg-red-50 text-red-700 border-red-200'
+                            : badge === 'nuevo'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : 'bg-amber-50 text-amber-700 border-amber-200'
                         }`}>
-                          {badge === 'nuevo'
-                            ? <Sparkles className="w-2.5 h-2.5" strokeWidth={2} />
-                            : <TrendingUp className="w-2.5 h-2.5" strokeWidth={2} />}
-                          {badge === 'nuevo' ? 'Nuevo' : 'Destacado'}
+                          {badge === 'oferta'
+                            ? null
+                            : badge === 'nuevo'
+                              ? <Sparkles className="w-2.5 h-2.5" strokeWidth={2} />
+                              : <TrendingUp className="w-2.5 h-2.5" strokeWidth={2} />}
+                          {badge === 'oferta'
+                            ? `-${getDiscountPercentage(product) ?? ''}% OFERTA`
+                            : badge === 'nuevo' ? 'Nuevo' : 'Destacado'}
                         </div>
                       )}
 
@@ -964,8 +1241,10 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
 
                       {/* Stars */}
                       <div className="flex items-center gap-1.5 mb-3">
-                        <Stars n={4} />
-                        <span className="text-[9px] text-stone-400">4.8</span>
+                        <Stars n={Math.round(product.rating_average ?? 0)} />
+                        <span className="text-[9px] text-stone-400">
+                          {product.rating_average !== null ? product.rating_average.toFixed(1) : 'Nuevo'}
+                        </span>
                       </div>
 
                       {/* Tallas pill */}
@@ -996,9 +1275,20 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
 
                       {/* Precio + botón */}
                       <div className="flex flex-wrap items-center justify-between gap-2 mt-auto pt-3 border-t border-stone-100">
-                        <span className="text-base font-semibold text-stone-900">
-                          {formatPrice(product.price, product.currency ?? 'COP')}
-                        </span>
+                        {getDiscountedPrice(product) !== null ? (
+                          <span className="flex flex-col">
+                            <span className="text-[10px] text-red-500 line-through">
+                              {formatPrice(product.price, product.currency ?? 'COP')}
+                            </span>
+                            <span className="text-base font-semibold text-emerald-600">
+                              {formatPrice(getDiscountedPrice(product), product.currency ?? 'COP')}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="text-base font-semibold text-stone-900">
+                            {formatPrice(product.price, product.currency ?? 'COP')}
+                          </span>
+                        )}
                         <motion.button
                           whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
                           onClick={e => { e.stopPropagation(); handleAddToCart(product); }}
@@ -1091,6 +1381,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
             onClose={() => setQuickViewProduct(null)}
             isProductSaved={isProductSaved}
             onNavigateTo={p => setQuickViewProduct(p)}
+            onLoginRequired={onLoginRequired}
           />
         )}
       </AnimatePresence>

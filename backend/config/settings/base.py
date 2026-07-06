@@ -58,6 +58,7 @@ LOCAL_APPS = [
     "apps.customers",
     "apps.referrals",
     "apps.catalog",
+    "apps.promotions",
     "apps.inventory",
     "apps.commerce",
     "apps.envios",
@@ -67,6 +68,7 @@ LOCAL_APPS = [
     "apps.analytics",
     "apps.audit",
     "apps.notifications",
+    "apps.chatbot",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -155,6 +157,7 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5174")
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8001")
+WHATSAPP_NUMBER = os.getenv("WHATSAPP_NUMBER", os.getenv("VITE_WHATSAPP_NUMBER", "3000000000"))
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "no-reply@juhniosrold.com")
 EMAIL_PROVIDER = os.getenv("EMAIL_PROVIDER", "django").lower()
 NOMINATIM_CONTACT_EMAIL = os.getenv("NOMINATIM_CONTACT_EMAIL", DEFAULT_FROM_EMAIL)
@@ -213,6 +216,8 @@ ENVIA_API_URL = os.getenv("ENVIA_API_URL", "")
 COORDINADORA_API_KEY = os.getenv("COORDINADORA_API_KEY", "")
 COORDINADORA_API_URL = os.getenv("COORDINADORA_API_URL", "")
 
+DIALOGFLOW_WEBHOOK_TOKEN = os.getenv("DIALOGFLOW_WEBHOOK_TOKEN", "")
+
 # Calculadora de costos de envío — semilla inicial (la configuración vigente vive en BD,
 # tabla ShippingSettings, administrable desde el panel admin "Configuración de Envíos").
 SHIPPING_ORIGIN_ADDRESS = os.getenv("SHIPPING_ORIGIN_ADDRESS", "")
@@ -243,6 +248,17 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 20,
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "EXCEPTION_HANDLER": "shared.interfaces.exceptions.api_exception_handler",
+    "DEFAULT_THROTTLE_CLASSES": (
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+        "rest_framework.throttling.ScopedRateThrottle",
+    ),
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "60/min",
+        "user": "300/min",
+        "auth_sensitive": "20/min",
+        "geocoding": "30/min",
+    },
 }
 
 SIMPLE_JWT = {

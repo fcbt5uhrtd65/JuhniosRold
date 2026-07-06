@@ -96,9 +96,10 @@ def _bounded_limit(value: str, default: int = 5, maximum: int = 10) -> int:
 
 class GeocodingSearchView(APIView):
     permission_classes = (AllowAny,)
+    throttle_scope = "geocoding"
 
     def get(self, request):
-        query = str(request.query_params.get("q", "")).strip()
+        query = str(request.query_params.get("q", "")).strip()[:200]
         if not query:
             return Response([], status=status.HTTP_200_OK)
 
@@ -127,6 +128,7 @@ class GeocodingSearchView(APIView):
 
 class GeocodingReverseView(APIView):
     permission_classes = (AllowAny,)
+    throttle_scope = "geocoding"
 
     def get(self, request):
         lat = str(request.query_params.get("lat", "")).strip()

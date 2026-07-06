@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Search, X, User, Bell, Package, Tag, Info, AlertCircle,
-  ChevronRight, ArrowRight, ChevronDown, Instagram, CheckCheck,
+  ArrowRight, ChevronDown, Instagram, CheckCheck,
   Heart, Settings, LogOut,
 } from 'lucide-react';
 import { ShoppingCart } from './ShoppingCart';
@@ -14,8 +15,9 @@ import type { NotificationType } from '../services/notifications.service';
 import { navigateTo } from '../services/navigate';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 
-interface NavbarProps {
+interface NavigationBarProps {
   onLoginClick?: () => void;
+  variant?: 'solid' | 'transparent';
 }
 
 const TikTokIcon = ({ className }: { className?: string }) => (
@@ -80,25 +82,18 @@ function timeAgo(dateStr: string): string {
   return `Hace ${Math.floor(diff / 86400)} d`;
 }
 
-export function Navbar({ onLoginClick }: NavbarProps = {}) {
+export function NavigationBar({ onLoginClick, variant = 'solid' }: NavigationBarProps) {
   const { searchQuery, setSearchQuery, isSearchOpen, setIsSearchOpen } = useSearch();
   const { currentUser, logout, orders, savedProducts } = useUser();
   const { notifications, unreadCount, markRead, markAllRead } = useNotifications();
   const [scrolled, setScrolled]                   = useState(false);
   const [hidden, setHidden]                        = useState(false);
   const [menuOpen, setMenuOpen]                   = useState(false);
-  const [showModal, setShowModal]                 = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [activeLink, setActiveLink]               = useState('#');
+  const [notifAnchor, setNotifAnchor] = useState<{ top: number; right: number } | null>(null);
+  const notifButtonRef = useRef<HTMLButtonElement>(null);
   const lastScrollY = useRef(0);
-
-  useEffect(() => {
-    const seen = sessionStorage.getItem('hasSeenSeasonalModal');
-    if (!seen) {
-      const t = setTimeout(() => setShowModal(true), 1500);
-      return () => clearTimeout(t);
-    }
-  }, []);
 
   useEffect(() => {
     const fn = () => {
@@ -118,11 +113,6 @@ export function Navbar({ onLoginClick }: NavbarProps = {}) {
   }, []);
 
   useBodyScrollLock(menuOpen);
-
-  const handleCloseModal = () => {
-    setShowModal(false);
-    sessionStorage.setItem('hasSeenSeasonalModal', 'true');
-  };
 
   const handleNavClick = (href: string, e: React.MouseEvent) => {
     if (href.startsWith('/')) {
@@ -145,69 +135,31 @@ export function Navbar({ onLoginClick }: NavbarProps = {}) {
     setMenuOpen(false);
   };
 
+  const isTransparent = variant === 'transparent';
+
   return (
     <>
-      {/* ── MODAL BIENVENIDA ── */}
-      <AnimatePresence>
-        {showModal && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/55 backdrop-blur-sm z-[200] flex items-center justify-center p-4"
-          >
-            <motion.div
-              initial={{ scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-              transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-              className="relative bg-[#F7F3EE] max-w-3xl w-full overflow-hidden rounded-3xl shadow-2xl"
-            >
-              <button onClick={handleCloseModal} className="absolute top-4 right-4 p-2 hover:opacity-50 transition-opacity z-10 text-stone-500">
-                <X className="w-5 h-5" strokeWidth={1.5} />
-              </button>
-              <div className="grid md:grid-cols-2">
-                <div className="relative h-[220px] sm:h-[300px] md:h-auto">
-                  <img src="https://images.unsplash.com/photo-1752652011858-302f08a6dc9f?w=800&q=80" alt="Juhnios Rold" className="w-full h-full object-cover" />
-                </div>
-                <div className="p-8 md:p-12 flex flex-col justify-center">
-                  <div className="flex items-center gap-2 text-[#8B7355] mb-5">
-                    <Heart className="w-3.5 h-3.5" strokeWidth={1.5} />
-                    <span className="text-[10px] tracking-[0.3em] uppercase">Juhnios Rold</span>
-                  </div>
-                  <h2 className="text-2xl md:text-3xl font-light leading-snug mb-4 text-stone-800" style={{ fontFamily: "'Playfair Display', serif" }}>
-                    Belleza natural que transforma
-                  </h2>
-                  <p className="text-sm text-stone-500 mb-6 leading-relaxed">
-                    Descubre nuestra colección de cuidado capilar con ingredientes 100% naturales.
-                  </p>
-                  <div className="flex items-baseline gap-2 mb-7">
-                    <span className="text-[10px] tracking-[0.2em] uppercase text-stone-400">Envío gratis desde</span>
-                    <span className="text-3xl font-light text-stone-800">$80.000</span>
-                  </div>
-                  <motion.button
-                    whileHover={{ scale: 1.02 }} onClick={handleCloseModal}
-                    className="flex items-center justify-center gap-2 w-full py-3.5 text-white text-[11px] tracking-[0.2em] uppercase font-medium rounded-xl"
-                    style={{ backgroundColor: OLIVE }}
-                  >
-                    Explorar colección <ChevronRight className="w-4 h-4" strokeWidth={1.5} />
-                  </motion.button>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ── NAVBAR — pill flotante con bordes redondeados ── */}
+      {/* ── NAVBAR ── */}
       <motion.div
         initial={{ y: -20, opacity: 0 }}
         animate={{ y: hidden ? -90 : 0, opacity: 1 }}
         transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-        className="fixed left-3 right-3 md:left-5 md:right-5 lg:left-7 lg:right-7 z-40"
-        style={{ top: '14px' }}
+        className={isTransparent
+          ? 'absolute left-0 right-0 z-40 transition-all duration-300'
+          : 'fixed left-3 right-3 md:left-5 md:right-5 lg:left-7 lg:right-7 z-40'}
+        style={{ top: isTransparent ? '16px' : '14px' }}
       >
-        <div className={`bg-white rounded-[20px] transition-shadow duration-300 ${
-          scrolled ? 'shadow-[0_4px_24px_rgba(0,0,0,0.10)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.06)]'
-        }`}>
-          <div className="px-5 md:px-7 lg:px-9">
-            <div className="flex items-center justify-between h-[68px] gap-4">
+        <div className={
+          isTransparent
+            ? `mx-4 md:mx-6 lg:mx-8 px-5 md:px-7 rounded-[16px] transition-all duration-400 bg-white/90 backdrop-blur-md border border-white/40 ${
+                scrolled ? 'shadow-[0_4px_24px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.06)]'
+              }`
+            : `bg-white rounded-[20px] transition-shadow duration-300 ${
+                scrolled ? 'shadow-[0_4px_24px_rgba(0,0,0,0.10)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.06)]'
+              }`
+        }>
+          <div className={isTransparent ? '' : 'px-5 md:px-7 lg:px-9'}>
+            <div className={`flex items-center justify-between gap-4 ${isTransparent ? 'h-[62px]' : 'h-[68px]'}`}>
 
               {/* LOGO */}
               <a
@@ -241,9 +193,9 @@ export function Navbar({ onLoginClick }: NavbarProps = {}) {
                       key={link.href}
                       href={link.href === '#' ? undefined : link.href}
                       onClick={e => handleNavClick(link.href, e)}
-                      className={`relative flex items-center gap-1 px-4 h-[68px] text-[12px] tracking-[0.07em] transition-colors duration-200 ${
-                        isActive ? 'text-stone-900 font-medium' : 'text-stone-500 hover:text-stone-900'
-                      }`}
+                      className={`relative flex items-center gap-1 px-4 text-[12px] tracking-[0.07em] transition-colors duration-200 ${
+                        isTransparent ? 'h-[62px]' : 'h-[68px]'
+                      } ${isActive ? 'text-stone-900 font-medium' : 'text-stone-500 hover:text-stone-900'}`}
                     >
                       {link.label}
                       {link.hasDropdown && <ChevronDown className="w-3 h-3 opacity-50" strokeWidth={1.5} />}
@@ -308,7 +260,14 @@ export function Navbar({ onLoginClick }: NavbarProps = {}) {
                 {currentUser && (
                   <div className="relative hidden md:block">
                     <button
-                      onClick={() => setShowNotifications(!showNotifications)}
+                      ref={notifButtonRef}
+                      onClick={() => {
+                        const rect = notifButtonRef.current?.getBoundingClientRect();
+                        if (rect) {
+                          setNotifAnchor({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
+                        }
+                        setShowNotifications(v => !v);
+                      }}
                       className="relative p-2 rounded-full hover:bg-stone-100 text-stone-500 hover:text-stone-700 transition-all"
                     >
                       <Bell className="w-4 h-4" strokeWidth={1.5} />
@@ -318,67 +277,6 @@ export function Navbar({ onLoginClick }: NavbarProps = {}) {
                         </span>
                       )}
                     </button>
-                    <AnimatePresence>
-                      {showNotifications && (
-                        <motion.div
-                          initial={{ opacity: 0, y: -6, scale: 0.97 }}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          exit={{ opacity: 0, y: -6, scale: 0.97 }}
-                          transition={{ duration: 0.16 }}
-                          className="absolute right-0 mt-2 w-80 bg-white border border-stone-100 shadow-xl rounded-2xl z-50 overflow-hidden"
-                        >
-                          {/* Header */}
-                          <div className="flex items-center justify-between px-4 py-3 border-b border-stone-100">
-                            <span className="text-[10px] font-bold tracking-[0.25em] uppercase text-stone-500">
-                              Notificaciones {unreadCount > 0 && `· ${unreadCount} nueva${unreadCount > 1 ? 's' : ''}`}
-                            </span>
-                            {unreadCount > 0 && (
-                              <button
-                                onClick={markAllRead}
-                                className="flex items-center gap-1 text-[10px] text-stone-400 hover:text-stone-700 transition-colors"
-                              >
-                                <CheckCheck className="w-3 h-3" strokeWidth={2} /> Marcar todas
-                              </button>
-                            )}
-                          </div>
-
-                          {/* Lista */}
-                          <div className="max-h-72 overflow-y-auto divide-y divide-stone-50">
-                            {notifications.length === 0 ? (
-                              <div className="flex flex-col items-center justify-center py-8 text-center gap-2">
-                                <Bell className="w-6 h-6 text-stone-200" strokeWidth={1} />
-                                <p className="text-xs text-stone-400">Sin notificaciones</p>
-                              </div>
-                            ) : notifications.map(n => (
-                              <button
-                                key={n.id}
-                                onClick={() => {
-                                  markRead(n.id);
-                                  if (n.action_url) {
-                                    window.history.pushState({}, '', n.action_url);
-                                    window.dispatchEvent(new Event('app:navigate'));
-                                    setShowNotifications(false);
-                                  }
-                                }}
-                                className={`w-full text-left px-4 py-3 hover:bg-stone-50 transition-colors flex gap-3 ${!n.read ? 'bg-stone-50/60' : ''}`}
-                              >
-                                <span className={notifColor(n.type)}>{notifIcon(n.type)}</span>
-                                <div className="flex-1 min-w-0">
-                                  <p className={`text-xs leading-snug truncate ${n.read ? 'text-stone-500' : 'font-semibold text-stone-800'}`}>
-                                    {n.title}
-                                  </p>
-                                  <p className="text-[11px] text-stone-400 mt-0.5 leading-relaxed line-clamp-2">{n.message}</p>
-                                  <p className="text-[10px] text-stone-300 mt-1">{timeAgo(n.created_at)}</p>
-                                </div>
-                                {!n.read && (
-                                  <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-red-400" />
-                                )}
-                              </button>
-                            ))}
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
                   </div>
                 )}
 
@@ -604,6 +502,90 @@ export function Navbar({ onLoginClick }: NavbarProps = {}) {
           </>
         )}
       </AnimatePresence>
+
+      {currentUser && createPortal(
+        <AnimatePresence>
+          {showNotifications && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setShowNotifications(false)}
+                className="fixed inset-0 z-[220] bg-stone-950/40 backdrop-blur-sm md:hidden"
+              />
+              <motion.div
+                initial={{ opacity: 0, y: 24, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 16, scale: 0.98 }}
+                transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                style={notifAnchor ? ({ '--notif-top': `${notifAnchor.top}px`, '--notif-right': `${notifAnchor.right}px` } as React.CSSProperties) : undefined}
+                className="fixed inset-x-0 bottom-0 z-[230] max-h-[80dvh] rounded-t-[28px] bg-white shadow-2xl md:fixed md:inset-x-auto md:bottom-auto md:top-[var(--notif-top)] md:right-[var(--notif-right)] md:max-h-none md:w-80 md:rounded-2xl md:border md:border-stone-100 md:shadow-xl"
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between px-4 py-3 border-b border-stone-100">
+                  <span className="text-[10px] font-bold tracking-[0.25em] uppercase text-stone-500">
+                    Notificaciones {unreadCount > 0 && `· ${unreadCount} nueva${unreadCount > 1 ? 's' : ''}`}
+                  </span>
+                  <div className="flex items-center gap-3">
+                    {unreadCount > 0 && (
+                      <button
+                        onClick={markAllRead}
+                        className="flex items-center gap-1 text-[10px] text-stone-400 hover:text-stone-700 transition-colors"
+                      >
+                        <CheckCheck className="w-3 h-3" strokeWidth={2} /> Marcar todas
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setShowNotifications(false)}
+                      className="p-1 rounded-full text-stone-400 hover:bg-stone-100 hover:text-stone-700 transition-colors md:hidden"
+                      aria-label="Cerrar notificaciones"
+                    >
+                      <X className="w-4 h-4" strokeWidth={1.6} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Lista */}
+                <div className="max-h-[60dvh] overflow-y-auto divide-y divide-stone-50 md:max-h-72">
+                  {notifications.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-8 text-center gap-2">
+                      <Bell className="w-6 h-6 text-stone-200" strokeWidth={1} />
+                      <p className="text-xs text-stone-400">Sin notificaciones</p>
+                    </div>
+                  ) : notifications.map(n => (
+                    <button
+                      key={n.id}
+                      onClick={() => {
+                        markRead(n.id);
+                        if (n.action_url) {
+                          window.history.pushState({}, '', n.action_url);
+                          window.dispatchEvent(new Event('app:navigate'));
+                          setShowNotifications(false);
+                        }
+                      }}
+                      className={`w-full text-left px-4 py-3 hover:bg-stone-50 transition-colors flex gap-3 ${!n.read ? 'bg-stone-50/60' : ''}`}
+                    >
+                      <span className={notifColor(n.type)}>{notifIcon(n.type)}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-xs leading-snug truncate ${n.read ? 'text-stone-500' : 'font-semibold text-stone-800'}`}>
+                          {n.title}
+                        </p>
+                        <p className="text-[11px] text-stone-400 mt-0.5 leading-relaxed line-clamp-2">{n.message}</p>
+                        <p className="text-[10px] text-stone-300 mt-1">{timeAgo(n.created_at)}</p>
+                      </div>
+                      {!n.read && (
+                        <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-red-400" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>,
+        document.body,
+      )}
     </>
   );
 }

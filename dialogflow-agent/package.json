@@ -1,0 +1,21 @@
+{
+  "name": "juhnios-rold-dialogflow-agent",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Agente Dialogflow ES automatizado para Productos Juhnios Rold S.A.S.",
+  "type": "module",
+  "scripts": {
+    "build": "tsx ../scripts/build-dialogflow-agent.ts",
+    "deploy": "tsx ../scripts/deploy-dialogflow-agent.ts"
+  },
+  "dependencies": {
+    "@google-cloud/dialogflow": "^6.13.0",
+    "archiver": "^7.0.1",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.3"
+  },
+  "devDependencies": {
+    "@types/archiver": "^6.0.3",
+    "@types/node": "^24.10.1"
+  }
+}

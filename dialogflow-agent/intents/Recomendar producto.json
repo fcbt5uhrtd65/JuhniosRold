@@ -1,0 +1,41 @@
+{
+  "id": "recomendar-producto",
+  "name": "Recomendar producto",
+  "auto": true,
+  "contexts": [],
+  "responses": [
+    {
+      "resetContexts": false,
+      "action": "commerce.recommend_product",
+      "affectedContexts": [],
+      "parameters": [
+        {
+          "id": "necesidad_capilar",
+          "required": false,
+          "dataType": "@necesidad_capilar",
+          "name": "necesidad_capilar",
+          "value": "$necesidad_capilar",
+          "isList": false
+        },
+        {
+          "id": "tipo_cliente",
+          "required": false,
+          "dataType": "@tipo_cliente",
+          "name": "tipo_cliente",
+          "value": "$tipo_cliente",
+          "isList": false
+        }
+      ],
+      "messages": [
+        { "type": 0, "lang": "es", "speech": ["Te recomiendo segun tu necesidad. Cuentame si buscas controlar frizz, brillo, suavidad o reparar el cabello."] }
+      ],
+      "defaultResponsePlatforms": {},
+      "speech": []
+    }
+  ],
+  "priority": 500000,
+  "webhookUsed": true,
+  "webhookForSlotFilling": false,
+  "fallbackIntent": false,
+  "events": []
+}

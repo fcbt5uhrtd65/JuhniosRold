@@ -1,3 +1,11 @@
 .env
 .env.production
+backend/secrets/*
+!backend/secrets/README.md
+*.service-account.json
+*service-account*.json
 backend/celerybeat-schedule
+node_modules/
+dialogflow-agent/node_modules/
+server/node_modules/
+dialogflow-agent/dist/

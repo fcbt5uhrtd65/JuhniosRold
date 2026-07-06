@@ -1,0 +1,33 @@
+{
+  "id": "consulta-de-envio",
+  "name": "Consulta de envio",
+  "auto": true,
+  "contexts": [],
+  "responses": [
+    {
+      "resetContexts": false,
+      "action": "commerce.shipping_info",
+      "affectedContexts": [],
+      "parameters": [
+        {
+          "id": "ciudad",
+          "required": false,
+          "dataType": "@ciudad",
+          "name": "ciudad",
+          "value": "$ciudad",
+          "isList": false
+        }
+      ],
+      "messages": [
+        { "type": 0, "lang": "es", "speech": ["Hacemos envios a Colombia. Dime tu ciudad y te doy una guia estimada de entrega."] }
+      ],
+      "defaultResponsePlatforms": {},
+      "speech": []
+    }
+  ],
+  "priority": 500000,
+  "webhookUsed": true,
+  "webhookForSlotFilling": false,
+  "fallbackIntent": false,
+  "events": []
+}

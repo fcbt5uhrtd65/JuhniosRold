@@ -13,11 +13,14 @@ import {
   Clock,
   CreditCard,
   ExternalLink,
+  Eye,
+  EyeOff,
   FileText,
   Gift,
   Hash,
   Heart,
   Headphones,
+  KeyRound,
   Loader2,
   Lock,
   MapPin,
@@ -45,7 +48,8 @@ import { DeliveryLocationSection } from './ui/DeliveryLocationSection';
 import { EMPTY_LOCATION, type LocationValue } from '../services/geography.types';
 import { EMPTY_DELIVERY_LOCATION, type DeliveryLocationValue } from '../services/delivery-location.types';
 import { geographyService, type City } from '../services/geography.service';
-import { getProductById } from '../services/products.service';
+import { getProductById, type Product as CatalogProduct } from '../services/products.service';
+import { ProductPage as ProductQuickView } from './ProductCatalog';
 import { initiatePayment, resolveMockPayment, getInvoiceByOrder, openInvoicePdf } from '../services/payments.service';
 import { TrackingPedidoPage } from './TrackingPedidoPage';
 import { navigateBack, navigateTo } from '../services/navigate';
@@ -420,7 +424,7 @@ function MayoristaSection({
 
 /* ════════════════════════════════════════════════════════ */
 export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => void }) {
-  const { currentUser, updateProfile, orders, loadOrders, backendOnline, savedProducts, toggleSaveProduct } = useUser();
+  const { currentUser, updateProfile, changePassword, orders, loadOrders, backendOnline, savedProducts, toggleSaveProduct } = useUser();
   const { addItem } = useCart();
   const { products } = useAdmin();
   const toast = useToast();
@@ -442,6 +446,14 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
   const [saving, setSaving] = useState(false);
   const [saveOk, setSaveOk] = useState(false);
   const [saveErr, setSaveErr] = useState('');
+
+  /* ── contraseña ── */
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [savingPwd, setSavingPwd] = useState(false);
+  const [pwdErr, setPwdErr] = useState('');
+  const [showPwdFields, setShowPwdFields] = useState(false);
 
   /* ── pedidos ── */
   const [payingId, setPayingId] = useState<string | null>(null);
@@ -588,6 +600,21 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
     setSaveOk(true); setTimeout(() => setSaveOk(false), 3000);
   };
 
+  /* contraseña */
+  const hasPassword = currentUser?.hasUsablePassword ?? true;
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault(); setPwdErr('');
+    if (hasPassword && !currentPassword) { setPwdErr('Ingresa tu contraseña actual.'); return; }
+    if (newPassword.length < 8) { setPwdErr('La nueva contraseña debe tener al menos 8 caracteres.'); return; }
+    if (newPassword !== confirmPassword) { setPwdErr('Las contraseñas no coinciden.'); return; }
+    setSavingPwd(true);
+    const r = await changePassword(newPassword, hasPassword ? currentPassword : undefined);
+    setSavingPwd(false);
+    if (!r.ok) { setPwdErr(r.message || 'No fue posible guardar la contraseña.'); return; }
+    toast.success(hasPassword ? 'Contraseña actualizada.' : 'Contraseña configurada.');
+    setCurrentPassword(''); setNewPassword(''); setConfirmPassword('');
+  };
+
   /* pago */
   const handlePay = async (orderId: string) => {
     setPayingId(orderId);
@@ -637,6 +664,27 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
       const added = await addItem({ variantId: v.id, name: cp.name, category: cp.category_name, price: v.current_price ?? cp.price ?? 0, image: cp.primary_image || product.imagen || 'https://images.unsplash.com/photo-1571875257727-256c39da42af?w=600&q=80', size: v.presentation, quantity: 1 });
       if (added) toast.success(`${cp.name} añadido al carrito`);
     } catch (err) { toast.error(err instanceof Error ? err.message : 'Error al cargar producto.'); }
+  };
+
+  /* vista rápida desde guardados */
+  const [quickViewProduct, setQuickViewProduct] = useState<CatalogProduct | null>(null);
+  const [quickViewSizes, setQuickViewSizes] = useState<Record<string, string>>({});
+  const handleQuickView = async (productId: string) => {
+    try {
+      const cp = await getProductById(productId);
+      setQuickViewProduct(cp);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No fue posible cargar el producto.');
+    }
+  };
+  const handleQuickViewAddToCart = async (cp: CatalogProduct) => {
+    const size = quickViewSizes[cp.id] || cp.sizes[0];
+    const v = cp.variants.find(i => i.is_active && i.presentation === size) ?? cp.variants.find(i => i.is_active);
+    if (!v) { toast.warning('Sin presentación disponible.'); return; }
+    try {
+      const added = await addItem({ variantId: v.id, name: cp.name, category: cp.category_name, price: v.current_price ?? cp.price ?? 0, image: cp.primary_image || 'https://images.unsplash.com/photo-1571875257727-256c39da42af?w=600&q=80', size: v.presentation, quantity: 1 });
+      if (added) toast.success(`${cp.name} añadido al carrito`);
+    } catch (err) { toast.error(err instanceof Error ? err.message : 'Error al agregar al carrito.'); }
   };
 
   const savedWithDetail = savedProducts.map(s => { const p = products.find(x => x.id === s.productoId); return p ? { ...p, savedDate: s.fecha } : null; }).filter(Boolean) as any[];
@@ -865,6 +913,93 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
                             style={{ backgroundColor: OLIVE }}>
                             {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" strokeWidth={2} />}
                             {saving ? 'Guardando…' : 'Guardar cambios'}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Tarjeta seguridad / contraseña */}
+                      <div className="rounded-2xl border border-stone-200 bg-white overflow-hidden">
+                        <div className="px-5 py-3 border-b border-stone-100 flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${OLIVE}12` }}>
+                            <KeyRound className="w-3.5 h-3.5" style={{ color: OLIVE }} strokeWidth={2} />
+                          </div>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">
+                            {hasPassword ? 'Cambiar contraseña' : 'Configurar contraseña'}
+                          </p>
+                        </div>
+
+                        <div className="px-5 py-4 space-y-3">
+                          <AnimatePresence>
+                            {pwdErr && (
+                              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                                className="flex items-center gap-2 rounded-xl bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-700">
+                                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                                {pwdErr}
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+
+                          {!hasPassword && (
+                            <p className="text-[11px] text-stone-400 leading-relaxed">
+                              Tu cuenta no tiene una contraseña configurada todavía (iniciaste sesión con Google). Crea una para poder ingresar también con tu email.
+                            </p>
+                          )}
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {hasPassword && (
+                              <label className="flex flex-col gap-1.5 sm:col-span-2">
+                                <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Contraseña actual *</span>
+                                <div className="relative">
+                                  <input
+                                    type={showPwdFields ? 'text' : 'password'}
+                                    value={currentPassword}
+                                    onChange={e => setCurrentPassword(e.target.value)}
+                                    className={inp}
+                                    placeholder="••••••••"
+                                  />
+                                </div>
+                              </label>
+                            )}
+                            <label className="flex flex-col gap-1.5">
+                              <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Nueva contraseña *</span>
+                              <input
+                                type={showPwdFields ? 'text' : 'password'}
+                                value={newPassword}
+                                onChange={e => setNewPassword(e.target.value)}
+                                className={inp}
+                                placeholder="Mínimo 8 caracteres"
+                              />
+                            </label>
+                            <label className="flex flex-col gap-1.5">
+                              <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Confirmar contraseña *</span>
+                              <input
+                                type={showPwdFields ? 'text' : 'password'}
+                                value={confirmPassword}
+                                onChange={e => setConfirmPassword(e.target.value)}
+                                className={inp}
+                                placeholder="Repite la contraseña"
+                              />
+                            </label>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => setShowPwdFields(v => !v)}
+                            className="flex items-center gap-1.5 text-[11px] font-medium text-stone-400 hover:text-stone-600 transition-colors"
+                          >
+                            {showPwdFields ? <EyeOff className="w-3.5 h-3.5" strokeWidth={1.5} /> : <Eye className="w-3.5 h-3.5" strokeWidth={1.5} />}
+                            {showPwdFields ? 'Ocultar contraseñas' : 'Mostrar contraseñas'}
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={savingPwd}
+                            onClick={handleChangePassword}
+                            className="flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-40"
+                            style={{ backgroundColor: OLIVE }}
+                          >
+                            {savingPwd ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Lock className="w-3.5 h-3.5" strokeWidth={2} />}
+                            {savingPwd ? 'Guardando…' : hasPassword ? 'Actualizar contraseña' : 'Configurar contraseña'}
                           </button>
                         </div>
                       </div>
@@ -1339,12 +1474,34 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
                     <div className="space-y-3">
                       <div className="grid gap-3 grid-cols-2 sm:grid-cols-3">
                         {pagedSaved.map((p: any) => (
-                          <div key={p.id} className="group overflow-hidden rounded-2xl border border-stone-200 bg-white">
+                          <div
+                            key={p.id}
+                            onClick={() => handleQuickView(p.id)}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleQuickView(p.id); } }}
+                            className="group overflow-hidden rounded-2xl border border-stone-200 bg-white cursor-pointer transition-colors hover:border-stone-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-300"
+                          >
                             <div className="relative aspect-[4/3] overflow-hidden bg-stone-100">
                               <img src={p.imagen || 'https://images.unsplash.com/photo-1571875257727-256c39da42af?w=600&q=80'} alt={p.nombre} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
-                              <button onClick={() => toggleSaveProduct(p.id)} className="absolute right-2 top-2 rounded-full bg-white/90 p-1.5 shadow-sm transition hover:opacity-70">
-                                <Trash2 className="h-3.5 w-3.5 text-stone-600" strokeWidth={1.5} />
-                              </button>
+
+                              {/* Overlay ojo + eliminar: siempre visible en mobile/touch, hover en desktop */}
+                              <div className="absolute inset-0 md:bg-black/22 md:hover:backdrop-blur-[1px] flex items-start justify-end gap-2 p-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                                <button
+                                  onClick={e => { e.stopPropagation(); handleQuickView(p.id); }}
+                                  className="rounded-full bg-white/90 p-1.5 shadow-sm transition hover:bg-white"
+                                  aria-label="Vista rápida"
+                                >
+                                  <Eye className="h-3.5 w-3.5 text-stone-600" strokeWidth={1.5} />
+                                </button>
+                                <button
+                                  onClick={e => { e.stopPropagation(); toggleSaveProduct(p.id); }}
+                                  className="rounded-full bg-white/90 p-1.5 shadow-sm transition hover:bg-white"
+                                  title="Quitar de guardados"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5 text-stone-600" strokeWidth={1.5} />
+                                </button>
+                              </div>
                             </div>
                             <div className="p-3">
                               <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">{p.tipo}</p>
@@ -1352,7 +1509,7 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
                               <p className="text-xs text-stone-400">{p.presentacion}</p>
                               <div className="mt-3 flex items-center justify-between gap-2">
                                 <span className="text-sm font-bold text-stone-900">${p.precio.toLocaleString('es-CO')}</span>
-                                <button onClick={() => handleAddToCart(p)} className="flex items-center gap-1 rounded-lg bg-stone-900 px-2.5 py-1.5 text-[10px] font-bold text-white transition hover:opacity-80">
+                                <button onClick={e => { e.stopPropagation(); handleAddToCart(p); }} className="flex items-center gap-1 rounded-lg bg-stone-900 px-2.5 py-1.5 text-[10px] font-bold text-white transition hover:opacity-80">
                                   <ShoppingCart className="h-3 w-3" strokeWidth={2} /> Agregar
                                 </button>
                               </div>
@@ -1422,6 +1579,23 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
         initialStep={missingDoc ? 'identity' : missingLocation ? 'location' : 'wholesale'}
         onClose={() => setShowOnboarding(false)}
       />
+
+      <AnimatePresence>
+        {quickViewProduct && (
+          <ProductQuickView
+            product={quickViewProduct}
+            allProducts={[quickViewProduct]}
+            selectedSizes={quickViewSizes}
+            onSelectSize={(id, size) => setQuickViewSizes(prev => ({ ...prev, [id]: size }))}
+            onAddToCart={handleQuickViewAddToCart}
+            onToggleSave={(id) => toggleSaveProduct(id)}
+            isSaved={savedProducts.some(s => s.productoId === quickViewProduct.id)}
+            isProductSaved={(id) => savedProducts.some(s => s.productoId === id)}
+            onClose={() => setQuickViewProduct(null)}
+            onNavigateTo={p => setQuickViewProduct(p)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

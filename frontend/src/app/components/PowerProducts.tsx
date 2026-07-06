@@ -110,8 +110,8 @@ function mapCatalogProduct(product: CatalogProduct): Product {
     price: formatPrice(product.price),
     priceValue: product.price ?? 0,
     currency: product.currency ?? 'COP',
-    rating: 5,
-    reviews: 0,
+    rating: product.rating_average ?? 5,
+    reviews: product.rating_count,
     badge: productBadge(product),
     images: images.length > 0 ? images : [FALLBACK_PRODUCT_IMAGE],
     sizes: product.sizes,
@@ -582,8 +582,8 @@ function ProductCardSkeleton({ index }: { index: number }) {
 }
 
 /* ── Componente principal ── */
-export function PowerProducts() {
-  const { toggleSaveProduct, isProductSaved } = useUser();
+export function PowerProducts({ onLoginRequired }: { onLoginRequired?: () => void } = {}) {
+  const { currentUser, toggleSaveProduct, isProductSaved } = useUser();
   const { addItem } = useCart();
   const toast = useToast();
   const [selectedSize, setSelectedSize] = useState<Record<string, string>>({});
@@ -660,6 +660,11 @@ export function PowerProducts() {
   };
 
   const handleToggleSave = (id: string, name: string) => {
+    if (!currentUser) {
+      toast.info('Inicia sesión para guardar productos');
+      onLoginRequired?.();
+      return;
+    }
     const was = isProductSaved(id);
     toggleSaveProduct(id);
     toast[was ? 'info' : 'success'](was ? `${name} eliminado de guardados` : `${name} guardado`);

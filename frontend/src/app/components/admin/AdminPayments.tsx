@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { CreditCard, Check, X, Clock, AlertTriangle, FileText } from 'lucide-react';
+import { CreditCard, Check, X, Clock, AlertTriangle, FileText, FileSpreadsheet, Calendar, Download, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { SearchBar } from './SearchBar';
 import { FilterPanel, type FilterGroup } from './FilterPanel';
@@ -7,8 +7,16 @@ import { Pagination } from './Pagination';
 import {
   getAdminPayments, openInvoicePdf, type AdminPayment, type AdminPaymentStatus,
 } from '../../services/payments.service';
+import {
+  requestGenericReportExport, getGenericReportExportStatus, type InventoryReportExportFormat,
+} from '../../services/reports.service';
+import { pollExportStatus, downloadFile } from '../../utils/pollExportStatus';
+import { resolveBackendUrl } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 import { KpiCard, Table, Th, Td, Badge, type BadgeColor, EmptyState } from './AdminUI';
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
+} from '../ui/dropdown-menu';
 
 const STATUS_LABELS: Record<AdminPaymentStatus, string> = {
   PENDING: 'Pendiente',
@@ -56,6 +64,9 @@ export function AdminPayments() {
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [errorMessage, setErrorMessage] = useState('');
   const [loadingInvoiceId, setLoadingInvoiceId] = useState<string | null>(null);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [isExporting, setIsExporting] = useState(false);
 
   const handleViewInvoice = async (invoiceId: string) => {
     setLoadingInvoiceId(invoiceId);
@@ -77,6 +88,8 @@ export function AdminPayments() {
       pageSize: PAGE_SIZE,
       search: searchQuery || undefined,
       status: statusFilter,
+      dateFrom: dateFrom || undefined,
+      dateTo: dateTo || undefined,
     })
       .then(result => {
         setPayments(result.data);
@@ -88,11 +101,31 @@ export function AdminPayments() {
         setErrorMessage(error instanceof Error ? error.message : 'No se pudieron cargar los pagos.');
         setStatus('error');
       });
-  }, [currentPage, searchQuery, statusFilter]);
+  }, [currentPage, searchQuery, statusFilter, dateFrom, dateTo]);
 
   useEffect(() => {
     loadPayments();
   }, [loadPayments]);
+
+  const handleExport = async (exportFormat: InventoryReportExportFormat) => {
+    setIsExporting(true);
+    toast.info('Generando exportación…');
+    try {
+      const taskId = await requestGenericReportExport('payments', exportFormat, {
+        date_from: dateFrom || undefined,
+        date_to: dateTo || undefined,
+        status: statusFilter,
+        search: searchQuery || undefined,
+      });
+      const url = await pollExportStatus(taskId, getGenericReportExportStatus);
+      await downloadFile(resolveBackendUrl(url));
+      toast.success('Exportación lista.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Error al exportar');
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const stats = {
     aprobados: payments.filter(p => p.status === 'APPROVED').length,
@@ -117,7 +150,7 @@ export function AdminPayments() {
       </div>
 
       {/* Toolbar */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 mb-6">
+      <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 mb-3">
         <SearchBar
           value={searchQuery}
           onChange={v => { setSearchQuery(v); setCurrentPage(1); }}
@@ -130,6 +163,63 @@ export function AdminPayments() {
           onFilterChange={(id, vals) => { setActiveFilters(prev => ({ ...prev, [id]: vals })); setCurrentPage(1); }}
           onClearAll={() => { setActiveFilters({}); setCurrentPage(1); }}
         />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              disabled={isExporting}
+              className="flex items-center gap-1.5 px-4 h-10 rounded-xl bg-[#2a4038] text-white text-xs font-semibold transition hover:opacity-90 disabled:opacity-40"
+            >
+              {isExporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+              Exportar
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={() => handleExport('pdf')}>
+              <FileText className="mr-2 h-3.5 w-3.5" strokeWidth={1.5} /> Facturas (PDF)
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => handleExport('xlsx')}>
+              <FileSpreadsheet className="mr-2 h-3.5 w-3.5" strokeWidth={1.5} /> Listado (Excel)
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      {/* Filtro de fecha */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3 mb-6">
+        <div className="flex flex-col gap-1.5">
+          <label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Fecha desde</label>
+          <div className="relative">
+            <Calendar size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <input
+              type="date"
+              value={dateFrom}
+              max={dateTo || undefined}
+              onChange={e => { setDateFrom(e.target.value); setCurrentPage(1); }}
+              className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#2a4038]/20 focus:border-[#2a4038]"
+            />
+          </div>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Fecha hasta</label>
+          <div className="relative">
+            <Calendar size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <input
+              type="date"
+              value={dateTo}
+              min={dateFrom || undefined}
+              onChange={e => { setDateTo(e.target.value); setCurrentPage(1); }}
+              className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#2a4038]/20 focus:border-[#2a4038]"
+            />
+          </div>
+        </div>
+        {(dateFrom || dateTo) && (
+          <button
+            onClick={() => { setDateFrom(''); setDateTo(''); setCurrentPage(1); }}
+            className="text-xs font-semibold text-gray-500 hover:text-gray-700 px-3 py-2"
+          >
+            Limpiar fechas
+          </button>
+        )}
       </div>
 
       {status === 'error' && (

@@ -24,6 +24,7 @@ export interface AuthUser {
   role: UserRole;
   is_active: boolean;
   avatar_url?: string;
+  has_usable_password: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -219,6 +220,21 @@ export async function confirmPasswordReset(
 ): Promise<void> {
   await api.post('/auth/password-reset/confirm/', {
     token: resetToken,
+    new_password: newPassword,
+  });
+}
+
+/**
+ * Cambia o configura la contraseña del usuario autenticado. `currentPassword`
+ * puede omitirse cuando el usuario aún no tiene una contraseña utilizable
+ * (p.ej. se registró con Google) — el backend no la exige en ese caso.
+ */
+export async function changePassword(
+  newPassword: string,
+  currentPassword?: string,
+): Promise<void> {
+  await api.patch('/auth/users/me/password/', {
+    ...(currentPassword ? { current_password: currentPassword } : {}),
     new_password: newPassword,
   });
 }

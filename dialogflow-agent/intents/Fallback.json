@@ -1,0 +1,24 @@
+{
+  "id": "fallback",
+  "name": "Fallback",
+  "auto": true,
+  "contexts": [],
+  "responses": [
+    {
+      "resetContexts": false,
+      "action": "input.unknown",
+      "affectedContexts": [],
+      "parameters": [],
+      "messages": [
+        { "type": 0, "lang": "es", "speech": ["No tengo esa informacion exacta. Te puedo pasar con un asesor por WhatsApp para ayudarte sin inventar datos."] }
+      ],
+      "defaultResponsePlatforms": {},
+      "speech": []
+    }
+  ],
+  "priority": 500000,
+  "webhookUsed": true,
+  "webhookForSlotFilling": false,
+  "fallbackIntent": true,
+  "events": []
+}
