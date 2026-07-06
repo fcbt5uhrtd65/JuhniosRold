@@ -124,15 +124,15 @@ export function BeforeAfter() {
     {
       id: 1,
       // Cabello opaco / cabello brillante y sedoso liso
-      before: 'https://images.unsplash.com/photo-1519699047748-de8e457a634e?w=600&q=85',
-      after:  'https://images.unsplash.com/photo-1526045612212-70caf35c14df?w=600&q=85',
+      before: '/images/before-after/before-long-damaged.png',
+      after:  '/images/before-after/after-long-smooth.png',
       benefit: '+ Brillo y suavidad',
     },
     {
       id: 2,
       // Cabello con pérdida / cabello abundante y saludable
-      before: 'https://images.unsplash.com/photo-1595476108010-b4d1f102b1b1?w=600&q=85',
-      after:  'https://images.unsplash.com/photo-1617897903246-719242758050?w=600&q=85',
+      before: '/images/before-after/before-medium-smooth.png',
+      after:  '/images/before-after/after-medium-smooth.png',
       benefit: '+ Crecimiento saludable',
     },
     {
