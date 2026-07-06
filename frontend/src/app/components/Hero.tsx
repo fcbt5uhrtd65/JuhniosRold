@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ChevronLeft, ChevronRight, ArrowRight,
@@ -236,6 +237,7 @@ export function Hero({ onLoginClick }: HeroProps = {}) {
   const slide = slides[currentSlide];
 
   return (
+    <>
     <section
       ref={sectionRef}
       className="relative overflow-hidden rounded-[20px] mx-3 md:mx-5 lg:mx-7"
@@ -383,64 +385,6 @@ export function Hero({ onLoginClick }: HeroProps = {}) {
                       </span>
                     )}
                   </button>
-                  <AnimatePresence>
-                    {showNotifications && (
-                      <motion.div
-                        initial={{ opacity: 0, y: -6, scale: 0.97 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: -6, scale: 0.97 }}
-                        transition={{ duration: 0.16 }}
-                        className="absolute right-0 mt-2 w-80 bg-white border border-stone-100 shadow-xl rounded-2xl z-50 overflow-hidden"
-                      >
-                        {/* Header */}
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-stone-100">
-                          <span className="text-[10px] font-bold tracking-[0.25em] uppercase text-stone-500">
-                            Notificaciones {unreadCount > 0 && `· ${unreadCount} nueva${unreadCount > 1 ? 's' : ''}`}
-                          </span>
-                          {unreadCount > 0 && (
-                            <button
-                              onClick={markAllRead}
-                              className="flex items-center gap-1 text-[10px] text-stone-400 hover:text-stone-700 transition-colors"
-                            >
-                              <CheckCheck className="w-3 h-3" strokeWidth={2} /> Marcar todas
-                            </button>
-                          )}
-                        </div>
-                        {/* Lista */}
-                        <div className="max-h-72 overflow-y-auto divide-y divide-stone-50">
-                          {notifications.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center py-8 gap-2">
-                              <Bell className="w-6 h-6 text-stone-200" strokeWidth={1} />
-                              <p className="text-xs text-stone-400">Sin notificaciones</p>
-                            </div>
-                          ) : notifications.map(n => (
-                            <button
-                              key={n.id}
-                              onClick={() => {
-                                markRead(n.id);
-                                if (n.action_url) {
-                                  window.history.pushState({}, '', n.action_url);
-                                  window.dispatchEvent(new Event('app:navigate'));
-                                  setShowNotifications(false);
-                                }
-                              }}
-                              className={`w-full text-left px-4 py-3 hover:bg-stone-50 transition-colors flex gap-3 ${!n.read ? 'bg-stone-50/60' : ''}`}
-                            >
-                              <span className={notifColor(n.type)}>{notifIcon(n.type)}</span>
-                              <div className="flex-1 min-w-0">
-                                <p className={`text-xs leading-snug truncate ${n.read ? 'text-stone-500' : 'font-semibold text-stone-800'}`}>
-                                  {n.title}
-                                </p>
-                                <p className="text-[11px] text-stone-400 mt-0.5 leading-relaxed line-clamp-2">{n.message}</p>
-                                <p className="text-[10px] text-stone-300 mt-1">{timeAgo(n.created_at)}</p>
-                              </div>
-                              {!n.read && <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-red-400" />}
-                            </button>
-                          ))}
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
                 </div>
               )}
 
@@ -768,5 +712,89 @@ export function Hero({ onLoginClick }: HeroProps = {}) {
         </motion.button>
       </div>
     </section>
+
+    {currentUser && createPortal(
+      <AnimatePresence>
+        {showNotifications && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowNotifications(false)}
+              className="fixed inset-0 z-[220] bg-stone-950/40 backdrop-blur-sm md:hidden"
+            />
+            <motion.div
+              initial={{ opacity: 0, y: 24, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 16, scale: 0.98 }}
+              transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+              className="fixed inset-x-0 bottom-0 z-[230] max-h-[80dvh] rounded-t-[28px] bg-white shadow-2xl md:absolute md:inset-x-auto md:bottom-auto md:top-16 md:right-4 md:max-h-none md:w-80 md:rounded-2xl md:border md:border-stone-100 md:shadow-xl"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-4 py-3 border-b border-stone-100">
+                <span className="text-[10px] font-bold tracking-[0.25em] uppercase text-stone-500">
+                  Notificaciones {unreadCount > 0 && `· ${unreadCount} nueva${unreadCount > 1 ? 's' : ''}`}
+                </span>
+                <div className="flex items-center gap-3">
+                  {unreadCount > 0 && (
+                    <button
+                      onClick={markAllRead}
+                      className="flex items-center gap-1 text-[10px] text-stone-400 hover:text-stone-700 transition-colors"
+                    >
+                      <CheckCheck className="w-3 h-3" strokeWidth={2} /> Marcar todas
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setShowNotifications(false)}
+                    className="p-1 rounded-full text-stone-400 hover:bg-stone-100 hover:text-stone-700 transition-colors md:hidden"
+                    aria-label="Cerrar notificaciones"
+                  >
+                    <X className="w-4 h-4" strokeWidth={1.6} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Lista */}
+              <div className="max-h-[60dvh] overflow-y-auto divide-y divide-stone-50 md:max-h-72">
+                {notifications.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-center gap-2">
+                    <Bell className="w-6 h-6 text-stone-200" strokeWidth={1} />
+                    <p className="text-xs text-stone-400">Sin notificaciones</p>
+                  </div>
+                ) : notifications.map(n => (
+                  <button
+                    key={n.id}
+                    onClick={() => {
+                      markRead(n.id);
+                      if (n.action_url) {
+                        window.history.pushState({}, '', n.action_url);
+                        window.dispatchEvent(new Event('app:navigate'));
+                        setShowNotifications(false);
+                      }
+                    }}
+                    className={`w-full text-left px-4 py-3 hover:bg-stone-50 transition-colors flex gap-3 ${!n.read ? 'bg-stone-50/60' : ''}`}
+                  >
+                    <span className={notifColor(n.type)}>{notifIcon(n.type)}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-xs leading-snug truncate ${n.read ? 'text-stone-500' : 'font-semibold text-stone-800'}`}>
+                        {n.title}
+                      </p>
+                      <p className="text-[11px] text-stone-400 mt-0.5 leading-relaxed line-clamp-2">{n.message}</p>
+                      <p className="text-[10px] text-stone-300 mt-1">{timeAgo(n.created_at)}</p>
+                    </div>
+                    {!n.read && (
+                      <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-red-400" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>,
+      document.body,
+    )}
+    </>
   );
 }
