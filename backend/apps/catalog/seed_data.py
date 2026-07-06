@@ -31,9 +31,9 @@ CATEGORY_DATA = {
 
 
 CATALOG_DATA = """
-1|ACEITE DE AGUACATE 50 ML|12|432|1290
-2|ACEITE DE AGUACATE 70 ML|12|288|1609
-3|ACEITE DE AGUACATE 90 ML|12|288|1874
+1|ACEITE CAPILAR AGUACATE 50 ML|12|432|1290
+2|ACEITE CAPILAR AGUACATE 70 ML|12|288|1609
+3|ACEITE CAPILAR AGUACATE 90 ML|12|288|1874
 4|ACEITE DE BEBE 50 ML|12|432|1290
 5|ACEITE DE BEBE 70 ML|12|288|1609
 6|ACEITE DE BEBE 90 ML|12|288|1874
@@ -194,8 +194,151 @@ PRODUCT_IMAGES = {
 }
 
 
+def catalog_image(filename):
+    return f"/images/catalog/{filename}"
+
+
+IMAGE_BY_PRODUCT_NAME = {
+    "ACEITE CAPILAR AGUACATE 50 ML": "Aceite Capilar Aguacate 50 ml.png",
+    "ACEITE CAPILAR AGUACATE 70 ML": "Aceite Capilar Aguacate 70 ml.png",
+    "ACEITE CAPILAR AGUACATE 90 ML": "Aceite Capilar Aguacate 90 ml.png",
+    "ACEITE DE BEBE 50 ML": "Aceite Bebe 50ml.png",
+    "ACEITE DE BEBE 70 ML": "Aceite Bebe 70ml.png",
+    "ACEITE DE BEBE 90 ML": "Aceite Bebe 90ml.png",
+    "FULL LISO 30 G": "Full liso 15g Alisado progresivo permanente.png",
+    "FULL LISO TERMOPROTECTOR 30 G": "Full Liso Termoprotector 15g.png",
+    "DESODORANTE FOR WOMEN 8 G": "Desodorante Mujer 8g.png",
+    "DESODORANTE FOR MEN 8 G": "Desodorante Hombre 8g.png",
+    "GEL CAPILAR 12 G SACHET": "Gel 12g.png",
+    "GEL CAPILAR 30 G SACHET": "Gel 30g.png",
+    "GEL CAPILAR 80 G SACHET RISTRA": "Vaporizante 80gr.png",
+    "LOCION TERMICA DE CANNABIS 60 ML": "Loción Térmica Cannabis 60ml.png",
+    "SHAMPOO NATURAL 250 G": "Shampoo Natural Cebolla 350ml.png",
+    "ACONDICIONADOR CAPILAR 350 G": "Acondicionador Cebolla 350 ml.png",
+    "CREMA PARA PEINAR 350 G": "Crema para peinar 350 gr.png",
+    "REMOVEDOR DE ESMALTE 50 ML": "Removedor De esmalte 50 ml Caja.png",
+    "SILICONA CAPILAR 8 ML SACHET LINO & ARGAN": "Silicona Capilar Lino 8ml Caja.png",
+    "SILICONA CAPILAR 8 ML VIDRIO LINO & ARGAN": "Silicon Capilar Lino Caja 8ml.png",
+    "SILICONA CAPILAR 30 ML LINO & ARGAN": "Silicona Capilar Lino 30ml.png",
+    "VASELINA BABY 20 G AZUL / ROSADA": "Vaselina Baby 20g.png",
+    "VASELINA BABY 80 G AZUL / ROSADA": "Vaselina Rosada 80gr.png",
+    "VASELINA BABY 200 G AZUL / ROSADA": "Vaselina 200gr.png",
+}
+
+
+IMAGE_GUIDED_EXPANSIONS = {
+    "ACEITE CAPILAR 8 ML LINO": [
+        ("ACEITE CAPILAR ARGAN 8 ML", "Aceite Capilar Argan 8ml.png"),
+        ("ACEITE CAPILAR CEBOLLA 8 ML", "Aceite Capilar Cebolla 8ml.png"),
+        ("ACEITE CAPILAR COCO 8 ML", "Aceite Capilar Coco 8ml.png"),
+        ("ACEITE CAPILAR ROMERO 8 ML", "Aceite Capilar Romero 8ml.png"),
+    ],
+    "ACEITE CAPILAR 8 ML ARGAN": [],
+    "ACEITE CAPILAR 60 ML": [
+        ("ACEITE CAPILAR ARGAN 50 ML", "Aceite Capilar Argan 50ml.png"),
+        ("ACEITE CAPILAR CEBOLLA 50 ML", "Aceite Capilar Cebolla 50ml.png"),
+        ("ACEITE CAPILAR COCO 50 ML", "Aceite Capilar Coco 50ml.png"),
+        ("ACEITE CAPILAR ROMERO 50 ML", "Aceite Capilar Romero 50ml.png"),
+    ],
+    "ACEITE CAPILAR 120 ML": [
+        ("ACEITE CAPILAR ARGAN 120 ML", "Aceite Capilar Argan 120ml.png"),
+        ("ACEITE CAPILAR CEBOLLA 120 ML", "Aceite Capilar Cebolla 120ml.png"),
+        ("ACEITE CAPILAR COCO 120 ML", "Aceite Capilar Coco 120 ml.png"),
+        ("ACEITE CAPILAR CHOCOLATE 120 ML", "Aceite Capilar Chocolate 120ml.png"),
+    ],
+    "ACEITE CORPORAL 120 ML": [
+        ("ACEITE CORPORAL ALMENDRAS 120 ML", "Aceite Corporal Almendras 120ml.png"),
+        ("ACEITE CORPORAL CANNABIS 120 ML", "Aceite Corporal Cannabis 120ml.png"),
+        ("ACEITE CORPORAL COCO 120 ML", "Aceite Corporal Coco 120 ml.png"),
+    ],
+    "ACEITE CORPORAL 250 ML": [
+        ("ACEITE CORPORAL ALMENDRAS 250 ML", "Aceite Corporal Almendras 250ml.png"),
+        ("ACEITE CORPORAL CANNABIS 250 ML", "Aceite Corporal Cannabis 250ml.png"),
+        ("ACEITE CORPORAL COCO 250 ML", "Aceite Corporal  Coco 250ml .png"),
+        ("ACEITE CORPORAL CHOCOLATE 250 ML", "Aceite Corporal Chocolate 250ml.png"),
+    ],
+    "BODY SPLASH 250 ML FOR WOMEN": [
+        ("BODY SPLASH BRISAS DEL ORIENTE 250 ML", "Brisas del Oriente 250ml.png"),
+        ("BODY SPLASH CIELO DE NOCHE 250 ML", "Cielo de Noche 250ml.png"),
+        ("BODY SPLASH CITRUS 250 ML", "Citrus 250ml.png"),
+        ("BODY SPLASH CLASS AND ELEGANT 250 ML", "Class And Elegant 250ml.png"),
+        ("BODY SPLASH FANTASY MAGIC 250 ML", "Fantasy Magic 250ml.png"),
+        ("BODY SPLASH LUNA CLARA 250 ML", "Luna Clara 250ml.png"),
+        ("BODY SPLASH TIEMPO DE PRIMAVERA 250 ML", "Tiempo de Primavera.png"),
+    ],
+    "BODY SPLASH 250 ML FOR MEN": [
+        ("BODY SPLASH CLASSIC MEN 250 ML", "Classic Men 250ml.png"),
+        ("BODY SPLASH URBAN STREET 250 ML", "Urban Street 250ml.png"),
+    ],
+    "LOCION TERMICA DE CANNABIS 150 ML": [
+        ("LOCION TERMICA DE CANNABIS 150 ML", "Locion Termica Cannabis 150ml.png"),
+        ("LOCION TERMICA DE ARNICA 150 ML", "Locion Termica Arnica 150ml.png"),
+    ],
+    "LOCION TERMICA DE CANNABIS 375 ML": [
+        ("LOCION TERMICA DE CANNABIS 375 ML", "Locion Termica Cannabis 375ml.png"),
+        ("LOCION TERMICA DE ARNICA 375 ML", "Locion Termica Arnica 375ml.png"),
+    ],
+    "LOCION MENTOLADA PINGUINO 150 ML": [
+        ("LOCION MENTOLADA PINGUINO AMARILLA 150 ML", "Locion Mentolada Amarilla 150ml.png"),
+        ("LOCION MENTOLADA PINGUINO AZUL 150 ML", "Locion Mentolada Azul 150ml.png"),
+        ("LOCION MENTOLADA PINGUINO VERDE 150 ML", "Locion Mentolada Verde 150ml.png"),
+    ],
+    "SHAMPOO NATURAL 30 G CEBOLLA / ROMERO": [
+        ("SHAMPOO NATURAL CEBOLLA 30 G", "Shampoo Natural Cebolla 30g.png"),
+        ("SHAMPOO NATURAL ROMERO 30 G", "Shampoo Natural Romero 30g.png"),
+    ],
+    "ACONDICIONADOR CAPILAR 30 G": [
+        ("ACONDICIONADOR CAPILAR CEBOLLA 30 G", "Acondicionador Capilar Cebolla 30g.png"),
+        ("ACONDICIONADOR CAPILAR ROMERO 30 G", "Acondicionador Capilar Romero 30g.png"),
+    ],
+    "CREMA PARA PEINAR 30 G": [
+        ("CREMA PARA PEINAR CEBOLLA 30 G", "Crema para peinar Cebolla 30g.png"),
+        ("CREMA PARA PEINAR ROMERO 30 G", "Crema para peinar Romero 30g.png"),
+    ],
+    "TRATAMIENTO NUTRITIVO KERATINA 30 G": [
+        ("TRATAMIENTO NUTRITIVO CAPILAR AJO 30 G", "Tratamiento Nutritivo Capilar Ajo 30g.png"),
+        ("TRATAMIENTO NUTRITIVO CAPILAR ARGAN 30 G", "Tratamiento Nutritivo Capilar Argan 30g.png"),
+        ("TRATAMIENTO NUTRITIVO CAPILAR COCO 30 G", "Tratamiento Nutritivo Capilar Coco 30g.png"),
+        ("TRATAMIENTO NUTRITIVO CAPILAR KERATINA CEBOLLA 30 G", "Tratamiento Nutritivo Capilar Keratina Cebolla 30g.png"),
+        ("TRATAMIENTO NUTRITIVO CAPILAR ROMERO Y QUINA 30 G", "Tratamiento Nutritivo Capilar Romero y quina 30g.png"),
+    ],
+    "TRATAMIENTO NUTRITIVO KERATINA 250 G": [
+        ("TRATAMIENTO CAPILAR KERATINA 250 G", "Tratamiento Nutritivo Capilar Keratina.png"),
+        ("TRATAMIENTO CAPILAR CEBOLLA 250 G", "Tratamiento Capilar Cebolla 250g.png"),
+        ("TRATAMIENTO CAPILAR ROMERO 250 G", "Tratamiento Capilar Romero 250g.png"),
+    ],
+    "MASCARILLA CAPILAR TONO SOBRE TONO 30 G": [
+        ("MASCARILLA CAPILAR BEIGE PERLA 30 G", "Mascarills Capilar Beige Perla 30gr.png"),
+        ("MASCARILLA CAPILAR BORGOÑA 30 G", "Mascarilla Capilar Borgoña.png"),
+        ("MASCARILLA CAPILAR CASTAÑO CLARO 30 G", "Mascarilla Capilar Castaño Claro 30 gr.png"),
+        ("MASCARILLA CAPILAR CASTAÑO OSCURO 30 G", "Mascarilla Capilar Castaño Oscuro 30gr.png"),
+        ("MASCARILLA CAPILAR CENIZO 30 G", "Mascarilla Capilar Cenizo 30gr.png"),
+        ("MASCARILLA CAPILAR CHOCOLATE 30 G", "Mascarilla Capilar Chocolate.png"),
+        ("MASCARILLA CAPILAR COBRIZO 30 G", "Mascarilla Capilar Cobrizo.png"),
+        ("MASCARILLA CAPILAR GRIS PLATA 30 G", "Mascarilla Capilar Gris Plata.png"),
+        ("MASCARILLA CAPILAR MAGENTA 30 G", "Mascarilla Capilar Magenta 30gr.png"),
+        ("MASCARILLA CAPILAR NEGRO 30 G", "Mascarilla Capilar Negro 30gr.png"),
+        ("MASCARILLA CAPILAR ROJO 30 G", "Mascarilla Capilar Rojo 30gr.png"),
+        ("MASCARILLA CAPILAR VERDE CAÑA 30 G", "Mascarilla Capilar Verde Caña.png"),
+        ("MASCARILLA CAPILAR VIOLETA 30 G", "Mascarilla Capilar Violeta.png"),
+    ],
+    "MASCARILLA CAPILAR TONO SOBRE TONO 30 G - LINEA 2": [],
+    "SILICONA CAPILAR 50 ML LINO & ARGAN": [
+        ("SILICONA CAPILAR ARGAN 50 ML", "Silicona Capilar Argan50 ml.png"),
+        ("SILICONA CAPILAR PANTENOL ARGAN 50 ML", "Silicona Capilar Con Pantenol Argan 50ml.png"),
+        ("SILICONA CAPILAR VITAMINA E 50 ML", "Silicona Capilar Con Vitamina E 50 ml.png"),
+    ],
+}
+
+
 def image_for_product(name):
     normalized = name.upper()
+    if normalized in IMAGE_BY_PRODUCT_NAME:
+        return catalog_image(IMAGE_BY_PRODUCT_NAME[normalized])
+    for expansions in IMAGE_GUIDED_EXPANSIONS.values():
+        for expanded_name, filename in expansions:
+            if normalized == expanded_name:
+                return catalog_image(filename)
     if "RECOLECTOR" in normalized:
         return _LAB
     if "GEL ANTIBACTERIAL" in normalized:
@@ -242,14 +385,21 @@ def image_for_product(name):
 
 
 def iter_catalog_items():
+    next_id = 1
     for line in CATALOG_DATA.splitlines():
         item_id, name, units_per_display, stock, price = line.split("|")
-        pid = int(item_id)
-        yield {
-            "id": pid,
-            "name": name,
-            "units_per_display": units_per_display,
-            "stock": int(stock),
-            "price": int(price),
-            "image_url": image_for_product(name) or PRODUCT_IMAGES.get(pid, ""),
-        }
+        source_id = int(item_id)
+        expansions = IMAGE_GUIDED_EXPANSIONS.get(name)
+        if expansions is None:
+            expansions = [(name, "")]
+        for expanded_name, filename in expansions:
+            yield {
+                "id": next_id,
+                "source_id": source_id,
+                "name": expanded_name,
+                "units_per_display": units_per_display,
+                "stock": int(stock),
+                "price": int(price),
+                "image_url": catalog_image(filename) if filename else image_for_product(expanded_name) or PRODUCT_IMAGES.get(source_id, ""),
+            }
+            next_id += 1

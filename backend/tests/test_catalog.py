@@ -70,23 +70,27 @@ class CatalogSeederTests(TestCase):
         call_command("seed_catalog")
 
         self.assertEqual(Category.objects.count(), 7)
-        self.assertEqual(Product.objects.count(), 52)
-        self.assertEqual(ProductVariant.objects.count(), 104)
-        self.assertEqual(Price.objects.count(), 104)
-        self.assertEqual(Stock.objects.count(), 104)
+        self.assertEqual(Product.objects.count(), 93)
+        self.assertEqual(ProductVariant.objects.count(), 150)
+        self.assertEqual(Price.objects.count(), 150)
+        self.assertEqual(Stock.objects.count(), 150)
 
-        aceite_corporal = ProductVariant.objects.get(product__name="ACEITE CORPORAL", presentation_number=250)
+        aceite_corporal = ProductVariant.objects.get(product__name="ACEITE CORPORAL COCO", presentation_number=250)
         self.assertEqual(aceite_corporal.presentation_number, 250)
         self.assertEqual(aceite_corporal.presentation_unit, "ML")
 
-        aceite_capilar = ProductVariant.objects.get(product__name="ACEITE CAPILAR", presentation_number=120)
+        aceite_capilar = ProductVariant.objects.get(product__name="ACEITE CAPILAR ARGAN", presentation_number=120)
         self.assertEqual(aceite_capilar.presentation_label, "120 ML")
 
-        keratina = ProductVariant.objects.get(product__name="TRATAMIENTO NUTRITIVO KERATINA", presentation_number=30)
+        coco = ProductVariant.objects.get(product__name="ACEITE CAPILAR COCO", presentation_number=8)
+        self.assertEqual(coco.prices.get(is_active=True).amount, 747)
+        self.assertIn("Aceite Capilar Coco 8ml.png", coco.product.image_url)
+
+        keratina = ProductVariant.objects.get(product__name="TRATAMIENTO NUTRITIVO CAPILAR KERATINA CEBOLLA", presentation_number=30)
         self.assertEqual(keratina.presentation_number, 30)
         self.assertEqual(keratina.presentation_unit, "GR")
 
         call_command("seed_catalog")
 
-        self.assertEqual(Product.objects.count(), 52)
-        self.assertEqual(Stock.objects.count(), 104)
+        self.assertEqual(Product.objects.count(), 93)
+        self.assertEqual(Stock.objects.count(), 150)

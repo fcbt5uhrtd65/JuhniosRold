@@ -49,13 +49,14 @@ def category_slug_for(name):
         return "laboratorio"
     if "GEL ANTIBACTERIAL" in normalized:
         return "antibacterial"
-    if "BEBE" in normalized or "AGUACATE" in normalized:
+    if "BEBE" in normalized:
         return "baby"
     if any(
         keyword in normalized
         for keyword in (
             "ACEITES",
             "ACEITE CAPILAR",
+            "ACEITE DE AGUACATE",
             "FULL LISO",
             "FUSION AMINO",
             "GEL CAPILAR",
@@ -67,6 +68,7 @@ def category_slug_for(name):
             "MASCARILLA",
             "TRATAMIENTO KERATINA",
             "TRATAMIENTO NUTRITIVO",
+            "TRATAMIENTO CAPILAR",
             "ACEITE ES 3 MAS",
         )
     ):
