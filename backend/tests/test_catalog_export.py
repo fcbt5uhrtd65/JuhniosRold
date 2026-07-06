@@ -1,9 +1,11 @@
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from apps.catalog.infrastructure.models import Category, Price, Product, ProductVariant
-from apps.catalog.infrastructure.tasks import _collect_rows
+from apps.catalog.infrastructure.tasks import _collect_rows, _load_image_bytes
 
 
 @override_settings(
@@ -85,3 +87,19 @@ class ProductExportTests(TestCase):
         self.assertEqual(rows[0]["sku"], small.sku)
         self.assertEqual(rows[0]["image_url"], small.image_url)
         self.assertNotEqual(rows[0]["image_url"], large.image_url)
+
+    @override_settings(FRONTEND_URL="https://juhniosrold.cloud")
+    def test_relative_catalog_image_resolves_against_frontend_url(self):
+        """Las fotos reales del catálogo se guardan como rutas relativas
+        (/images/catalog/...) porque las sirve el frontend/nginx, no Django;
+        _load_image_bytes debe resolverlas contra FRONTEND_URL en vez de
+        descartarlas como si fueran una ruta de MEDIA_ROOT inexistente."""
+        with patch("apps.catalog.infrastructure.tasks._download_public_image") as mock_download:
+            mock_download.return_value = b"fake-image-bytes"
+            result = _load_image_bytes("/images/catalog/Aceite Capilar Argan 8ml.png")
+
+        mock_download.assert_called_once_with(
+            "https://juhniosrold.cloud/images/catalog/Aceite%20Capilar%20Argan%208ml.png",
+            skip_ssrf_check=True,
+        )
+        self.assertEqual(result, b"fake-image-bytes")

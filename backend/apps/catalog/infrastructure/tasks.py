@@ -8,7 +8,7 @@ import socket
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 from uuid import uuid4
 
 from celery import shared_task
@@ -77,6 +77,27 @@ def _is_safe_public_url(url):
         return False
 
 
+def _download_public_image(url, skip_ssrf_check=False):
+    if not skip_ssrf_check and not _is_safe_public_url(url):
+        return None
+    cache_key = hashlib.sha256(url.encode()).hexdigest()
+    IMAGE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    cache_path = IMAGE_CACHE_DIR / cache_key
+    if cache_path.exists():
+        data = cache_path.read_bytes()
+        return data if len(data) <= MAX_IMAGE_BYTES else None
+    try:
+        request = urllib.request.Request(url, headers={"User-Agent": "JuhniosRold-Export/1.0"})
+        with urllib.request.urlopen(request, timeout=IMAGE_DOWNLOAD_TIMEOUT) as response:
+            data = response.read(MAX_IMAGE_BYTES + 1)
+    except Exception:
+        return None
+    if len(data) <= MAX_IMAGE_BYTES:
+        cache_path.write_bytes(data)
+        return data
+    return None
+
+
 def _load_image_bytes(image_ref):
     if not image_ref:
         return None
@@ -102,24 +123,17 @@ def _load_image_bytes(image_ref):
         return data if len(data) <= MAX_IMAGE_BYTES else None
 
     if image_ref.startswith(("http://", "https://")):
-        if not _is_safe_public_url(image_ref):
-            return None
-        cache_key = hashlib.sha256(image_ref.encode()).hexdigest()
-        IMAGE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        cache_path = IMAGE_CACHE_DIR / cache_key
-        if cache_path.exists():
-            data = cache_path.read_bytes()
-            return data if len(data) <= MAX_IMAGE_BYTES else None
-        try:
-            request = urllib.request.Request(image_ref, headers={"User-Agent": "JuhniosRold-Export/1.0"})
-            with urllib.request.urlopen(request, timeout=IMAGE_DOWNLOAD_TIMEOUT) as response:
-                data = response.read(MAX_IMAGE_BYTES + 1)
-        except Exception:
-            return None
-        if len(data) <= MAX_IMAGE_BYTES:
-            cache_path.write_bytes(data)
-            return data
-        return None
+        return _download_public_image(image_ref)
+
+    if image_ref.startswith("/"):
+        # Rutas como "/images/catalog/foo.png" son servidas por el frontend
+        # (nginx), no por Django: se resuelven contra FRONTEND_URL (URL de
+        # configuración, no entrada externa, por eso se omite el chequeo SSRF
+        # que sí aplica a URLs arbitrarias guardadas en la base de datos).
+        # quote() escapa espacios y demás caracteres presentes en los nombres
+        # de archivo del catálogo (p.ej. "Aceite Capilar Argan 8ml.png").
+        encoded_path = quote(image_ref)
+        return _download_public_image(settings.FRONTEND_URL.rstrip("/") + encoded_path, skip_ssrf_check=True)
 
     return None
 
@@ -226,12 +240,15 @@ def _write_xlsx(path, rows):
     workbook.save(path)
 
 
+PDF_IMAGE_PX_PER_CM = 118  # ~300 DPI, nítido tanto en pantalla como impreso
+
+
 def _image_to_jpeg_bytes(image, max_size_cm=1.6):
-    max_px = int(max_size_cm * 40)
+    max_px = int(max_size_cm * PDF_IMAGE_PX_PER_CM)
     thumb = image.copy()
     thumb.thumbnail((max_px, max_px), PILImage.LANCZOS)
     buf = io.BytesIO()
-    thumb.save(buf, format="JPEG", quality=72, optimize=True)
+    thumb.save(buf, format="JPEG", quality=90, optimize=True)
     return buf.getvalue(), thumb.size
 
 
