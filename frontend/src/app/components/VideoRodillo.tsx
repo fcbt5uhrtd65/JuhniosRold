@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Play, Volume2, VolumeX, ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -6,17 +6,41 @@ const OLIVE = '#2D3A1F';
 
 interface ReelVideo {
   id: number;
+  src: string;
   poster: string;
   username: string;
   caption: string;
 }
 
 const REELS: ReelVideo[] = [
-  { id: 1, poster: 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=500&q=80', username: 'maria.beauty', caption: 'Ritual de romero cada noche' },
-  { id: 2, poster: 'https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?w=500&q=80', username: 'andrea_col', caption: 'Antes y después en 4 semanas' },
-  { id: 3, poster: 'https://images.unsplash.com/photo-1556228720-195a672e8a03?w=500&q=80', username: 'caro.style', caption: 'Cómo aplico la keratina' },
-  { id: 4, poster: 'https://images.unsplash.com/photo-1487412947147-5cebf100ffc2?w=500&q=80', username: 'laura.glam', caption: 'Mi rutina completa paso a paso' },
-  { id: 5, poster: 'https://images.unsplash.com/photo-1560066984-138dadb4c035?w=500&q=80', username: 'juliana.looks', caption: 'El secreto del aceite de aguacate' },
+  {
+    id: 1,
+    src: '/videos/reels/menthus-tamanos.mp4',
+    poster: '',
+    username: 'juhniosrold',
+    caption: 'Un tamaño para cada momento con loción térmica Menthus',
+  },
+  {
+    id: 2,
+    src: '/videos/reels/menthus-calor-extremo.mp4',
+    poster: '',
+    username: 'juhniosrold',
+    caption: 'Cuidamos tu cabello del calor extremo',
+  },
+  {
+    id: 3,
+    src: '/videos/reels/duo-piel-glowing.mp4',
+    poster: '',
+    username: 'juhniosrold',
+    caption: 'El dúo perfecto para una piel glowing e hidratada',
+  },
+  {
+    id: 4,
+    src: '/videos/reels/testimonio-menthus.mp4',
+    poster: '',
+    username: 'juhniosrold',
+    caption: 'Testimonio real de la fórmula Menthus',
+  },
 ];
 
 /**
@@ -33,13 +57,28 @@ function circularOffset(index: number, active: number, length: number): number {
 export function VideoRodillo() {
   const [active, setActive] = useState(0);
   const [playing, setPlaying] = useState(true);
-  const [muted, setMuted] = useState(true);
+  const [muted, setMuted] = useState(false);
+  const activeVideoRef = useRef<HTMLVideoElement | null>(null);
   const touchStartX = useRef<number | null>(null);
 
   const goTo = useCallback((index: number) => {
     setActive(((index % REELS.length) + REELS.length) % REELS.length);
     setPlaying(true);
   }, []);
+
+  const togglePlaying = useCallback(() => {
+    const video = activeVideoRef.current;
+
+    if (playing) {
+      video?.pause();
+      setPlaying(false);
+      return;
+    }
+
+    video?.play()
+      .then(() => setPlaying(true))
+      .catch(() => setPlaying(false));
+  }, [playing]);
 
   const handleTouchStart = (event: React.TouchEvent) => {
     touchStartX.current = event.touches[0].clientX;
@@ -52,6 +91,22 @@ export function VideoRodillo() {
     if (Math.abs(delta) < 40) return;
     goTo(active + (delta < 0 ? 1 : -1));
   };
+
+  useEffect(() => {
+    const video = activeVideoRef.current;
+    if (!video) return;
+
+    video.muted = muted;
+
+    if (!playing) {
+      video.pause();
+      return;
+    }
+
+    video.play().catch(() => {
+      setPlaying(false);
+    });
+  }, [active, muted, playing]);
 
   return (
     <section className="py-16 sm:py-20 overflow-hidden" style={{ backgroundColor: '#FAFAF8' }}>
@@ -120,11 +175,19 @@ export function VideoRodillo() {
                     className="relative"
                     style={{ width: baseWidth, height: baseHeight, cursor: isActive ? 'default' : 'pointer' }}
                   >
-                    <img
-                      src={reel.poster}
-                      alt={reel.caption}
+                    <video
+                      ref={isActive ? activeVideoRef : undefined}
+                      key={`${reel.id}-${isActive ? 'active' : 'preview'}`}
+                      src={reel.src}
+                      poster={reel.poster || undefined}
                       className="absolute inset-0 w-full h-full object-cover"
-                      draggable={false}
+                      autoPlay={isActive && playing}
+                      loop
+                      playsInline
+                      muted={!isActive || muted}
+                      controls={false}
+                      preload={isActive ? 'auto' : 'metadata'}
+                      aria-label={reel.caption}
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/0 to-black/10" />
 
@@ -144,7 +207,7 @@ export function VideoRodillo() {
                         </div>
 
                         <button
-                          onClick={(event) => { event.stopPropagation(); setPlaying((current) => !current); }}
+                          onClick={(event) => { event.stopPropagation(); togglePlaying(); }}
                           aria-label={playing ? 'Pausar' : 'Reproducir'}
                           className="absolute inset-0 flex items-center justify-center"
                         >
