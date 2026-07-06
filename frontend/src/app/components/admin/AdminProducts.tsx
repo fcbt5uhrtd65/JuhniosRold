@@ -248,7 +248,7 @@ function ImageUploader({ value, onChange }: ImageUploaderProps) {
           <img
             src={value}
             alt="Vista previa"
-            className="w-full h-48 object-cover rounded-xl border border-gray-100 bg-gray-50"
+            className="w-full h-48 object-contain rounded-xl border border-gray-100 bg-gray-50 p-2"
           />
           <div className="absolute inset-0 bg-black/50 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
             <button
@@ -733,7 +733,7 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
               <Card key={product.id} className="overflow-hidden">
                 <div className="aspect-[4/3] bg-gray-50 overflow-hidden relative">
                   {product.imagen ? (
-                    <img src={product.imagen} alt={product.nombre} className="w-full h-full object-cover" />
+                    <img src={product.imagen} alt={product.nombre} className="w-full h-full object-contain p-2" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
                       <Package size={32} className="text-gray-300" />
@@ -858,7 +858,7 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 flex-shrink-0 rounded-lg bg-gray-50 border border-gray-100 overflow-hidden">
                         {product.imagen ? (
-                          <img src={product.imagen} alt={product.nombre} className="w-full h-full object-cover" />
+                          <img src={product.imagen} alt={product.nombre} className="w-full h-full object-contain p-1" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center">
                             <Package size={15} className="text-gray-300" />
@@ -942,7 +942,7 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
                 <div className="space-y-4">
                   <div className="aspect-square rounded-xl bg-gray-50 border border-gray-100 overflow-hidden">
                     {selectedProduct.imagen ? (
-                      <img src={selectedProduct.imagen} alt={selectedProduct.nombre} className="w-full h-full object-cover" />
+                      <img src={selectedProduct.imagen} alt={selectedProduct.nombre} className="w-full h-full object-contain p-3" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
                         <Package size={56} className="text-gray-300" />
