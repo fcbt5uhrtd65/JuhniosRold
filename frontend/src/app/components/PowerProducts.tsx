@@ -729,7 +729,7 @@ export function PowerProducts({ onLoginRequired }: { onLoginRequired?: () => voi
         </motion.div>
 
         {/* Grid */}
-        <div className="grid gap-7 sm:grid-cols-2 lg:grid-cols-3 xl:gap-8 mb-8">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
           {isLoading
             ? Array.from({ length: 3 }, (_, i) => <ProductCardSkeleton key={i} index={i} />)
             : products.map((p, i) => (
