@@ -3,6 +3,7 @@ from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from apps.catalog.infrastructure.models import Category, Price, Product, ProductVariant
+from apps.catalog.infrastructure.tasks import _collect_rows
 
 
 @override_settings(
@@ -57,3 +58,30 @@ class ProductExportTests(TestCase):
             format="json",
         )
         self.assertEqual(response.status_code, 401)
+
+    def test_export_uses_variant_image_not_product_image(self):
+        category = Category.objects.create(name="Capilar 2", slug="capilar-2", is_active=True)
+        product = Product.objects.create(
+            category=category,
+            name="Aceite Capilar Argan",
+            slug="aceite-capilar-argan",
+            is_active=True,
+            image_url="/images/catalog/Aceite Capilar Argan 8ml.png",
+        )
+        small = ProductVariant.objects.create(
+            product=product, sku="JR-CAT-007", name="8 ML", cost=100, is_active=True,
+            image_url="/images/catalog/Aceite Capilar Argan 8ml.png",
+        )
+        large = ProductVariant.objects.create(
+            product=product, sku="JR-CAT-015", name="120 ML", cost=1000, is_active=True,
+            image_url="/images/catalog/Aceite Capilar Argan 120ml.png",
+        )
+        Price.objects.create(variant=small, amount=747, valid_from="2024-01-01T00:00:00Z", is_active=True)
+        Price.objects.create(variant=large, amount=3775, valid_from="2024-01-01T00:00:00Z", is_active=True)
+
+        rows = _collect_rows([product.id])
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["sku"], small.sku)
+        self.assertEqual(rows[0]["image_url"], small.image_url)
+        self.assertNotEqual(rows[0]["image_url"], large.image_url)

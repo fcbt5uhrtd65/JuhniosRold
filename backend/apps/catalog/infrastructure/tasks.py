@@ -170,7 +170,7 @@ def _collect_rows(product_ids):
 
         attrs = variant.attributes if variant and isinstance(variant.attributes, dict) else {}
         rows.append({
-            "image_url": product.image_url,
+            "image_url": (variant.image_url if variant and variant.image_url else product.image_url),
             "nombre": product.name,
             "categoria": product.category.name if product.category else "",
             "tipo": attrs.get("type", ""),
