@@ -244,6 +244,8 @@ export interface CreateProductPayload {
   sku?: string;
   images?: string[];
   image_url?: string;
+  variant_images?: string[];
+  variant_image_url?: string;
   variant_name?: string;
   variant_attributes?: Record<string, unknown>;
   presentation_number?: number;
@@ -733,17 +735,18 @@ export async function createProduct(payload: CreateProductPayload): Promise<Prod
 
   // Producto con variante/precio: se crea todo en una sola transacción atómica
   // en el backend, evitando dejar un producto huérfano si el SKU está duplicado
-  // o falla la creación del precio.
+  // o falla la creación del precio. Las imágenes son de la variante, no del
+  // producto: cada presentación tiene su propia galería.
   const res = await api.post<BackendProduct>(`${CATALOG_BASE_PATH}/products/create-complete/`, {
     category: categoryId,
     name: payload.name,
     slug: payload.slug,
     description: payload.description ?? '',
-    image_url: payload.image_url ?? payload.images?.[0] ?? '',
-    images: payload.images ?? [],
     is_active: payload.is_active ?? true,
     is_featured: payload.is_featured ?? false,
     sku: payload.sku || generateShortSku(),
+    variant_image_url: payload.variant_image_url ?? payload.image_url ?? payload.variant_images?.[0] ?? payload.images?.[0] ?? '',
+    variant_images: payload.variant_images ?? payload.images ?? [],
     variant_name: payload.variant_name ||
       (payload.presentation_number && payload.presentation_unit
         ? `${payload.presentation_number} ${payload.presentation_unit}`

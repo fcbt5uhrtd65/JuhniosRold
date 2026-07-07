@@ -15,7 +15,7 @@ import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent,
 } from '../ui/dropdown-menu';
-import { requestProductsExport, getCategories, getProductById, updateProductVariant, type ExportFormat, type PdfLayout, type ProductVariant } from '../../services/products.service';
+import { requestProductsExport, getCategories, getProductById, updateProductVariant, updateVariantImages, type ExportFormat, type PdfLayout, type ProductVariant } from '../../services/products.service';
 import { getProductReviews, type ProductReview } from '../../services/reviews.service';
 import { getWholesaleSettingsApi, updateWholesaleSettingsApi } from '../../services/cart.service';
 import { pollExportStatus, downloadFile } from '../../utils/pollExportStatus';
@@ -55,6 +55,16 @@ const EMPTY_FORM: Omit<Product, 'id'> = {
   stockInicial: 0,
   fechaCreacion: '',
 };
+
+function variantImageList(variant: ProductVariant | undefined, fallback?: string): string[] {
+  if (!variant) return fallback ? [fallback] : [];
+  if (variant.images.length > 0) {
+    return [...variant.images]
+      .sort((a, b) => (a.is_primary === b.is_primary ? a.position - b.position : a.is_primary ? -1 : 1))
+      .map(img => img.image);
+  }
+  return variant.image_url ? [variant.image_url] : (fallback ? [fallback] : []);
+}
 
 function margenGanancia(venta: number, costo: number | undefined): string | null {
   if (!costo || costo <= 0 || venta <= 0) return null;
@@ -255,7 +265,7 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
   const [editVariants, setEditVariants] = useState<ProductVariant[]>([]);
   const [editingVariantId, setEditingVariantId] = useState<string | null>(null);
   const [isLoadingEditVariants, setIsLoadingEditVariants] = useState(false);
-  const [editVariantImage, setEditVariantImage] = useState('');
+  const [editVariantImages, setEditVariantImages] = useState<string[]>([]);
   const [primaryVariantId, setPrimaryVariantId] = useState<string | null>(null);
 
   const set = (patch: Partial<Omit<Product, 'id'>>) => setFormData(prev => ({ ...prev, ...patch }));
@@ -328,25 +338,23 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
     setModalMode('edit');
     setEditVariants([]);
     setEditingVariantId(null);
-    setEditVariantImage(product.imagen);
-    if (product.otrasPresentaciones && product.otrasPresentaciones.length > 0) {
-      setIsLoadingEditVariants(true);
-      getProductById(product.id)
-        .then(full => {
-          setEditVariants(full.variants);
-          const primary = full.variants.find(v => v.presentation === product.presentacion) ?? full.variants[0];
-          setEditingVariantId(primary?.id ?? null);
-          setPrimaryVariantId(primary?.id ?? null);
-          setEditVariantImage(primary?.image_url ?? product.imagen);
-        })
-        .catch(() => setEditVariants([]))
-        .finally(() => setIsLoadingEditVariants(false));
-    }
+    setEditVariantImages(product.imagen ? [product.imagen] : []);
+    setIsLoadingEditVariants(true);
+    getProductById(product.id)
+      .then(full => {
+        setEditVariants(full.variants);
+        const primary = full.variants.find(v => v.presentation === product.presentacion) ?? full.variants[0];
+        setEditingVariantId(primary?.id ?? null);
+        setPrimaryVariantId(primary?.id ?? null);
+        setEditVariantImages(variantImageList(primary, product.imagen));
+      })
+      .catch(() => setEditVariants([]))
+      .finally(() => setIsLoadingEditVariants(false));
   };
 
   const selectEditVariant = (variant: ProductVariant) => {
     setEditingVariantId(variant.id);
-    setEditVariantImage(variant.image_url);
+    setEditVariantImages(variantImageList(variant));
     set({
       presentacion: variant.presentation,
       presentacionNumero: variant.presentation_number ?? undefined,
@@ -380,42 +388,36 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
     try {
       if (modalMode === 'edit' && selectedProduct) {
         const isEditingSiblingVariant = editingVariantId !== null && editingVariantId !== primaryVariantId;
+        const productFields = {
+          nombre: formData.nombre,
+          categoria: formData.categoria,
+          descripcion: formData.descripcion,
+          estado: formData.estado,
+          marca: formData.marca,
+          tipo: formData.tipo,
+          beneficios: formData.beneficios,
+          modoDeUso: formData.modoDeUso,
+          ingredientes: formData.ingredientes,
+          stockMinimo: formData.stockMinimo,
+        };
+        const tasks: Promise<unknown>[] = [
+          isEditingSiblingVariant
+            ? updateProduct(selectedProduct.id, productFields)
+            : updateProduct(selectedProduct.id, { ...productFields, precio: formData.precio, precioCosto: formData.precioCosto, codigo: formData.codigo, presentacion: formData.presentacion, presentacionNumero: formData.presentacionNumero, presentacionUnidad: formData.presentacionUnidad }),
+        ];
         if (isEditingSiblingVariant) {
-          // Los campos de producto (nombre, categoría, descripción, estado, imágenes
-          // genéricas) se guardan igual; los de la variante seleccionada van aparte,
-          // directo a esa variante y no a "la primera activa" del producto.
-          await Promise.all([
-            updateProduct(selectedProduct.id, {
-              nombre: formData.nombre,
-              categoria: formData.categoria,
-              descripcion: formData.descripcion,
-              estado: formData.estado,
-              imagenes: formData.imagenes,
-              imagen: formData.imagen,
-              marca: formData.marca,
-              tipo: formData.tipo,
-              beneficios: formData.beneficios,
-              modoDeUso: formData.modoDeUso,
-              ingredientes: formData.ingredientes,
-              stockMinimo: formData.stockMinimo,
-            }),
-            updateProductVariant(editingVariantId, {
-              sku: formData.codigo,
-              presentation_number: formData.presentacionNumero,
-              presentation_unit: formData.presentacionUnidad,
-              cost: formData.precioCosto,
-              price: formData.precio,
-              image_url: editVariantImage,
-            }),
-          ]);
-        } else {
-          await updateProduct(selectedProduct.id, formData);
-          // updateProduct no toca el image_url propio de la variante (solo la
-          // galería genérica del producto), así que se guarda aparte si cambió.
-          if (editingVariantId && editVariantImage !== undefined) {
-            await updateProductVariant(editingVariantId, { image_url: editVariantImage });
-          }
+          tasks.push(updateProductVariant(editingVariantId, {
+            sku: formData.codigo,
+            presentation_number: formData.presentacionNumero,
+            presentation_unit: formData.presentacionUnidad,
+            cost: formData.precioCosto,
+            price: formData.precio,
+          }));
         }
+        if (editingVariantId) {
+          tasks.push(updateVariantImages(editingVariantId, editVariantImages));
+        }
+        await Promise.all(tasks);
         toast.success('Producto actualizado correctamente');
       } else {
         await addProduct(formData);
@@ -1165,31 +1167,29 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
                     />
                   </div>
 
-                  {modalMode === 'edit' && editVariants.length > 0 && (
-                    <div>
-                      <FormLabel>Imagen de esta presentación ({formData.presentacion})</FormLabel>
-                      <div className="max-w-[220px]">
-                        <ImageUploader value={editVariantImage} onChange={setEditVariantImage} />
-                      </div>
+                  <div className="rounded-xl border-2 border-[#2a4038]/15 bg-[#2a4038]/[0.03] p-4">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <Images size={13} className="text-[#2a4038]" />
+                      <p className="text-[11px] font-bold uppercase tracking-widest text-[#2a4038]">
+                        Imágenes de la presentación {formData.presentacion} (hasta 3)
+                      </p>
                     </div>
-                  )}
-
-                  <div>
-                    <FormLabel>Imágenes (hasta 3)</FormLabel>
+                    <p className="text-[11px] text-gray-500 mb-3">
+                      Estas son las fotos que verán los clientes al elegir esta presentación en la tienda.
+                    </p>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       {[0, 1, 2].map(slot => (
                         <ImageUploader
                           key={slot}
-                          value={formData.imagenes?.[slot] ?? ''}
+                          value={editVariantImages[slot] ?? ''}
                           onChange={v => {
-                            const next = [...(formData.imagenes ?? [])];
+                            const next = [...editVariantImages];
                             if (v) {
                               next[slot] = v;
                             } else {
                               next.splice(slot, 1);
                             }
-                            const cleaned = next.filter(Boolean);
-                            set({ imagenes: cleaned, imagen: cleaned[0] ?? '' });
+                            setEditVariantImages(next.filter(Boolean).slice(0, 3));
                           }}
                         />
                       ))}

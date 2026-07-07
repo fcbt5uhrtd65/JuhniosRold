@@ -110,10 +110,17 @@ function mapCatalogProduct(product: CatalogProduct): Product {
   };
 
   const firstVariant = product.variants[0];
-  addImage(firstVariant?.image_url, firstVariant?.presentation ?? null, firstVariant?.id);
-  addImage(product.primary_image, null);
-  addImage(product.image_url, null);
-  product.image_urls.forEach(src => addImage(src, null));
+  const firstVariantImages = [...(firstVariant?.images ?? [])].sort((a, b) =>
+    a.is_primary === b.is_primary ? a.position - b.position : a.is_primary ? -1 : 1,
+  );
+  if (firstVariantImages.length > 0) {
+    firstVariantImages.forEach(img => addImage(img.image, firstVariant?.presentation ?? null, firstVariant?.id));
+  } else {
+    addImage(firstVariant?.image_url, firstVariant?.presentation ?? null, firstVariant?.id);
+  }
+  if (imageItems.length === 0) {
+    addImage(product.primary_image, null);
+  }
   if (imageItems.length === 0) {
     addImage(FALLBACK_PRODUCT_IMAGE, null);
   }
@@ -126,7 +133,8 @@ function mapCatalogProduct(product: CatalogProduct): Product {
     product.variants.forEach(variant => {
       if (seenPresentation.has(variant.presentation)) return;
       seenPresentation.add(variant.presentation);
-      const src = variant.image_url || product.primary_image || FALLBACK_PRODUCT_IMAGE;
+      const primaryImage = [...variant.images].sort((a, b) => (a.is_primary === b.is_primary ? a.position - b.position : a.is_primary ? -1 : 1))[0];
+      const src = primaryImage?.image || variant.image_url || FALLBACK_PRODUCT_IMAGE;
       siblingVariantItems.push({ src, size: variant.presentation, variantId: variant.id });
     });
   }
@@ -237,8 +245,14 @@ function ProductPage({
       seen.add(src);
       items.push({ src, size, variantId });
     };
-    add(selectedVariant?.image_url, selSize || null, selectedVariant?.id);
-    product.imageItems.filter(item => item.size === null).forEach(item => add(item.src, null));
+    const variantImages = [...(selectedVariant?.images ?? [])].sort((a, b) =>
+      a.is_primary === b.is_primary ? a.position - b.position : a.is_primary ? -1 : 1,
+    );
+    if (variantImages.length > 0) {
+      variantImages.forEach(img => add(img.image, selSize || null, selectedVariant?.id));
+    } else {
+      add(selectedVariant?.image_url, selSize || null, selectedVariant?.id);
+    }
     if (items.length === 0) product.images.forEach(src => add(src, null));
     return items;
   })();

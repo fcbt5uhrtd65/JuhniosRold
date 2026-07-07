@@ -204,6 +204,10 @@ class CompleteProductSerializer(serializers.Serializer):
     )
     variant_attributes = serializers.JSONField(required=False, default=dict)
     cost = serializers.DecimalField(max_digits=14, decimal_places=2, required=False, default=Decimal("0"))
+    variant_image_url = serializers.CharField(required=False, allow_blank=True, default="")
+    variant_images = serializers.ListField(
+        child=serializers.CharField(allow_blank=True), required=False, default=list,
+    )
 
     price = serializers.DecimalField(max_digits=14, decimal_places=2)
 
@@ -252,8 +256,18 @@ class CompleteProductSerializer(serializers.Serializer):
             presentation_unit=validated_data.get("presentation_unit", ""),
             attributes=validated_data.get("variant_attributes") or {},
             cost=validated_data.get("cost", Decimal("0")),
+            image_url=validated_data.get("variant_image_url", ""),
             is_active=validated_data.get("is_active", True),
         )
+        for position, image_url in enumerate(validated_data.get("variant_images") or []):
+            if not image_url:
+                continue
+            ProductVariantImage.objects.create(
+                variant=variant,
+                image=image_url,
+                position=position,
+                is_primary=position == 0,
+            )
         Price.objects.create(
             variant=variant,
             amount=validated_data["price"],

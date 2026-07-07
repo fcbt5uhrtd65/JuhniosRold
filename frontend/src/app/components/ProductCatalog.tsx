@@ -77,8 +77,8 @@ function getDiscountPercentage(product: CatalogProduct, variant?: ProductVariant
 
 /**
  * Fotos del carrusel principal: todas pertenecen a la MISMA variante/presentación
- * seleccionada (fotos genéricas del producto + la foto propia de esa variante).
- * No mezcla fotos de otras presentaciones.
+ * seleccionada (su propia galería de hasta 3 fotos). No mezcla fotos de otras
+ * presentaciones ni fotos genéricas del producto.
  */
 function getVariantGallery(product: CatalogProduct, selectedVariant?: ProductVariant | null): ProductGalleryItem[] {
   const items: ProductGalleryItem[] = [];
@@ -90,9 +90,17 @@ function getVariantGallery(product: CatalogProduct, selectedVariant?: ProductVar
     items.push({ src, size, variantId });
   };
 
-  add(selectedVariant?.image_url, selectedVariant?.presentation ?? null, selectedVariant?.id);
-  add(product.primary_image, selectedVariant?.presentation ?? null);
-  product.image_urls.forEach(src => add(src, selectedVariant?.presentation ?? null));
+  const variantImages = selectedVariant?.images ?? [];
+  if (variantImages.length > 0) {
+    [...variantImages]
+      .sort((a, b) => (a.is_primary === b.is_primary ? a.position - b.position : a.is_primary ? -1 : 1))
+      .forEach(img => add(img.image, selectedVariant?.presentation ?? null, selectedVariant?.id));
+  } else {
+    add(selectedVariant?.image_url, selectedVariant?.presentation ?? null, selectedVariant?.id);
+  }
+  if (items.length === 0) {
+    add(product.primary_image, selectedVariant?.presentation ?? null);
+  }
   if (items.length === 0) {
     add(FALLBACK_IMAGE, selectedVariant?.presentation ?? null);
   }
@@ -110,7 +118,8 @@ function getSiblingVariantThumbnails(product: CatalogProduct): ProductGalleryIte
   const seen = new Set<string>();
 
   product.variants.forEach(variant => {
-    const src = variant.image_url || product.primary_image || FALLBACK_IMAGE;
+    const primaryImage = [...variant.images].sort((a, b) => (a.is_primary === b.is_primary ? a.position - b.position : a.is_primary ? -1 : 1))[0];
+    const src = primaryImage?.image || variant.image_url || FALLBACK_IMAGE;
     if (seen.has(variant.presentation)) return;
     seen.add(variant.presentation);
     items.push({ src, size: variant.presentation, variantId: variant.id });
