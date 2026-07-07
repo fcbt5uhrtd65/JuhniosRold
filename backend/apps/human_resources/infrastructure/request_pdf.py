@@ -196,8 +196,7 @@ def _employee_name(employee):
 def _draw_header(c, x0, x1, y, vacation):
     logo_size = _draw_logo(c, x0, y - 13, size=42)
     text_x = x0 + logo_size + (12 if logo_size else 0)
-    _draw_text(c, text_x, y - 22, COMPANY_NAME, size=13.5, bold=True)
-    _draw_text(c, text_x, y - 38, "Recursos Humanos", size=8.5, color=MUTED_COLOR)
+    _draw_text(c, text_x, y - 28, COMPANY_NAME, size=13.5, bold=True)
     _draw_text(c, x1, y - 22, "Documento de solicitud", size=12, bold=True, align="right", color=BRAND_COLOR)
     _draw_text(c, x1, y - 38, f"Generado: {timezone.now():%d/%m/%Y %H:%M}", size=8.5, align="right", color=MUTED_COLOR)
     status_text = vacation.get_status_display()

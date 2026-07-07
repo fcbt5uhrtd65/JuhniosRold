@@ -30,6 +30,7 @@ from ..infrastructure.serializers import (
 )
 from ..infrastructure.employee_pdf import render_employees_pdf
 from ..infrastructure.branch_pdf import render_branches_pdf
+from ..infrastructure.catalog_pdf import render_departments_pdf, render_positions_pdf
 
 
 class DepartmentViewSet(SoftDeleteModelViewSet):
@@ -40,8 +41,19 @@ class DepartmentViewSet(SoftDeleteModelViewSet):
     search_fields = ("name",)
 
     def get_permissions(self):
-        self.required_component_action = "view" if self.action in {"list", "retrieve"} else "edit"
+        self.required_component_action = "view" if self.action in {"list", "retrieve", "export_pdf"} else "edit"
         return super().get_permissions()
+
+    @action(detail=False, methods=("get",), url_path="export-pdf")
+    def export_pdf(self, request):
+        queryset = self.filter_queryset(self.get_queryset()).order_by("name")
+        pdf_buffer = render_departments_pdf(queryset)
+        return FileResponse(
+            pdf_buffer,
+            as_attachment=True,
+            filename="departamentos-juhnios-rold.pdf",
+            content_type="application/pdf",
+        )
 
 
 class PositionViewSet(SoftDeleteModelViewSet):
@@ -53,8 +65,19 @@ class PositionViewSet(SoftDeleteModelViewSet):
     search_fields = ("name",)
 
     def get_permissions(self):
-        self.required_component_action = "view" if self.action in {"list", "retrieve"} else "edit"
+        self.required_component_action = "view" if self.action in {"list", "retrieve", "export_pdf"} else "edit"
         return super().get_permissions()
+
+    @action(detail=False, methods=("get",), url_path="export-pdf")
+    def export_pdf(self, request):
+        queryset = self.filter_queryset(self.get_queryset()).order_by("department__name", "name")
+        pdf_buffer = render_positions_pdf(queryset)
+        return FileResponse(
+            pdf_buffer,
+            as_attachment=True,
+            filename="cargos-juhnios-rold.pdf",
+            content_type="application/pdf",
+        )
 
 
 class BranchViewSet(SoftDeleteModelViewSet):

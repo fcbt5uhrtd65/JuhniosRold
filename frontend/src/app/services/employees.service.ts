@@ -447,6 +447,31 @@ export async function deleteDepartment(id: string): Promise<void> {
   await api.delete(`${DEPARTMENTS_PATH}${id}/`);
 }
 
+export async function exportDepartmentsPdf(): Promise<void> {
+  const token = getAccessToken();
+  if (!token) {
+    throw new Error('Tu sesion expiro. Inicia sesion de nuevo.');
+  }
+
+  const response = await fetch(`${API_BASE_URL}${DEPARTMENTS_PATH}export-pdf/`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok) {
+    throw new Error('No se pudo exportar el PDF de departamentos.');
+  }
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'departamentos-juhnios-rold.pdf';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 // ---- Positions ----
 export async function getPositions(params?: ListPositionsParams): Promise<PaginatedPositions> {
   const query = buildQuery({
@@ -474,6 +499,31 @@ export async function updatePosition(id: string, payload: Partial<PositionPayloa
 
 export async function deletePosition(id: string): Promise<void> {
   await api.delete(`${POSITIONS_PATH}${id}/`);
+}
+
+export async function exportPositionsPdf(): Promise<void> {
+  const token = getAccessToken();
+  if (!token) {
+    throw new Error('Tu sesion expiro. Inicia sesion de nuevo.');
+  }
+
+  const response = await fetch(`${API_BASE_URL}${POSITIONS_PATH}export-pdf/`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok) {
+    throw new Error('No se pudo exportar el PDF de cargos.');
+  }
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'cargos-juhnios-rold.pdf';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 // ---- Branches ----

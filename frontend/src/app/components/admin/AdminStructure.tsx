@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Building2, Briefcase, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Building2, Briefcase, FileDown, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import {
   createDepartment,
   createPosition,
   deleteDepartment,
   deletePosition,
+  exportDepartmentsPdf,
+  exportPositionsPdf,
   getDepartments,
   getPositions,
   updateDepartment,
@@ -68,6 +70,8 @@ export function AdminStructure() {
   const [positionForm, setPositionForm] = useState<PositionFormState>(EMPTY_POSITION_FORM);
   const [savingDepartment, setSavingDepartment] = useState(false);
   const [savingPosition, setSavingPosition] = useState(false);
+  const [exportingDepartmentsPdf, setExportingDepartmentsPdf] = useState(false);
+  const [exportingPositionsPdf, setExportingPositionsPdf] = useState(false);
 
   const loadDepartments = useCallback(async () => {
     setIsLoadingDepartments(true);
@@ -168,6 +172,19 @@ export function AdminStructure() {
     }
   };
 
+  const handleDepartmentsPdfExport = async () => {
+    setExportingDepartmentsPdf(true);
+    try {
+      await exportDepartmentsPdf();
+      toast.success('PDF de departamentos generado');
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo exportar el PDF de departamentos');
+    } finally {
+      setExportingDepartmentsPdf(false);
+    }
+  };
+
   // ---- Position CRUD ----
   const openCreatePosition = () => {
     setEditingPosition(null);
@@ -219,6 +236,19 @@ export function AdminStructure() {
     }
   };
 
+  const handlePositionsPdfExport = async () => {
+    setExportingPositionsPdf(true);
+    try {
+      await exportPositionsPdf();
+      toast.success('PDF de cargos generado');
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo exportar el PDF de cargos');
+    } finally {
+      setExportingPositionsPdf(false);
+    }
+  };
+
   return (
     <div>
       <TabBar
@@ -236,12 +266,22 @@ export function AdminStructure() {
             <div className="w-full sm:w-72">
               <SearchBar value={departmentsSearch} onChange={setDepartmentsSearch} placeholder="Buscar departamento..." />
             </div>
-            <button
-              onClick={openCreateDepartment}
-              className="flex items-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white text-xs font-semibold rounded-xl hover:bg-[#3d5c4e] transition-colors whitespace-nowrap"
-            >
-              <Plus size={14} /> Nuevo departamento
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => void handleDepartmentsPdfExport()}
+                disabled={exportingDepartmentsPdf}
+                className="flex items-center gap-2 px-4 py-2.5 border border-[#2a4038] text-[#2a4038] text-xs font-semibold rounded-xl hover:bg-[#eef4f1] transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+              >
+                {exportingDepartmentsPdf ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
+                {exportingDepartmentsPdf ? 'Generando PDF...' : 'Exportar PDF'}
+              </button>
+              <button
+                onClick={openCreateDepartment}
+                className="flex items-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white text-xs font-semibold rounded-xl hover:bg-[#3d5c4e] transition-colors whitespace-nowrap"
+              >
+                <Plus size={14} /> Nuevo departamento
+              </button>
+            </div>
           </div>
 
           {isLoadingDepartments ? (
@@ -309,12 +349,22 @@ export function AdminStructure() {
             <div className="w-full sm:w-72">
               <SearchBar value={positionsSearch} onChange={setPositionsSearch} placeholder="Buscar cargo..." />
             </div>
-            <button
-              onClick={openCreatePosition}
-              className="flex items-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white text-xs font-semibold rounded-xl hover:bg-[#3d5c4e] transition-colors whitespace-nowrap"
-            >
-              <Plus size={14} /> Nuevo cargo
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => void handlePositionsPdfExport()}
+                disabled={exportingPositionsPdf}
+                className="flex items-center gap-2 px-4 py-2.5 border border-[#2a4038] text-[#2a4038] text-xs font-semibold rounded-xl hover:bg-[#eef4f1] transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+              >
+                {exportingPositionsPdf ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
+                {exportingPositionsPdf ? 'Generando PDF...' : 'Exportar PDF'}
+              </button>
+              <button
+                onClick={openCreatePosition}
+                className="flex items-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white text-xs font-semibold rounded-xl hover:bg-[#3d5c4e] transition-colors whitespace-nowrap"
+              >
+                <Plus size={14} /> Nuevo cargo
+              </button>
+            </div>
           </div>
 
           {isLoadingPositions ? (
