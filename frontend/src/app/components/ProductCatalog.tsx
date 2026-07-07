@@ -75,7 +75,12 @@ function getDiscountPercentage(product: CatalogProduct, variant?: ProductVariant
   return Math.round(((original - discounted) / original) * 100);
 }
 
-function getProductGallery(product: CatalogProduct, selectedVariant?: ProductVariant | null): ProductGalleryItem[] {
+/**
+ * Fotos del carrusel principal: todas pertenecen a la MISMA variante/presentación
+ * seleccionada (fotos genéricas del producto + la foto propia de esa variante).
+ * No mezcla fotos de otras presentaciones.
+ */
+function getVariantGallery(product: CatalogProduct, selectedVariant?: ProductVariant | null): ProductGalleryItem[] {
   const items: ProductGalleryItem[] = [];
   const seen = new Set<string>();
 
@@ -86,12 +91,28 @@ function getProductGallery(product: CatalogProduct, selectedVariant?: ProductVar
   };
 
   add(selectedVariant?.image_url, selectedVariant?.presentation ?? null, selectedVariant?.id);
+  add(product.primary_image, selectedVariant?.presentation ?? null);
+  product.image_urls.forEach(src => add(src, selectedVariant?.presentation ?? null));
+  add(FALLBACK_IMAGE, selectedVariant?.presentation ?? null);
+
+  return items;
+}
+
+/**
+ * Una imagen representativa por cada variante/presentación distinta del MISMO
+ * producto. Solo tiene sentido mostrarla si el producto tiene más de una variante.
+ */
+function getSiblingVariantThumbnails(product: CatalogProduct): ProductGalleryItem[] {
+  if (product.variants.length <= 1) return [];
+  const items: ProductGalleryItem[] = [];
+  const seen = new Set<string>();
+
   product.variants.forEach(variant => {
-    add(variant.image_url, variant.presentation, variant.id);
+    const src = variant.image_url || product.primary_image || FALLBACK_IMAGE;
+    if (seen.has(variant.presentation)) return;
+    seen.add(variant.presentation);
+    items.push({ src, size: variant.presentation, variantId: variant.id });
   });
-  add(product.primary_image, null);
-  product.image_urls.forEach(src => add(src, null));
-  add(FALLBACK_IMAGE, null);
 
   return items;
 }
@@ -363,8 +384,9 @@ export function ProductPage({
   const sizes = getProductSizes(product);
   const selSize = selectedSizes[product.id] ?? sizes[0];
   const selVariant = product.variants.find(v => v.presentation === selSize) ?? product.variants[0];
-  const gallery = useMemo(() => getProductGallery(product, selVariant), [product, selVariant]);
+  const gallery = useMemo(() => getVariantGallery(product, selVariant), [product, selVariant]);
   const images = gallery.map(item => item.src);
+  const siblingThumbnails = useMemo(() => getSiblingVariantThumbnails(product), [product]);
   const [activeImg, setActiveImg] = useState(0);
   const [qty, setQty] = useState(1);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -488,19 +510,23 @@ export function ProductPage({
             >
               <ChevronUp className="w-5 h-5" strokeWidth={1.5} />
             </button>
-            {images.map((src, i) => (
-              <button
-                key={i}
-                onClick={() => activateGalleryImage(i)}
-                className={`w-[100px] h-[100px] rounded-xl overflow-hidden border-2 transition-all duration-150 flex-shrink-0 ${
-                  activeImg === i
-                    ? 'border-stone-800 shadow-sm'
-                    : 'border-stone-200 opacity-55 hover:opacity-100 hover:border-stone-400'
-                }`}
-              >
-                <img src={src} alt="" className="w-full h-full object-cover" draggable={false} />
-              </button>
-            ))}
+            {(siblingThumbnails.length > 0 ? siblingThumbnails : gallery).map((item, i) => {
+              const isSiblingMode = siblingThumbnails.length > 0;
+              const isActive = isSiblingMode ? item.size === selSize : activeImg === i;
+              return (
+                <button
+                  key={item.variantId ?? i}
+                  onClick={() => (isSiblingMode ? item.size && onSelectSize(product.id, item.size) : activateGalleryImage(i))}
+                  className={`w-[100px] h-[100px] rounded-xl overflow-hidden border-2 transition-all duration-150 flex-shrink-0 ${
+                    isActive
+                      ? 'border-stone-800 shadow-sm'
+                      : 'border-stone-200 opacity-55 hover:opacity-100 hover:border-stone-400'
+                  }`}
+                >
+                  <img src={item.src} alt="" className="w-full h-full object-cover" draggable={false} />
+                </button>
+              );
+            })}
             <button
               onClick={() => activateGalleryImage(Math.min(images.length - 1, activeImg + 1))}
               disabled={activeImg === images.length - 1}

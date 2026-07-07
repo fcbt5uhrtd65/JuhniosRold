@@ -237,6 +237,9 @@ const INITIAL_PAYMENTS: Payment[] = [
 function mapApiProduct(p: ApiProduct): Product {
   const variants = p.variants ?? [];
   const primaryVariant = variants.find(variant => variant.is_active) ?? variants[0];
+  const otrasPresentaciones = variants
+    .filter(variant => variant.id !== primaryVariant?.id && variant.presentation)
+    .map(variant => variant.presentation);
   const attrs = primaryVariant?.attributes ?? {};
   const productType = attrs.type;
   const marca = attrs.brand ?? attrs.marca;
@@ -253,6 +256,7 @@ function mapApiProduct(p: ApiProduct): Product {
     presentacion: primaryVariant?.presentation ?? p.sizes[0] ?? '',
     presentacionNumero: primaryVariant?.presentation_number ?? undefined,
     presentacionUnidad: primaryVariant?.presentation_unit || undefined,
+    otrasPresentaciones: otrasPresentaciones.length > 0 ? otrasPresentaciones : undefined,
     precio: p.price ?? 0,
     precioCosto: primaryVariant?.cost ?? undefined,
     descripcion: p.description,

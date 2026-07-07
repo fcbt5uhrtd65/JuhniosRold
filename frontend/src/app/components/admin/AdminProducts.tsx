@@ -760,6 +760,11 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
                       </p>
                       <h3 className="text-[13px] font-semibold text-gray-900 mb-1 truncate">{product.nombre}</h3>
                       <p className="text-[11px] text-gray-400">{product.tipo} · {product.presentacion}</p>
+                      {product.otrasPresentaciones && product.otrasPresentaciones.length > 0 && (
+                        <p className="text-[10px] text-gray-400 mt-0.5">
+                          +{product.otrasPresentaciones.length} presentación(es): {product.otrasPresentaciones.join(', ')}
+                        </p>
+                      )}
                     </div>
                     <div className="ml-2 flex-shrink-0">
                       {estadoBadge(product.estado, stockActual, stockMinimo)}
@@ -880,7 +885,14 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
                     </div>
                   </Td>
                   <Td className="capitalize">{product.categoria}</Td>
-                  <Td>{product.presentacion}</Td>
+                  <Td>
+                    <p>{product.presentacion}</p>
+                    {product.otrasPresentaciones && product.otrasPresentaciones.length > 0 && (
+                      <p className="text-[10px] text-gray-400">
+                        +{product.otrasPresentaciones.join(', ')}
+                      </p>
+                    )}
+                  </Td>
                   <Td>
                     <div className="font-semibold">${product.precio.toLocaleString()}</div>
                     {Boolean(product.precioCosto) && product.precioCosto! > 0 && (
@@ -993,6 +1005,12 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
                     <ViewField label="Presentación" value={selectedProduct.presentacion} />
                     {selectedProduct.marca && <ViewField label="Marca" value={selectedProduct.marca} />}
                     {selectedProduct.codigo && <ViewField label="Código / SKU" value={selectedProduct.codigo} mono />}
+                    {selectedProduct.otrasPresentaciones && selectedProduct.otrasPresentaciones.length > 0 && (
+                      <ViewField
+                        label="Otras presentaciones"
+                        value={selectedProduct.otrasPresentaciones.join(', ')}
+                      />
+                    )}
                   </div>
 
                   <Card className="p-4 space-y-2">

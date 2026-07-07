@@ -17,6 +17,8 @@ export interface Product {
   presentacion: string;
   presentacionNumero?: number;
   presentacionUnidad?: 'ML' | 'LT' | 'GR' | 'KG' | 'UND';
+  /** Otras presentaciones del mismo producto (ej. si esta fila muestra 8 ML, aquí van "50 ML", "120 ML", etc.). */
+  otrasPresentaciones?: string[];
   precio: number;
   precioCosto?: number;
   descripcion: string;
