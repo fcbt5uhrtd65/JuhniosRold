@@ -33,6 +33,11 @@ type ViewMode = 'grid' | 'list';
 type PriceRange = 'all' | 'low' | 'mid' | 'high';
 type CollectionFilter = 'all' | 'featured' | 'recent';
 type CatalogBadge = 'nuevo' | 'destacado' | 'oferta';
+type ProductGalleryItem = {
+  src: string;
+  size: string | null;
+  variantId?: string;
+};
 
 const FALLBACK_IMAGE =
   'https://images.unsplash.com/photo-1608248597279-f99d160bfcbc?w=900&q=80';
@@ -57,16 +62,46 @@ function hasActivePromotion(product: CatalogProduct): boolean {
   return product.variants.some(v => v.active_promotion != null);
 }
 
-function getDiscountedPrice(product: CatalogProduct): number | null {
-  const variant = product.variants.find(v => v.discounted_price != null);
-  return variant?.discounted_price ?? null;
+function getDiscountedPrice(product: CatalogProduct, variant?: ProductVariant | null): number | null {
+  if (variant !== undefined) return variant?.discounted_price ?? null;
+  const promoVariant = product.variants.find(v => v.discounted_price != null);
+  return promoVariant?.discounted_price ?? null;
 }
 
-function getDiscountPercentage(product: CatalogProduct): number | null {
-  const original = product.price;
-  const discounted = getDiscountedPrice(product);
+function getDiscountPercentage(product: CatalogProduct, variant?: ProductVariant | null): number | null {
+  const original = variant?.current_price ?? product.price;
+  const discounted = getDiscountedPrice(product, variant);
   if (original === null || discounted === null || original <= 0) return null;
   return Math.round(((original - discounted) / original) * 100);
+}
+
+function getProductGallery(product: CatalogProduct, selectedVariant?: ProductVariant | null): ProductGalleryItem[] {
+  const items: ProductGalleryItem[] = [];
+  const seen = new Set<string>();
+
+  const add = (src: string | null | undefined, size: string | null, variantId?: string) => {
+    if (!src || seen.has(src)) return;
+    seen.add(src);
+    items.push({ src, size, variantId });
+  };
+
+  add(selectedVariant?.image_url, selectedVariant?.presentation ?? null, selectedVariant?.id);
+  product.variants.forEach(variant => {
+    add(variant.image_url, variant.presentation, variant.id);
+  });
+  add(product.primary_image, null);
+  product.image_urls.forEach(src => add(src, null));
+  add(FALLBACK_IMAGE, null);
+
+  return items;
+}
+
+function getDisplayedPrice(product: CatalogProduct, variant?: ProductVariant | null): number | null {
+  return getDiscountedPrice(product, variant) ?? variant?.current_price ?? product.price;
+}
+
+function getProductOriginalPrice(product: CatalogProduct, variant?: ProductVariant | null): number | null {
+  return variant?.current_price ?? product.price;
 }
 
 function getProductBadge(product: CatalogProduct): CatalogBadge | undefined {
@@ -80,14 +115,6 @@ function getProductImage(product: CatalogProduct, variant?: ProductVariant | nul
   return variant?.image_url || product.primary_image || product.image_urls[0] || FALLBACK_IMAGE;
 }
 
-function getProductImages(product: CatalogProduct, variant?: ProductVariant | null): string[] {
-  const imgs: string[] = [];
-  if (variant?.image_url) imgs.push(variant.image_url);
-  if (product.primary_image && product.primary_image !== variant?.image_url) imgs.push(product.primary_image);
-  product.image_urls.forEach(u => { if (u !== product.primary_image && u !== variant?.image_url) imgs.push(u); });
-  if (imgs.length === 0) imgs.push(FALLBACK_IMAGE);
-  return imgs.slice(0, 3);
-}
 
 function getProductSizes(product: CatalogProduct): string[] {
   return product.sizes.length > 0 ? product.sizes : ['Presentación única'];
@@ -336,7 +363,8 @@ export function ProductPage({
   const sizes = getProductSizes(product);
   const selSize = selectedSizes[product.id] ?? sizes[0];
   const selVariant = product.variants.find(v => v.presentation === selSize) ?? product.variants[0];
-  const images = getProductImages(product, selVariant);
+  const gallery = useMemo(() => getProductGallery(product, selVariant), [product, selVariant]);
+  const images = gallery.map(item => item.src);
   const [activeImg, setActiveImg] = useState(0);
   const [qty, setQty] = useState(1);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -362,6 +390,19 @@ export function ProductPage({
   useEffect(() => {
     setActiveImg(0);
   }, [selSize]);
+
+  useEffect(() => {
+    if (activeImg >= images.length) setActiveImg(0);
+  }, [activeImg, images.length]);
+
+  const activateGalleryImage = (index: number) => {
+    const safeIndex = ((index % images.length) + images.length) % images.length;
+    const item = gallery[safeIndex];
+    setActiveImg(safeIndex);
+    if (item?.size && item.size !== selSize) {
+      onSelectSize(product.id, item.size);
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -441,7 +482,7 @@ export function ProductPage({
           {/* Columna 1: Thumbnail rail vertical */}
           <div className="hidden lg:flex flex-col items-center gap-2 w-[104px]">
             <button
-              onClick={() => setActiveImg(i => Math.max(0, i - 1))}
+              onClick={() => activateGalleryImage(Math.max(0, activeImg - 1))}
               disabled={activeImg === 0}
               className="p-1.5 text-stone-300 hover:text-stone-600 disabled:opacity-20 transition-colors"
             >
@@ -450,7 +491,7 @@ export function ProductPage({
             {images.map((src, i) => (
               <button
                 key={i}
-                onClick={() => setActiveImg(i)}
+                onClick={() => activateGalleryImage(i)}
                 className={`w-[100px] h-[100px] rounded-xl overflow-hidden border-2 transition-all duration-150 flex-shrink-0 ${
                   activeImg === i
                     ? 'border-stone-800 shadow-sm'
@@ -461,7 +502,7 @@ export function ProductPage({
               </button>
             ))}
             <button
-              onClick={() => setActiveImg(i => Math.min(images.length - 1, i + 1))}
+              onClick={() => activateGalleryImage(Math.min(images.length - 1, activeImg + 1))}
               disabled={activeImg === images.length - 1}
               className="p-1.5 text-stone-300 hover:text-stone-600 disabled:opacity-20 transition-colors"
             >
@@ -485,20 +526,20 @@ export function ProductPage({
               />
             </AnimatePresence>
             <button
-              onClick={() => setActiveImg(i => (i - 1 + images.length) % images.length)}
+              onClick={() => activateGalleryImage(activeImg - 1)}
               className="lg:hidden absolute left-3 top-1/2 -translate-y-1/2 p-2 bg-white/85 rounded-full text-stone-600 shadow"
             >
               <ChevronLeft className="w-4 h-4" strokeWidth={1.5} />
             </button>
             <button
-              onClick={() => setActiveImg(i => (i + 1) % images.length)}
+              onClick={() => activateGalleryImage(activeImg + 1)}
               className="lg:hidden absolute right-3 top-1/2 -translate-y-1/2 p-2 bg-white/85 rounded-full text-stone-600 shadow"
             >
               <ChevronRight className="w-4 h-4" strokeWidth={1.5} />
             </button>
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
               {images.map((_, i) => (
-                <button key={i} onClick={() => setActiveImg(i)}
+                <button key={i} onClick={() => activateGalleryImage(i)}
                   className={`rounded-full transition-all duration-300 ${
                     activeImg === i ? 'w-6 h-1.5 bg-stone-700' : 'w-1.5 h-1.5 bg-stone-300/70 hover:bg-stone-400'
                   }`}
@@ -527,16 +568,16 @@ export function ProductPage({
               </span>
             </button>
 
-            {getDiscountedPrice(product) !== null ? (
+            {getDiscountedPrice(product, selVariant) !== null ? (
               <p className="flex items-center gap-3 mb-6">
                 <span className="text-[16px] text-red-500 line-through">
-                  {formatPrice(product.price, product.currency ?? 'COP')}
+                  {formatPrice(getProductOriginalPrice(product, selVariant), product.currency ?? 'COP')}
                 </span>
                 <span className="text-[28px] font-semibold text-emerald-600">
-                  {formatPrice(getDiscountedPrice(product), product.currency ?? 'COP')}
+                  {formatPrice(getDisplayedPrice(product, selVariant), product.currency ?? 'COP')}
                 </span>
-                <span className="px-2 py-0.5 text-[10px] font-bold text-red-700 bg-red-50 border border-red-200 rounded-full">
-                  -{getDiscountPercentage(product)}%
+                <span className="px-2 py-0.5 text-[10px] font-bold text-white bg-red-600 border border-red-600 rounded-full">
+                  -{getDiscountPercentage(product, selVariant)}%
                 </span>
               </p>
             ) : (
@@ -552,9 +593,10 @@ export function ProductPage({
                 <div className="flex flex-wrap gap-2">
                   {sizes.map(size => (
                     <button key={size} onClick={() => onSelectSize(product.id, size)}
-                      className={`px-4 py-2 text-[12.5px] rounded-lg border transition-all font-medium ${
-                        selSize === size ? 'border-stone-800 text-stone-900 bg-white shadow-sm' : 'border-stone-200 text-stone-500 hover:border-stone-400'
+                      className={`px-4 py-2 text-[12.5px] rounded-lg border transition-all font-semibold ${
+                        selSize === size ? 'border-[#2D3A1F] bg-[#2D3A1F] text-white shadow-sm' : 'border-stone-200 text-stone-500 hover:border-stone-400'
                       }`}
+                      aria-pressed={selSize === size}
                     >{size}</button>
                   ))}
                 </div>
@@ -840,7 +882,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
       name: product.name,
       category: product.category_name,
       size,
-      price: variant?.current_price ?? product.price ?? 0,
+      price: variant.discounted_price ?? variant.current_price ?? product.price ?? 0,
       image: getProductImage(product, variant),
     });
     if (added) toast.success(`${product.name} añadido al carrito`);
@@ -1076,6 +1118,9 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                 const saved  = isProductSaved(product.id);
                 const selSize = selectedSizes[product.id] ?? sizes[0];
                 const selVariant = product.variants.find(v => v.presentation === selSize) ?? product.variants[0];
+                const originalPrice = getProductOriginalPrice(product, selVariant);
+                const displayedPrice = getDisplayedPrice(product, selVariant);
+                const hasSelectedDiscount = getDiscountedPrice(product, selVariant) !== null;
                 const availableQty = selVariant?.available_quantity ?? null;
                 const minimumQty = selVariant?.minimum_quantity ?? 0;
                 const isLowStock = availableQty !== null && availableQty > 0 && availableQty <= minimumQty;
@@ -1123,18 +1168,18 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                         </div>
                       </div>
                       <div className="flex flex-col items-end justify-between gap-2 flex-shrink-0">
-                        {getDiscountedPrice(product) !== null ? (
+                        {hasSelectedDiscount ? (
                           <span className="flex flex-col items-end">
                             <span className="text-[10px] text-red-500 line-through">
-                              {formatPrice(product.price, product.currency ?? 'COP')}
+                              {formatPrice(originalPrice, product.currency ?? 'COP')}
                             </span>
-                            <span className="text-sm font-semibold text-emerald-600">
-                              {formatPrice(getDiscountedPrice(product), product.currency ?? 'COP')}
+                            <span className="text-base font-semibold text-emerald-600">
+                              {formatPrice(displayedPrice, product.currency ?? 'COP')}
                             </span>
                           </span>
                         ) : (
-                          <span className="text-sm font-semibold text-stone-900">
-                            {formatPrice(product.price, product.currency ?? 'COP')}
+                          <span className="text-base font-semibold text-stone-900">
+                            {formatPrice(displayedPrice, product.currency ?? 'COP')}
                           </span>
                         )}
                         {isLowStock && !isOutOfStock && (
@@ -1194,10 +1239,10 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                       {badge && (
                         <div className={`absolute top-3 left-3 z-10 flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-semibold border ${
                           badge === 'oferta'
-                            ? 'bg-red-50 text-red-700 border-red-200'
+                            ? 'bg-red-600 text-white border-red-600'
                             : badge === 'nuevo'
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                              : 'bg-amber-50 text-amber-700 border-amber-200'
+                              ? 'bg-emerald-600 text-white border-emerald-600'
+                              : 'bg-amber-500 text-white border-amber-500'
                         }`}>
                           {badge === 'oferta'
                             ? null
@@ -1283,18 +1328,18 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
 
                       {/* Precio + botón */}
                       <div className="flex flex-wrap items-center justify-between gap-2 mt-auto pt-3 border-t border-stone-100">
-                        {getDiscountedPrice(product) !== null ? (
+                        {hasSelectedDiscount ? (
                           <span className="flex flex-col">
                             <span className="text-[10px] text-red-500 line-through">
-                              {formatPrice(product.price, product.currency ?? 'COP')}
+                              {formatPrice(originalPrice, product.currency ?? 'COP')}
                             </span>
-                            <span className="text-base font-semibold text-emerald-600">
-                              {formatPrice(getDiscountedPrice(product), product.currency ?? 'COP')}
+                            <span className="text-lg font-semibold text-emerald-600">
+                              {formatPrice(displayedPrice, product.currency ?? 'COP')}
                             </span>
                           </span>
                         ) : (
-                          <span className="text-base font-semibold text-stone-900">
-                            {formatPrice(product.price, product.currency ?? 'COP')}
+                          <span className="text-lg font-semibold text-stone-900">
+                            {formatPrice(displayedPrice, product.currency ?? 'COP')}
                           </span>
                         )}
                         <motion.button

@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Trash2 } from 'lucide-react';
+import { PowerOff, Trash2 } from 'lucide-react';
 import { Modal, Field, inputCls, selectCls, Badge, PrimaryButton, SecondaryButton } from './AdminUI';
 import { useToast } from '../../contexts/ToastContext';
 import { getCategories } from '../../services/products.service';
 import {
   getPromotionsForProduct,
+  getPromotions,
   createPromotion,
   updatePromotion,
   deletePromotion,
@@ -19,6 +20,7 @@ interface AdminProductPromotionModalProps {
   productId: string;
   productName: string;
   categorySlug: string;
+  onChanged?: () => void | Promise<void>;
 }
 
 interface FormState {
@@ -43,6 +45,31 @@ function nowLocal(): string {
   return toDatetimeLocal(new Date().toISOString());
 }
 
+function formatDateTime(iso: string | null): string {
+  if (!iso) return 'Sin fecha final';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return 'Fecha no valida';
+  return date.toLocaleString('es-CO', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function formatDiscount(promo: Promotion): string {
+  if (promo.discount_type === 'PERCENTAGE') return `${promo.discount_value}%`;
+  return `$${promo.discount_value.toLocaleString('es-CO')}`;
+}
+
+function isCurrentlyActive(promo: Promotion): boolean {
+  const now = Date.now();
+  const starts = new Date(promo.starts_at).getTime();
+  const ends = promo.ends_at ? new Date(promo.ends_at).getTime() : Infinity;
+  return promo.is_active && (!Number.isFinite(starts) || starts <= now) && ends > now;
+}
+
 const EMPTY_FORM: FormState = {
   name: '',
   discount_type: 'PERCENTAGE',
@@ -54,7 +81,7 @@ const EMPTY_FORM: FormState = {
   is_active: true,
 };
 
-export function AdminProductPromotionModal({ open, onClose, productId, productName, categorySlug }: AdminProductPromotionModalProps) {
+export function AdminProductPromotionModal({ open, onClose, productId, productName, categorySlug, onChanged }: AdminProductPromotionModalProps) {
   const toast = useToast();
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [categoryId, setCategoryId] = useState<string | null>(null);
@@ -64,12 +91,23 @@ export function AdminProductPromotionModal({ open, onClose, productId, productNa
 
   useEffect(() => {
     if (!open) return;
-    setForm(EMPTY_FORM);
+    setForm({ ...EMPTY_FORM, starts_at: nowLocal() });
     setIsLoading(true);
-    Promise.all([getPromotionsForProduct(productId), getCategories(true)])
-      .then(([promos, categories]) => {
-        setPromotions(promos);
-        setCategoryId(categories.find(c => c.slug === categorySlug)?.id ?? null);
+    getCategories(true)
+      .then(async categories => {
+        const category = categories.find(c => c.slug === categorySlug || c.name.toLowerCase() === categorySlug.toLowerCase());
+        const resolvedCategoryId = category?.id ?? null;
+        setCategoryId(resolvedCategoryId);
+
+        const [productPromos, categoryPromos] = await Promise.all([
+          getPromotionsForProduct(productId),
+          resolvedCategoryId ? getPromotions({ category: resolvedCategoryId }) : Promise.resolve([]),
+        ]);
+        setPromotions(
+          [...productPromos, ...categoryPromos].filter((promo, index, all) => (
+            all.findIndex(item => item.id === promo.id) === index
+          )),
+        );
       })
       .catch(() => toast.error('No se pudieron cargar las promociones del producto.'))
       .finally(() => setIsLoading(false));
@@ -101,7 +139,8 @@ export function AdminProductPromotionModal({ open, onClose, productId, productNa
         is_active: form.is_active,
       });
       setPromotions(prev => [created, ...prev]);
-      setForm(EMPTY_FORM);
+      setForm({ ...EMPTY_FORM, starts_at: nowLocal() });
+      await onChanged?.();
       toast.success('Promoción creada correctamente.');
     } catch {
       toast.error('No se pudo crear la promoción.');
@@ -111,9 +150,12 @@ export function AdminProductPromotionModal({ open, onClose, productId, productNa
   }
 
   async function handleToggleActive(promo: Promotion) {
+    if (promo.is_active && !confirm(`¿Quitar la promoción "${promo.name}" antes de su fecha final?`)) return;
     try {
       const updated = await updatePromotion(promo.id, { is_active: !promo.is_active });
       setPromotions(prev => prev.map(p => (p.id === updated.id ? updated : p)));
+      await onChanged?.();
+      toast.success(updated.is_active ? 'Promoción activada.' : 'Promoción desactivada. El precio se actualizará sin descuento.');
     } catch {
       toast.error('No se pudo actualizar la promoción.');
     }
@@ -124,6 +166,7 @@ export function AdminProductPromotionModal({ open, onClose, productId, productNa
     try {
       await deletePromotion(promo.id);
       setPromotions(prev => prev.filter(p => p.id !== promo.id));
+      await onChanged?.();
       toast.success('Promoción eliminada.');
     } catch {
       toast.error('No se pudo eliminar la promoción.');
@@ -134,38 +177,49 @@ export function AdminProductPromotionModal({ open, onClose, productId, productNa
     <Modal title={`Promociones · ${productName}`} open={open} onClose={onClose} wide>
       <div className="flex flex-col gap-6">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-3">Promociones activas</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-3">Promociones aplicadas</p>
           {isLoading ? (
             <p className="text-xs text-gray-400">Cargando...</p>
           ) : promotions.length === 0 ? (
             <p className="text-xs text-gray-400">Este producto no tiene promociones configuradas.</p>
           ) : (
             <div className="flex flex-col gap-2">
-              {promotions.map(promo => (
-                <div key={promo.id} className="flex items-center justify-between gap-3 p-3 rounded-xl border border-gray-100 bg-gray-50/50">
-                  <div>
-                    <p className="text-xs font-semibold text-gray-900">{promo.name}</p>
-                    <p className="text-[11px] text-gray-500">
-                      {promo.discount_type === 'PERCENTAGE' ? `${promo.discount_value}%` : `$${promo.discount_value.toLocaleString()}`}
-                      {' · '}
-                      {promo.scope === 'CATEGORY' ? 'Toda la categoría' : 'Este producto'}
-                      {promo.ends_at ? ` · hasta ${new Date(promo.ends_at).toLocaleDateString('es-CO')}` : ''}
-                    </p>
+              {promotions.map(promo => {
+                const active = isCurrentlyActive(promo);
+                return (
+                  <div key={promo.id} className="flex flex-col gap-3 p-3 rounded-xl border border-gray-100 bg-gray-50/50 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-xs font-semibold text-gray-900">{promo.name}</p>
+                        <Badge label={active ? 'Activa' : promo.is_active ? 'Programada/expirada' : 'Inactiva'} color={active ? 'green' : 'gray'} />
+                      </div>
+                      <div className="mt-2 grid gap-1 text-[11px] text-gray-500 sm:grid-cols-2">
+                        <span>Descuento: <strong className="text-gray-700">{formatDiscount(promo)}</strong></span>
+                        <span>Aplica a: {promo.scope === 'CATEGORY' ? 'Toda la categoría' : 'Este producto'}</span>
+                        <span>Inicio: {formatDateTime(promo.starts_at)}</span>
+                        <span>Fin: {formatDateTime(promo.ends_at)}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleActive(promo)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 transition-colors hover:bg-red-50 hover:text-red-600 hover:border-red-200"
+                      >
+                        <PowerOff size={12} />
+                        {promo.is_active ? 'Quitar' : 'Activar'}
+                      </button>
+                      <button
+                        onClick={() => handleDelete(promo)}
+                        className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+                        title="Eliminar"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <button type="button" onClick={() => handleToggleActive(promo)}>
-                      <Badge label={promo.is_active ? 'Activa' : 'Inactiva'} color={promo.is_active ? 'green' : 'gray'} />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(promo)}
-                      className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
-                      title="Eliminar"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

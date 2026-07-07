@@ -313,7 +313,7 @@ interface AdminProductsProps {
 }
 
 export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
-  const { products, inventory, addProduct, updateProduct, deleteProduct } = useAdmin();
+  const { products, inventory, addProduct, updateProduct, deleteProduct, refreshData } = useAdmin();
   const toast = useToast();
   const [modalMode, setModalMode] = useState<ModalMode>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -1438,6 +1438,7 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
           productId={promotionModalProduct.id}
           productName={promotionModalProduct.nombre}
           categorySlug={promotionModalProduct.categoria}
+          onChanged={refreshData}
         />
       )}
     </div>
