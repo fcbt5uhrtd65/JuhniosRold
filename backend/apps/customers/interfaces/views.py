@@ -1,5 +1,7 @@
 from decimal import Decimal, InvalidOperation
 
+from django.db.models import Count, Q
+from django.http import FileResponse
 from rest_framework import permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -8,6 +10,8 @@ from rest_framework.views import APIView
 from apps.identity.interfaces.permissions import HasComponentAccess
 from shared.interfaces.viewsets import SoftDeleteModelViewSet
 
+from ..infrastructure.customer_excel import render_customers_xlsx
+from ..infrastructure.customer_pdf import render_customers_pdf
 from ..infrastructure.models import Customer, CustomerAddress, CustomerContact, CustomerSegment
 from ..infrastructure.serializers import (
     CustomerContactSerializer,
@@ -19,7 +23,9 @@ from .filters import CustomerFilter
 
 
 class CustomerViewSet(SoftDeleteModelViewSet):
-    queryset = Customer.objects.prefetch_related("contacts", "segments")
+    queryset = Customer.objects.prefetch_related("contacts", "segments").annotate(
+        orders_count=Count("orders", filter=~Q(orders__status="CANCELLED"), distinct=True)
+    )
     serializer_class = CustomerSerializer
     permission_classes = (HasComponentAccess,)
     required_component = "customers.management"
@@ -28,7 +34,9 @@ class CustomerViewSet(SoftDeleteModelViewSet):
     ordering_fields = ("created_at", "first_name", "last_name")
 
     def get_permissions(self):
-        self.required_component_action = "view" if self.action in {"list", "retrieve", "purchase_history"} else "edit"
+        self.required_component_action = (
+            "view" if self.action in {"list", "retrieve", "purchase_history", "export_pdf", "export_xlsx"} else "edit"
+        )
         return super().get_permissions()
 
     @action(detail=True, methods=("get",), url_path="purchase-history")
@@ -36,6 +44,28 @@ class CustomerViewSet(SoftDeleteModelViewSet):
         customer = self.get_object()
         orders = customer.orders.values("id", "number", "status", "total", "created_at")
         return Response(orders)
+
+    @action(detail=False, methods=("get",), url_path="export-pdf")
+    def export_pdf(self, request):
+        queryset = self.filter_queryset(self.get_queryset()).order_by("first_name", "last_name")
+        pdf_buffer = render_customers_pdf(queryset)
+        return FileResponse(
+            pdf_buffer,
+            as_attachment=True,
+            filename="clientes-juhnios-rold.pdf",
+            content_type="application/pdf",
+        )
+
+    @action(detail=False, methods=("get",), url_path="export-xlsx")
+    def export_xlsx(self, request):
+        queryset = self.filter_queryset(self.get_queryset()).order_by("first_name", "last_name")
+        xlsx_buffer = render_customers_xlsx(queryset)
+        return FileResponse(
+            xlsx_buffer,
+            as_attachment=True,
+            filename="clientes-juhnios-rold.xlsx",
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
 
 
 class CustomerContactViewSet(SoftDeleteModelViewSet):

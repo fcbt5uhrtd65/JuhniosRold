@@ -1,4 +1,4 @@
-import { api } from './api';
+import { api, API_BASE_URL, getAccessToken } from './api';
 
 interface PaginatedResponse<T> {
   count: number;
@@ -83,4 +83,62 @@ export async function updateCustomer(
 
 export async function deleteCustomer(id: string): Promise<void> {
   await api.delete(`/customers/${id}/`);
+}
+
+export interface CustomerExportFilters {
+  city?: string;
+  minOrders?: number;
+  maxOrders?: number;
+  search?: string;
+}
+
+function buildExportQuery(filters?: CustomerExportFilters): string {
+  const query = new URLSearchParams();
+  if (filters?.city) query.set('city', filters.city);
+  if (filters?.minOrders !== undefined) query.set('min_orders', String(filters.minOrders));
+  if (filters?.maxOrders !== undefined) query.set('max_orders', String(filters.maxOrders));
+  if (filters?.search) query.set('search', filters.search);
+  const qs = query.toString();
+  return qs ? `?${qs}` : '';
+}
+
+async function downloadCustomersFile(path: string, filename: string, errorMessage: string): Promise<void> {
+  const token = getAccessToken();
+  if (!token) {
+    throw new Error('Tu sesion expiro. Inicia sesion de nuevo.');
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok) {
+    throw new Error(errorMessage);
+  }
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+export async function exportCustomersPdf(filters?: CustomerExportFilters): Promise<void> {
+  await downloadCustomersFile(
+    `/customers/export-pdf/${buildExportQuery(filters)}`,
+    'clientes-juhnios-rold.pdf',
+    'No se pudo exportar el PDF de clientes.',
+  );
+}
+
+export async function exportCustomersExcel(filters?: CustomerExportFilters): Promise<void> {
+  await downloadCustomersFile(
+    `/customers/export-xlsx/${buildExportQuery(filters)}`,
+    'clientes-juhnios-rold.xlsx',
+    'No se pudo exportar el Excel de clientes.',
+  );
 }

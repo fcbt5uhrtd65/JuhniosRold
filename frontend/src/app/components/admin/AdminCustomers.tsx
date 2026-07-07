@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAdmin } from '../../contexts/AdminContext';
-import { Users, TrendingUp, DollarSign, Plus, Search, ChevronDown, ChevronUp, X, FileText, Loader2, Pencil, Trash2, AlertTriangle } from 'lucide-react';
+import { Users, TrendingUp, DollarSign, Plus, Search, ChevronDown, ChevronUp, X, FileText, FileDown, FileSpreadsheet, Loader2, Pencil, Trash2, AlertTriangle } from 'lucide-react';
 import { getInvoiceByOrder, openInvoicePdf } from '../../services/payments.service';
+import { exportCustomersPdf, exportCustomersExcel } from '../../services/customers.service';
 import { useToast } from '../../contexts/ToastContext';
 import { format } from 'date-fns';
 import { LocationPicker } from '../ui/LocationPicker';
@@ -218,6 +219,13 @@ export function AdminCustomers() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
+  const [showExportPanel, setShowExportPanel] = useState(false);
+  const [exportCity, setExportCity] = useState('');
+  const [exportMinOrders, setExportMinOrders] = useState('');
+  const [exportMaxOrders, setExportMaxOrders] = useState('');
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportingExcel, setExportingExcel] = useState(false);
+
   const normalizeText = (value: string | undefined | null) =>
     value?.toLowerCase().trim() ?? '';
 
@@ -332,6 +340,36 @@ export function AdminCustomers() {
     }
   };
 
+  const buildExportFilters = () => ({
+    city: exportCity.trim() || undefined,
+    minOrders: exportMinOrders.trim() ? Number(exportMinOrders) : undefined,
+    maxOrders: exportMaxOrders.trim() ? Number(exportMaxOrders) : undefined,
+  });
+
+  const handleExportPdf = async () => {
+    setExportingPdf(true);
+    try {
+      await exportCustomersPdf(buildExportFilters());
+      toast.success('PDF de clientes generado');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo exportar el PDF de clientes');
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
+  const handleExportExcel = async () => {
+    setExportingExcel(true);
+    try {
+      await exportCustomersExcel(buildExportFilters());
+      toast.success('Excel de clientes generado');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo exportar el Excel de clientes');
+    } finally {
+      setExportingExcel(false);
+    }
+  };
+
   const stats = {
     total: customers.length,
     nuevos: customers.filter(c => {
@@ -355,13 +393,89 @@ export function AdminCustomers() {
           <h2 className="text-lg font-semibold text-gray-900">Clientes</h2>
           <p className="text-xs text-gray-500 mt-0.5">{filteredCustomers.length} de {customers.length} clientes</p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white text-xs font-semibold rounded-xl hover:bg-[#3d5c4e] transition-colors whitespace-nowrap"
-        >
-          <Plus size={14} /> Nuevo Cliente
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowExportPanel(v => !v)}
+            className="flex items-center gap-2 px-4 py-2.5 border border-[#2a4038] text-[#2a4038] text-xs font-semibold rounded-xl hover:bg-[#eef4f1] transition-colors whitespace-nowrap"
+          >
+            <FileDown size={14} /> Exportar
+          </button>
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white text-xs font-semibold rounded-xl hover:bg-[#3d5c4e] transition-colors whitespace-nowrap"
+          >
+            <Plus size={14} /> Nuevo Cliente
+          </button>
+        </div>
       </div>
+
+      {showExportPanel && (
+        <Card className="p-4 mb-5">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-semibold text-gray-900">Exportar clientes</p>
+            <button onClick={() => setShowExportPanel(false)} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 transition-colors">
+              <X size={14} />
+            </button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1.5">Ciudad</label>
+              <input
+                value={exportCity}
+                onChange={e => setExportCity(e.target.value)}
+                placeholder="Ej. Medellín"
+                className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#2a4038]/20 focus:border-[#2a4038]"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1.5">Mínimo de pedidos</label>
+              <input
+                type="number"
+                min={0}
+                value={exportMinOrders}
+                onChange={e => setExportMinOrders(e.target.value)}
+                placeholder="Ej. 1"
+                className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#2a4038]/20 focus:border-[#2a4038]"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1.5">Máximo de pedidos</label>
+              <input
+                type="number"
+                min={0}
+                value={exportMaxOrders}
+                onChange={e => setExportMaxOrders(e.target.value)}
+                placeholder="Ej. 10"
+                className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#2a4038]/20 focus:border-[#2a4038]"
+              />
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-2 mt-4">
+            <button
+              onClick={() => { setExportCity(''); setExportMinOrders(''); setExportMaxOrders(''); }}
+              className="text-xs font-semibold text-gray-500 hover:text-[#2a4038] mr-auto"
+            >
+              Limpiar filtros de exportación
+            </button>
+            <button
+              onClick={() => void handleExportExcel()}
+              disabled={exportingExcel}
+              className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 text-gray-700 text-xs font-semibold rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {exportingExcel ? <Loader2 size={14} className="animate-spin" /> : <FileSpreadsheet size={14} />}
+              {exportingExcel ? 'Generando...' : 'Exportar a Excel'}
+            </button>
+            <button
+              onClick={() => void handleExportPdf()}
+              disabled={exportingPdf}
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white text-xs font-semibold rounded-xl hover:bg-[#3d5c4e] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {exportingPdf ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
+              {exportingPdf ? 'Generando...' : 'Exportar a PDF'}
+            </button>
+          </div>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
         <KpiCard label="Total" value={String(stats.total)} icon={Users} color="text-[#2a4038] bg-[#2a4038]/10" />
