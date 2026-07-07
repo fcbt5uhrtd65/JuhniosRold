@@ -15,7 +15,7 @@ import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent,
 } from '../ui/dropdown-menu';
-import { requestProductsExport, getCategories, getProductById, type ExportFormat, type PdfLayout, type ProductVariant } from '../../services/products.service';
+import { requestProductsExport, getCategories, getProductById, updateProductVariant, type ExportFormat, type PdfLayout, type ProductVariant } from '../../services/products.service';
 import { getProductReviews, type ProductReview } from '../../services/reviews.service';
 import { getWholesaleSettingsApi, updateWholesaleSettingsApi } from '../../services/cart.service';
 import { pollExportStatus, downloadFile } from '../../utils/pollExportStatus';
@@ -252,6 +252,11 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
   const [formData, setFormData] = useState<Omit<Product, 'id'>>(EMPTY_FORM);
   const [wholesaleSettings, setWholesaleSettings] = useState(getWholesaleSettings);
   const [catalogCategories, setCatalogCategories] = useState<string[]>([]);
+  const [editVariants, setEditVariants] = useState<ProductVariant[]>([]);
+  const [editingVariantId, setEditingVariantId] = useState<string | null>(null);
+  const [isLoadingEditVariants, setIsLoadingEditVariants] = useState(false);
+  const [editVariantImage, setEditVariantImage] = useState('');
+  const [primaryVariantId, setPrimaryVariantId] = useState<string | null>(null);
 
   const set = (patch: Partial<Omit<Product, 'id'>>) => setFormData(prev => ({ ...prev, ...patch }));
 
@@ -321,6 +326,35 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
     });
     setActiveSection('general');
     setModalMode('edit');
+    setEditVariants([]);
+    setEditingVariantId(null);
+    setEditVariantImage(product.imagen);
+    if (product.otrasPresentaciones && product.otrasPresentaciones.length > 0) {
+      setIsLoadingEditVariants(true);
+      getProductById(product.id)
+        .then(full => {
+          setEditVariants(full.variants);
+          const primary = full.variants.find(v => v.presentation === product.presentacion) ?? full.variants[0];
+          setEditingVariantId(primary?.id ?? null);
+          setPrimaryVariantId(primary?.id ?? null);
+          setEditVariantImage(primary?.image_url ?? product.imagen);
+        })
+        .catch(() => setEditVariants([]))
+        .finally(() => setIsLoadingEditVariants(false));
+    }
+  };
+
+  const selectEditVariant = (variant: ProductVariant) => {
+    setEditingVariantId(variant.id);
+    setEditVariantImage(variant.image_url);
+    set({
+      presentacion: variant.presentation,
+      presentacionNumero: variant.presentation_number ?? undefined,
+      presentacionUnidad: (variant.presentation_unit || 'ML') as NonNullable<Product['presentacionUnidad']>,
+      precio: variant.current_price ?? 0,
+      precioCosto: variant.cost || undefined,
+      codigo: variant.sku,
+    });
   };
 
   const openView = (product: Product) => {
@@ -345,7 +379,43 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
     setIsSubmitting(true);
     try {
       if (modalMode === 'edit' && selectedProduct) {
-        await updateProduct(selectedProduct.id, formData);
+        const isEditingSiblingVariant = editingVariantId !== null && editingVariantId !== primaryVariantId;
+        if (isEditingSiblingVariant) {
+          // Los campos de producto (nombre, categoría, descripción, estado, imágenes
+          // genéricas) se guardan igual; los de la variante seleccionada van aparte,
+          // directo a esa variante y no a "la primera activa" del producto.
+          await Promise.all([
+            updateProduct(selectedProduct.id, {
+              nombre: formData.nombre,
+              categoria: formData.categoria,
+              descripcion: formData.descripcion,
+              estado: formData.estado,
+              imagenes: formData.imagenes,
+              imagen: formData.imagen,
+              marca: formData.marca,
+              tipo: formData.tipo,
+              beneficios: formData.beneficios,
+              modoDeUso: formData.modoDeUso,
+              ingredientes: formData.ingredientes,
+              stockMinimo: formData.stockMinimo,
+            }),
+            updateProductVariant(editingVariantId, {
+              sku: formData.codigo,
+              presentation_number: formData.presentacionNumero,
+              presentation_unit: formData.presentacionUnidad,
+              cost: formData.precioCosto,
+              price: formData.precio,
+              image_url: editVariantImage,
+            }),
+          ]);
+        } else {
+          await updateProduct(selectedProduct.id, formData);
+          // updateProduct no toca el image_url propio de la variante (solo la
+          // galería genérica del producto), así que se guarda aparte si cambió.
+          if (editingVariantId && editVariantImage !== undefined) {
+            await updateProductVariant(editingVariantId, { image_url: editVariantImage });
+          }
+        }
         toast.success('Producto actualizado correctamente');
       } else {
         await addProduct(formData);
@@ -935,6 +1005,45 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
               {/* GENERAL */}
               {activeSection === 'general' && (
                 <div className="space-y-5">
+                  {modalMode === 'edit' && editVariants.length > 1 && (
+                    <div>
+                      <FormLabel>Presentación que estás editando</FormLabel>
+                      <div className="flex gap-3 overflow-x-auto pb-1">
+                        {editVariants.map(variant => (
+                          <button
+                            key={variant.id}
+                            type="button"
+                            onClick={() => selectEditVariant(variant)}
+                            title={variant.presentation}
+                            className={`flex flex-col items-center gap-1 flex-shrink-0 group`}
+                          >
+                            <div
+                              className={`w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${
+                                editingVariantId === variant.id
+                                  ? 'border-[#2a4038] shadow-sm'
+                                  : 'border-gray-200 opacity-60 group-hover:opacity-100 group-hover:border-gray-300'
+                              }`}
+                            >
+                              {variant.image_url ? (
+                                <img src={variant.image_url} alt={variant.presentation} className="w-full h-full object-contain bg-gray-50 p-1" />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center bg-gray-50">
+                                  <Package size={16} className="text-gray-300" />
+                                </div>
+                              )}
+                            </div>
+                            <span className={`text-[10px] font-medium ${editingVariantId === variant.id ? 'text-[#2a4038]' : 'text-gray-400'}`}>
+                              {variant.presentation}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[11px] text-gray-400 mt-1">
+                        {isLoadingEditVariants ? 'Cargando presentaciones...' : 'Haz clic en una presentación para editar su SKU, precio, costo e imagen específicos.'}
+                      </p>
+                    </div>
+                  )}
+
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="md:col-span-2">
                       <FormLabel required>Nombre del producto</FormLabel>
@@ -1056,6 +1165,15 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
                     />
                   </div>
 
+                  {modalMode === 'edit' && editVariants.length > 0 && (
+                    <div>
+                      <FormLabel>Imagen de esta presentación ({formData.presentacion})</FormLabel>
+                      <div className="max-w-[220px]">
+                        <ImageUploader value={editVariantImage} onChange={setEditVariantImage} />
+                      </div>
+                    </div>
+                  )}
+
                   <div>
                     <FormLabel>Imágenes (hasta 3)</FormLabel>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -1083,6 +1201,11 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
               {/* PRECIOS */}
               {activeSection === 'precios' && (
                 <div className="space-y-5">
+                  {modalMode === 'edit' && editVariants.length > 1 && (
+                    <p className="text-[11px] text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+                      Estás editando el precio de la presentación <strong>{formData.presentacion}</strong>. Cambia de presentación en la pestaña General para editar otro precio.
+                    </p>
+                  )}
                   <div className="grid md:grid-cols-2 gap-4">
                     <div>
                       <FormLabel required>Precio de venta (COP)</FormLabel>

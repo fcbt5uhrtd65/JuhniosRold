@@ -763,6 +763,50 @@ export async function createProduct(payload: CreateProductPayload): Promise<Prod
   return getProductById(res.data.id);
 }
 
+export interface UpdateVariantPayload {
+  sku?: string;
+  presentation_number?: number;
+  presentation_unit?: 'ML' | 'LT' | 'GR' | 'KG' | 'UND';
+  cost?: number;
+  price?: number;
+  image_url?: string;
+  is_active?: boolean;
+}
+
+/**
+ * Actualiza UNA variante específica por su propio id (no "la primera activa
+ * del producto" como hace updateProduct), para permitir editar cada
+ * presentación de un producto multi-variante de forma independiente.
+ */
+export async function updateProductVariant(variantId: string, payload: UpdateVariantPayload): Promise<void> {
+  const hasVariantFields =
+    payload.sku !== undefined ||
+    payload.presentation_number !== undefined ||
+    payload.presentation_unit !== undefined ||
+    payload.cost !== undefined ||
+    payload.image_url !== undefined ||
+    payload.is_active !== undefined;
+
+  if (hasVariantFields) {
+    await api.patch(`${VARIANTS_PATH}${variantId}/`, {
+      ...(payload.sku !== undefined ? { sku: payload.sku } : {}),
+      ...(payload.presentation_number !== undefined ? { presentation_number: String(payload.presentation_number) } : {}),
+      ...(payload.presentation_unit !== undefined ? { presentation_unit: payload.presentation_unit } : {}),
+      ...(payload.cost !== undefined ? { cost: String(payload.cost) } : {}),
+      ...(payload.image_url !== undefined ? { image_url: payload.image_url } : {}),
+      ...(payload.is_active !== undefined ? { is_active: payload.is_active } : {}),
+    });
+  }
+
+  if (payload.price !== undefined) {
+    const res = await api.get<BackendVariant>(`${VARIANTS_PATH}${variantId}/`);
+    const price = res.data?.prices.find((item) => item.is_active) ?? res.data?.prices[0];
+    if (price) {
+      await api.patch(`${PRICES_PATH}${price.id}/`, { amount: String(payload.price) });
+    }
+  }
+}
+
 export async function updateProduct(id: string, payload: UpdateProductPayload): Promise<Product> {
   const categoryId = payload.category
     ? await resolveCategoryId(payload.category)
