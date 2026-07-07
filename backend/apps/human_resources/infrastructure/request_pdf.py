@@ -1,5 +1,6 @@
 import io
 import os
+from datetime import datetime
 
 from django.utils import timezone
 from reportlab.lib.colors import HexColor
@@ -158,14 +159,41 @@ def _datetime_label(value):
     return f"{value:%d/%m/%Y %H:%M}" if value else "-"
 
 
+def _time_label(value):
+    return f"{value:%H:%M}" if value else "-"
+
+
+def _calculate_hours_label(vacation):
+    if vacation.start_time and vacation.end_time:
+        base_date = vacation.start_date or vacation.end_date
+        start = datetime.combine(base_date, vacation.start_time)
+        end = datetime.combine(base_date, vacation.end_time)
+        if end > start:
+            day_count = 1
+            if vacation.start_date and vacation.end_date:
+                day_count = max((vacation.end_date - vacation.start_date).days + 1, 1)
+            minutes = int((end - start).total_seconds() // 60) * day_count
+            hours, remainder = divmod(minutes, 60)
+            if remainder:
+                return f"{hours} h {remainder} min"
+            return f"{hours} h"
+    if vacation.hours_count not in (None, ""):
+        value = float(vacation.hours_count)
+        hours = int(value)
+        minutes = round((value - hours) * 60)
+        return f"{hours} h {minutes} min" if minutes else f"{hours} h"
+    return "-"
+
+
+def _is_overtime(vacation):
+    return getattr(vacation, "request_type", "") == "OVERTIME"
+
+
 def _employee_name(employee):
     return f"{_safe(employee.first_name, '')} {_safe(employee.last_name, '')}".strip() or "-"
 
 
 def _draw_header(c, x0, x1, y, vacation):
-    main_w = x1 - x0
-    c.setFillColor(BRAND_COLOR)
-    c.rect(x0, y - 5, main_w, 3, stroke=0, fill=1)
     logo_size = _draw_logo(c, x0, y - 13, size=42)
     text_x = x0 + logo_size + (12 if logo_size else 0)
     _draw_text(c, text_x, y - 22, COMPANY_NAME, size=13.5, bold=True)
@@ -175,9 +203,6 @@ def _draw_header(c, x0, x1, y, vacation):
     status_text = vacation.get_status_display()
     pill_w = max(84, stringWidth(status_text, "Helvetica-Bold", 7.3) + 18)
     _pill(c, x1 - pill_w, y - 53, status_text, _status_color(vacation.status), pill_w)
-    c.setStrokeColor(LINE_COLOR)
-    c.setLineWidth(0.8)
-    c.line(x0, y - 65, x1, y - 65)
 
 
 def _draw_summary_card(c, x0, y, w, vacation, employee):
@@ -227,12 +252,15 @@ def _draw_step(c, x, y, w, number, step_name, status, actor, date_text, comment)
     c.setLineWidth(1.1)
     c.circle(x + 14, y - 20, 8, stroke=1, fill=1)
     _draw_text(c, x + 14, y - 23, str(number), size=7, bold=True, align="center", color=status_color)
-    _draw_text(c, x + 30, y - 13, _fit_text(step_name, 148, font_size=8.5), size=8.5, bold=True)
-    _pill(c, x + 190, y - 12, _fit_text(status_label, 72, "Helvetica-Bold", 7.2), status_color, 82)
-    _draw_text(c, x + 290, y - 13, _fit_text(f"Fecha: {date_text}", 120, font_size=7.4), size=7.4, color=TEXT_COLOR)
+    status_x = x + w - 248
+    date_x = x + w - 150
+    detail_x = status_x
+    _draw_text(c, x + 30, y - 13, _fit_text(step_name, 158, font_size=8.5), size=8.5, bold=True)
+    _pill(c, status_x, y - 12, _fit_text(status_label, 72, "Helvetica-Bold", 7.2), status_color, 82)
+    _draw_text(c, date_x, y - 13, _fit_text(f"Fecha: {date_text}", w - 154, font_size=7.4), size=7.4, color=TEXT_COLOR)
     detail = comment if comment and comment != "-" else "Pendiente de gestion" if date_text == "-" else "Accion registrada"
     _draw_text(c, x + 30, y - 28, _fit_text(f"Responsable: {actor}", 218, font_size=7.4), size=7.4, color=MUTED_COLOR)
-    _draw_text(c, x + 260, y - 28, _fit_text(f"Detalle: {detail}", w - 266, font_size=7.4), size=7.4, color=MUTED_COLOR)
+    _draw_text(c, detail_x, y - 28, _fit_text(f"Detalle: {detail}", w - 252, font_size=7.4), size=7.4, color=MUTED_COLOR)
 
 
 def _draw_approval_flow(c, x, y, w, vacation):
@@ -308,6 +336,12 @@ def render_request_pdf(vacation):
         ("Hasta", _date_label(vacation.end_date)),
         ("Estado actual", vacation.get_status_display()),
     ]
+    if _is_overtime(vacation):
+        request_fields.extend([
+            ("Hora inicio", _time_label(vacation.start_time)),
+            ("Hora fin", _time_label(vacation.end_time)),
+            ("Total horas", _calculate_hours_label(vacation)),
+        ])
 
     left_w = (main_w - 12) / 2
     left_bottom = _draw_info_card(c, x0, y, left_w, "Datos del solicitante", applicant_fields)

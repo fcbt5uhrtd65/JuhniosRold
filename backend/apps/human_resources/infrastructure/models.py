@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.core.validators import FileExtensionValidator
 from django.conf import settings
 from django.db import models
@@ -113,10 +115,30 @@ class VacationRequest(BaseModel):
     hr_comment = models.TextField(blank=True)
 
     def save(self, *args, **kwargs):
+        update_fields = kwargs.get("update_fields")
         if not self.request_number:
             self.request_number = self.generate_request_number()
+            if update_fields is not None:
+                update_fields = set(update_fields)
+                update_fields.add("request_number")
+                kwargs["update_fields"] = tuple(update_fields)
         if self.start_date and self.end_date and not self.days_count:
             self.days_count = max((self.end_date - self.start_date).days + 1, 0)
+            if update_fields is not None:
+                update_fields = set(update_fields)
+                update_fields.add("days_count")
+                kwargs["update_fields"] = tuple(update_fields)
+        if self.start_date and self.end_date and self.start_time and self.end_time:
+            start_minutes = self.start_time.hour * 60 + self.start_time.minute
+            end_minutes = self.end_time.hour * 60 + self.end_time.minute
+            if end_minutes > start_minutes:
+                day_count = max((self.end_date - self.start_date).days + 1, 1)
+                total_minutes = (end_minutes - start_minutes) * day_count
+                self.hours_count = (Decimal(total_minutes) / Decimal(60)).quantize(Decimal("0.01"))
+                if update_fields is not None:
+                    update_fields = set(update_fields)
+                    update_fields.add("hours_count")
+                    kwargs["update_fields"] = tuple(update_fields)
         super().save(*args, **kwargs)
 
     @classmethod
