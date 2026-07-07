@@ -15,7 +15,8 @@ import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent,
 } from '../ui/dropdown-menu';
-import { requestProductsExport, getCategories, getProductById, updateProductVariant, updateVariantImages, type ExportFormat, type PdfLayout, type ProductVariant } from '../../services/products.service';
+import { requestProductsExport, getCategories, getProductById, updateProductVariant, updateVariantImages, createProductVariant, type ExportFormat, type PdfLayout, type ProductVariant } from '../../services/products.service';
+import { createInitialStock } from '../../services/inventory.service';
 import { getProductReviews, type ProductReview } from '../../services/reviews.service';
 import { getWholesaleSettingsApi, updateWholesaleSettingsApi } from '../../services/cart.service';
 import { pollExportStatus, downloadFile } from '../../utils/pollExportStatus';
@@ -23,6 +24,7 @@ import { resolveBackendUrl, ApiError } from '../../services/api';
 import { getWholesaleSettings, saveWholesaleSettings } from '../../utils/wholesale';
 import { Card, Badge, type BadgeColor, Table, Th, Td, Modal, EmptyState, inputCls, selectCls, ImageUploader } from './AdminUI';
 import { AdminVariantImagesModal } from './AdminVariantImagesModal';
+import { AddVariantModal } from './AddVariantModal';
 
 type ViewMode = 'grid' | 'table';
 type SortField = 'nombre' | 'precio' | 'categoria' | 'estado' | 'stock';
@@ -267,6 +269,7 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
   const [isLoadingEditVariants, setIsLoadingEditVariants] = useState(false);
   const [editVariantImages, setEditVariantImages] = useState<string[]>([]);
   const [primaryVariantId, setPrimaryVariantId] = useState<string | null>(null);
+  const [isAddingVariant, setAddingVariant] = useState(false);
 
   const set = (patch: Partial<Omit<Product, 'id'>>) => setFormData(prev => ({ ...prev, ...patch }));
 
@@ -363,6 +366,15 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
       precioCosto: variant.cost || undefined,
       codigo: variant.sku,
     });
+  };
+
+  const handleVariantCreated = async (full: Awaited<ReturnType<typeof getProductById>>) => {
+    setEditVariants(full.variants);
+    const newest = full.variants[full.variants.length - 1];
+    if (newest) selectEditVariant(newest);
+    setAddingVariant(false);
+    await refreshData();
+    toast.success('Presentación agregada correctamente');
   };
 
   const openView = (product: Product) => {
@@ -1007,9 +1019,9 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
               {/* GENERAL */}
               {activeSection === 'general' && (
                 <div className="space-y-5">
-                  {modalMode === 'edit' && editVariants.length > 1 && (
+                  {modalMode === 'edit' && (editVariants.length > 0 || isLoadingEditVariants) && (
                     <div>
-                      <FormLabel>Presentación que estás editando</FormLabel>
+                      <FormLabel>Presentaciones de este producto</FormLabel>
                       <div className="flex gap-3 overflow-x-auto pb-1">
                         {editVariants.map(variant => (
                           <button
@@ -1039,9 +1051,20 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
                             </span>
                           </button>
                         ))}
+                        <button
+                          type="button"
+                          onClick={() => setAddingVariant(true)}
+                          title="Agregar nueva presentación"
+                          className="flex flex-col items-center gap-1 flex-shrink-0"
+                        >
+                          <div className="w-16 h-16 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center text-gray-400 hover:border-[#2a4038] hover:text-[#2a4038] transition-colors">
+                            <Plus size={20} />
+                          </div>
+                          <span className="text-[10px] font-medium text-gray-400">Nueva</span>
+                        </button>
                       </div>
                       <p className="text-[11px] text-gray-400 mt-1">
-                        {isLoadingEditVariants ? 'Cargando presentaciones...' : 'Haz clic en una presentación para editar su SKU, precio, costo e imagen específicos.'}
+                        {isLoadingEditVariants ? 'Cargando presentaciones...' : 'Haz clic en una presentación para editar su SKU, precio, costo e imágenes específicos.'}
                       </p>
                     </div>
                   )}
@@ -1408,6 +1431,16 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
           productId={variantImagesModalProduct.id}
           productName={variantImagesModalProduct.nombre}
           onChanged={refreshData}
+        />
+      )}
+
+      {selectedProduct && modalMode === 'edit' && (
+        <AddVariantModal
+          open={isAddingVariant}
+          onClose={() => setAddingVariant(false)}
+          productId={selectedProduct.id}
+          productName={selectedProduct.nombre}
+          onCreated={handleVariantCreated}
         />
       )}
     </div>

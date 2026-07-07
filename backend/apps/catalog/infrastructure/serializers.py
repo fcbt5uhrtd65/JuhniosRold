@@ -277,3 +277,64 @@ class CompleteProductSerializer(serializers.Serializer):
             is_active=True,
         )
         return product
+
+
+class CompleteVariantSerializer(serializers.Serializer):
+    """Agrega una ProductVariant + Price a un Product YA EXISTENTE, en una sola
+    transacción atómica (misma razón que CompleteProductSerializer: evita
+    variantes sin precio si el segundo paso fallara por separado)."""
+
+    product = serializers.PrimaryKeyRelatedField(queryset=Product.objects.all())
+    sku = serializers.CharField(max_length=80)
+    variant_name = serializers.CharField(max_length=150)
+    presentation_number = serializers.DecimalField(
+        max_digits=10, decimal_places=3, required=False, allow_null=True, default=None,
+    )
+    presentation_unit = serializers.ChoiceField(
+        choices=ProductVariant.PresentationUnit.choices, required=False, allow_blank=True, default="",
+    )
+    variant_attributes = serializers.JSONField(required=False, default=dict)
+    cost = serializers.DecimalField(max_digits=14, decimal_places=2, required=False, default=Decimal("0"))
+    variant_image_url = serializers.CharField(required=False, allow_blank=True, default="")
+    variant_images = serializers.ListField(
+        child=serializers.CharField(allow_blank=True), required=False, default=list,
+    )
+    is_active = serializers.BooleanField(required=False, default=True)
+    price = serializers.DecimalField(max_digits=14, decimal_places=2)
+
+    def validate_sku(self, value):
+        if ProductVariant.objects.filter(sku=value).exists():
+            raise serializers.ValidationError("Ya existe una variante con ese SKU/código.")
+        return value
+
+    @transaction.atomic
+    def create(self, validated_data):
+        variant = ProductVariant.objects.create(
+            product=validated_data["product"],
+            sku=validated_data["sku"],
+            name=validated_data["variant_name"],
+            presentation_number=validated_data.get("presentation_number"),
+            presentation_unit=validated_data.get("presentation_unit", ""),
+            attributes=validated_data.get("variant_attributes") or {},
+            cost=validated_data.get("cost", Decimal("0")),
+            image_url=validated_data.get("variant_image_url", ""),
+            is_active=validated_data.get("is_active", True),
+        )
+        for position, image_url in enumerate(validated_data.get("variant_images") or []):
+            if not image_url:
+                continue
+            ProductVariantImage.objects.create(
+                variant=variant,
+                image=image_url,
+                position=position,
+                is_primary=position == 0,
+            )
+        Price.objects.create(
+            variant=variant,
+            amount=validated_data["price"],
+            currency="COP",
+            valid_from=timezone.now(),
+            valid_until=None,
+            is_active=True,
+        )
+        return variant

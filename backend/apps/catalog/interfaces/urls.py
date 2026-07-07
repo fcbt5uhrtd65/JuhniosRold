@@ -12,6 +12,7 @@ from .views import (
     ProductVariantImageViewSet,
     ProductVariantViewSet,
     ProductViewSet,
+    VariantCompleteCreateView,
 )
 
 router = DefaultRouter()
@@ -27,4 +28,5 @@ urlpatterns = [
     path("exports/", ProductExportView.as_view(), name="product-export"),
     path("exports/<str:task_id>/", ProductExportStatusView.as_view(), name="product-export-status"),
     path("products/create-complete/", ProductCompleteCreateView.as_view(), name="product-create-complete"),
+    path("variants/create-complete/", VariantCompleteCreateView.as_view(), name="variant-create-complete"),
 ] + router.urls

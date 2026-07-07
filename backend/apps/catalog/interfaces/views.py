@@ -20,6 +20,7 @@ from ..infrastructure.models import (
 from ..infrastructure.serializers import (
     CategorySerializer,
     CompleteProductSerializer,
+    CompleteVariantSerializer,
     PriceSerializer,
     ProductImageSerializer,
     ProductReviewSerializer,
@@ -77,6 +78,21 @@ class ProductCompleteCreateView(generics.GenericAPIView):
         serializer.is_valid(raise_exception=True)
         product = serializer.save()
         return Response(ProductSerializer(product).data, status=201)
+
+
+class VariantCompleteCreateView(generics.GenericAPIView):
+    """Agrega una ProductVariant + Price a un producto existente en una sola
+    transacción atómica, para permitir registrar nuevas presentaciones
+    (ej. 50 ML, 120 ML) sobre un producto que ya tiene al menos una variante."""
+
+    serializer_class = CompleteVariantSerializer
+    permission_classes = (permissions.IsAdminUser,)
+
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        variant = serializer.save()
+        return Response(ProductVariantSerializer(variant).data, status=201)
 
 
 class ProductExportView(generics.GenericAPIView):

@@ -766,6 +766,46 @@ export async function createProduct(payload: CreateProductPayload): Promise<Prod
   return getProductById(res.data.id);
 }
 
+export interface CreateVariantPayload {
+  sku?: string;
+  variant_name?: string;
+  presentation_number?: number;
+  presentation_unit?: 'ML' | 'LT' | 'GR' | 'KG' | 'UND';
+  variant_attributes?: Record<string, unknown>;
+  cost?: number;
+  price?: number;
+  variant_image_url?: string;
+  variant_images?: string[];
+  is_active?: boolean;
+}
+
+/**
+ * Agrega una presentación/variante nueva a un producto YA EXISTENTE (con
+ * su propio precio), en una sola transacción atómica en el backend.
+ */
+export async function createProductVariant(productId: string, payload: CreateVariantPayload): Promise<Product> {
+  const res = await api.post<BackendVariant>(`${CATALOG_BASE_PATH}/variants/create-complete/`, {
+    product: productId,
+    sku: payload.sku || generateShortSku(),
+    variant_name: payload.variant_name ||
+      (payload.presentation_number && payload.presentation_unit
+        ? `${payload.presentation_number} ${payload.presentation_unit}`
+        : 'Presentación única'),
+    ...(payload.presentation_number !== undefined ? { presentation_number: String(payload.presentation_number) } : {}),
+    ...(payload.presentation_unit !== undefined ? { presentation_unit: payload.presentation_unit } : {}),
+    variant_attributes: payload.variant_attributes ?? {},
+    cost: String(payload.cost ?? 0),
+    variant_image_url: payload.variant_image_url ?? payload.variant_images?.[0] ?? '',
+    variant_images: payload.variant_images ?? [],
+    is_active: payload.is_active ?? true,
+    price: String(payload.price ?? 0),
+  });
+  if (!res.data) {
+    throw new Error('No se pudo crear la presentación.');
+  }
+  return getProductById(productId);
+}
+
 export interface UpdateVariantPayload {
   sku?: string;
   presentation_number?: number;
