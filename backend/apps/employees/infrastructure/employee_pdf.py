@@ -94,8 +94,7 @@ def _draw_header(c, page_w, page_h, employees):
     c.rect(x0, page_h - 34, x1 - x0, 3, stroke=0, fill=1)
     logo_size = _draw_logo(c, x0, page_h - 40, 36)
     text_x = x0 + logo_size + (10 if logo_size else 0)
-    _text(c, text_x, page_h - 52, COMPANY_NAME, size=12, bold=True)
-    _text(c, text_x, page_h - 66, "Reporte general de empleados", size=8.3, color=MUTED)
+    _text(c, text_x, page_h - 56, COMPANY_NAME, size=12, bold=True)
     _text(c, x1, page_h - 52, f"Generado: {timezone.now():%d/%m/%Y %H:%M}", size=8, color=MUTED, align="right")
     _text(c, x1, page_h - 66, f"Total empleados: {len(employees)}", size=8, bold=True, color=BRAND, align="right")
     c.setStrokeColor(LINE)
@@ -124,11 +123,25 @@ def _draw_summary(c, x, y, width, employees):
     return y - 50
 
 
+def _money(value):
+    if value in (None, ""):
+        return "-"
+    return f"${value:,.0f}"
+
+
+def _hours(value):
+    if value in (None, ""):
+        return "-"
+    value = float(value)
+    text = f"{value:.1f}".rstrip("0").rstrip(".")
+    return f"{text} h"
+
+
 def _row_values(employee):
     department = _safe(employee.department.name, "Sin area") if employee.department_id else "Sin area"
     position = _safe(employee.position.name, "Sin cargo") if employee.position_id else "Sin cargo"
     branch = _safe(employee.branch.name, "Sin sede") if employee.branch_id else "Sin sede"
-    document = " ".join(part for part in (_safe(employee.document_type, ""), _safe(employee.document_number, "")) if part) or "-"
+    document = _safe(employee.document_number, "-")
     return [
         _safe(employee.employee_code),
         _name(employee),
@@ -138,14 +151,14 @@ def _row_values(employee):
         branch,
         _date(employee.hire_date),
         employee.get_contract_type_display(),
+        _money(employee.base_salary),
+        _hours(employee.weekly_working_hours),
         employee.get_status_display(),
-        f"{employee.profile_completion_percentage}%",
-        f"P:{employee.pending_documents_count} V:{employee.expired_documents_count}",
     ]
 
 
 def _draw_table_header(c, x, y, widths):
-    labels = ["Codigo", "Empleado", "Documento", "Area", "Cargo", "Sede", "Ingreso", "Contrato", "Estado", "Perfil", "Docs"]
+    labels = ["Codigo", "Empleado", "Documento", "Area", "Cargo", "Sede", "Ingreso", "Contrato", "Salario", "Hrs/sem", "Estado"]
     c.setFillColor(HEADER_BG)
     c.setStrokeColor(LINE)
     c.roundRect(x, y - 19, sum(widths), 19, 5, stroke=1, fill=1)
@@ -163,8 +176,10 @@ def _draw_employee_row(c, x, y, widths, employee, shaded=False):
     values = _row_values(employee)
     cursor = x
     for idx, (value, width) in enumerate(zip(values, widths)):
-        if idx == 8:
+        if idx == 10:
             _pill(c, cursor + 5, y - 8, value, _status_color(employee.status), min(56, width - 8))
+        elif idx in {8, 9}:
+            _text(c, cursor + width - 6, y - 8, _fit(value, width - 9, size=6.8), size=6.8, align="right")
         else:
             _text(c, cursor + 5, y - 8, _fit(value, width - 9, size=6.8), size=6.8, bold=idx in {0, 1})
         cursor += width
@@ -188,7 +203,7 @@ def render_employees_pdf(employees):
     page_w, page_h = landscape(letter)
     x = 32
     table_w = page_w - 64
-    widths = [48, 96, 76, 82, 92, 74, 50, 64, 58, 42, 46]
+    widths = [46, 92, 62, 80, 90, 66, 48, 64, 68, 52, 60]
     page_number = 1
 
     y = _draw_header(c, page_w, page_h, employees)

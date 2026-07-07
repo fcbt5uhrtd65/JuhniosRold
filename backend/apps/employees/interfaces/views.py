@@ -29,6 +29,7 @@ from ..infrastructure.serializers import (
     WorkDaySerializer,
 )
 from ..infrastructure.employee_pdf import render_employees_pdf
+from ..infrastructure.branch_pdf import render_branches_pdf
 
 
 class DepartmentViewSet(SoftDeleteModelViewSet):
@@ -66,8 +67,19 @@ class BranchViewSet(SoftDeleteModelViewSet):
     ordering_fields = ("name", "code", "city", "department", "status", "created_at")
 
     def get_permissions(self):
-        self.required_component_action = "view" if self.action in {"list", "retrieve"} else "edit"
+        self.required_component_action = "view" if self.action in {"list", "retrieve", "export_pdf"} else "edit"
         return super().get_permissions()
+
+    @action(detail=False, methods=("get",), url_path="export-pdf")
+    def export_pdf(self, request):
+        queryset = self.filter_queryset(self.get_queryset()).order_by("name", "code")
+        pdf_buffer = render_branches_pdf(queryset)
+        return FileResponse(
+            pdf_buffer,
+            as_attachment=True,
+            filename="sedes-juhnios-rold.pdf",
+            content_type="application/pdf",
+        )
 
 
 class WorkDayViewSet(SoftDeleteModelViewSet):

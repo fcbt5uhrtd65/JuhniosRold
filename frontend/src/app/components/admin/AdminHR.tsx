@@ -46,6 +46,7 @@ import {
   createBranch,
   deleteBranch,
   exportEmployeesPdf,
+  exportBranchesPdf,
   getBranches,
   getDepartments,
   getEmployeeChangeLogs,
@@ -761,6 +762,7 @@ export function AdminHR() {
   const [savingDocument, setSavingDocument] = useState(false);
   const [savingBranch, setSavingBranch] = useState(false);
   const [exportingEmployeesPdf, setExportingEmployeesPdf] = useState(false);
+  const [exportingBranchesPdf, setExportingBranchesPdf] = useState(false);
   const [deletingEmployeeId, setDeletingEmployeeId] = useState<string | null>(null);
   const [deletingBranchId, setDeletingBranchId] = useState<string | null>(null);
   const [vacationActionId, setVacationActionId] = useState<string | null>(null);
@@ -1260,6 +1262,19 @@ export function AdminHR() {
       toast.error(error instanceof Error ? error.message : 'No se pudo exportar el PDF de empleados');
     } finally {
       setExportingEmployeesPdf(false);
+    }
+  };
+
+  const handleBranchesPdfExport = async () => {
+    setExportingBranchesPdf(true);
+    try {
+      await exportBranchesPdf();
+      toast.success('PDF de sedes generado');
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo exportar el PDF de sedes');
+    } finally {
+      setExportingBranchesPdf(false);
     }
   };
 
@@ -1920,6 +1935,16 @@ export function AdminHR() {
             >
               {exportingEmployeesPdf ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
               {exportingEmployeesPdf ? 'Generando PDF...' : 'Exportar PDF'}
+            </button>
+          )}
+          {activeTab === 'branches' && (
+            <button
+              onClick={() => void handleBranchesPdfExport()}
+              disabled={exportingBranchesPdf}
+              className="flex items-center gap-2 px-4 py-2.5 border border-[#2a4038] text-[#2a4038] text-xs font-semibold rounded-xl hover:bg-[#eef4f1] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {exportingBranchesPdf ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
+              {exportingBranchesPdf ? 'Generando PDF...' : 'Exportar PDF'}
             </button>
           )}
           <button

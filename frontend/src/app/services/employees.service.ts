@@ -516,6 +516,31 @@ export async function deleteBranch(id: string): Promise<void> {
   await api.delete(`${BRANCHES_PATH}${id}/`);
 }
 
+export async function exportBranchesPdf(): Promise<void> {
+  const token = getAccessToken();
+  if (!token) {
+    throw new Error('Tu sesion expiro. Inicia sesion de nuevo.');
+  }
+
+  const response = await fetch(`${API_BASE_URL}${BRANCHES_PATH}export-pdf/`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok) {
+    throw new Error('No se pudo exportar el PDF de sedes.');
+  }
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'sedes-juhnios-rold.pdf';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 // ---- Work days ----
 export async function getWorkDays(params?: ListDepartmentsParams): Promise<PaginatedWorkDays> {
   const query = buildQuery({ page: params?.page, page_size: params?.limit, search: params?.search, is_active: params?.is_active });
