@@ -277,6 +277,23 @@ class RoleComponentPermissionViewSet(viewsets.ModelViewSet):
         self.required_component_action = "view" if self.action in {"list", "retrieve"} else "edit"
         return super().get_permissions()
 
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        role = serializer.validated_data["role"]
+        component = serializer.validated_data["component"]
+        existing = RoleComponentPermission.objects.filter(
+            role=role, component=component, deleted_at__isnull=True
+        ).first()
+        if existing:
+            update_serializer = self.get_serializer(existing, data=request.data, partial=True)
+            update_serializer.is_valid(raise_exception=True)
+            update_serializer.save()
+            return Response(update_serializer.data, status=status.HTTP_200_OK)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
 
 class GoogleAuthView(generics.GenericAPIView):
     serializer_class = GoogleAuthSerializer

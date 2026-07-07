@@ -294,8 +294,9 @@ def render_invoice_pdf(invoice):
     right_col_w = main_w - 371 - 3 - 82
     right_narrow_w = main_w - 520 - 3 - 45
 
+    razon_social = invoice.customer_business_name or invoice.customer_name
     _draw_label_value(c, left_x, row_y, "Nombre:", invoice.customer_name, label_w=58, max_width=left_col_w)
-    _draw_label_value(c, left_x, row_y - row_gap, "Razón Social:", invoice.customer_name, label_w=58, max_width=left_col_w)
+    _draw_label_value(c, left_x, row_y - row_gap, "Razón Social:", razon_social, label_w=58, max_width=left_col_w)
     _draw_label_value(c, left_x, row_y - row_gap * 2, "Nit / C.C.:", invoice.customer_document, label_w=58, max_width=left_col_w)
     _draw_text(c, left_x, row_y - row_gap * 3, "Dirección:", size=6.5, bold=True)
     _draw_wrapped_text(

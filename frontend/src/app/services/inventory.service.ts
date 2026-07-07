@@ -110,6 +110,20 @@ export async function getInventoryStock(): Promise<InventoryStock[]> {
   });
 }
 
+/**
+ * Consulta directamente al backend si ya existe un Stock para esta variante,
+ * en vez de confiar en el estado local `inventory` del admin (que puede estar
+ * desactualizado y llevar a intentar crear un Stock duplicado — (variant,
+ * location) es único en el backend).
+ */
+export async function findStockByVariant(variantId: string): Promise<{ id: string } | null> {
+  const res = await api.get<PaginatedResponse<BackendStock>>(
+    `${STOCK_PATH}?variant=${variantId}&page_size=1`,
+  );
+  const stock = res.data?.results?.[0];
+  return stock ? { id: stock.id } : null;
+}
+
 export async function createInitialStock(
   variantId: string,
   minimumQuantity = 10,

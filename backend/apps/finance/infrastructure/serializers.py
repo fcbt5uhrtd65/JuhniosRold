@@ -46,6 +46,7 @@ class SalesInvoiceSerializer(serializers.ModelSerializer):
             "total",
             "tax_rate",
             "customer_name",
+            "customer_business_name",
             "customer_email",
             "customer_document",
             "billing_address",

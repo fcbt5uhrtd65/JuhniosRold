@@ -20,6 +20,7 @@ import {
 } from '../services/products.service';
 import {
   createInitialStock,
+  findStockByVariant,
   getInventoryStock,
   setInventoryQuantity,
   updateStockMinimum,
@@ -725,7 +726,16 @@ export function AdminProvider({ children }: { children: ReactNode }) {
           const apiProduct = apiProducts.find(item => item.id === id);
           const variant = apiProduct?.variants.find(item => item.is_active) ?? apiProduct?.variants[0];
           if (variant) {
-            await createInitialStock(variant.id, updates.stockMinimo);
+            // El estado local `inventory` puede estar desactualizado y no
+            // reflejar un Stock que ya existe en el backend; se confirma
+            // directamente contra el backend antes de crear uno nuevo, ya
+            // que (variant, location) es único y un POST duplicado falla.
+            const existingStock = await findStockByVariant(variant.id);
+            if (existingStock) {
+              await updateStockMinimum(existingStock.id, updates.stockMinimo);
+            } else {
+              await createInitialStock(variant.id, updates.stockMinimo);
+            }
           }
         }
       }
