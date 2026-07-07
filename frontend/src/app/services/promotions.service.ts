@@ -3,7 +3,7 @@
 // CRUD de promociones (descuento % o monto fijo por producto/variante/categoría).
 // ============================================================
 
-import { api, publicApi } from './api';
+import { api } from './api';
 
 const PROMOTIONS_PATH = '/promotions/';
 
@@ -104,7 +104,7 @@ export async function getPromotions(params?: {
   category?: string;
   is_active?: boolean;
 }): Promise<Promotion[]> {
-  const res = await publicApi.get<PaginatedResponse<BackendPromotion> | BackendPromotion[]>(
+  const res = await api.get<PaginatedResponse<BackendPromotion> | BackendPromotion[]>(
     `${PROMOTIONS_PATH}${buildQuery(params)}`,
   );
   const results = Array.isArray(res.data) ? res.data : (res.data?.results ?? []);

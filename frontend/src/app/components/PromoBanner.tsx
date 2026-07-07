@@ -1,28 +1,33 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { ArrowRight, Clock, Leaf, Tag } from 'lucide-react';
-import { getPromotions, type Promotion } from '../services/promotions.service';
+import { getProducts } from '../services/products.service';
+import type { DiscountType, PromotionSummary } from '../services/promotions.service';
 
 const OLIVE = '#2D3A1F';
 
-function isLivePromotion(promotion: Promotion, now: number): boolean {
-  const startsAt = new Date(promotion.starts_at).getTime();
+type BannerPromotion = PromotionSummary & {
+  scope: 'PRODUCT' | 'VARIANT' | 'CATEGORY';
+  priority: number;
+};
+
+function isLivePromotion(promotion: BannerPromotion, now: number): boolean {
   const endsAt = promotion.ends_at ? new Date(promotion.ends_at).getTime() : Infinity;
-  return promotion.is_active && startsAt <= now && endsAt > now;
+  return endsAt > now;
 }
 
-function getPromotionEndTime(promotion: Promotion | null): number | null {
+function getPromotionEndTime(promotion: BannerPromotion | null): number | null {
   if (!promotion?.ends_at) return null;
   const endTime = new Date(promotion.ends_at).getTime();
   return Number.isFinite(endTime) ? endTime : null;
 }
 
-function formatDiscount(promotion: Promotion): string {
+function formatDiscount(promotion: { discount_type: DiscountType; discount_value: number }): string {
   if (promotion.discount_type === 'PERCENTAGE') return `${promotion.discount_value}% OFF`;
   return `$${promotion.discount_value.toLocaleString('es-CO')} OFF`;
 }
 
-function formatScope(promotion: Promotion): string {
+function formatScope(promotion: BannerPromotion): string {
   if (promotion.scope === 'CATEGORY') return 'en productos seleccionados';
   if (promotion.scope === 'PRODUCT') return 'en producto seleccionado';
   return 'en una presentacion especial';
@@ -40,14 +45,37 @@ function formatRemaining(ms: number): string {
 }
 
 export function PromoBanner() {
-  const [promotions, setPromotions] = useState<Promotion[]>([]);
+  const [promotions, setPromotions] = useState<BannerPromotion[]>([]);
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
     let mounted = true;
-    getPromotions({ is_active: true })
-      .then(data => {
-        if (mounted) setPromotions(data);
+    getProducts({ limit: 100, active: true })
+      .then(({ data }) => {
+        if (!mounted) return;
+        const found = new Map<string, BannerPromotion>();
+
+        data.forEach(product => {
+          if (product.active_promotion) {
+            found.set(product.active_promotion.id, {
+              ...product.active_promotion,
+              scope: 'PRODUCT',
+              priority: 0,
+            });
+          }
+
+          product.variants.forEach(variant => {
+            if (variant.active_promotion) {
+              found.set(variant.active_promotion.id, {
+                ...variant.active_promotion,
+                scope: 'VARIANT',
+                priority: 0,
+              });
+            }
+          });
+        });
+
+        setPromotions(Array.from(found.values()));
       })
       .catch(() => {
         if (mounted) setPromotions([]);
