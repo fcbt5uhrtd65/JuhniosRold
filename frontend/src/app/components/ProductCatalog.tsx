@@ -93,7 +93,9 @@ function getVariantGallery(product: CatalogProduct, selectedVariant?: ProductVar
   add(selectedVariant?.image_url, selectedVariant?.presentation ?? null, selectedVariant?.id);
   add(product.primary_image, selectedVariant?.presentation ?? null);
   product.image_urls.forEach(src => add(src, selectedVariant?.presentation ?? null));
-  add(FALLBACK_IMAGE, selectedVariant?.presentation ?? null);
+  if (items.length === 0) {
+    add(FALLBACK_IMAGE, selectedVariant?.presentation ?? null);
+  }
 
   return items;
 }
