@@ -3,7 +3,7 @@
 // Wraps employee, catalog, branch, work-day and HR history APIs.
 // ============================================================
 
-import { api } from './api';
+import { API_BASE_URL, api, getAccessToken } from './api';
 import type { UserRole } from './auth.service';
 
 const EMPLOYEES_PATH = '/employees/';
@@ -585,6 +585,31 @@ export async function updateEmployee(id: string, payload: Partial<EmployeePayloa
 
 export async function deleteEmployee(id: string): Promise<void> {
   await api.delete(`${EMPLOYEES_PATH}${id}/`);
+}
+
+export async function exportEmployeesPdf(): Promise<void> {
+  const token = getAccessToken();
+  if (!token) {
+    throw new Error('Tu sesion expiro. Inicia sesion de nuevo.');
+  }
+
+  const response = await fetch(`${API_BASE_URL}${EMPLOYEES_PATH}export-pdf/`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok) {
+    throw new Error('No se pudo exportar el PDF de empleados.');
+  }
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'empleados-juhnios-rold.pdf';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 // ---- Contracts ----

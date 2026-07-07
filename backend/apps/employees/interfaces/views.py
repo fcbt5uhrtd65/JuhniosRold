@@ -1,6 +1,8 @@
 from apps.identity.interfaces.permissions import HasComponentAccess
+from django.http import FileResponse
 from shared.interfaces.viewsets import SoftDeleteModelViewSet
 from django.db.models import Count
+from rest_framework.decorators import action
 
 from ..infrastructure.models import (
     Branch,
@@ -26,6 +28,7 @@ from ..infrastructure.serializers import (
     PositionSerializer,
     WorkDaySerializer,
 )
+from ..infrastructure.employee_pdf import render_employees_pdf
 
 
 class DepartmentViewSet(SoftDeleteModelViewSet):
@@ -114,7 +117,7 @@ class EmployeeViewSet(SoftDeleteModelViewSet):
     ordering_fields = ("hire_date", "first_name", "last_name")
 
     def get_permissions(self):
-        self.required_component_action = "view" if self.action in {"list", "retrieve"} else "edit"
+        self.required_component_action = "view" if self.action in {"list", "retrieve", "export_pdf"} else "edit"
         return super().get_permissions()
 
     def perform_create(self, serializer):
@@ -122,6 +125,23 @@ class EmployeeViewSet(SoftDeleteModelViewSet):
 
     def perform_update(self, serializer):
         serializer.save(updated_by=self.request.user)
+
+    @action(detail=False, methods=("get",), url_path="export-pdf")
+    def export_pdf(self, request):
+        queryset = self.filter_queryset(self.get_queryset()).order_by(
+            "department__name",
+            "position__name",
+            "first_name",
+            "last_name",
+            "employee_code",
+        )
+        pdf_buffer = render_employees_pdf(queryset)
+        return FileResponse(
+            pdf_buffer,
+            as_attachment=True,
+            filename="empleados-juhnios-rold.pdf",
+            content_type="application/pdf",
+        )
 
 
 class ContractViewSet(SoftDeleteModelViewSet):

@@ -45,6 +45,7 @@ import {
   deleteEmployee,
   createBranch,
   deleteBranch,
+  exportEmployeesPdf,
   getBranches,
   getDepartments,
   getEmployeeChangeLogs,
@@ -759,6 +760,7 @@ export function AdminHR() {
   const [savingEmployee, setSavingEmployee] = useState(false);
   const [savingDocument, setSavingDocument] = useState(false);
   const [savingBranch, setSavingBranch] = useState(false);
+  const [exportingEmployeesPdf, setExportingEmployeesPdf] = useState(false);
   const [deletingEmployeeId, setDeletingEmployeeId] = useState<string | null>(null);
   const [deletingBranchId, setDeletingBranchId] = useState<string | null>(null);
   const [vacationActionId, setVacationActionId] = useState<string | null>(null);
@@ -1245,6 +1247,19 @@ export function AdminHR() {
       toast.error('No se pudo eliminar el empleado');
     } finally {
       setDeletingEmployeeId(null);
+    }
+  };
+
+  const handleEmployeesPdfExport = async () => {
+    setExportingEmployeesPdf(true);
+    try {
+      await exportEmployeesPdf();
+      toast.success('PDF de empleados generado');
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo exportar el PDF de empleados');
+    } finally {
+      setExportingEmployeesPdf(false);
     }
   };
 
@@ -1896,13 +1911,25 @@ export function AdminHR() {
             Expedientes empresariales con nómina, seguridad social, documentos y auditoría.
           </p>
         </div>
-        <button
-          onClick={activeTab === 'branches' ? openCreateBranchModal : openCreateModal}
-          className="flex items-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white text-xs font-semibold rounded-xl hover:bg-[#3d5c4e] transition-colors"
-        >
-          {activeTab === 'branches' ? <Plus size={14} /> : <UserPlus size={14} />}
-          {activeTab === 'branches' ? 'Nueva sede' : 'Nuevo empleado'}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          {activeTab === 'employees' && (
+            <button
+              onClick={() => void handleEmployeesPdfExport()}
+              disabled={exportingEmployeesPdf}
+              className="flex items-center gap-2 px-4 py-2.5 border border-[#2a4038] text-[#2a4038] text-xs font-semibold rounded-xl hover:bg-[#eef4f1] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {exportingEmployeesPdf ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
+              {exportingEmployeesPdf ? 'Generando PDF...' : 'Exportar PDF'}
+            </button>
+          )}
+          <button
+            onClick={activeTab === 'branches' ? openCreateBranchModal : openCreateModal}
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white text-xs font-semibold rounded-xl hover:bg-[#3d5c4e] transition-colors"
+          >
+            {activeTab === 'branches' ? <Plus size={14} /> : <UserPlus size={14} />}
+            {activeTab === 'branches' ? 'Nueva sede' : 'Nuevo empleado'}
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

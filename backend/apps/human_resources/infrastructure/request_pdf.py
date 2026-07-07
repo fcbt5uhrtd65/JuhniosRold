@@ -1,18 +1,23 @@
 import io
+import os
 
 from django.utils import timezone
 from reportlab.lib.colors import HexColor
 from reportlab.lib.pagesizes import letter
+from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
 
 COMPANY_NAME = "PRODUCTOS JUHNIOS ROLD SAS"
+LOGO_PATH = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "finance", "infrastructure", "assets", "logo.jpeg")
+)
 BRAND_COLOR = HexColor("#2a4038")
-BRAND_COLOR_DARK = HexColor("#1f302a")
 TEXT_COLOR = HexColor("#111827")
 MUTED_COLOR = HexColor("#6b7280")
 LINE_COLOR = HexColor("#e5e7eb")
-CARD_BG = HexColor("#f8faf9")
+CARD_BG = HexColor("#f7faf8")
+SUBTLE_BG = HexColor("#fbfcfb")
 WHITE = HexColor("#ffffff")
 SUCCESS = HexColor("#0f7a45")
 WARNING = HexColor("#9a6700")
@@ -130,6 +135,17 @@ def _pill(c, x, y, text, color, w=None):
     return w
 
 
+def _draw_logo(c, x, y, size=44):
+    if not os.path.exists(LOGO_PATH):
+        return 0
+    try:
+        logo = ImageReader(LOGO_PATH)
+        c.drawImage(logo, x, y - size, width=size, height=size, preserveAspectRatio=True, mask="auto")
+    except (OSError, ValueError):
+        return 0
+    return size
+
+
 def _request_type_label(vacation):
     return _safe(vacation.get_request_type_display())
 
@@ -148,23 +164,29 @@ def _employee_name(employee):
 
 def _draw_header(c, x0, x1, y, vacation):
     main_w = x1 - x0
-    _round_rect(c, x0, y - 62, main_w, 64, fill_color=BRAND_COLOR_DARK, stroke_color=BRAND_COLOR_DARK, radius=10)
-    _draw_text(c, x0 + 18, y - 18, COMPANY_NAME, size=13, bold=True, color=WHITE)
-    _draw_text(c, x0 + 18, y - 35, "Recursos Humanos", size=8.5, color=HexColor("#d9e4df"))
-    _draw_text(c, x1 - 18, y - 18, "Documento de solicitud", size=12, bold=True, align="right", color=WHITE)
-    _draw_text(c, x1 - 18, y - 35, f"Generado: {timezone.now():%d/%m/%Y %H:%M}", size=8.5, align="right", color=HexColor("#d9e4df"))
+    c.setFillColor(BRAND_COLOR)
+    c.rect(x0, y - 5, main_w, 3, stroke=0, fill=1)
+    logo_size = _draw_logo(c, x0, y - 13, size=42)
+    text_x = x0 + logo_size + (12 if logo_size else 0)
+    _draw_text(c, text_x, y - 22, COMPANY_NAME, size=13.5, bold=True)
+    _draw_text(c, text_x, y - 38, "Recursos Humanos", size=8.5, color=MUTED_COLOR)
+    _draw_text(c, x1, y - 22, "Documento de solicitud", size=12, bold=True, align="right", color=BRAND_COLOR)
+    _draw_text(c, x1, y - 38, f"Generado: {timezone.now():%d/%m/%Y %H:%M}", size=8.5, align="right", color=MUTED_COLOR)
     status_text = vacation.get_status_display()
     pill_w = max(84, stringWidth(status_text, "Helvetica-Bold", 7.3) + 18)
-    _pill(c, x1 - 18 - pill_w, y - 50, status_text, _status_color(vacation.status), pill_w)
+    _pill(c, x1 - pill_w, y - 53, status_text, _status_color(vacation.status), pill_w)
+    c.setStrokeColor(LINE_COLOR)
+    c.setLineWidth(0.8)
+    c.line(x0, y - 65, x1, y - 65)
 
 
 def _draw_summary_card(c, x0, y, w, vacation, employee):
-    h = 58
+    h = 54
     _round_rect(c, x0, y - h, w, h, fill_color=CARD_BG, stroke_color=LINE_COLOR, radius=8)
-    _field(c, x0 + 14, y - 18, "Solicitud", vacation.request_number or str(vacation.id), 115)
-    _field(c, x0 + 142, y - 18, "Tipo", _request_type_label(vacation), 125)
-    _field(c, x0 + 278, y - 18, "Periodo", f"{_date_label(vacation.start_date)} - {_date_label(vacation.end_date)}", 130)
-    _field(c, x0 + 420, y - 18, "Solicitante", _employee_name(employee), 120)
+    _field(c, x0 + 14, y - 17, "Solicitud", vacation.request_number or str(vacation.id), 115)
+    _field(c, x0 + 142, y - 17, "Tipo", _request_type_label(vacation), 125)
+    _field(c, x0 + 278, y - 17, "Periodo", f"{_date_label(vacation.start_date)} - {_date_label(vacation.end_date)}", 130)
+    _field(c, x0 + 420, y - 17, "Solicitante", _employee_name(employee), 120)
     return y - h
 
 
@@ -186,26 +208,31 @@ def _draw_info_card(c, x, y, w, title, fields):
 
 def _draw_reason_card(c, x, y, w, reason):
     lines = _wrap_lines(reason, w - 28, "Helvetica", 9)
-    max_lines = min(max(len(lines), 2), 5)
+    max_lines = min(max(len(lines), 2), 3)
     h = 34 + max_lines * 12
     _round_rect(c, x, y - h, w, h, fill_color=WHITE, stroke_color=LINE_COLOR, radius=8)
     _section_label(c, x + 14, y - 16, "Motivo / descripcion")
-    _draw_wrapped_text(c, x + 14, y - 36, reason, w - 28, size=9, max_lines=5)
+    _draw_wrapped_text(c, x + 14, y - 36, reason, w - 28, size=9, max_lines=3)
     return y - h
 
 
-def _draw_step(c, x, y, w, step_name, status, actor, date_text, comment):
-    h = 34
-    _round_rect(c, x, y - h, w, h, fill_color=CARD_BG, stroke_color=LINE_COLOR, radius=7)
-    c.setFillColor(_status_color(status))
-    c.circle(x + 13, y - 17, 4, stroke=0, fill=1)
-    _draw_text(c, x + 26, y - 13, step_name, size=8.6, bold=True)
-    _draw_text(c, x + 26, y - 25, _fit_text(actor, 130, font_size=7.5), size=7.5, color=MUTED_COLOR)
-    status_label = _fit_text(status if status else "Pendiente", 78, "Helvetica-Bold", 7.3)
-    _pill(c, x + w - 156, y - 12, status_label, _status_color(status_label), 82)
-    _draw_text(c, x + w - 64, y - 14, date_text, size=7.4, color=MUTED_COLOR)
-    if comment and comment != "-":
-        _draw_text(c, x + w - 220, y - 26, _fit_text(comment, 150, font_size=7.4), size=7.4, color=MUTED_COLOR)
+def _draw_step(c, x, y, w, number, step_name, status, actor, date_text, comment):
+    h = 43
+    fill = CARD_BG if number % 2 else SUBTLE_BG
+    _round_rect(c, x, y - h, w, h, fill_color=fill, stroke_color=LINE_COLOR, radius=7)
+    status_label = _safe(status, "Pendiente")
+    status_color = _status_color(status_label)
+    c.setFillColor(WHITE)
+    c.setStrokeColor(status_color)
+    c.setLineWidth(1.1)
+    c.circle(x + 14, y - 20, 8, stroke=1, fill=1)
+    _draw_text(c, x + 14, y - 23, str(number), size=7, bold=True, align="center", color=status_color)
+    _draw_text(c, x + 30, y - 13, _fit_text(step_name, 148, font_size=8.5), size=8.5, bold=True)
+    _pill(c, x + 190, y - 12, _fit_text(status_label, 72, "Helvetica-Bold", 7.2), status_color, 82)
+    _draw_text(c, x + 290, y - 13, _fit_text(f"Fecha: {date_text}", 120, font_size=7.4), size=7.4, color=TEXT_COLOR)
+    detail = comment if comment and comment != "-" else "Pendiente de gestion" if date_text == "-" else "Accion registrada"
+    _draw_text(c, x + 30, y - 28, _fit_text(f"Responsable: {actor}", 218, font_size=7.4), size=7.4, color=MUTED_COLOR)
+    _draw_text(c, x + 260, y - 28, _fit_text(f"Detalle: {detail}", w - 266, font_size=7.4), size=7.4, color=MUTED_COLOR)
 
 
 def _draw_approval_flow(c, x, y, w, vacation):
@@ -220,16 +247,18 @@ def _draw_approval_flow(c, x, y, w, vacation):
             decision_label = dict(vacation.Status.choices).get(decision, "Pendiente") if decision else "Pendiente"
             steps.append((role_label, decision_label, decided_by, decided_at, comment))
 
-    h = 30 + max(len(steps), 1) * 42
+    visible_steps = steps[:4]
+    h = 35 + max(len(visible_steps), 1) * 47
     _round_rect(c, x, y - h, w, h, fill_color=WHITE, stroke_color=LINE_COLOR, radius=8)
     _section_label(c, x + 14, y - 16, "Flujo de aprobacion")
-    current_y = y - 36
+    _draw_text(c, x + w - 14, y - 16, "Estado, responsable, fecha y detalle", size=7.4, align="right", color=MUTED_COLOR)
+    current_y = y - 38
 
     if not steps:
         _draw_text(c, x + 14, current_y, "Sin pasos de aprobacion registrados.", size=8.5, color=MUTED_COLOR)
         return y - h
 
-    for item in steps[:6]:
+    for number, item in enumerate(visible_steps, start=1):
         if isinstance(item, tuple):
             step_name, status, user, acted_at, comment = item
             actor = _safe(getattr(user, "email", None), "-")
@@ -240,11 +269,11 @@ def _draw_approval_flow(c, x, y, w, vacation):
             actor = _safe(getattr(item.user, "email", None), "-")
             date_text = _datetime_label(item.acted_at)
             comment = item.comment
-        _draw_step(c, x + 14, current_y, w - 28, step_name, status, actor, date_text, _safe(comment))
-        current_y -= 42
+        _draw_step(c, x + 14, current_y, w - 28, number, step_name, status, actor, date_text, _safe(comment))
+        current_y -= 47
 
-    if len(steps) > 6:
-        _draw_text(c, x + 14, current_y + 5, f"+ {len(steps) - 6} paso(s) adicional(es)", size=8, bold=True, color=MUTED_COLOR)
+    if len(steps) > 4:
+        _draw_text(c, x + 14, current_y + 6, f"+ {len(steps) - 4} paso(s) adicional(es) no mostrados para conservar una hoja.", size=8, bold=True, color=MUTED_COLOR)
     return y - h
 
 
