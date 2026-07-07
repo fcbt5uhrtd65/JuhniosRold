@@ -771,6 +771,9 @@ export function AdminHR() {
   const [showBranchModal, setShowBranchModal] = useState(false);
   const [showBranchDetailModal, setShowBranchDetailModal] = useState(false);
   const [showRequestDetailModal, setShowRequestDetailModal] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectingRequest, setRejectingRequest] = useState<VacationRequest | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [viewingEmployee, setViewingEmployee] = useState<Employee | null>(null);
   const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
@@ -1330,16 +1333,43 @@ export function AdminHR() {
   };
 
   const handleVacationAction = async (request: VacationRequest, action: 'approve' | 'reject') => {
+    if (action === 'reject') {
+      setRejectingRequest(request);
+      setRejectReason('');
+      setShowRejectModal(true);
+      return;
+    }
     setVacationActionId(request.id);
     try {
-      if (action === 'approve') {
-        await approveVacationRequest(request.id);
-        toast.success('Solicitud aprobada');
-      } else {
-        await rejectVacationRequest(request.id);
-        toast.info('Solicitud rechazada');
-      }
+      await approveVacationRequest(request.id);
+      toast.success('Solicitud aprobada');
       await loadData();
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo procesar la solicitud');
+    } finally {
+      setVacationActionId(null);
+    }
+  };
+
+  const closeRejectModal = () => {
+    setShowRejectModal(false);
+    setRejectingRequest(null);
+    setRejectReason('');
+  };
+
+  const confirmRejectVacation = async () => {
+    if (!rejectingRequest) return;
+    if (!rejectReason.trim()) {
+      toast.error('Debes indicar el motivo del rechazo');
+      return;
+    }
+    setVacationActionId(rejectingRequest.id);
+    try {
+      await rejectVacationRequest(rejectingRequest.id, rejectReason.trim());
+      toast.info('Solicitud rechazada');
+      await loadData();
+      closeRejectModal();
     } catch (error) {
       console.error(error);
       toast.error('No se pudo procesar la solicitud');
@@ -2557,6 +2587,25 @@ export function AdminHR() {
             </div>
           </div>
         )}
+      </Modal>
+
+      <Modal title="Rechazar solicitud" open={showRejectModal && Boolean(rejectingRequest)} onClose={closeRejectModal}>
+        <div className="space-y-4">
+          <p className="text-xs text-gray-500">Indica el motivo del rechazo. Este comentario quedará registrado en la solicitud.</p>
+          <TextareaInput label="Motivo del rechazo" value={rejectReason} onChange={setRejectReason} />
+          <div className="flex justify-end gap-2">
+            <button onClick={closeRejectModal} className="px-4 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+              Cancelar
+            </button>
+            <button
+              onClick={confirmRejectVacation}
+              disabled={!rejectReason.trim() || (rejectingRequest ? vacationActionId === rejectingRequest.id : false)}
+              className="px-4 py-2 bg-red-500 rounded-lg text-xs font-semibold text-white hover:bg-red-600 transition-colors disabled:opacity-40"
+            >
+              Rechazar solicitud
+            </button>
+          </div>
+        </div>
       </Modal>
 
       <Modal title={editingBranch ? 'Editar sede' : 'Nueva sede'} open={showBranchModal} onClose={resetBranchModal} wide>
