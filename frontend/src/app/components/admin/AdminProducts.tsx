@@ -19,7 +19,7 @@ import { requestProductsExport, getCategories, type ExportFormat, type PdfLayout
 import { getProductReviews, type ProductReview } from '../../services/reviews.service';
 import { getWholesaleSettingsApi, updateWholesaleSettingsApi } from '../../services/cart.service';
 import { pollExportStatus, downloadFile } from '../../utils/pollExportStatus';
-import { resolveBackendUrl } from '../../services/api';
+import { resolveBackendUrl, ApiError } from '../../services/api';
 import { getWholesaleSettings, saveWholesaleSettings } from '../../utils/wholesale';
 import { Card, Badge, type BadgeColor, Table, Th, Td, Modal, EmptyState, inputCls, selectCls } from './AdminUI';
 
@@ -435,7 +435,11 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
       }
       closeModal();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No fue posible guardar el producto');
+      if (error instanceof ApiError && error.errors && error.errors.length > 0) {
+        toast.error(error.errors.join(' — '));
+      } else {
+        toast.error(error instanceof Error ? error.message : 'No fue posible guardar el producto');
+      }
     } finally {
       setIsSubmitting(false);
     }

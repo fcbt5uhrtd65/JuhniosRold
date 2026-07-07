@@ -62,6 +62,7 @@ class SalesInvoice(BaseModel):
     total = models.DecimalField(max_digits=14, decimal_places=2)
     tax_rate = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("19.00"))
     customer_name = models.CharField(max_length=240)
+    customer_business_name = models.CharField(max_length=200, blank=True)
     customer_email = models.EmailField()
     customer_document = models.CharField(max_length=80)
     billing_address = models.TextField(blank=True)

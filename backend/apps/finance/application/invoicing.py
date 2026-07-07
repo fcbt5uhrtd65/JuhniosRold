@@ -26,6 +26,7 @@ class GenerateSalesInvoice:
             created_by=actor,
         )
         customer = order.customer
+        is_wholesale = customer.purchase_mode == customer.PurchaseMode.WHOLESALE
         invoice = SalesInvoice.objects.create(
             order=order,
             payment=payment,
@@ -35,6 +36,7 @@ class GenerateSalesInvoice:
             shipping_cost=order.shipping_cost,
             total=order.total,
             customer_name=str(customer),
+            customer_business_name=customer.company_name if is_wholesale else "",
             customer_email=customer.email,
             customer_document=f"{customer.document_type} {customer.document_number}",
             billing_address=order.shipping_address,

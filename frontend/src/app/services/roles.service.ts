@@ -127,12 +127,22 @@ export async function deleteComponent(id: string): Promise<void> {
 // --- Role-Component Permissions ---
 
 export async function getRolePermissions(): Promise<RoleComponentPermission[]> {
-  const res = await api.get<RoleComponentPermission[]>('/auth/role-permissions/');
-  if (Array.isArray(res.data)) return res.data;
-  if (res.data && 'results' in (res.data as Record<string, unknown>)) {
-    return (res.data as { results: RoleComponentPermission[] }).results;
+  const all: RoleComponentPermission[] = [];
+  let url: string | null = '/auth/role-permissions/?page_size=100';
+  while (url) {
+    const res = await api.get<RoleComponentPermission[] | { results: RoleComponentPermission[]; next: string | null }>(url);
+    if (Array.isArray(res.data)) {
+      all.push(...res.data);
+      url = null;
+    } else if (res.data && 'results' in res.data) {
+      all.push(...res.data.results);
+      const next = res.data.next;
+      url = next ? next.replace(/^https?:\/\/[^/]+\/api\/v1/, '') : null;
+    } else {
+      url = null;
+    }
   }
-  return [];
+  return all;
 }
 
 export async function setRolePermission(payload: SetPermissionPayload): Promise<RoleComponentPermission> {
