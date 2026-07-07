@@ -63,6 +63,7 @@ class RoleComponentPermissionSerializer(serializers.ModelSerializer):
             "updated_at",
         )
         read_only_fields = ("id", "created_at", "updated_at")
+        validators = ()
 
 
 class RoleSerializer(serializers.ModelSerializer):
