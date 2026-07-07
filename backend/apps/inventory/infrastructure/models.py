@@ -40,6 +40,7 @@ class Stock(BaseModel):
     minimum_quantity = models.DecimalField(max_digits=14, decimal_places=3, default=0)
 
     class Meta:
+        ordering = ("id",)
         constraints = [
             models.UniqueConstraint(fields=("variant", "location"), name="unique_stock_per_variant_location"),
             models.CheckConstraint(condition=models.Q(quantity__gte=0), name="stock_quantity_non_negative"),

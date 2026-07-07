@@ -58,6 +58,16 @@ function parseQuantity(value: string | number): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function dedupeById<T>(items: T[]): T[] {
+  const seen = new Set<unknown>();
+  return items.filter(item => {
+    const id = (item as { id?: unknown }).id;
+    if (id === undefined || seen.has(id)) return id === undefined;
+    seen.add(id);
+    return true;
+  });
+}
+
 async function getPage<T>(path: string): Promise<T[]> {
   const firstResponse = await api.get<PaginatedResponse<T>>(`${path}?page_size=100`);
   const firstPage = firstResponse.data;
@@ -67,7 +77,7 @@ async function getPage<T>(path: string): Promise<T[]> {
 
   const totalPages = Math.ceil(firstPage.count / 100);
   if (totalPages <= 1) {
-    return firstPage.results;
+    return dedupeById(firstPage.results);
   }
 
   const remainingPages = await Promise.all(
@@ -76,10 +86,10 @@ async function getPage<T>(path: string): Promise<T[]> {
     ),
   );
 
-  return [
+  return dedupeById([
     ...firstPage.results,
     ...remainingPages.flatMap(response => response.data?.results ?? []),
-  ];
+  ]);
 }
 
 export async function getInventoryStock(): Promise<InventoryStock[]> {
