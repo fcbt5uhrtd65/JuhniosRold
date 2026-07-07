@@ -11,14 +11,15 @@ import { DeliveryLocationSection } from './ui/DeliveryLocationSection';
 import { geographyService, type City } from '../services/geography.service';
 import { EMPTY_LOCATION, type LocationValue } from '../services/geography.types';
 import { EMPTY_DELIVERY_LOCATION, type DeliveryLocationValue } from '../services/delivery-location.types';
+import authHeroImg from '../../assets/auth-hero.png';
 
 const OLIVE = '#2D3A1F';
 
 /* ─── imágenes por pantalla ─── */
 const IMAGES = {
-  login:    'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?w=900&q=85&fit=crop',   // aceite / gotero natural
-  register: 'https://images.unsplash.com/photo-1526045612212-70caf35c14df?w=900&q=85&fit=crop',  // hierbas / ingredientes
-  step2:    'https://images.unsplash.com/photo-1599305090598-fe179d501227?w=900&q=85&fit=crop',   // flores / botanico
+  login:    authHeroImg,
+  register: authHeroImg,
+  step2:    authHeroImg,
 };
 
 /* ─── input compacto ─── */

@@ -14,6 +14,7 @@ import { useNotifications } from '../contexts/NotificationsContext';
 import type { NotificationType } from '../services/notifications.service';
 import { navigateTo } from '../services/navigate';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
+import logoImg from '../../assets/logo.png';
 
 interface NavigationBarProps {
   onLoginClick?: () => void;
@@ -23,15 +24,6 @@ interface NavigationBarProps {
 const TikTokIcon = ({ className }: { className?: string }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
     <path d="M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5" />
-  </svg>
-);
-
-const LeafIcon = () => (
-  <svg width="22" height="18" viewBox="0 0 28 22" fill="none">
-    <path d="M14 20C14 20 4 14 4 7C4 3.5 7 1 10.5 1C12 1 13.2 1.6 14 2.5C14.8 1.6 16 1 17.5 1C21 1 24 3.5 24 7C24 14 14 20 14 20Z" stroke="#8B7355" strokeWidth="1" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
-    <path d="M14 20V6" stroke="#8B7355" strokeWidth="0.8" strokeLinecap="round" strokeDasharray="1.5 2"/>
-    <path d="M14 10C12 8.5 9 8 7 9" stroke="#8B7355" strokeWidth="0.8" strokeLinecap="round"/>
-    <path d="M14 14C16 12.5 19 12 21 13" stroke="#8B7355" strokeWidth="0.8" strokeLinecap="round"/>
   </svg>
 );
 
@@ -169,18 +161,15 @@ export function NavigationBar({ onLoginClick, variant = 'solid' }: NavigationBar
                   if (window.location.pathname !== '/') { navigateTo('/'); return; }
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
-                className="flex-shrink-0 flex items-center gap-2.5 cursor-pointer group"
+                className="flex-shrink-0 flex items-center gap-2 cursor-pointer group"
               >
-                <div className="opacity-80 group-hover:opacity-100 transition-opacity">
-                  <LeafIcon />
-                </div>
-                <div>
-                  <div className="text-[13.5px] tracking-[0.2em] uppercase font-semibold text-stone-900 leading-none">
-                    JUHNIOS ROLD
-                  </div>
-                  <div className="text-[7.5px] tracking-[0.28em] uppercase text-[#8B7355] mt-0.5 font-light">
-                    CUIDADO CAPILAR NATURAL
-                  </div>
+                <img
+                  src={logoImg}
+                  alt="Juhnios Rold"
+                  className="h-9 md:h-10 w-auto object-contain opacity-90 group-hover:opacity-100 transition-opacity"
+                />
+                <div className="text-[7.5px] tracking-[0.28em] uppercase text-[#8B7355] mt-2.5 font-light hidden sm:block">
+                  CUIDADO CAPILAR NATURAL
                 </div>
               </a>
 
@@ -343,9 +332,9 @@ export function NavigationBar({ onLoginClick, variant = 'solid' }: NavigationBar
               className="fixed top-0 right-0 bottom-0 z-[160] w-[86%] max-w-sm bg-white shadow-2xl flex flex-col rounded-l-3xl overflow-hidden"
             >
               <div className="flex items-center justify-between px-7 py-5 border-b border-stone-100">
-                <div>
-                  <div className="text-[13px] tracking-[0.22em] uppercase font-semibold text-stone-900">JUHNIOS ROLD</div>
-                  <div className="text-[8px] tracking-[0.25em] uppercase text-[#8B7355] mt-0.5">CUIDADO CAPILAR NATURAL</div>
+                <div className="flex items-center gap-2">
+                  <img src={logoImg} alt="Juhnios Rold" className="h-8 w-auto object-contain" />
+                  <div className="text-[8px] tracking-[0.25em] uppercase text-[#8B7355] mt-1.5">CUIDADO CAPILAR NATURAL</div>
                 </div>
                 <button onClick={() => setMenuOpen(false)} className="p-2 rounded-full hover:bg-stone-100 transition-colors">
                   <X className="w-4 h-4 text-stone-400" strokeWidth={1.5} />

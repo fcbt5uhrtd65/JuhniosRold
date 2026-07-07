@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Search, SlidersHorizontal, Grid, List,
-  Heart, Eye, ShoppingBag, TrendingUp, Sparkles,
+  Heart, Eye, ShoppingBag,
   Package, Star, X, ChevronLeft, ChevronRight,
   Minus, Plus, ChevronUp, ChevronDown, Truck, ShieldCheck, Leaf,
 } from 'lucide-react';
@@ -1272,23 +1272,10 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                         decoding="async"
                       />
 
-                      {/* Badge */}
-                      {badge && (
-                        <div className={`absolute top-3 left-3 z-10 flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-semibold border ${
-                          badge === 'oferta'
-                            ? 'bg-red-600 text-white border-red-600'
-                            : badge === 'nuevo'
-                              ? 'bg-emerald-600 text-white border-emerald-600'
-                              : 'bg-amber-500 text-white border-amber-500'
-                        }`}>
-                          {badge === 'oferta'
-                            ? null
-                            : badge === 'nuevo'
-                              ? <Sparkles className="w-2.5 h-2.5" strokeWidth={2} />
-                              : <TrendingUp className="w-2.5 h-2.5" strokeWidth={2} />}
-                          {badge === 'oferta'
-                            ? `-${getDiscountPercentage(product) ?? ''}% OFERTA`
-                            : badge === 'nuevo' ? 'Nuevo' : 'Destacado'}
+                      {/* Badge: solo se muestra cuando el producto está en oferta */}
+                      {badge === 'oferta' && (
+                        <div className="absolute top-3 left-3 z-10 flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-semibold border bg-red-600 text-white border-red-600">
+                          {`-${getDiscountPercentage(product) ?? ''}% OFERTA`}
                         </div>
                       )}
 
