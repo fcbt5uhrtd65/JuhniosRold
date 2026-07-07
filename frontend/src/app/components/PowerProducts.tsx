@@ -33,6 +33,7 @@ interface Product {
   badge: 'top' | 'nuevo' | 'pocas' | 'oferta';
   images: string[];
   imageItems: Array<{ src: string; size: string | null; variantId?: string }>;
+  siblingVariantItems: Array<{ src: string; size: string | null; variantId?: string }>;
   sizes?: string[];
   variants?: CatalogProduct['variants'];
   description?: string;
@@ -108,13 +109,27 @@ function mapCatalogProduct(product: CatalogProduct): Product {
     imageItems.push({ src, size, variantId });
   };
 
-  product.variants.forEach(variant => addImage(variant.image_url, variant.presentation, variant.id));
+  const firstVariant = product.variants[0];
+  addImage(firstVariant?.image_url, firstVariant?.presentation ?? null, firstVariant?.id);
   addImage(product.primary_image, null);
   addImage(product.image_url, null);
   product.image_urls.forEach(src => addImage(src, null));
-  addImage(FALLBACK_PRODUCT_IMAGE, null);
+  if (imageItems.length === 0) {
+    addImage(FALLBACK_PRODUCT_IMAGE, null);
+  }
 
   const images = imageItems.map(item => item.src);
+
+  const siblingVariantItems: Product['imageItems'] = [];
+  if (product.variants.length > 1) {
+    const seenPresentation = new Set<string>();
+    product.variants.forEach(variant => {
+      if (seenPresentation.has(variant.presentation)) return;
+      seenPresentation.add(variant.presentation);
+      const src = variant.image_url || product.primary_image || FALLBACK_PRODUCT_IMAGE;
+      siblingVariantItems.push({ src, size: variant.presentation, variantId: variant.id });
+    });
+  }
 
   return {
     id: product.id,
@@ -130,6 +145,7 @@ function mapCatalogProduct(product: CatalogProduct): Product {
     badge: productBadge(product),
     images,
     imageItems,
+    siblingVariantItems,
     sizes: product.sizes,
     variants: product.variants,
     description: product.description,
@@ -209,8 +225,27 @@ function ProductPage({
   const scrollRef = useRef<HTMLDivElement>(null);
   const sizes = product.sizes ?? [];
   const selSize = selectedSizes[product.id] ?? sizes[0] ?? '';
-  const gallery = product.imageItems.length > 0 ? product.imageItems : product.images.map(src => ({ src, size: null }));
+  const selectedVariant = product.variants?.find(v => v.presentation === selSize) ?? product.variants?.[0];
+
+  // Fotos de la variante/presentación seleccionada (carrusel principal): no mezcla
+  // fotos de otras presentaciones, solo genéricas del producto + la propia de esa variante.
+  const gallery = (() => {
+    const items: Product['imageItems'] = [];
+    const seen = new Set<string>();
+    const add = (src: string | null | undefined, size: string | null, variantId?: string) => {
+      if (!src || seen.has(src)) return;
+      seen.add(src);
+      items.push({ src, size, variantId });
+    };
+    add(selectedVariant?.image_url, selSize || null, selectedVariant?.id);
+    product.imageItems.filter(item => item.size === null).forEach(item => add(item.src, null));
+    if (items.length === 0) product.images.forEach(src => add(src, null));
+    return items;
+  })();
   const images = gallery.map(item => item.src);
+
+  // Miniaturas de variantes hermanas (barra lateral): una por presentación distinta.
+  const siblingThumbnails = product.siblingVariantItems;
 
   const related = allProducts.filter(p => p.id !== product.id && p.category === product.category).slice(0, 3);
 
@@ -221,21 +256,12 @@ function ProductPage({
   }, [product.id]);
 
   useEffect(() => {
-    const variantIndex = gallery.findIndex(item => item.size === selSize);
-    if (variantIndex >= 0) setActiveImg(variantIndex);
-  }, [selSize, product.id]);
-
-  useEffect(() => {
     if (activeImg >= images.length) setActiveImg(0);
   }, [activeImg, images.length]);
 
   const activateGalleryImage = (index: number) => {
     const safeIndex = ((index % images.length) + images.length) % images.length;
-    const item = gallery[safeIndex];
     setActiveImg(safeIndex);
-    if (item?.size && item.size !== selSize) {
-      onSelectSize(product.id, item.size);
-    }
   };
 
   useBodyScrollLock(true);
@@ -275,17 +301,21 @@ function ProductPage({
             >
               <ChevronUp className="w-5 h-5" strokeWidth={1.5} />
             </button>
-            {images.map((src, i) => (
-              <button
-                key={i}
-                onClick={() => activateGalleryImage(i)}
-                className={`w-[100px] h-[100px] rounded-xl overflow-hidden border-2 transition-all flex-shrink-0 ${
-                  activeImg === i ? 'border-stone-800 shadow-sm' : 'border-stone-200 opacity-55 hover:opacity-100 hover:border-stone-400'
-                }`}
-              >
-                <img src={src} alt="" className="w-full h-full object-cover" draggable={false} />
-              </button>
-            ))}
+            {(siblingThumbnails.length > 0 ? siblingThumbnails : gallery).map((item, i) => {
+              const isSiblingMode = siblingThumbnails.length > 0;
+              const isActive = isSiblingMode ? item.size === selSize : activeImg === i;
+              return (
+                <button
+                  key={item.variantId ?? i}
+                  onClick={() => (isSiblingMode ? item.size && onSelectSize(product.id, item.size) : activateGalleryImage(i))}
+                  className={`w-[100px] h-[100px] rounded-xl overflow-hidden border-2 transition-all flex-shrink-0 ${
+                    isActive ? 'border-stone-800 shadow-sm' : 'border-stone-200 opacity-55 hover:opacity-100 hover:border-stone-400'
+                  }`}
+                >
+                  <img src={item.src} alt="" className="w-full h-full object-cover" draggable={false} />
+                </button>
+              );
+            })}
             <button
               onClick={() => activateGalleryImage(Math.min(images.length - 1, activeImg + 1))}
               disabled={activeImg === images.length - 1}
