@@ -138,43 +138,43 @@ export function BeforeAfter() {
     {
       id: 3,
       // Cabello esponjado con frizz / liso controlado y brillante
-      before: 'https://images.unsplash.com/photo-1618609378039-b572f369f2a8?w=600&q=85',
-      after:  'https://images.unsplash.com/photo-1560066984-138dadb4c035?w=600&q=85',
+      before: '/images/before-after/before-long-damaged.png',
+      after:  '/images/before-after/after-long-smooth.png',
       benefit: '+ Control del frizz',
     },
     {
       id: 4,
       // Cabello sin vida / nutrido, con textura y movimiento
-      before: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&q=85',
-      after:  'https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?w=600&q=85',
+      before: '/images/before-after/before-long-damaged.png',
+      after:  '/images/before-after/after-long-smooth.png',
       benefit: '+ Fuerza y nutrición',
     },
     {
       id: 5,
       // Rizos indefinidos / rizos definidos con humedad y forma
-      before: 'https://images.unsplash.com/photo-1594744803329-e58b31de8bf5?w=600&q=85',
-      after:  'https://images.unsplash.com/photo-1590065707046-4fde65275b2e?w=600&q=85',
+      before: '/images/before-after/before-long-damaged.png',
+      after:  '/images/before-after/after-long-smooth.png',
       benefit: '+ Rizos definidos',
     },
     {
       id: 6,
       // Cabello fino / volumen suave y natural
-      before: 'https://images.unsplash.com/photo-1522337094846-8a818192de1f?w=600&q=85',
-      after:  'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=600&q=85',
+      before: '/images/before-after/before-long-damaged.png',
+      after:  '/images/before-after/after-long-smooth.png',
       benefit: '+ Volumen natural',
     },
     {
       id: 7,
       // Cabello quebradizo y opaco / hidratado y sellado
-      before: 'https://images.unsplash.com/photo-1523263685509-57c1d050d19b?w=600&q=85',
-      after:  'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=600&q=85',
+      before: '/images/before-after/before-long-damaged.png',
+      after:  '/images/before-after/after-long-smooth.png',
       benefit: '+ Hidratación intensa',
     },
     {
       id: 8,
       // Cabello con daño y opacidad / color vibrante y recuperado
-      before: 'https://images.unsplash.com/photo-1576097449798-7c7f90e1248a?w=600&q=85',
-      after:  'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=600&q=85',
+      before: '/images/before-after/before-long-damaged.png',
+      after:  '/images/before-after/after-long-smooth.png',
       benefit: '+ Reparación capilar',
     },
   ];

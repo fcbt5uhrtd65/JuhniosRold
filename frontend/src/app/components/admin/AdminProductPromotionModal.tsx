@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { PowerOff, Trash2 } from 'lucide-react';
 import { Modal, Field, inputCls, selectCls, Badge, PrimaryButton, SecondaryButton } from './AdminUI';
 import { useToast } from '../../contexts/ToastContext';
@@ -88,9 +88,17 @@ export function AdminProductPromotionModal({ open, onClose, productId, productNa
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const lastLoadKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      lastLoadKeyRef.current = null;
+      return;
+    }
+    const loadKey = `${productId}:${categorySlug}`;
+    if (lastLoadKeyRef.current === loadKey) return;
+    lastLoadKeyRef.current = loadKey;
+
     setForm({ ...EMPTY_FORM, starts_at: nowLocal() });
     setIsLoading(true);
     getCategories(true)
@@ -99,19 +107,20 @@ export function AdminProductPromotionModal({ open, onClose, productId, productNa
         const resolvedCategoryId = category?.id ?? null;
         setCategoryId(resolvedCategoryId);
 
-        const [productPromos, categoryPromos] = await Promise.all([
-          getPromotionsForProduct(productId),
-          resolvedCategoryId ? getPromotions({ category: resolvedCategoryId }) : Promise.resolve([]),
-        ]);
+        const productPromos = await getPromotionsForProduct(productId);
+        const categoryPromos = resolvedCategoryId ? await getPromotions({ category: resolvedCategoryId }) : [];
         setPromotions(
           [...productPromos, ...categoryPromos].filter((promo, index, all) => (
             all.findIndex(item => item.id === promo.id) === index
           )),
         );
       })
-      .catch(() => toast.error('No se pudieron cargar las promociones del producto.'))
+      .catch(() => {
+        setPromotions([]);
+        toast.error('No se pudieron cargar las promociones del producto. Revisa que tu sesión admin siga activa.');
+      })
       .finally(() => setIsLoading(false));
-  }, [open, productId, categorySlug]);
+  }, [open, productId, categorySlug, toast]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
