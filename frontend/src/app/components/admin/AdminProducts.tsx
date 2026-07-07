@@ -177,6 +177,10 @@ interface ComboboxProps {
 
 function Combobox({ value, onChange, options, placeholder, required, id }: ComboboxProps) {
   const [open, setOpen] = useState(false);
+  // Si el valor actual ya coincide con una opción (fue seleccionada, no
+  // tecleada), al abrir se muestran todas las opciones en vez de filtrar
+  // por el propio texto ya cargado, que solo se emparejaría consigo mismo.
+  const isExactOption = options.some(o => o.toLowerCase() === value.toLowerCase());
   const ref = useRef<HTMLDivElement>(null);
 
   return (
@@ -204,8 +208,7 @@ function Combobox({ value, onChange, options, placeholder, required, id }: Combo
       </div>
       {open && options.length > 0 && (
         <ul className="absolute z-20 w-full bg-white border border-gray-100 rounded-xl shadow-lg max-h-48 overflow-y-auto mt-1">
-          {options
-            .filter(o => o.toLowerCase().includes(value.toLowerCase()))
+          {(isExactOption ? options : options.filter(o => o.toLowerCase().includes(value.toLowerCase())))
             .map(option => (
               <li
                 key={option}
