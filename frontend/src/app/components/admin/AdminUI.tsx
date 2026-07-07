@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
-import { Plus, Search, X, Save, Loader2, Inbox, AlertCircle } from 'lucide-react';
+import { useRef, type ReactNode } from 'react';
+import { Plus, Search, X, Save, Loader2, Inbox, AlertCircle, Upload } from 'lucide-react';
 
 /* ═══════════════════════════════════════════════════════
    Librería visual compartida del panel administrativo.
@@ -217,6 +217,85 @@ export function TabBar<T extends string>({ tabs, value, onChange }: { tabs: { id
           </button>
         );
       })}
+    </div>
+  );
+}
+
+export function ImageUploader({ value, onChange }: { value: string; onChange: (url: string) => void }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = e => onChange(e.target?.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (file?.type.startsWith('image/')) handleFile(file);
+  };
+
+  return (
+    <div className="space-y-3">
+      {value ? (
+        <div className="relative group">
+          <img
+            src={value}
+            alt="Vista previa"
+            className="w-full h-48 object-contain rounded-xl border border-gray-100 bg-gray-50 p-2"
+          />
+          <div className="absolute inset-0 bg-black/50 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              className="text-white text-xs font-semibold px-3 py-1.5 rounded-lg border border-white/70 hover:bg-white hover:text-gray-900 transition-colors"
+            >
+              Cambiar
+            </button>
+            <button
+              type="button"
+              onClick={() => onChange('')}
+              className="text-white text-xs font-semibold px-3 py-1.5 rounded-lg border border-white/70 hover:bg-white hover:text-gray-900 transition-colors"
+            >
+              Eliminar
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div
+          onDrop={handleDrop}
+          onDragOver={e => e.preventDefault()}
+          onClick={() => fileRef.current?.click()}
+          className="border-2 border-dashed border-gray-200 rounded-xl h-48 flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-gray-50 transition-colors"
+        >
+          <Upload size={20} className="text-gray-400" />
+          <span className="text-xs font-semibold text-gray-500">Subir imagen</span>
+          <span className="text-[11px] text-gray-400">o arrastra aquí</span>
+        </div>
+      )}
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={e => {
+          const file = e.target.files?.[0];
+          if (file) handleFile(file);
+        }}
+      />
+      <div>
+        <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">
+          O pega una URL de imagen
+        </label>
+        <input
+          type="url"
+          value={value.startsWith('data:') ? '' : value}
+          onChange={e => onChange(e.target.value)}
+          placeholder="https://..."
+          className={inputCls}
+        />
+      </div>
     </div>
   );
 }

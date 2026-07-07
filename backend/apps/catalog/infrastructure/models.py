@@ -80,6 +80,14 @@ class ProductImage(BaseModel):
     is_primary = models.BooleanField(default=False)
 
 
+class ProductVariantImage(BaseModel):
+    variant = models.ForeignKey(ProductVariant, on_delete=models.CASCADE, related_name="images")
+    image = models.TextField()
+    alt_text = models.CharField(max_length=180, blank=True)
+    position = models.PositiveSmallIntegerField(default=0)
+    is_primary = models.BooleanField(default=False)
+
+
 class ProductReview(BaseModel):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="reviews")
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="product_reviews")

@@ -12,8 +12,10 @@ const CATEGORIES_PATH = `${CATALOG_BASE_PATH}/categories/`;
 const VARIANTS_PATH = `${CATALOG_BASE_PATH}/variants/`;
 const PRICES_PATH = `${CATALOG_BASE_PATH}/prices/`;
 const IMAGES_PATH = `${CATALOG_BASE_PATH}/images/`;
+const VARIANT_IMAGES_PATH = `${CATALOG_BASE_PATH}/variant-images/`;
 const EXPORTS_PATH = `${CATALOG_BASE_PATH}/exports/`;
 const MAX_PRODUCT_IMAGES = 3;
+const MAX_VARIANT_IMAGES = 3;
 
 type UUID = string;
 
@@ -65,6 +67,7 @@ interface BackendVariant {
   updated_at: string;
   deleted_at: string | null;
   prices: BackendPrice[];
+  images: BackendVariantImage[];
   active_promotion?: PromotionSummary | null;
   discounted_price?: string | number | null;
 }
@@ -72,6 +75,18 @@ interface BackendVariant {
 interface BackendImage {
   id: UUID;
   product: UUID;
+  image: string;
+  alt_text: string;
+  position: number;
+  is_primary: boolean;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+interface BackendVariantImage {
+  id: UUID;
+  variant: UUID;
   image: string;
   alt_text: string;
   position: number;
@@ -123,6 +138,17 @@ export interface ProductPrice {
   updated_at: string;
 }
 
+export interface ProductVariantImage {
+  id: UUID;
+  variant: UUID;
+  image: string;
+  alt_text: string;
+  position: number;
+  is_primary: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ProductVariant {
   id: UUID;
   product: UUID;
@@ -131,6 +157,7 @@ export interface ProductVariant {
   presentation_number?: number | null;
   presentation_unit?: 'ML' | 'LT' | 'GR' | 'KG' | 'UND' | '';
   image_url: string;
+  images: ProductVariantImage[];
   attributes: Record<string, unknown>;
   cost: number;
   is_active: boolean;
@@ -305,6 +332,7 @@ function normalizeVariant(variant: BackendVariant): ProductVariant {
     presentation_number: parseAmount(variant.presentation_number),
     presentation_unit: variant.presentation_unit ?? '',
     image_url: variant.image_url ? normalizeImageUrl(variant.image_url) : '',
+    images: (variant.images ?? []).map(normalizeVariantImage),
     prices: variant.prices.map(normalizePrice),
     current_price: currentPrice?.amount ?? null,
     presentation: buildPresentation(variant),
@@ -316,6 +344,13 @@ function normalizeVariant(variant: BackendVariant): ProductVariant {
 }
 
 function normalizeImage(image: BackendImage): ProductImage {
+  return {
+    ...image,
+    image: normalizeImageUrl(image.image),
+  };
+}
+
+function normalizeVariantImage(image: BackendVariantImage): ProductVariantImage {
   return {
     ...image,
     image: normalizeImageUrl(image.image),
@@ -392,7 +427,7 @@ function normalizeProduct(
       (pickPrimaryImage(images) ?? product.image_url) ||
       category?.image_url ||
       null,
-    image_urls: images.map((image) => image.image),
+    image_urls: images.length > 0 ? images.map((image) => image.image) : (product.image_url ? [product.image_url] : []),
     images,
     variants,
     sizes: uniqueValues(variants.map((variant) => variant.presentation)),
@@ -622,6 +657,48 @@ async function syncProductImages(
       return api.post(IMAGES_PATH, body);
     }),
   );
+}
+
+/**
+ * Reemplaza las imágenes (hasta 3) de una variante específica: borra las
+ * existentes que ya no están en la lista nueva y crea/actualiza el resto,
+ * preservando el orden (posición 0 = imagen principal de la variante).
+ */
+async function syncVariantImages(
+  variantId: string,
+  images: string[],
+  existing: BackendVariantImage[] = [],
+): Promise<void> {
+  const nextImages = images.filter(Boolean).slice(0, MAX_VARIANT_IMAGES);
+
+  const toDelete = existing.filter((image) => !nextImages.includes(image.image));
+  await Promise.all(toDelete.map((image) => api.delete(`${VARIANT_IMAGES_PATH}${image.id}/`)));
+
+  const remainingExisting = existing.filter((image) => nextImages.includes(image.image));
+
+  await Promise.all(
+    nextImages.map((url, position) => {
+      const current = remainingExisting.find((image) => image.image === url);
+      const body = { variant: variantId, image: url, position, is_primary: position === 0 };
+      if (current) {
+        return api.patch(`${VARIANT_IMAGES_PATH}${current.id}/`, body);
+      }
+      return api.post(VARIANT_IMAGES_PATH, body);
+    }),
+  );
+}
+
+export async function updateVariantImages(variantId: string, images: string[]): Promise<ProductVariantImage[]> {
+  const res = await api.get<BackendVariantImage[] | PaginatedResponse<BackendVariantImage>>(
+    `${VARIANT_IMAGES_PATH}?variant=${variantId}`,
+  );
+  const existing = Array.isArray(res.data) ? res.data : res.data?.results ?? [];
+  await syncVariantImages(variantId, images, existing);
+  const refreshed = await api.get<BackendVariantImage[] | PaginatedResponse<BackendVariantImage>>(
+    `${VARIANT_IMAGES_PATH}?variant=${variantId}`,
+  );
+  const nextExisting = Array.isArray(refreshed.data) ? refreshed.data : refreshed.data?.results ?? [];
+  return nextExisting.map(normalizeVariantImage);
 }
 
 export async function createProduct(payload: CreateProductPayload): Promise<Product> {

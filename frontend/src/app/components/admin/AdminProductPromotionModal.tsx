@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { PowerOff, Trash2 } from 'lucide-react';
 import { Modal, Field, inputCls, selectCls, Badge, PrimaryButton, SecondaryButton } from './AdminUI';
 import { useToast } from '../../contexts/ToastContext';
-import { getCategories } from '../../services/products.service';
+import { getCategories, getProductById, type ProductVariant } from '../../services/products.service';
 import {
   getPromotionsForProduct,
   getPromotions,
@@ -27,7 +27,8 @@ interface FormState {
   name: string;
   discount_type: DiscountType;
   discount_value: string;
-  scope: Extract<PromotionScope, 'PRODUCT' | 'CATEGORY'>;
+  scope: PromotionScope;
+  variantId: string;
   starts_at: string;
   ends_at: string;
   priority: string;
@@ -75,6 +76,7 @@ const EMPTY_FORM: FormState = {
   discount_type: 'PERCENTAGE',
   discount_value: '',
   scope: 'PRODUCT',
+  variantId: '',
   starts_at: nowLocal(),
   ends_at: '',
   priority: '0',
@@ -85,6 +87,7 @@ export function AdminProductPromotionModal({ open, onClose, productId, productNa
   const toast = useToast();
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [variants, setVariants] = useState<ProductVariant[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
@@ -101,16 +104,20 @@ export function AdminProductPromotionModal({ open, onClose, productId, productNa
 
     setForm({ ...EMPTY_FORM, starts_at: nowLocal() });
     setIsLoading(true);
-    getCategories(true)
-      .then(async categories => {
+    Promise.all([getCategories(true), getProductById(productId)])
+      .then(async ([categories, product]) => {
         const category = categories.find(c => c.slug === categorySlug || c.name.toLowerCase() === categorySlug.toLowerCase());
         const resolvedCategoryId = category?.id ?? null;
         setCategoryId(resolvedCategoryId);
+        setVariants(product.variants);
 
         const productPromos = await getPromotionsForProduct(productId);
         const categoryPromos = resolvedCategoryId ? await getPromotions({ category: resolvedCategoryId }) : [];
+        const variantPromos = (
+          await Promise.all(product.variants.map(variant => getPromotions({ variant: variant.id })))
+        ).flat();
         setPromotions(
-          [...productPromos, ...categoryPromos].filter((promo, index, all) => (
+          [...productPromos, ...categoryPromos, ...variantPromos].filter((promo, index, all) => (
             all.findIndex(item => item.id === promo.id) === index
           )),
         );
@@ -133,6 +140,10 @@ export function AdminProductPromotionModal({ open, onClose, productId, productNa
       toast.error('No se pudo determinar la categoría de este producto.');
       return;
     }
+    if (form.scope === 'VARIANT' && !form.variantId) {
+      toast.error('Selecciona la presentación/variante a la que aplica la promoción.');
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -141,7 +152,11 @@ export function AdminProductPromotionModal({ open, onClose, productId, productNa
         discount_type: form.discount_type,
         discount_value: discountValue,
         scope: form.scope,
-        ...(form.scope === 'PRODUCT' ? { product: productId } : { category: categoryId! }),
+        ...(form.scope === 'PRODUCT'
+          ? { product: productId }
+          : form.scope === 'VARIANT'
+            ? { variant: form.variantId }
+            : { category: categoryId! }),
         starts_at: new Date(form.starts_at).toISOString(),
         ends_at: form.ends_at ? new Date(form.ends_at).toISOString() : null,
         priority: Number(form.priority) || 0,
@@ -204,7 +219,15 @@ export function AdminProductPromotionModal({ open, onClose, productId, productNa
                       </div>
                       <div className="mt-2 grid gap-1 text-[11px] text-gray-500 sm:grid-cols-2">
                         <span>Descuento: <strong className="text-gray-700">{formatDiscount(promo)}</strong></span>
-                        <span>Aplica a: {promo.scope === 'CATEGORY' ? 'Toda la categoría' : 'Este producto'}</span>
+                        <span>
+                          Aplica a: {
+                            promo.scope === 'CATEGORY'
+                              ? 'Toda la categoría'
+                              : promo.scope === 'VARIANT'
+                                ? `Presentación: ${variants.find(v => v.id === promo.variant)?.presentation ?? 'variante eliminada'}`
+                                : 'Todo el producto'
+                          }
+                        </span>
                         <span>Inicio: {formatDateTime(promo.starts_at)}</span>
                         <span>Fin: {formatDateTime(promo.ends_at)}</span>
                       </div>
@@ -270,13 +293,29 @@ export function AdminProductPromotionModal({ open, onClose, productId, productNa
           <Field label="Aplica a" required>
             <select
               value={form.scope}
-              onChange={e => setForm({ ...form, scope: e.target.value as FormState['scope'] })}
+              onChange={e => setForm({ ...form, scope: e.target.value as FormState['scope'], variantId: '' })}
               className={selectCls}
             >
-              <option value="PRODUCT">Solo este producto</option>
+              <option value="PRODUCT">Todo el producto (todas sus presentaciones)</option>
+              {variants.length > 1 && <option value="VARIANT">Solo una presentación específica</option>}
               <option value="CATEGORY">Toda su categoría</option>
             </select>
           </Field>
+
+          {form.scope === 'VARIANT' && (
+            <Field label="Presentación" required>
+              <select
+                value={form.variantId}
+                onChange={e => setForm({ ...form, variantId: e.target.value })}
+                className={selectCls}
+              >
+                <option value="">Selecciona una presentación...</option>
+                {variants.map(variant => (
+                  <option key={variant.id} value={variant.id}>{variant.presentation}</option>
+                ))}
+              </select>
+            </Field>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <Field label="Inicio" required>

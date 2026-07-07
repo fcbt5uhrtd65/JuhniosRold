@@ -8,7 +8,7 @@ from rest_framework import serializers
 from apps.promotions.application.services import resolve_best_promotion
 from apps.promotions.infrastructure.serializers import PromotionSummarySerializer
 
-from .models import Category, Price, Product, ProductImage, ProductReview, ProductVariant
+from .models import Category, Price, Product, ProductImage, ProductReview, ProductVariant, ProductVariantImage
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -35,8 +35,26 @@ def _get_current_price_amount(variant) -> Decimal | None:
     return active.amount
 
 
+MAX_IMAGES_PER_VARIANT = 3
+
+
+class ProductVariantImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProductVariantImage
+        fields = "__all__"
+
+    def validate_variant(self, variant):
+        existing = variant.images.exclude(pk=getattr(self.instance, "pk", None))
+        if existing.count() >= MAX_IMAGES_PER_VARIANT:
+            raise serializers.ValidationError(
+                f"Una variante no puede tener más de {MAX_IMAGES_PER_VARIANT} imágenes."
+            )
+        return variant
+
+
 class ProductVariantSerializer(serializers.ModelSerializer):
     prices = PriceSerializer(many=True, read_only=True)
+    images = ProductVariantImageSerializer(many=True, read_only=True)
     presentation_label = serializers.CharField(read_only=True)
     available_quantity = serializers.SerializerMethodField()
     minimum_quantity = serializers.SerializerMethodField()

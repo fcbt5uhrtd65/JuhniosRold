@@ -21,7 +21,8 @@ import { getWholesaleSettingsApi, updateWholesaleSettingsApi } from '../../servi
 import { pollExportStatus, downloadFile } from '../../utils/pollExportStatus';
 import { resolveBackendUrl, ApiError } from '../../services/api';
 import { getWholesaleSettings, saveWholesaleSettings } from '../../utils/wholesale';
-import { Card, Badge, type BadgeColor, Table, Th, Td, Modal, EmptyState, inputCls, selectCls } from './AdminUI';
+import { Card, Badge, type BadgeColor, Table, Th, Td, Modal, EmptyState, inputCls, selectCls, ImageUploader } from './AdminUI';
+import { AdminVariantImagesModal } from './AdminVariantImagesModal';
 
 type ViewMode = 'grid' | 'table';
 type SortField = 'nombre' | 'precio' | 'categoria' | 'estado' | 'stock';
@@ -224,90 +225,6 @@ function Combobox({ value, onChange, options, placeholder, required, id }: Combo
   );
 }
 
-interface ImageUploaderProps {
-  value: string;
-  onChange: (url: string) => void;
-}
-
-function ImageUploader({ value, onChange }: ImageUploaderProps) {
-  const fileRef = useRef<HTMLInputElement>(null);
-
-  const handleFile = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = e => onChange(e.target?.result as string);
-    reader.readAsDataURL(file);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    const file = e.dataTransfer.files[0];
-    if (file?.type.startsWith('image/')) handleFile(file);
-  };
-
-  return (
-    <div className="space-y-3">
-      {value ? (
-        <div className="relative group">
-          <img
-            src={value}
-            alt="Vista previa"
-            className="w-full h-48 object-contain rounded-xl border border-gray-100 bg-gray-50 p-2"
-          />
-          <div className="absolute inset-0 bg-black/50 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              className="text-white text-xs font-semibold px-3 py-1.5 rounded-lg border border-white/70 hover:bg-white hover:text-gray-900 transition-colors"
-            >
-              Cambiar
-            </button>
-            <button
-              type="button"
-              onClick={() => onChange('')}
-              className="text-white text-xs font-semibold px-3 py-1.5 rounded-lg border border-white/70 hover:bg-white hover:text-gray-900 transition-colors"
-            >
-              Eliminar
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div
-          onDrop={handleDrop}
-          onDragOver={e => e.preventDefault()}
-          onClick={() => fileRef.current?.click()}
-          className="border-2 border-dashed border-gray-200 rounded-xl h-48 flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-gray-50 transition-colors"
-        >
-          <Upload size={20} className="text-gray-400" />
-          <span className="text-xs font-semibold text-gray-500">Subir imagen</span>
-          <span className="text-[11px] text-gray-400">o arrastra aquí</span>
-        </div>
-      )}
-      <input
-        ref={fileRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={e => {
-          const file = e.target.files?.[0];
-          if (file) handleFile(file);
-        }}
-      />
-      <div>
-        <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">
-          O pega una URL de imagen
-        </label>
-        <input
-          type="url"
-          value={value.startsWith('data:') ? '' : value}
-          onChange={e => onChange(e.target.value)}
-          placeholder="https://..."
-          className={inputCls}
-        />
-      </div>
-    </div>
-  );
-}
-
 interface AdminProductsProps {
   onViewInInventory?: (search: string) => void;
 }
@@ -318,6 +235,7 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
   const [modalMode, setModalMode] = useState<ModalMode>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [promotionModalProduct, setPromotionModalProduct] = useState<Product | null>(null);
+  const [variantImagesModalProduct, setVariantImagesModalProduct] = useState<Product | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [activeSection, setActiveSection] = useState<'general' | 'precios' | 'inventario' | 'adicional'>('general');
@@ -818,6 +736,15 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
                     >
                       <Tag size={13} />
                     </button>
+                    {product.otrasPresentaciones && product.otrasPresentaciones.length > 0 && (
+                      <button
+                        onClick={() => setVariantImagesModalProduct(product)}
+                        className="flex-1 py-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-blue-50 hover:text-blue-600 transition-colors flex items-center justify-center"
+                        title="Imágenes por presentación"
+                      >
+                        <Package size={13} />
+                      </button>
+                    )}
                     {onViewInInventory && (
                       <button
                         onClick={() => onViewInInventory(product.nombre)}
@@ -920,6 +847,9 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
                       <button onClick={() => openView(product)} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors" title="Ver"><Eye size={13} /></button>
                       <button onClick={() => openEdit(product)} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-amber-50 hover:text-amber-600 transition-colors" title="Editar"><Edit2 size={13} /></button>
                       <button onClick={() => setPromotionModalProduct(product)} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors" title="Promoción"><Tag size={13} /></button>
+                      {product.otrasPresentaciones && product.otrasPresentaciones.length > 0 && (
+                        <button onClick={() => setVariantImagesModalProduct(product)} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors" title="Imágenes por presentación"><Package size={13} /></button>
+                      )}
                       {onViewInInventory && (
                         <button onClick={() => onViewInInventory(product.nombre)} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors" title="Ver en Inventario"><Warehouse size={13} /></button>
                       )}
@@ -1460,6 +1390,16 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
           productId={promotionModalProduct.id}
           productName={promotionModalProduct.nombre}
           categorySlug={promotionModalProduct.categoria}
+          onChanged={refreshData}
+        />
+      )}
+
+      {variantImagesModalProduct && (
+        <AdminVariantImagesModal
+          open={variantImagesModalProduct !== null}
+          onClose={() => setVariantImagesModalProduct(null)}
+          productId={variantImagesModalProduct.id}
+          productName={variantImagesModalProduct.nombre}
           onChanged={refreshData}
         />
       )}

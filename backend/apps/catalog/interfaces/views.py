@@ -8,7 +8,15 @@ from apps.identity.interfaces.permissions import HasComponentAccess
 from shared.interfaces.viewsets import SoftDeleteModelViewSet
 
 from apps.inventory.infrastructure.models import Stock
-from ..infrastructure.models import Category, Price, Product, ProductImage, ProductReview, ProductVariant
+from ..infrastructure.models import (
+    Category,
+    Price,
+    Product,
+    ProductImage,
+    ProductReview,
+    ProductVariant,
+    ProductVariantImage,
+)
 from ..infrastructure.serializers import (
     CategorySerializer,
     CompleteProductSerializer,
@@ -16,6 +24,7 @@ from ..infrastructure.serializers import (
     ProductImageSerializer,
     ProductReviewSerializer,
     ProductSerializer,
+    ProductVariantImageSerializer,
     ProductVariantSerializer,
 )
 from .permissions import IsReviewOwnerOrReadOnly
@@ -120,7 +129,7 @@ class CategoryViewSet(SoftDeleteModelViewSet):
 
 
 class ProductVariantViewSet(SoftDeleteModelViewSet):
-    queryset = ProductVariant.objects.select_related("product").prefetch_related("prices")
+    queryset = ProductVariant.objects.select_related("product").prefetch_related("prices", "images")
     serializer_class = ProductVariantSerializer
     permission_classes = (permissions.IsAdminUser,)
     filterset_fields = ("product", "is_active")
@@ -139,6 +148,13 @@ class ProductImageViewSet(SoftDeleteModelViewSet):
     serializer_class = ProductImageSerializer
     permission_classes = (permissions.IsAdminUser,)
     filterset_fields = ("product", "is_primary")
+
+
+class ProductVariantImageViewSet(SoftDeleteModelViewSet):
+    queryset = ProductVariantImage.objects.select_related("variant")
+    serializer_class = ProductVariantImageSerializer
+    permission_classes = (permissions.IsAdminUser,)
+    filterset_fields = ("variant", "is_primary")
 
 
 class ProductReviewViewSet(SoftDeleteModelViewSet):

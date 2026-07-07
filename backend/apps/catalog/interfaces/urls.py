@@ -9,6 +9,7 @@ from .views import (
     ProductExportView,
     ProductImageViewSet,
     ProductReviewViewSet,
+    ProductVariantImageViewSet,
     ProductVariantViewSet,
     ProductViewSet,
 )
@@ -19,6 +20,7 @@ router.register("categories", CategoryViewSet)
 router.register("variants", ProductVariantViewSet)
 router.register("prices", PriceViewSet)
 router.register("images", ProductImageViewSet)
+router.register("variant-images", ProductVariantImageViewSet)
 router.register("reviews", ProductReviewViewSet)
 
 urlpatterns = [
