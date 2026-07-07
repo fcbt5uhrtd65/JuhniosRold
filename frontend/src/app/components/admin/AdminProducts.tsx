@@ -3,9 +3,9 @@ import { useAdmin } from '../../contexts/AdminContext';
 import {
   Plus, Edit2, Trash2, Eye, EyeOff, Grid3x3, List, ArrowUpDown,
   X, Upload, AlertTriangle, ChevronDown, Package, Warehouse,
-  Download, FileSpreadsheet, FileText, Star, Tag,
+  Download, FileSpreadsheet, FileText, Star, Tag, MoreVertical, Images,
 } from 'lucide-react';
-import type { Product } from '../../types/admin';
+import type { Product, Inventory } from '../../types/admin';
 import { SearchBar } from './SearchBar';
 import { FilterPanel, type FilterGroup } from './FilterPanel';
 import { Pagination } from './Pagination';
@@ -15,7 +15,7 @@ import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent,
 } from '../ui/dropdown-menu';
-import { requestProductsExport, getCategories, type ExportFormat, type PdfLayout } from '../../services/products.service';
+import { requestProductsExport, getCategories, getProductById, type ExportFormat, type PdfLayout, type ProductVariant } from '../../services/products.service';
 import { getProductReviews, type ProductReview } from '../../services/reviews.service';
 import { getWholesaleSettingsApi, updateWholesaleSettingsApi } from '../../services/cart.service';
 import { pollExportStatus, downloadFile } from '../../utils/pollExportStatus';
@@ -714,53 +714,50 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1.5 mt-3">
+                  <div className="flex items-center gap-2 mt-3">
                     <button
                       onClick={() => openView(product)}
-                      className="flex-1 py-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors flex items-center justify-center"
-                      title="Ver"
+                      className="flex-1 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors flex items-center justify-center gap-1.5 text-xs font-medium"
                     >
-                      <Eye size={13} />
+                      <Eye size={13} /> Ver
                     </button>
                     <button
                       onClick={() => openEdit(product)}
-                      className="flex-1 py-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors flex items-center justify-center"
-                      title="Editar"
+                      className="flex-1 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-amber-50 hover:text-amber-700 hover:border-amber-200 transition-colors flex items-center justify-center gap-1.5 text-xs font-medium"
                     >
-                      <Edit2 size={13} />
+                      <Edit2 size={13} /> Editar
                     </button>
-                    <button
-                      onClick={() => setPromotionModalProduct(product)}
-                      className="flex-1 py-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-red-50 hover:text-red-600 transition-colors flex items-center justify-center"
-                      title="Promoción"
-                    >
-                      <Tag size={13} />
-                    </button>
-                    {product.otrasPresentaciones && product.otrasPresentaciones.length > 0 && (
-                      <button
-                        onClick={() => setVariantImagesModalProduct(product)}
-                        className="flex-1 py-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-blue-50 hover:text-blue-600 transition-colors flex items-center justify-center"
-                        title="Imágenes por presentación"
-                      >
-                        <Package size={13} />
-                      </button>
-                    )}
-                    {onViewInInventory && (
-                      <button
-                        onClick={() => onViewInInventory(product.nombre)}
-                        className="flex-1 py-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors flex items-center justify-center"
-                        title="Ver en Inventario"
-                      >
-                        <Warehouse size={13} />
-                      </button>
-                    )}
-                    <button
-                      onClick={() => { if (confirm('¿Eliminar este producto?')) void handleDelete(product.id); }}
-                      className="flex-1 py-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors flex items-center justify-center"
-                      title="Eliminar"
-                    >
-                      <Trash2 size={13} />
-                    </button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          className="p-2 rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50 hover:text-gray-700 transition-colors flex-shrink-0"
+                          title="Más acciones"
+                        >
+                          <MoreVertical size={15} />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => setPromotionModalProduct(product)}>
+                          <Tag size={14} /> Promoción
+                        </DropdownMenuItem>
+                        {product.otrasPresentaciones && product.otrasPresentaciones.length > 0 && (
+                          <DropdownMenuItem onClick={() => setVariantImagesModalProduct(product)}>
+                            <Images size={14} /> Imágenes por presentación
+                          </DropdownMenuItem>
+                        )}
+                        {onViewInInventory && (
+                          <DropdownMenuItem onClick={() => onViewInInventory(product.nombre)}>
+                            <Warehouse size={14} /> Ver en inventario
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onClick={() => { if (confirm('¿Eliminar este producto?')) void handleDelete(product.id); }}
+                        >
+                          <Trash2 size={14} /> Eliminar
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </div>
               </Card>
@@ -846,14 +843,34 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
                     <div className="flex items-center gap-1">
                       <button onClick={() => openView(product)} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors" title="Ver"><Eye size={13} /></button>
                       <button onClick={() => openEdit(product)} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-amber-50 hover:text-amber-600 transition-colors" title="Editar"><Edit2 size={13} /></button>
-                      <button onClick={() => setPromotionModalProduct(product)} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors" title="Promoción"><Tag size={13} /></button>
-                      {product.otrasPresentaciones && product.otrasPresentaciones.length > 0 && (
-                        <button onClick={() => setVariantImagesModalProduct(product)} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors" title="Imágenes por presentación"><Package size={13} /></button>
-                      )}
-                      {onViewInInventory && (
-                        <button onClick={() => onViewInInventory(product.nombre)} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors" title="Ver en Inventario"><Warehouse size={13} /></button>
-                      )}
-                      <button onClick={() => { if (confirm('¿Eliminar este producto?')) void handleDelete(product.id); }} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors" title="Eliminar"><Trash2 size={13} /></button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50 hover:text-gray-700 transition-colors" title="Más acciones">
+                            <MoreVertical size={13} />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => setPromotionModalProduct(product)}>
+                            <Tag size={14} /> Promoción
+                          </DropdownMenuItem>
+                          {product.otrasPresentaciones && product.otrasPresentaciones.length > 0 && (
+                            <DropdownMenuItem onClick={() => setVariantImagesModalProduct(product)}>
+                              <Images size={14} /> Imágenes por presentación
+                            </DropdownMenuItem>
+                          )}
+                          {onViewInInventory && (
+                            <DropdownMenuItem onClick={() => onViewInInventory(product.nombre)}>
+                              <Warehouse size={14} /> Ver en inventario
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuItem
+                            variant="destructive"
+                            onClick={() => { if (confirm('¿Eliminar este producto?')) void handleDelete(product.id); }}
+                          >
+                            <Trash2 size={14} /> Eliminar
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </Td>
                 </tr>
@@ -882,148 +899,15 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
         wide
       >
         {/* VIEW MODE */}
-        {modalMode === 'view' && selectedProduct && (() => {
-          const inv = inventory.find(i => i.productoId === selectedProduct.id);
-          return (
-            <div className="space-y-6">
-              <div className="grid md:grid-cols-2 gap-6">
-                {/* Image */}
-                <div className="space-y-4">
-                  <div className="aspect-square rounded-xl bg-gray-50 border border-gray-100 overflow-hidden">
-                    {selectedProduct.imagen ? (
-                      <img src={selectedProduct.imagen} alt={selectedProduct.nombre} className="w-full h-full object-contain p-3" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <Package size={56} className="text-gray-300" />
-                      </div>
-                    )}
-                  </div>
-                  {/* Stock card */}
-                  {inv && (
-                    <Card className="p-4">
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">Inventario</p>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <p className="text-[11px] text-gray-400 mb-0.5">Stock actual</p>
-                          <p className={`text-2xl font-bold ${inv.stockActual === 0 ? 'text-red-600' : inv.stockActual < inv.stockMinimo ? 'text-amber-600' : 'text-gray-900'}`}>
-                            {inv.stockActual}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[11px] text-gray-400 mb-0.5">Stock mínimo</p>
-                          <p className="text-2xl font-bold text-gray-900">{inv.stockMinimo}</p>
-                        </div>
-                      </div>
-                      {inv.stockActual < inv.stockMinimo && (
-                        <div className="mt-3 flex items-center gap-2 text-[11px] text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
-                          <AlertTriangle size={13} className="flex-shrink-0" />
-                          Stock por debajo del mínimo
-                        </div>
-                      )}
-                      <p className="mt-2 text-[11px] text-gray-400">{inv.ubicacion}</p>
-                    </Card>
-                  )}
-                </div>
-
-                {/* Details */}
-                <div className="space-y-4">
-                  <div>{estadoBadge(selectedProduct.estado, inv?.stockActual, inv?.stockMinimo)}</div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <ViewField label="Categoría" value={selectedProduct.categoria} capitalize />
-                    <ViewField label="Tipo" value={selectedProduct.tipo} />
-                    <ViewField label="Presentación" value={selectedProduct.presentacion} />
-                    {selectedProduct.marca && <ViewField label="Marca" value={selectedProduct.marca} />}
-                    {selectedProduct.codigo && <ViewField label="Código / SKU" value={selectedProduct.codigo} mono />}
-                    {selectedProduct.otrasPresentaciones && selectedProduct.otrasPresentaciones.length > 0 && (
-                      <ViewField
-                        label="Otras presentaciones"
-                        value={selectedProduct.otrasPresentaciones.join(', ')}
-                      />
-                    )}
-                  </div>
-
-                  <Card className="p-4 space-y-2">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">Precio</p>
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-2xl font-bold text-gray-900">${selectedProduct.precio.toLocaleString()}</span>
-                      <span className="text-[11px] text-gray-400">COP</span>
-                    </div>
-                    {Boolean(selectedProduct.precioCosto) && selectedProduct.precioCosto! > 0 && (
-                      <p className="text-xs text-gray-500">
-                        Costo: ${selectedProduct.precioCosto!.toLocaleString()}
-                        {margenGanancia(selectedProduct.precio, selectedProduct.precioCosto) && (
-                          <span className="ml-2 text-emerald-600 font-semibold">
-                            Margen: {margenGanancia(selectedProduct.precio, selectedProduct.precioCosto)}
-                          </span>
-                        )}
-                      </p>
-                    )}
-                  </Card>
-
-                  {selectedProduct.descripcion && (
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Descripción</p>
-                      <p className="text-xs leading-relaxed text-gray-600">{selectedProduct.descripcion}</p>
-                    </div>
-                  )}
-
-                  {selectedProduct.fechaCreacion && (
-                    <p className="text-[11px] text-gray-400">
-                      Creado: {new Date(selectedProduct.fechaCreacion).toLocaleDateString('es-CO', { dateStyle: 'long' })}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {/* Additional info */}
-              {(selectedProduct.beneficios || selectedProduct.modoDeUso || selectedProduct.ingredientes) && (
-                <div className="grid md:grid-cols-3 gap-4 pt-4 border-t border-gray-100">
-                  {selectedProduct.beneficios && (
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Beneficios</p>
-                      <p className="text-xs leading-relaxed whitespace-pre-line text-gray-600">{selectedProduct.beneficios}</p>
-                    </div>
-                  )}
-                  {selectedProduct.modoDeUso && (
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Modo de uso</p>
-                      <p className="text-xs leading-relaxed whitespace-pre-line text-gray-600">{selectedProduct.modoDeUso}</p>
-                    </div>
-                  )}
-                  {selectedProduct.ingredientes && (
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Ingredientes</p>
-                      <p className="text-xs leading-relaxed whitespace-pre-line text-gray-600">{selectedProduct.ingredientes}</p>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <ProductReviewsPanel productId={selectedProduct.id} />
-
-              <div className="flex gap-3 pt-4 border-t border-gray-100">
-                <button
-                  onClick={() => { closeModal(); openEdit(selectedProduct); }}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white rounded-xl text-xs font-semibold hover:bg-[#3d5c4e] transition-colors"
-                >
-                  <Edit2 size={13} />
-                  Editar
-                </button>
-                <button
-                  onClick={() => setPromotionModalProduct(selectedProduct)}
-                  className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"
-                >
-                  <Tag size={13} />
-                  Promoción
-                </button>
-                <button onClick={closeModal} className="px-4 py-2.5 border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
-                  Cerrar
-                </button>
-              </div>
-            </div>
-          );
-        })()}
+        {modalMode === 'view' && selectedProduct && (
+          <ProductViewPanel
+            product={selectedProduct}
+            inventory={inventory}
+            onEdit={() => { closeModal(); openEdit(selectedProduct); }}
+            onPromotion={() => setPromotionModalProduct(selectedProduct)}
+            onClose={closeModal}
+          />
+        )}
 
         {/* CREATE / EDIT MODE */}
         {(modalMode === 'create' || modalMode === 'edit') && (
@@ -1412,6 +1296,218 @@ function FormLabel({ children, required }: { children: React.ReactNode; required
     <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">
       {children}{required && <span className="text-red-500 ml-0.5">*</span>}
     </label>
+  );
+}
+
+interface ProductViewPanelProps {
+  product: Product;
+  inventory: Inventory[];
+  onEdit: () => void;
+  onPromotion: () => void;
+  onClose: () => void;
+}
+
+function ProductViewPanel({ product, inventory, onEdit, onPromotion, onClose }: ProductViewPanelProps) {
+  const [variants, setVariants] = useState<ProductVariant[]>([]);
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
+  const [isLoadingVariants, setIsLoadingVariants] = useState(false);
+  const lastLoadedProductId = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (lastLoadedProductId.current === product.id) return;
+    lastLoadedProductId.current = product.id;
+    setVariants([]);
+    setSelectedVariantId(null);
+    if (!product.otrasPresentaciones || product.otrasPresentaciones.length === 0) return;
+
+    setIsLoadingVariants(true);
+    getProductById(product.id)
+      .then(full => {
+        setVariants(full.variants);
+        setSelectedVariantId(full.variants.find(v => v.presentation === product.presentacion)?.id ?? full.variants[0]?.id ?? null);
+      })
+      .catch(() => setVariants([]))
+      .finally(() => setIsLoadingVariants(false));
+  }, [product.id, product.otrasPresentaciones, product.presentacion]);
+
+  const selectedVariant = variants.find(v => v.id === selectedVariantId) ?? null;
+  const inv = selectedVariant
+    ? inventory.find(i => i.varianteId === selectedVariant.id)
+    : inventory.find(i => i.productoId === product.id);
+
+  const displayImage = selectedVariant?.image_url || product.imagen;
+  const displayPrecio = selectedVariant?.current_price ?? product.precio;
+  const displayCosto = selectedVariant ? selectedVariant.cost : product.precioCosto;
+  const displayPresentacion = selectedVariant?.presentation ?? product.presentacion;
+  const displayCodigo = selectedVariant?.sku ?? product.codigo;
+
+  return (
+    <div className="space-y-6">
+      <div className="grid md:grid-cols-2 gap-6">
+        {/* Image + variant thumbnails */}
+        <div className="space-y-4">
+          <div className="flex gap-3">
+            {variants.length > 1 && (
+              <div className="flex flex-col gap-2 flex-shrink-0">
+                {variants.map(variant => (
+                  <button
+                    key={variant.id}
+                    type="button"
+                    onClick={() => setSelectedVariantId(variant.id)}
+                    title={variant.presentation}
+                    className={`w-14 h-14 rounded-lg overflow-hidden border-2 transition-all flex-shrink-0 ${
+                      selectedVariantId === variant.id
+                        ? 'border-[#2a4038] shadow-sm'
+                        : 'border-gray-200 opacity-60 hover:opacity-100 hover:border-gray-300'
+                    }`}
+                  >
+                    {variant.image_url ? (
+                      <img src={variant.image_url} alt={variant.presentation} className="w-full h-full object-contain bg-gray-50 p-1" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-gray-50">
+                        <Package size={16} className="text-gray-300" />
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="flex-1 aspect-square rounded-xl bg-gray-50 border border-gray-100 overflow-hidden">
+              {displayImage ? (
+                <img src={displayImage} alt={product.nombre} className="w-full h-full object-contain p-3" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <Package size={56} className="text-gray-300" />
+                </div>
+              )}
+            </div>
+          </div>
+          {variants.length > 1 && (
+            <p className="text-[11px] text-gray-400 text-center">
+              {isLoadingVariants ? 'Cargando presentaciones...' : 'Haz clic en una miniatura para ver esa presentación'}
+            </p>
+          )}
+          {/* Stock card */}
+          {inv && (
+            <Card className="p-4">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">Inventario{selectedVariant ? ` · ${selectedVariant.presentation}` : ''}</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-[11px] text-gray-400 mb-0.5">Stock actual</p>
+                  <p className={`text-2xl font-bold ${inv.stockActual === 0 ? 'text-red-600' : inv.stockActual < inv.stockMinimo ? 'text-amber-600' : 'text-gray-900'}`}>
+                    {inv.stockActual}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-gray-400 mb-0.5">Stock mínimo</p>
+                  <p className="text-2xl font-bold text-gray-900">{inv.stockMinimo}</p>
+                </div>
+              </div>
+              {inv.stockActual < inv.stockMinimo && (
+                <div className="mt-3 flex items-center gap-2 text-[11px] text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
+                  <AlertTriangle size={13} className="flex-shrink-0" />
+                  Stock por debajo del mínimo
+                </div>
+              )}
+              <p className="mt-2 text-[11px] text-gray-400">{inv.ubicacion}</p>
+            </Card>
+          )}
+        </div>
+
+        {/* Details */}
+        <div className="space-y-4">
+          <div>{estadoBadge(product.estado, inv?.stockActual, inv?.stockMinimo)}</div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <ViewField label="Categoría" value={product.categoria} capitalize />
+            <ViewField label="Tipo" value={product.tipo} />
+            <ViewField label="Presentación" value={displayPresentacion} />
+            {product.marca && <ViewField label="Marca" value={product.marca} />}
+            {displayCodigo && <ViewField label="Código / SKU" value={displayCodigo} mono />}
+            {variants.length <= 1 && product.otrasPresentaciones && product.otrasPresentaciones.length > 0 && (
+              <ViewField label="Otras presentaciones" value={product.otrasPresentaciones.join(', ')} />
+            )}
+          </div>
+
+          <Card className="p-4 space-y-2">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">Precio{selectedVariant ? ` · ${selectedVariant.presentation}` : ''}</p>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold text-gray-900">${(displayPrecio ?? 0).toLocaleString()}</span>
+              <span className="text-[11px] text-gray-400">COP</span>
+            </div>
+            {Boolean(displayCosto) && displayCosto! > 0 && (
+              <p className="text-xs text-gray-500">
+                Costo: ${displayCosto!.toLocaleString()}
+                {margenGanancia(displayPrecio ?? 0, displayCosto) && (
+                  <span className="ml-2 text-emerald-600 font-semibold">
+                    Margen: {margenGanancia(displayPrecio ?? 0, displayCosto)}
+                  </span>
+                )}
+              </p>
+            )}
+          </Card>
+
+          {product.descripcion && (
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Descripción</p>
+              <p className="text-xs leading-relaxed text-gray-600">{product.descripcion}</p>
+            </div>
+          )}
+
+          {product.fechaCreacion && (
+            <p className="text-[11px] text-gray-400">
+              Creado: {new Date(product.fechaCreacion).toLocaleDateString('es-CO', { dateStyle: 'long' })}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Additional info */}
+      {(product.beneficios || product.modoDeUso || product.ingredientes) && (
+        <div className="grid md:grid-cols-3 gap-4 pt-4 border-t border-gray-100">
+          {product.beneficios && (
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Beneficios</p>
+              <p className="text-xs leading-relaxed whitespace-pre-line text-gray-600">{product.beneficios}</p>
+            </div>
+          )}
+          {product.modoDeUso && (
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Modo de uso</p>
+              <p className="text-xs leading-relaxed whitespace-pre-line text-gray-600">{product.modoDeUso}</p>
+            </div>
+          )}
+          {product.ingredientes && (
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Ingredientes</p>
+              <p className="text-xs leading-relaxed whitespace-pre-line text-gray-600">{product.ingredientes}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      <ProductReviewsPanel productId={product.id} />
+
+      <div className="flex gap-3 pt-4 border-t border-gray-100">
+        <button
+          onClick={onEdit}
+          className="flex items-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white rounded-xl text-xs font-semibold hover:bg-[#3d5c4e] transition-colors"
+        >
+          <Edit2 size={13} />
+          Editar
+        </button>
+        <button
+          onClick={onPromotion}
+          className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"
+        >
+          <Tag size={13} />
+          Promoción
+        </button>
+        <button onClick={onClose} className="px-4 py-2.5 border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+          Cerrar
+        </button>
+      </div>
+    </div>
   );
 }
 
