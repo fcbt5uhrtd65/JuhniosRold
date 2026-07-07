@@ -90,16 +90,11 @@ def _draw_logo(c, x, y, size=36):
 
 def _draw_header(c, page_w, page_h, employees):
     x0, x1 = 32, page_w - 32
-    c.setFillColor(BRAND)
-    c.rect(x0, page_h - 34, x1 - x0, 3, stroke=0, fill=1)
     logo_size = _draw_logo(c, x0, page_h - 40, 36)
     text_x = x0 + logo_size + (10 if logo_size else 0)
     _text(c, text_x, page_h - 56, COMPANY_NAME, size=12, bold=True)
     _text(c, x1, page_h - 52, f"Generado: {timezone.now():%d/%m/%Y %H:%M}", size=8, color=MUTED, align="right")
     _text(c, x1, page_h - 66, f"Total empleados: {len(employees)}", size=8, bold=True, color=BRAND, align="right")
-    c.setStrokeColor(LINE)
-    c.setLineWidth(0.8)
-    c.line(x0, page_h - 80, x1, page_h - 80)
     return page_h - 94
 
 
