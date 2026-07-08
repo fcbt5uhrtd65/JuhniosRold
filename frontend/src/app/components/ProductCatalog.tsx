@@ -554,42 +554,66 @@ export function ProductPage({
             </button>
           </div>
 
-          {/* Columna 2: Imagen principal */}
-          <div className="relative rounded-2xl overflow-hidden bg-white" style={{ aspectRatio: '3/4' }}>
-            <AnimatePresence mode="wait">
-              <motion.img
-                key={`${product.id}-${activeImg}`}
-                src={images[activeImg]}
-                alt={product.name}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.18 }}
-                className="w-full h-full object-contain p-5 sm:p-7 lg:p-8"
-                draggable={false}
-              />
-            </AnimatePresence>
-            <button
-              onClick={() => activateGalleryImage(activeImg - 1)}
-              className="lg:hidden absolute left-3 top-1/2 -translate-y-1/2 p-2 bg-white/85 rounded-full text-stone-600 shadow"
-            >
-              <ChevronLeft className="w-4 h-4" strokeWidth={1.5} />
-            </button>
-            <button
-              onClick={() => activateGalleryImage(activeImg + 1)}
-              className="lg:hidden absolute right-3 top-1/2 -translate-y-1/2 p-2 bg-white/85 rounded-full text-stone-600 shadow"
-            >
-              <ChevronRight className="w-4 h-4" strokeWidth={1.5} />
-            </button>
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
-              {images.map((_, i) => (
-                <button key={i} onClick={() => activateGalleryImage(i)}
-                  className={`rounded-full transition-all duration-300 ${
-                    activeImg === i ? 'w-6 h-1.5 bg-stone-700' : 'w-1.5 h-1.5 bg-stone-300/70 hover:bg-stone-400'
-                  }`}
+          {/* Columna 2: Imagen principal + miniaturas de la variante actual */}
+          <div className="flex flex-col gap-3">
+            <div className="relative rounded-2xl overflow-hidden bg-white" style={{ aspectRatio: '3/4' }}>
+              <AnimatePresence mode="wait">
+                <motion.img
+                  key={`${product.id}-${activeImg}`}
+                  src={images[activeImg]}
+                  alt={product.name}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.18 }}
+                  className="w-full h-full object-contain p-5 sm:p-7 lg:p-8"
+                  draggable={false}
                 />
-              ))}
+              </AnimatePresence>
+              {images.length > 1 && (
+                <>
+                  <button
+                    onClick={() => activateGalleryImage(activeImg - 1)}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 p-2 bg-white/85 rounded-full text-stone-600 shadow hover:bg-white transition-colors"
+                  >
+                    <ChevronLeft className="w-4 h-4" strokeWidth={1.5} />
+                  </button>
+                  <button
+                    onClick={() => activateGalleryImage(activeImg + 1)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-2 bg-white/85 rounded-full text-stone-600 shadow hover:bg-white transition-colors"
+                  >
+                    <ChevronRight className="w-4 h-4" strokeWidth={1.5} />
+                  </button>
+                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
+                    {images.map((_, i) => (
+                      <button key={i} onClick={() => activateGalleryImage(i)}
+                        className={`rounded-full transition-all duration-300 ${
+                          activeImg === i ? 'w-6 h-1.5 bg-stone-700' : 'w-1.5 h-1.5 bg-stone-300/70 hover:bg-stone-400'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
+
+            {gallery.length > 1 && (
+              <div className="flex gap-2 overflow-x-auto">
+                {gallery.map((item, i) => (
+                  <button
+                    key={item.variantId ? `${item.variantId}-${i}` : i}
+                    onClick={() => activateGalleryImage(i)}
+                    className={`w-16 h-16 rounded-lg overflow-hidden border-2 bg-white flex-shrink-0 transition-all duration-150 ${
+                      activeImg === i
+                        ? 'border-stone-800 shadow-sm'
+                        : 'border-stone-200 opacity-60 hover:opacity-100 hover:border-stone-400'
+                    }`}
+                  >
+                    <img src={item.src} alt="" className="w-full h-full object-contain p-1.5" draggable={false} />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Columna 3: Panel derecho */}
