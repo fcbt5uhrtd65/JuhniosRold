@@ -334,7 +334,7 @@ function ProductPage({
                     isActive ? 'border-stone-800 shadow-sm' : 'border-stone-200 opacity-55 hover:opacity-100 hover:border-stone-400'
                   }`}
                 >
-                  <img src={item.src} alt="" className="w-full h-full object-cover" draggable={false} />
+                  <img src={item.src} alt="" className="w-full h-full object-contain p-2" draggable={false} />
                 </button>
               );
             })}
@@ -358,7 +358,7 @@ function ProductPage({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.18 }}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain p-5 sm:p-7 lg:p-8"
                 draggable={false}
               />
             </AnimatePresence>
@@ -512,7 +512,7 @@ function ProductPage({
                       <motion.img
                         whileHover={{ scale: 1.05 }} transition={{ duration: 0.45 }}
                         src={rp.images[0]} alt={rp.name}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-contain p-4"
                       />
                       {/* Overlay eye */}
                       <motion.div
@@ -591,7 +591,7 @@ function ProductCard({ product, index, isSaved, onToggleSave, onAddToCart, onVie
           transition={{ duration: 0.5 }}
           src={product.images[0]}
           alt={product.name}
-          className="w-full h-full object-cover"
+          className="w-full h-full object-contain p-4"
           draggable={false}
         />
 

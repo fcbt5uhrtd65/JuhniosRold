@@ -541,7 +541,7 @@ export function ProductPage({
                       : 'border-stone-200 opacity-55 hover:opacity-100 hover:border-stone-400'
                   }`}
                 >
-                  <img src={item.src} alt="" className="w-full h-full object-cover" draggable={false} />
+                  <img src={item.src} alt="" className="w-full h-full object-contain p-2" draggable={false} />
                 </button>
               );
             })}
@@ -555,7 +555,7 @@ export function ProductPage({
           </div>
 
           {/* Columna 2: Imagen principal */}
-          <div className="relative rounded-2xl overflow-hidden bg-[#F4F1EC]" style={{ aspectRatio: '3/4' }}>
+          <div className="relative rounded-2xl overflow-hidden bg-[#F8F6F2]" style={{ aspectRatio: '3/4' }}>
             <AnimatePresence mode="wait">
               <motion.img
                 key={`${product.id}-${activeImg}`}
@@ -565,7 +565,7 @@ export function ProductPage({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.18 }}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain p-5 sm:p-7 lg:p-8"
                 draggable={false}
               />
             </AnimatePresence>
@@ -750,7 +750,7 @@ export function ProductPage({
                       <motion.img
                         whileHover={{ scale: 1.05 }} transition={{ duration: 0.45 }}
                         src={getProductImage(rp)} alt={rp.name}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-contain p-4"
                       />
                       {/* Overlay hover */}
                       <motion.div
@@ -1193,7 +1193,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                         <motion.img
                           whileHover={{ scale: 1.06 }} transition={{ duration: 0.4 }}
                           src={getProductImage(product, selVariant)} alt={product.name}
-                          className="w-full h-full object-cover"
+                          className="w-full h-full object-contain p-3"
                         />
                       </div>
                       <div className="flex-1 min-w-0">
@@ -1280,7 +1280,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                         transition={{ duration: 0.55 }}
                         src={getProductImage(product, selVariant)}
                         alt={product.name}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-contain p-4"
                         loading="lazy"
                         decoding="async"
                       />
