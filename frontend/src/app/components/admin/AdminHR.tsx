@@ -272,7 +272,7 @@ const EMPTY_EMPLOYEE_FORM: EmployeeFormState = {
 
 const EMPTY_DOCUMENT_FORM: DocumentFormState = {
   document_type: 'ID_COPY',
-  name: 'Copia de cédula',
+  name: 'Cédula de Ciudadanía',
   file: null,
   issued_at: '',
   expires_at: '',
@@ -297,7 +297,7 @@ const EMPTY_BRANCH_FORM: BranchFormState = {
 };
 
 const DOCUMENT_TYPE_OPTIONS: Array<{ value: EmployeeDocumentType; label: string }> = [
-  { value: 'ID_COPY', label: 'Copia de cédula' },
+  { value: 'ID_COPY', label: 'Cédula de Ciudadanía' },
   { value: 'RESUME', label: 'Hoja de vida con soportes' },
   { value: 'SIGNED_CONTRACT', label: 'Contrato firmado' },
   { value: 'BANK_CERTIFICATE', label: 'Certificado bancario' },

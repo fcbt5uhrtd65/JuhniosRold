@@ -32,7 +32,7 @@ const TABS: Array<{ id: ProfileTab; label: string }> = [
 ];
 
 const DOCUMENT_TYPE_OPTIONS: Array<{ value: EmployeeDocumentType; label: string }> = [
-  { value: 'ID_COPY', label: 'Copia de cédula' },
+  { value: 'ID_COPY', label: 'Cédula de Ciudadanía' },
   { value: 'RESUME', label: 'Hoja de vida con soportes' },
   { value: 'SIGNED_CONTRACT', label: 'Contrato firmado' },
   { value: 'BANK_CERTIFICATE', label: 'Certificado bancario' },
@@ -204,7 +204,7 @@ export function EmployeeSelfProfileModal({ open, onClose }: { open: boolean; onC
   const [location, setLocation] = useState<LocationValue>(EMPTY_LOCATION);
   const [documents, setDocuments] = useState<EmployeeDocument[]>([]);
   const [documentType, setDocumentType] = useState<EmployeeDocumentType>('ID_COPY');
-  const [documentName, setDocumentName] = useState('Copia de cédula');
+  const [documentName, setDocumentName] = useState('Cédula de Ciudadanía');
   const [documentFile, setDocumentFile] = useState<File | null>(null);
 
   useEffect(() => {
@@ -449,6 +449,28 @@ export function EmployeeSelfProfileModal({ open, onClose }: { open: boolean; onC
 
               {activeTab === 'documents' && (
                 <div className="space-y-5">
+                  <div className="grid md:grid-cols-3 gap-3">
+                    {DOCUMENT_TYPE_OPTIONS.map((docType) => {
+                      const docs = documents.filter((document) => document.document_type === docType.value);
+                      const latest = docs[0];
+                      return (
+                        <button
+                          type="button"
+                          key={docType.value}
+                          onClick={() => {
+                            setDocumentType(docType.value);
+                            setDocumentName(docType.label);
+                          }}
+                          className="text-left border border-gray-200 rounded-xl p-3 hover:border-[#2a4038] transition-colors"
+                        >
+                          <div className="text-xs font-medium text-gray-900 mb-1.5">{docType.label}</div>
+                          <Badge label={latest ? documentStatusLabel(latest.status) : 'Pendiente'} color={documentStatusBadge(latest?.status ?? 'PENDING')} />
+                          {docs.length > 1 && <div className="text-[10px] text-gray-400 mt-2">{docs.length} adjuntos</div>}
+                        </button>
+                      );
+                    })}
+                  </div>
+
                   <Card className="p-4 space-y-4">
                     <div className="flex items-center gap-2 text-sm font-semibold text-gray-900">
                       <FileUp size={16} />
