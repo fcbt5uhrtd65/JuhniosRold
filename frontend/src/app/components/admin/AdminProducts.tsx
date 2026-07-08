@@ -4,6 +4,7 @@ import {
   Plus, Edit2, Trash2, Eye, EyeOff, Grid3x3, List, ArrowUpDown,
   X, Upload, AlertTriangle, ChevronDown, Package, Warehouse,
   Download, FileSpreadsheet, FileText, Star, Tag, MoreVertical, Images,
+  ChevronLeft, ChevronRight, Check,
 } from 'lucide-react';
 import type { Product, Inventory } from '../../types/admin';
 import { SearchBar } from './SearchBar';
@@ -251,6 +252,7 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [activeSection, setActiveSection] = useState<'general' | 'precios' | 'inventario' | 'adicional'>('general');
+  const [saveGuardActive, setSaveGuardActive] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilters, setActiveFilters] = useState<Record<string, string[]>>({});
@@ -389,6 +391,22 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isLastSection) {
+      // Un Enter dentro de un input dispara el submit del <form>; en un paso
+      // intermedio del wizard eso debe avanzar de sección, no guardar ya.
+      goToNextSection();
+      return;
+    }
+    if (saveGuardActive) {
+      // Protección contra el clic "fantasma": el botón "Siguiente" se
+      // reemplaza por "Guardar" en el mismo lugar al entrar a este paso.
+      return;
+    }
+    const finalStepError = validateSection(activeSection);
+    if (finalStepError) {
+      toast.error(finalStepError);
+      return;
+    }
     const categoryExists = catalogCategories.some(
       c => c.toLowerCase() === formData.categoria.toLowerCase(),
     );
@@ -590,6 +608,72 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
     { id: 'inventario', label: 'Inventario' },
     { id: 'adicional', label: 'Adicional' },
   ] as const;
+
+  // El botón "Siguiente" y "Guardar Producto" ocupan el mismo lugar en pantalla;
+  // al entrar al último paso se bloquea el submit brevemente y se muestra
+  // "Espera un momento..." para que el cambio de botón sea visible y el
+  // usuario no confirme sin darse cuenta de que ya llegó al paso final.
+  useEffect(() => {
+    if (activeSection !== 'adicional' || modalMode === null) {
+      setSaveGuardActive(false);
+      return;
+    }
+    setSaveGuardActive(true);
+    // El botón "Guardar" ocupa el mismo lugar del DOM que ocupaba "Siguiente";
+    // si el foco del teclado quedó sobre ese botón, cualquier evento de
+    // activación residual (Enter, Space) podría reenviarse contra el nuevo
+    // botón submit. Se quita el foco explícitamente al entrar a este paso.
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    const timer = setTimeout(() => setSaveGuardActive(false), 900);
+    return () => clearTimeout(timer);
+  }, [activeSection, modalMode]);
+
+  const sectionIndex = SECTIONS.findIndex(s => s.id === activeSection);
+  const isLastSection = sectionIndex === SECTIONS.length - 1;
+
+  const validateSection = (sectionId: (typeof SECTIONS)[number]['id']): string | null => {
+    if (sectionId === 'general') {
+      if (!formData.nombre.trim()) return 'Ingresa el nombre del producto.';
+      if (!formData.categoria.trim()) return 'Selecciona una categoría.';
+      if (!formData.tipo.trim()) return 'Selecciona un tipo de producto.';
+      if (!formData.presentacionNumero || formData.presentacionNumero <= 0) return 'Ingresa el número de presentación.';
+      if (!formData.presentacionUnidad) return 'Selecciona la unidad de presentación.';
+    }
+    if (sectionId === 'precios') {
+      if (!formData.precio || formData.precio <= 0) return 'Ingresa un precio de venta válido.';
+    }
+    return null;
+  };
+
+  const goToNextSection = () => {
+    const error = validateSection(activeSection);
+    if (error) {
+      toast.error(error);
+      return;
+    }
+    if (!isLastSection) setActiveSection(SECTIONS[sectionIndex + 1].id);
+  };
+
+  const goToPrevSection = () => {
+    if (sectionIndex > 0) setActiveSection(SECTIONS[sectionIndex - 1].id);
+  };
+
+  const goToSection = (targetId: (typeof SECTIONS)[number]['id']) => {
+    const targetIndex = SECTIONS.findIndex(s => s.id === targetId);
+    // Solo permite saltar hacia adelante si todas las secciones intermedias son válidas.
+    if (targetIndex > sectionIndex) {
+      for (let i = sectionIndex; i < targetIndex; i++) {
+        const error = validateSection(SECTIONS[i].id);
+        if (error) {
+          toast.error(error);
+          return;
+        }
+      }
+    }
+    setActiveSection(targetId);
+  };
 
   const margen = margenGanancia(formData.precio, formData.precioCosto);
 
@@ -981,6 +1065,7 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
         open={modalMode !== null}
         onClose={closeModal}
         wide
+        disableOverlayClose={modalMode === 'create' || modalMode === 'edit'}
       >
         {/* VIEW MODE */}
         {modalMode === 'view' && selectedProduct && (
@@ -996,22 +1081,39 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
         {/* CREATE / EDIT MODE */}
         {(modalMode === 'create' || modalMode === 'edit') && (
           <form onSubmit={handleSubmit} className="flex flex-col">
-            {/* Section tabs */}
-            <div className="flex gap-1 mb-5 bg-gray-100 rounded-xl p-1 flex-wrap">
-              {SECTIONS.map(s => (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => setActiveSection(s.id)}
-                  className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                    activeSection === s.id
-                      ? 'bg-white text-[#2a4038] shadow-sm font-semibold'
-                      : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  {s.label}
-                </button>
-              ))}
+            {/* Step indicator */}
+            <div className="flex items-center gap-2 mb-6">
+              {SECTIONS.map((s, i) => {
+                const isCompleted = i < sectionIndex;
+                const isCurrent = i === sectionIndex;
+                return (
+                  <div key={s.id} className="flex items-center flex-1 last:flex-initial">
+                    <button
+                      type="button"
+                      onClick={() => goToSection(s.id)}
+                      className="flex items-center gap-2 flex-shrink-0"
+                    >
+                      <span
+                        className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold transition-colors ${
+                          isCurrent
+                            ? 'bg-[#2a4038] text-white'
+                            : isCompleted
+                              ? 'bg-[#2a4038]/15 text-[#2a4038]'
+                              : 'bg-gray-100 text-gray-400'
+                        }`}
+                      >
+                        {isCompleted ? <Check size={13} /> : i + 1}
+                      </span>
+                      <span className={`text-xs font-medium hidden sm:inline ${isCurrent ? 'text-gray-900' : 'text-gray-400'}`}>
+                        {s.label}
+                      </span>
+                    </button>
+                    {i < SECTIONS.length - 1 && (
+                      <div className={`h-px flex-1 mx-2 ${isCompleted ? 'bg-[#2a4038]/30' : 'bg-gray-100'}`} />
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
             {/* Section content */}
@@ -1394,20 +1496,53 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
 
             {/* Footer */}
             <div className="flex gap-3 mt-8 pt-5 border-t border-gray-100">
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="flex-1 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold hover:bg-[#3d5c4e] transition-colors disabled:opacity-50"
-              >
-                {isSubmitting ? 'Guardando...' : modalMode === 'edit' ? 'Actualizar Producto' : 'Crear Producto'}
-              </button>
+              {sectionIndex > 0 && (
+                <button
+                  type="button"
+                  onClick={goToPrevSection}
+                  className="flex items-center justify-center gap-1.5 px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+                >
+                  <ChevronLeft size={15} /> Anterior
+                </button>
+              )}
               <button
                 type="button"
                 onClick={closeModal}
-                className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+                className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors"
               >
                 Cancelar
               </button>
+              <div className="flex-1" />
+              {isLastSection ? (
+                <button
+                  key="save-button"
+                  type="submit"
+                  disabled={isSubmitting || saveGuardActive}
+                  className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-6 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 ${
+                    saveGuardActive ? 'bg-gray-300 text-gray-500' : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                  }`}
+                >
+                  {isSubmitting
+                    ? 'Guardando...'
+                    : saveGuardActive
+                      ? 'Espera un momento...'
+                      : (
+                        <>
+                          <Check size={15} />
+                          {modalMode === 'edit' ? 'Actualizar Producto' : 'Guardar Producto'}
+                        </>
+                      )}
+                </button>
+              ) : (
+                <button
+                  key="next-button"
+                  type="button"
+                  onClick={e => { e.currentTarget.blur(); goToNextSection(); }}
+                  className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-6 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold hover:bg-[#3d5c4e] transition-colors"
+                >
+                  Siguiente <ChevronRight size={15} />
+                </button>
+              )}
             </div>
           </form>
         )}
