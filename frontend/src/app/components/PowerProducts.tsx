@@ -27,6 +27,8 @@ interface Product {
   shortDesc: string;
   price: string;
   priceValue: number;
+  originalPriceValue: number | null;
+  discountPercent: number | null;
   currency: string;
   rating: number;
   reviews: number;
@@ -106,8 +108,13 @@ function productBadge(product: CatalogProduct): Product['badge'] {
 }
 
 function mapCatalogProduct(product: CatalogProduct): Product {
-  const discountedPrice = product.variants.find(variant => variant.discounted_price != null)?.discounted_price ?? null;
+  const promoVariant = product.variants.find(variant => variant.discounted_price != null);
+  const discountedPrice = promoVariant?.discounted_price ?? null;
   const displayPrice = discountedPrice ?? product.price ?? 0;
+  const originalPriceValue = discountedPrice != null ? (promoVariant?.current_price ?? product.price ?? null) : null;
+  const discountPercent = discountedPrice != null && originalPriceValue
+    ? Math.round(((originalPriceValue - discountedPrice) / originalPriceValue) * 100)
+    : null;
   const imageItems: Product['imageItems'] = [];
   const seen = new Set<string>();
   const addImage = (src: string | null | undefined, size: string | null, variantId?: string) => {
@@ -154,6 +161,8 @@ function mapCatalogProduct(product: CatalogProduct): Product {
     shortDesc: buildShortDescription(product.description),
     price: formatPrice(displayPrice),
     priceValue: displayPrice,
+    originalPriceValue,
+    discountPercent,
     currency: product.currency ?? 'COP',
     rating: product.rating_average ?? 5,
     reviews: product.rating_count,
@@ -599,7 +608,7 @@ function ProductCard({ product, index, isSaved, onToggleSave, onAddToCart, onVie
         <div className="absolute top-3 left-3">
           <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[8px] font-semibold border ${badge.bg}`}>
             <badge.icon className="w-2 h-2" strokeWidth={2} />
-            {badge.label}
+            {product.badge === 'oferta' && product.discountPercent ? `-${product.discountPercent}% ${badge.label}` : badge.label}
           </span>
         </div>
 
@@ -635,7 +644,14 @@ function ProductCard({ product, index, isSaved, onToggleSave, onAddToCart, onVie
         </div>
 
         <div className="flex items-center justify-between mt-auto pt-2.5 border-t border-stone-100">
-          <span className="text-base font-semibold text-stone-900">${product.price} <span className="text-[9px] text-stone-400 font-normal">COP</span></span>
+          <div className="flex items-baseline gap-1.5">
+            {product.originalPriceValue != null && (
+              <span className="text-[11px] text-red-500 line-through">${formatPrice(product.originalPriceValue)}</span>
+            )}
+            <span className={`text-base font-semibold ${product.originalPriceValue != null ? 'text-green-600' : 'text-stone-900'}`}>
+              ${product.price} <span className="text-[9px] text-stone-400 font-normal">COP</span>
+            </span>
+          </div>
           <motion.button
             whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
             onClick={e => { e.stopPropagation(); onAddToCart(product); }}
