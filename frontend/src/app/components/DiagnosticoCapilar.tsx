@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, ArrowRight, FlaskConical, Leaf, Heart, MapPin, Sparkles, Droplet, Wind } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
 import { useToast } from '../contexts/ToastContext';
-import { getProducts } from '../services/products.service';
+import { getProducts, type Product, type ProductVariant } from '../services/products.service';
 
 const OLIVE = '#2D3A1F';
 const CREAM = '#F7F5F1';
@@ -14,6 +14,107 @@ interface Question {
   options: { value: string; label: string; description: string; icon: typeof Leaf }[];
 }
 
+interface RecommendedProduct {
+  product: Product;
+  variant: ProductVariant;
+}
+
+interface Recommendation {
+  title: string;
+  subtitle: string;
+  benefit: string;
+  description: string;
+  image: string;
+  products: RecommendedProduct[];
+}
+
+/**
+ * Perfil de resultado por combinación de respuestas (tipo de cabello + preocupación).
+ * Las "keywords" se buscan contra nombre/descripción reales del catálogo (mismo
+ * vocabulario que usa el chatbot en backend/apps/chatbot/application/services.py)
+ * en vez de depender de nombres de producto fijos que podrían no existir.
+ */
+const RECOMMENDATION_PROFILES: Record<string, {
+  title: string;
+  subtitle: string;
+  benefit: string;
+  description: string;
+  fallbackImage: string;
+  keywords: string[];
+}> = {
+  reparacion: {
+    title: 'Reparación Profunda',
+    subtitle: 'Reconstrucción Profunda',
+    benefit: 'Repara. Sella. Ilumina.',
+    description: 'Fórmulas que penetran la fibra capilar para reparar el daño desde el interior y restaurar la fuerza perdida por tratamientos químicos o caída.',
+    fallbackImage: 'https://images.unsplash.com/photo-1556228720-195a672e8a03?w=1200&q=80',
+    keywords: ['keratina', 'romero', 'caida', 'maltratado', 'reparacion'],
+  },
+  brillo: {
+    title: 'Control y Brillo',
+    subtitle: 'Nutrición y Luminosidad',
+    benefit: 'Nutre. Controla. Brilla.',
+    description: 'Ingredientes que suavizan la cutícula, controlan el frizz y aportan brillo natural duradero.',
+    fallbackImage: 'https://images.unsplash.com/photo-1523049673857-eb18f1d7b578?w=1200&q=80',
+    keywords: ['argan', 'brillo', 'frizz', 'aguacate', 'suavidad'],
+  },
+  estimulacion: {
+    title: 'Estimulación Natural',
+    subtitle: 'Fortalecimiento desde la raíz',
+    benefit: 'Estimula. Fortalece. Protege.',
+    description: 'Extractos naturales que activan la circulación del cuero cabelludo para reducir la caída y fortalecer desde la raíz.',
+    fallbackImage: 'https://images.unsplash.com/photo-1596401885239-34d567b41b5e?w=1200&q=80',
+    keywords: ['romero', 'cebolla', 'caida', 'fortalecer'],
+  },
+};
+
+function pickProfile(hairType: string, concern: string): keyof typeof RECOMMENDATION_PROFILES {
+  if (concern === 'caida' || hairType === 'seco') return 'reparacion';
+  if (concern === 'frizz' || concern === 'brillo') return 'brillo';
+  return 'estimulacion';
+}
+
+async function buildRecommendation(hairType: string, concern: string): Promise<Recommendation> {
+  const profileKey = pickProfile(hairType, concern);
+  const profile = RECOMMENDATION_PROFILES[profileKey];
+
+  const seen = new Set<string>();
+  const products: RecommendedProduct[] = [];
+
+  for (const keyword of profile.keywords) {
+    if (products.length >= 3) break;
+    const result = await getProducts({ search: keyword, active: true, limit: 5 });
+    for (const product of result.data) {
+      if (products.length >= 3 || seen.has(product.id)) continue;
+      const variant = product.variants.find(v => v.is_active);
+      if (!variant) continue;
+      seen.add(product.id);
+      products.push({ product, variant });
+    }
+  }
+
+  if (products.length === 0) {
+    const featured = await getProducts({ featured: true, active: true, limit: 3 });
+    for (const product of featured.data) {
+      const variant = product.variants.find(v => v.is_active);
+      if (!variant || seen.has(product.id)) continue;
+      seen.add(product.id);
+      products.push({ product, variant });
+    }
+  }
+
+  const heroImage = products[0]?.product.primary_image ?? profile.fallbackImage;
+
+  return {
+    title: profile.title,
+    subtitle: profile.subtitle,
+    benefit: profile.benefit,
+    description: profile.description,
+    image: heroImage,
+    products,
+  };
+}
+
 export function DiagnosticoCapilar() {
   const { addItem } = useCart();
   const toast = useToast();
@@ -22,6 +123,8 @@ export function DiagnosticoCapilar() {
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [showResults, setShowResults] = useState(false);
   const [addedToCart, setAddedToCart] = useState(false);
+  const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
+  const [isLoadingResult, setIsLoadingResult] = useState(false);
 
   const questions: Question[] = [
     {
@@ -60,94 +163,39 @@ export function DiagnosticoCapilar() {
     setAnswers({ ...answers, [currentQuestion]: value });
   };
 
-  const handleNextQuestion = () => {
+  const handleNextQuestion = async () => {
     if (!answers[currentQuestion]) return;
     if (currentQuestion < questions.length - 1) {
       setCurrentQuestion(currentQuestion + 1);
-    } else {
-      setShowResults(true);
+      return;
     }
-  };
-
-  const getRecommendation = () => {
-    const hairType = answers[0];
-    const concern = answers[1];
-
-    if (concern === 'caida' || hairType === 'seco') {
-      return {
-        title: "Keratina Hidrolizada",
-        subtitle: "Reconstrucción Profunda",
-        benefit: "Repara. Sella. Ilumina.",
-        description: "Proteína pura que penetra la fibra capilar para reparar daños desde el interior. Restaura la fuerza perdida por tratamientos químicos.",
-        products: [
-          { id: 'aceite-romero-120ml', name: 'Aceite de Romero', size: '120ml', price: 28900, image: 'https://images.unsplash.com/photo-1571875257727-256c39da42af?w=600&q=80' },
-          { id: 'aceite-cebolla-120ml', name: 'Aceite de Cebolla', size: '120ml', price: 28900, image: 'https://images.unsplash.com/photo-1556228720-195a672e8a03?w=600&q=80' },
-          { id: 'tratamiento-keratina', name: 'Tratamiento Keratina', size: '220gr', price: 38900, image: 'https://images.unsplash.com/photo-1519415510236-718bdfcd89c8?w=600&q=80' }
-        ],
-        image: 'https://images.unsplash.com/photo-1556228720-195a672e8a03?w=1200&q=80'
-      };
-    } else if (concern === 'frizz' || concern === 'brillo') {
-      return {
-        title: "Aceite de Aguacate",
-        subtitle: "Control y Brillo",
-        benefit: "Nutre. Controla. Brilla.",
-        description: "Vitaminas A, D, E que penetran profundamente para suavizar la cutícula y aportar brillo natural duradero.",
-        products: [
-          { id: 'silicona-lino-50ml', name: 'Silicona de Lino', size: '50ml', price: 24900, image: 'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?w=600&q=80' },
-          { id: 'aceite-aguacate-90ml', name: 'Aceite de Aguacate', size: '90ml', price: 35900, image: 'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?w=600&q=80' },
-          { id: 'tratamiento-keratina', name: 'Tratamiento Keratina', size: '220gr', price: 38900, image: 'https://images.unsplash.com/photo-1519415510236-718bdfcd89c8?w=600&q=80' }
-        ],
-        image: 'https://images.unsplash.com/photo-1523049673857-eb18f1d7b578?w=1200&q=80'
-      };
-    } else {
-      return {
-        title: "Aceite de Romero",
-        subtitle: "Estimulación Natural",
-        benefit: "Estimula. Fortalece. Protege.",
-        description: "Extracto puro que activa la circulación del cuero cabelludo para reducir la caída y fortalecer desde la raíz.",
-        products: [
-          { id: 'aceite-romero-120ml', name: 'Aceite de Romero', size: '120ml', price: 28900, image: 'https://images.unsplash.com/photo-1571875257727-256c39da42af?w=600&q=80' },
-          { id: 'silicona-lino-50ml', name: 'Silicona de Lino', size: '50ml', price: 24900, image: 'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?w=600&q=80' },
-          { id: 'aceite-aguacate-90ml', name: 'Aceite de Aguacate', size: '90ml', price: 35900, image: 'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?w=600&q=80' }
-        ],
-        image: 'https://images.unsplash.com/photo-1596401885239-34d567b41b5e?w=1200&q=80'
-      };
+    setIsLoadingResult(true);
+    try {
+      const result = await buildRecommendation(answers[0], answers[1]);
+      setRecommendation(result);
+      setShowResults(true);
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : 'No fue posible calcular tu recomendación. Intenta de nuevo.',
+      );
+    } finally {
+      setIsLoadingResult(false);
     }
   };
 
   const handleAddAllToCart = async () => {
-    const recommendation = getRecommendation();
+    if (!recommendation || recommendation.products.length === 0) return;
     try {
-      const resolvedProducts = await Promise.all(
-        recommendation.products.map(async product => {
-          const result = await getProducts({
-            search: product.name,
-            active: true,
-            limit: 10,
-          });
-          const catalogProduct =
-            result.data.find(
-              item => item.name.toLowerCase() === product.name.toLowerCase(),
-            ) ?? result.data[0];
-          const variant =
-            catalogProduct?.variants.find(
-              item => item.is_active && item.presentation === product.size,
-            ) ?? catalogProduct?.variants.find(item => item.is_active);
-          if (!catalogProduct || !variant) {
-            throw new Error(`${product.name} no está disponible en el catálogo.`);
-          }
-          return { catalogProduct, variant, fallbackImage: product.image };
-        }),
-      );
-
-      for (const { catalogProduct, variant, fallbackImage } of resolvedProducts) {
+      for (const { product, variant } of recommendation.products) {
         const added = await addItem({
           variantId: variant.id,
-          name: catalogProduct.name,
-          category: catalogProduct.category_name,
+          name: product.name,
+          category: product.category_name,
           size: variant.presentation,
-          price: variant.current_price ?? catalogProduct.price ?? 0,
-          image: catalogProduct.primary_image ?? fallbackImage,
+          price: variant.current_price ?? product.price ?? 0,
+          image: product.primary_image ?? variant.image_url ?? product.image_url,
         });
         if (!added) return;
       }
@@ -172,6 +220,7 @@ export function DiagnosticoCapilar() {
     setAnswers({});
     setShowResults(false);
     setAddedToCart(false);
+    setRecommendation(null);
   };
 
   const progress = ((currentQuestion + 1) / questions.length) * 100;
@@ -470,19 +519,21 @@ export function DiagnosticoCapilar() {
                           <span>Responde 3 preguntas y recibe tu recomendación personalizada</span>
                         </div>
                         <motion.button
-                          whileHover={answers[currentQuestion] ? { scale: 1.02 } : undefined}
-                          whileTap={answers[currentQuestion] ? { scale: 0.98 } : undefined}
-                          onClick={handleNextQuestion}
-                          disabled={!answers[currentQuestion]}
+                          whileHover={answers[currentQuestion] && !isLoadingResult ? { scale: 1.02 } : undefined}
+                          whileTap={answers[currentQuestion] && !isLoadingResult ? { scale: 0.98 } : undefined}
+                          onClick={() => void handleNextQuestion()}
+                          disabled={!answers[currentQuestion] || isLoadingResult}
                           className="flex min-w-[170px] items-center justify-center gap-3 rounded-full px-7 py-4 text-sm font-semibold text-white transition-all disabled:cursor-not-allowed disabled:opacity-40"
                           style={{ backgroundColor: OLIVE }}
                         >
-                          {currentQuestion === questions.length - 1 ? 'Ver resultado' : 'Siguiente'}
+                          {isLoadingResult
+                            ? 'Buscando...'
+                            : currentQuestion === questions.length - 1 ? 'Ver resultado' : 'Siguiente'}
                           <ArrowRight className="h-4 w-4" strokeWidth={1.7} />
                         </motion.button>
                       </div>
                     </motion.div>
-                  ) : (
+                  ) : recommendation ? (
                     <motion.div
                       key="results"
                       initial={{ opacity: 0 }}
@@ -499,8 +550,8 @@ export function DiagnosticoCapilar() {
                         className="relative aspect-[16/10] sm:aspect-[3/4] md:aspect-[3/4] bg-secondary rounded-2xl overflow-hidden"
                       >
                         <img
-                          src={getRecommendation().image}
-                          alt={getRecommendation().title}
+                          src={recommendation.image}
+                          alt={recommendation.title}
                           className="w-full h-full object-cover"
                         />
                       </motion.div>
@@ -514,32 +565,62 @@ export function DiagnosticoCapilar() {
                       >
                         <div className="mb-2">
                           <span className="text-[10px] tracking-[0.3em] uppercase text-muted-foreground">
-                            {getRecommendation().subtitle}
+                            {recommendation.subtitle}
                           </span>
                         </div>
 
                         <h3 className="text-4xl md:text-5xl mb-6 leading-tight font-serif">
-                          {getRecommendation().title}
+                          {recommendation.title}
                         </h3>
 
                         <p className="text-lg mb-8 italic font-light">
-                          {getRecommendation().benefit}
+                          {recommendation.benefit}
                         </p>
 
-                        <p className="text-sm text-muted-foreground leading-relaxed mb-12">
-                          {getRecommendation().description}
+                        <p className="text-sm text-muted-foreground leading-relaxed mb-8">
+                          {recommendation.description}
                         </p>
+
+                        {recommendation.products.length > 0 && (
+                          <ul className="mb-8 space-y-2.5">
+                            {recommendation.products.map(({ product, variant }) => (
+                              <li key={product.id} className="flex items-center justify-between gap-3 text-sm text-stone-700">
+                                <span className="flex items-center gap-2.5 min-w-0">
+                                  <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: OLIVE }} />
+                                  <span className="truncate">{product.name} · {variant.presentation}</span>
+                                </span>
+                                <span className="font-semibold text-stone-900 flex-shrink-0">
+                                  ${(variant.current_price ?? product.price ?? 0).toLocaleString('es-CO')}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
 
                         <motion.button
-                          onClick={handleAddAllToCart}
-                          disabled={addedToCart}
+                          onClick={() => void handleAddAllToCart()}
+                          disabled={addedToCart || recommendation.products.length === 0}
                           whileHover={{ opacity: 0.85 }}
-                          className="w-full py-4 text-sm tracking-wide transition-all text-white rounded-full"
+                          className="w-full py-4 text-sm tracking-wide transition-all text-white rounded-full disabled:opacity-40 disabled:cursor-not-allowed"
                           style={{ backgroundColor: addedToCart ? `${OLIVE}80` : OLIVE }}
                         >
-                          {addedToCart ? 'Agregado al carrito' : 'Agregar al carrito'}
+                          {addedToCart
+                            ? 'Agregado al carrito'
+                            : recommendation.products.length === 0
+                              ? 'Sin productos disponibles'
+                              : 'Agregar al carrito'}
                         </motion.button>
                       </motion.div>
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key="results-empty"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="flex min-h-[400px] items-center justify-center text-sm text-stone-400"
+                    >
+                      No fue posible calcular tu recomendación.
                     </motion.div>
                   )}
                 </AnimatePresence>
