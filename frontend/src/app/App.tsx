@@ -167,6 +167,18 @@ function AppContent() {
     );
   }
 
+  if (isLoading && !currentUser) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center text-xs tracking-wider uppercase">
+        Validando sesión...
+      </div>
+    );
+  }
+
+  if (currentUser) {
+    return <Admin />;
+  }
+
   if (isCatalogPage) {
     return (
       <>
@@ -197,18 +209,6 @@ function AppContent() {
         <ChatbotLauncher />
       </>
     );
-  }
-
-  if (isLoading && !currentUser) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center text-xs tracking-wider uppercase">
-        Validando sesión...
-      </div>
-    );
-  }
-
-  if (currentUser) {
-    return <Admin />;
   }
 
   return (
