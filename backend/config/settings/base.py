@@ -156,6 +156,12 @@ CSRF_TRUSTED_ORIGINS = [
     if origin.strip()
 ]
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5174")
+# Directorio local (montado como volumen) con una copia del contenido de
+# frontend/public. Si está definido, las rutas de imagen tipo "/images/..."
+# se leen directamente del filesystem en vez de por HTTP: evita depender de
+# que el contenedor del backend pueda alcanzar el dev server de Vite por red
+# (en desarrollo, "localhost" dentro del contenedor no apunta al frontend).
+FRONTEND_PUBLIC_DIR = os.getenv("FRONTEND_PUBLIC_DIR", "")
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8001")
 WHATSAPP_NUMBER = os.getenv("WHATSAPP_NUMBER", os.getenv("VITE_WHATSAPP_NUMBER", "3000000000"))
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "no-reply@juhniosrold.com")

@@ -37,6 +37,7 @@ IMAGE_CACHE_DIR = Path(settings.MEDIA_ROOT) / "cache" / "images"
 
 COLUMNS = (
     ("nombre", "Nombre"),
+    ("presentacion", "Presentación"),
     ("categoria", "Categoría"),
     ("tipo", "Tipo"),
     ("marca", "Marca"),
@@ -126,12 +127,28 @@ def _load_image_bytes(image_ref):
         return _download_public_image(image_ref)
 
     if image_ref.startswith("/"):
-        # Rutas como "/images/catalog/foo.png" son servidas por el frontend
-        # (nginx), no por Django: se resuelven contra FRONTEND_URL (URL de
-        # configuración, no entrada externa, por eso se omite el chequeo SSRF
-        # que sí aplica a URLs arbitrarias guardadas en la base de datos).
-        # quote() escapa espacios y demás caracteres presentes en los nombres
-        # de archivo del catálogo (p.ej. "Aceite Capilar Argan 8ml.png").
+        # Rutas como "/images/catalog/foo.png" son estáticos del frontend.
+        # Si hay una copia local montada (FRONTEND_PUBLIC_DIR), se lee del
+        # filesystem directamente: en desarrollo, "localhost" dentro del
+        # contenedor del backend no apunta al dev server de Vite, así que la
+        # descarga por HTTP fallaría aunque el archivo exista.
+        if settings.FRONTEND_PUBLIC_DIR:
+            public_root = Path(settings.FRONTEND_PUBLIC_DIR).resolve()
+            local_path = (public_root / image_ref.lstrip("/")).resolve()
+            if public_root in local_path.parents or local_path == public_root:
+                try:
+                    data = local_path.read_bytes()
+                    if len(data) <= MAX_IMAGE_BYTES:
+                        return data
+                except OSError:
+                    pass
+
+        # Si no hay copia local (o no se encontró el archivo), se resuelven
+        # contra FRONTEND_URL (URL de configuración, no entrada externa, por
+        # eso se omite el chequeo SSRF que sí aplica a URLs arbitrarias
+        # guardadas en la base de datos). quote() escapa espacios y demás
+        # caracteres presentes en los nombres de archivo del catálogo
+        # (p.ej. "Aceite Capilar Argan 8ml.png").
         encoded_path = quote(image_ref)
         return _download_public_image(settings.FRONTEND_URL.rstrip("/") + encoded_path, skip_ssrf_check=True)
 
@@ -153,51 +170,77 @@ def _resolve_image(image_ref):
         return None
 
 
+def _variant_image_url(variant, product):
+    """Imagen propia de la variante (galería > image_url legado), con el
+    producto como último recurso solo si la variante no tiene ninguna."""
+    images = list(variant.images.all())
+    primary = next((img for img in images if img.is_primary), images[0] if images else None)
+    if primary:
+        return primary.image
+    if variant.image_url:
+        return variant.image_url
+    return product.image_url
+
+
 def _collect_rows(product_ids):
     products = (
         Product.objects.filter(id__in=product_ids)
         .select_related("category")
-        .prefetch_related("variants__prices", "variants__stocks")
+        .prefetch_related("variants__prices", "variants__stocks", "variants__images")
     )
     rows = []
     for product in products:
         variants = list(product.variants.all())
-        variant = next((v for v in variants if v.is_active), variants[0] if variants else None)
+        if not variants:
+            rows.append({
+                "image_url": product.image_url,
+                "nombre": product.name,
+                "presentacion": "",
+                "categoria": product.category.name if product.category else "",
+                "tipo": "",
+                "marca": "",
+                "sku": "",
+                "precio": "",
+                "precio_costo": "",
+                "margen": "",
+                "estado": "Activo" if product.is_active else "Inactivo",
+                "stock_actual": "",
+                "stock_minimo": "",
+                "fecha_creacion": product.created_at.strftime("%Y-%m-%d") if product.created_at else "",
+            })
+            continue
 
-        price = None
-        if variant:
+        for variant in variants:
             prices = list(variant.prices.all())
             price = next((p for p in prices if p.is_active), prices[0] if prices else None)
 
-        cost = variant.cost if variant else None
-        amount = price.amount if price else None
-        margen = None
-        if amount and cost and amount > 0:
-            margen = round(float((amount - cost) / amount) * 100, 2)
+            cost = variant.cost
+            amount = price.amount if price else None
+            margen = None
+            if amount and cost and amount > 0:
+                margen = round(float((amount - cost) / amount) * 100, 2)
 
-        stock_actual = stock_minimo = None
-        if variant:
             stocks = list(variant.stocks.all())
-            if stocks:
-                stock_actual = sum(s.quantity for s in stocks)
-                stock_minimo = sum(s.minimum_quantity for s in stocks)
+            stock_actual = sum(s.quantity for s in stocks) if stocks else None
+            stock_minimo = sum(s.minimum_quantity for s in stocks) if stocks else None
 
-        attrs = variant.attributes if variant and isinstance(variant.attributes, dict) else {}
-        rows.append({
-            "image_url": (variant.image_url if variant and variant.image_url else product.image_url),
-            "nombre": product.name,
-            "categoria": product.category.name if product.category else "",
-            "tipo": attrs.get("type", ""),
-            "marca": attrs.get("brand", attrs.get("marca", "")),
-            "sku": variant.sku if variant else "",
-            "precio": float(amount) if amount is not None else "",
-            "precio_costo": float(cost) if cost is not None else "",
-            "margen": margen if margen is not None else "",
-            "estado": "Activo" if product.is_active else "Inactivo",
-            "stock_actual": float(stock_actual) if stock_actual is not None else "",
-            "stock_minimo": float(stock_minimo) if stock_minimo is not None else "",
-            "fecha_creacion": product.created_at.strftime("%Y-%m-%d") if product.created_at else "",
-        })
+            attrs = variant.attributes if isinstance(variant.attributes, dict) else {}
+            rows.append({
+                "image_url": _variant_image_url(variant, product),
+                "nombre": product.name,
+                "presentacion": variant.presentation_label,
+                "categoria": product.category.name if product.category else "",
+                "tipo": attrs.get("type", ""),
+                "marca": attrs.get("brand", attrs.get("marca", "")),
+                "sku": variant.sku,
+                "precio": float(amount) if amount is not None else "",
+                "precio_costo": float(cost) if cost is not None else "",
+                "margen": margen if margen is not None else "",
+                "estado": "Activo" if product.is_active and variant.is_active else "Inactivo",
+                "stock_actual": float(stock_actual) if stock_actual is not None else "",
+                "stock_minimo": float(stock_minimo) if stock_minimo is not None else "",
+                "fecha_creacion": product.created_at.strftime("%Y-%m-%d") if product.created_at else "",
+            })
     return rows
 
 
@@ -288,10 +331,11 @@ PDF_TABLE_MARGIN = 1 * cm
 # salga del PDF en orientación landscape.
 PDF_TABLE_COLUMN_WEIGHTS = (
     1.3,  # Imagen
-    2.2,  # Nombre
-    1.3,  # Categoría
-    1.1,  # Tipo
-    1.1,  # Marca
+    2.0,  # Nombre
+    1.0,  # Presentación
+    1.2,  # Categoría
+    1.0,  # Tipo
+    1.0,  # Marca
     1.3,  # SKU
     1.0,  # Precio
     1.1,  # Precio costo
@@ -361,7 +405,7 @@ def _write_pdf_catalog(path, rows):
         cached = image_cache.get(row["image_url"])
         image_cell = _make_rlimage(*cached, max_size_cm=3.5) if cached else Paragraph("Sin imagen", label_style)
         details = Paragraph(
-            f"<b>{row['nombre']}</b><br/>"
+            f"<b>{row['nombre']}</b>" + (f" · {row['presentacion']}" if row['presentacion'] else "") + "<br/>"
             f"SKU: {row['sku']}<br/>"
             f"Categoría: {row['categoria']}<br/>"
             f"Precio: {row['precio']}<br/>"
