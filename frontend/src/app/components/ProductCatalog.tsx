@@ -51,6 +51,13 @@ function formatPrice(price: number | null, currency = 'COP'): string {
   }).format(price);
 }
 
+const STOCK_DISPLAY_CAP = 1000;
+
+function formatStockLabel(quantity: number): string {
+  if (quantity > STOCK_DISPLAY_CAP) return `+${STOCK_DISPLAY_CAP.toLocaleString('es-CO')} disponibles`;
+  return `${Math.floor(quantity).toLocaleString('es-CO')} disponible${quantity === 1 ? '' : 's'}`;
+}
+
 function isRecentProduct(createdAt: string): boolean {
   const t = new Date(createdAt).getTime();
   if (Number.isNaN(t)) return false;
@@ -619,7 +626,7 @@ export function ProductPage({
               </p>
             ) : (
               <p className="text-[28px] font-semibold text-stone-900 mb-6">
-                {formatPrice(product.price, product.currency ?? 'COP')}
+                {formatPrice(getDisplayedPrice(product, selVariant), product.currency ?? 'COP')}
               </p>
             )}
             <div className="w-full h-px bg-stone-100 mb-6" />
@@ -638,6 +645,12 @@ export function ProductPage({
                   ))}
                 </div>
               </div>
+            )}
+
+            {selVariant?.available_quantity !== null && selVariant?.available_quantity !== undefined && (
+              <p className={`text-[11.5px] mb-5 ${selVariant.available_quantity <= 0 ? 'text-red-600 font-semibold' : 'text-stone-500'}`}>
+                {selVariant.available_quantity <= 0 ? 'Agotado' : `Stock: ${formatStockLabel(selVariant.available_quantity)}`}
+              </p>
             )}
 
             <div className="mb-6">
