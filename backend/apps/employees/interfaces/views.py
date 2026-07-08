@@ -2,7 +2,11 @@ from apps.identity.interfaces.permissions import HasComponentAccess
 from django.http import FileResponse
 from shared.interfaces.viewsets import SoftDeleteModelViewSet
 from django.db.models import Count
+from rest_framework import status
 from rest_framework.decorators import action
+from rest_framework.exceptions import NotFound
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 
 from ..infrastructure.models import (
     Branch,
@@ -23,6 +27,7 @@ from ..infrastructure.serializers import (
     EmployeeChangeLogSerializer,
     EmployeePositionHistorySerializer,
     EmployeeSalaryHistorySerializer,
+    EmployeeSelfServiceSerializer,
     EmployeeSerializer,
     HRFieldConfigurationSerializer,
     PositionSerializer,
@@ -152,6 +157,8 @@ class EmployeeViewSet(SoftDeleteModelViewSet):
     ordering_fields = ("hire_date", "first_name", "last_name")
 
     def get_permissions(self):
+        if self.action == "me":
+            return (IsAuthenticated(),)
         self.required_component_action = "view" if self.action in {"list", "retrieve", "export_pdf"} else "edit"
         return super().get_permissions()
 
@@ -160,6 +167,26 @@ class EmployeeViewSet(SoftDeleteModelViewSet):
 
     def perform_update(self, serializer):
         serializer.save(updated_by=self.request.user)
+
+    @action(detail=False, methods=("get", "patch"), url_path="me")
+    def me(self, request):
+        try:
+            employee = Employee.objects.select_related(
+                "department", "position", "manager", "branch",
+            ).prefetch_related("contracts", "working_days").get(user=request.user)
+        except Employee.DoesNotExist:
+            raise NotFound("Tu usuario no tiene un perfil de empleado asociado.")
+
+        if request.method == "GET":
+            serializer = EmployeeSelfServiceSerializer(employee, context={"request": request})
+            return Response(serializer.data)
+
+        serializer = EmployeeSelfServiceSerializer(
+            employee, data=request.data, partial=True, context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save(updated_by=request.user)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=("get",), url_path="export-pdf")
     def export_pdf(self, request):

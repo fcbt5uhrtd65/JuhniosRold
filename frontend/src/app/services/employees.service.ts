@@ -662,6 +662,18 @@ export async function deleteEmployee(id: string): Promise<void> {
   await api.delete(`${EMPLOYEES_PATH}${id}/`);
 }
 
+export async function getMyEmployeeProfile(): Promise<Employee> {
+  const res = await api.get<Employee>(`${EMPLOYEES_PATH}me/`);
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
+export async function updateMyEmployeeProfile(payload: Partial<EmployeePayload>): Promise<Employee> {
+  const res = await api.patch<Employee>(`${EMPLOYEES_PATH}me/`, toRequestBody(payload as Record<string, unknown>));
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
 export async function exportEmployeesPdf(): Promise<void> {
   const token = getAccessToken();
   if (!token) {

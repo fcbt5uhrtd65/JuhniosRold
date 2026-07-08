@@ -325,6 +325,50 @@ class EmployeeSerializer(serializers.ModelSerializer):
             return employee
 
 
+class EmployeeSelfServiceSerializer(EmployeeSerializer):
+    """Restricted variant of EmployeeSerializer for an employee editing their own profile.
+
+    Labor and payroll data, plus the system role, are read-only here — those stay
+    exclusive to RRHH/ADMIN via the regular EmployeeViewSet endpoints.
+    """
+
+    SELF_SERVICE_READ_ONLY_FIELDS = (
+        "employee_code",
+        "profile_status",
+        "department",
+        "position",
+        "manager",
+        "employment_type",
+        "contract_type",
+        "hire_date",
+        "base_salary",
+        "termination_date",
+        "status",
+        "branch",
+        "cost_center",
+        "work_modality",
+        "termination_reason",
+        "work_observations",
+        "salary_type",
+        "weekly_working_hours",
+        "working_days",
+        "transport_allowance_applies",
+        "integral_salary",
+    )
+
+    def get_fields(self):
+        fields = super().get_fields()
+        for field_name in self.SELF_SERVICE_READ_ONLY_FIELDS:
+            if field_name in fields:
+                fields[field_name].read_only = True
+        fields["user_role"].read_only = True
+        return fields
+
+    def validate(self, attrs):
+        attrs.pop("user_role", None)
+        return super().validate(attrs)
+
+
 class EmployeeChangeLogSerializer(serializers.ModelSerializer):
     class Meta:
         model = EmployeeChangeLog

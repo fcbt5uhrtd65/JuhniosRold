@@ -5,6 +5,7 @@ from django.http import FileResponse
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.decorators import action
+from rest_framework.exceptions import NotFound
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -33,6 +34,7 @@ from ..infrastructure.request_pdf import render_request_pdf
 from ..infrastructure.serializers import (
     AttendanceSerializer,
     EmployeeDocumentSerializer,
+    EmployeeSelfServiceDocumentSerializer,
     HRNotificationSerializer,
     PayrollSerializer,
     PerformanceReviewSerializer,
@@ -325,8 +327,27 @@ class EmployeeDocumentViewSet(SoftDeleteModelViewSet):
     filterset_fields = ("employee", "document_type", "status", "uploaded_by")
 
     def get_permissions(self):
+        if self.action == "me":
+            return (IsAuthenticated(),)
         self.required_component_action = "view" if self.action in {"list", "retrieve"} else "edit"
         return super().get_permissions()
+
+    @action(detail=False, methods=("get", "post"), url_path="me")
+    def me(self, request):
+        employee = getattr(request.user, "employee_profile", None)
+        if not employee:
+            raise NotFound("Tu usuario no tiene un perfil de empleado asociado.")
+
+        if request.method == "GET":
+            documents = self.get_queryset().filter(employee=employee)
+            serializer = EmployeeSelfServiceDocumentSerializer(documents, many=True, context={"request": request})
+            return Response(serializer.data)
+
+        serializer = EmployeeSelfServiceDocumentSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        document = serializer.save(employee=employee, uploaded_by=request.user, status=EmployeeDocument.Status.LOADED)
+        self._create_document_alert(document)
+        return Response(EmployeeSelfServiceDocumentSerializer(document).data, status=status.HTTP_201_CREATED)
 
     def _create_document_alert(self, document):
         if document.status != EmployeeDocument.Status.EXPIRED:

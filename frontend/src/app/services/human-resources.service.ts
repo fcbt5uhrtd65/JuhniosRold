@@ -652,6 +652,17 @@ export async function updateEmployeeDocument(id: string, payload: Partial<Employ
   throw new Error(res.message);
 }
 
+export async function getMyEmployeeDocuments(): Promise<EmployeeDocument[]> {
+  const res = await api.get<EmployeeDocument[]>(`${DOCUMENTS_PATH}me/`);
+  return res.data ?? [];
+}
+
+export async function createMyEmployeeDocument(payload: Omit<EmployeeDocumentPayload, 'employee' | 'status'>): Promise<EmployeeDocument> {
+  const res = await api.post<EmployeeDocument>(`${DOCUMENTS_PATH}me/`, buildEmployeeDocumentBody(payload));
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
 // ---- Notifications ----
 export async function getHRNotifications(params?: ListNotificationParams): Promise<{
   data: HRNotification[];

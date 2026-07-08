@@ -183,6 +183,21 @@ class EmployeeDocumentSerializer(serializers.ModelSerializer):
         return file
 
 
+class EmployeeSelfServiceDocumentSerializer(serializers.ModelSerializer):
+    """Restricted variant for an employee uploading their own supporting documents.
+
+    Only the file/type/name/dates are writable — status, employee, and uploaded_by
+    stay controlled server-side so an employee can't self-approve or spoof ownership.
+    """
+
+    class Meta:
+        model = EmployeeDocument
+        fields = "__all__"
+        read_only_fields = ("uploaded_at", "uploaded_by", "employee", "status")
+
+    validate_file = EmployeeDocumentSerializer.validate_file
+
+
 class HRNotificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = HRNotification

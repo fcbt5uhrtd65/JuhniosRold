@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { useAdmin } from '../../contexts/AdminContext';
+import { EmployeeSelfProfileModal } from './EmployeeSelfProfileModal';
 import {
   LayoutDashboard,
   Package,
@@ -31,6 +32,7 @@ interface AdminLayoutProps {
 export function AdminLayout({ children, currentView, onViewChange }: AdminLayoutProps) {
   const { currentUser, logout } = useAdmin();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['ADMIN', 'SELLER'] },
@@ -109,11 +111,19 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
       </nav>
 
       <div className="p-3 border-t border-gray-100">
-        <div className="mb-3 p-3 bg-white border border-gray-100 rounded-xl">
+        <button
+          type="button"
+          onClick={() => {
+            setProfileModalOpen(true);
+            setSidebarOpen(false);
+          }}
+          className="w-full mb-3 p-3 bg-white border border-gray-100 rounded-xl text-left hover:border-[#2a4038]/40 hover:shadow-sm transition-all cursor-pointer"
+          title="Ver mi perfil"
+        >
           <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400 mb-1">Usuario</p>
           <p className="text-xs font-semibold text-gray-800 mb-0.5">{currentUser?.nombre}</p>
           <p className="text-[11px] text-gray-400">{roleLabel}</p>
-        </div>
+        </button>
         <button
           onClick={logout}
           className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 hover:bg-white transition-colors"
@@ -173,6 +183,8 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
 
         <div className="p-4 sm:p-6 md:p-8 overflow-x-hidden">{children}</div>
       </div>
+
+      <EmployeeSelfProfileModal open={profileModalOpen} onClose={() => setProfileModalOpen(false)} />
     </div>
   );
 }

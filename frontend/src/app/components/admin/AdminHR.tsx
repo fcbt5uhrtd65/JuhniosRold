@@ -622,13 +622,14 @@ function buildEmployeePayload(form: EmployeeFormState): EmployeePayload {
   };
 }
 
-function TextInput({
+export function TextInput({
   label,
   value,
   onChange,
   type = 'text',
   required = false,
   placeholder = '',
+  disabled = false,
 }: {
   label: string;
   value: string;
@@ -636,6 +637,7 @@ function TextInput({
   type?: string;
   required?: boolean;
   placeholder?: string;
+  disabled?: boolean;
 }) {
   return (
     <label className="block">
@@ -647,18 +649,20 @@ function TextInput({
         onChange={(event) => onChange(event.target.value)}
         className={inputCls}
         placeholder={placeholder}
+        disabled={disabled}
       />
     </label>
   );
 }
 
-function SelectInput({
+export function SelectInput({
   label,
   value,
   onChange,
   options,
   required = false,
   emptyLabel = 'Selecciona una opción',
+  disabled = false,
 }: {
   label: string;
   value: string;
@@ -666,6 +670,7 @@ function SelectInput({
   options: Array<{ value: string; label: string }>;
   required?: boolean;
   emptyLabel?: string;
+  disabled?: boolean;
 }) {
   return (
     <label className="block">
@@ -675,6 +680,7 @@ function SelectInput({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         className={selectCls}
+        disabled={disabled}
       >
         <option value="">{emptyLabel}</option>
         {options.map((option) => (
@@ -687,14 +693,16 @@ function SelectInput({
   );
 }
 
-function TextareaInput({
+export function TextareaInput({
   label,
   value,
   onChange,
+  disabled = false,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
+  disabled?: boolean;
 }) {
   return (
     <label className="block">
@@ -704,15 +712,16 @@ function TextareaInput({
         onChange={(event) => onChange(event.target.value)}
         rows={3}
         className={`${inputCls} resize-none`}
+        disabled={disabled}
       />
     </label>
   );
 }
 
-function ToggleInput({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) {
+export function ToggleInput({ label, checked, onChange, disabled = false }: { label: string; checked: boolean; onChange: (value: boolean) => void; disabled?: boolean }) {
   return (
     <label className="flex items-center gap-3 px-4 py-3 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-700">
-      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="accent-[#2a4038]" />
+      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="accent-[#2a4038]" disabled={disabled} />
       {label}
     </label>
   );
