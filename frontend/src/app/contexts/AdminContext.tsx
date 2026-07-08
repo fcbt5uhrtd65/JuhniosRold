@@ -355,26 +355,28 @@ function splitCustomerName(name: string) {
 }
 
 function mapApiInventory(stocks: InventoryStock[], apiProducts: ApiProduct[]): Inventory[] {
-  const productByVariant = new Map(
+  const variantById = new Map(
     apiProducts.flatMap(product =>
-      product.variants.map(variant => [variant.id, product.id] as const),
+      product.variants.map(variant => [variant.id, { productId: product.id, variant }] as const),
     ),
   );
 
   return stocks.flatMap(stock => {
-    const productId = productByVariant.get(stock.variantId);
-    if (!productId) {
+    const match = variantById.get(stock.variantId);
+    if (!match) {
       return [];
     }
 
     return [{
       id: stock.id,
-      productoId: productId,
+      productoId: match.productId,
       varianteId: stock.variantId,
       ubicacionId: stock.locationId,
       stockActual: stock.quantity,
       stockMinimo: stock.minimumQuantity,
       ubicacion: [stock.warehouseName, stock.locationName].filter(Boolean).join(' / '),
+      presentacionVariante: match.variant.presentation,
+      codigoVariante: match.variant.sku,
     }];
   });
 }

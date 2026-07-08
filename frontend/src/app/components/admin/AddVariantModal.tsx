@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Modal, Field, inputCls, selectCls, ImageUploader, PrimaryButton, SecondaryButton } from './AdminUI';
 import { useToast } from '../../contexts/ToastContext';
 import { createProductVariant, getProductById, type Product } from '../../services/products.service';
-import { createInitialStock } from '../../services/inventory.service';
+import { createInitialStock, setInventoryQuantity } from '../../services/inventory.service';
 
 interface AddVariantModalProps {
   open: boolean;
@@ -20,6 +20,7 @@ interface FormState {
   sku: string;
   precio: string;
   precioCosto: string;
+  stockInicial: string;
   stockMinimo: string;
   imagen: string;
 }
@@ -30,6 +31,7 @@ const EMPTY_FORM: FormState = {
   sku: '',
   precio: '',
   precioCosto: '',
+  stockInicial: '0',
   stockMinimo: '10',
   imagen: '',
 };
@@ -74,7 +76,15 @@ export function AddVariantModal({ open, onClose, productId, productName, onCreat
         ?? full.variants[full.variants.length - 1];
       if (created) {
         const stockMinimo = form.stockMinimo ? Number(form.stockMinimo) : 10;
-        await createInitialStock(created.id, stockMinimo);
+        const stockInicial = form.stockInicial ? Number(form.stockInicial) : 0;
+        const stock = await createInitialStock(created.id, stockMinimo);
+        if (stock && stockInicial > 0) {
+          await setInventoryQuantity(
+            { variantId: created.id, locationId: stock.locationId, quantity: 0 },
+            stockInicial,
+            'Stock inicial al crear la presentación',
+          );
+        }
       }
       await onCreated(full);
       setForm(EMPTY_FORM);
@@ -148,15 +158,26 @@ export function AddVariantModal({ open, onClose, productId, productName, onCreat
           </Field>
         </div>
 
-        <Field label="Stock mínimo">
-          <input
-            type="number"
-            min="0"
-            value={form.stockMinimo}
-            onChange={e => set({ stockMinimo: e.target.value })}
-            className={inputCls}
-          />
-        </Field>
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Stock inicial">
+            <input
+              type="number"
+              min="0"
+              value={form.stockInicial}
+              onChange={e => set({ stockInicial: e.target.value })}
+              className={inputCls}
+            />
+          </Field>
+          <Field label="Stock mínimo">
+            <input
+              type="number"
+              min="0"
+              value={form.stockMinimo}
+              onChange={e => set({ stockMinimo: e.target.value })}
+              className={inputCls}
+            />
+          </Field>
+        </div>
 
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Imagen de esta presentación</p>

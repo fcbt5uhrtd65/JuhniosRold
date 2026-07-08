@@ -334,7 +334,7 @@ export function AdminInventory({ initialSearch = '' }: AdminInventoryProps) {
                     />
                     <div>
                       <p className="text-xs font-medium text-gray-900">{inv.product?.nombre}</p>
-                      <p className="text-[11px] text-gray-400">{inv.product?.presentacion}</p>
+                      <p className="text-[11px] text-gray-400">{inv.presentacionVariante ?? inv.product?.presentacion}</p>
                     </div>
                   </div>
                 </Td>
