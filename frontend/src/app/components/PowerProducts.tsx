@@ -53,6 +53,13 @@ function formatPrice(value: number | null): string {
   return new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 }).format(value ?? 0);
 }
 
+const STOCK_DISPLAY_CAP = 1000;
+
+function formatStockLabel(quantity: number): string {
+  if (quantity > STOCK_DISPLAY_CAP) return `+${STOCK_DISPLAY_CAP.toLocaleString('es-CO')} disponibles`;
+  return `${Math.floor(quantity).toLocaleString('es-CO')} disponible${quantity === 1 ? '' : 's'}`;
+}
+
 function splitTextList(value: unknown): string[] {
   if (Array.isArray(value)) {
     return value.map(item => String(item).trim()).filter(Boolean);
@@ -234,6 +241,7 @@ function ProductPage({
   const sizes = product.sizes ?? [];
   const selSize = selectedSizes[product.id] ?? sizes[0] ?? '';
   const selectedVariant = product.variants?.find(v => v.presentation === selSize) ?? product.variants?.[0];
+  const selectedPrice = selectedVariant?.discounted_price ?? selectedVariant?.current_price ?? product.priceValue;
 
   // Fotos de la variante/presentación seleccionada (carrusel principal): no mezcla
   // fotos de otras presentaciones, solo genéricas del producto + la propia de esa variante.
@@ -391,7 +399,7 @@ function ProductPage({
               <span className="text-[11.5px] text-stone-500">({product.reviews} reseñas)</span>
             </div>
 
-            <p className="text-[28px] font-semibold text-stone-900 mb-6">${product.price} <span className="text-xs text-stone-400 font-normal">COP</span></p>
+            <p className="text-[28px] font-semibold text-stone-900 mb-6">${formatPrice(selectedPrice)} <span className="text-xs text-stone-400 font-normal">COP</span></p>
             <div className="w-full h-px bg-stone-100 mb-6" />
 
             {/* Tallas */}
@@ -410,6 +418,12 @@ function ProductPage({
                   ))}
                 </div>
               </div>
+            )}
+
+            {selectedVariant?.available_quantity !== null && selectedVariant?.available_quantity !== undefined && (
+              <p className={`text-[11.5px] mb-5 ${selectedVariant.available_quantity <= 0 ? 'text-red-600 font-semibold' : 'text-stone-500'}`}>
+                {selectedVariant.available_quantity <= 0 ? 'Agotado' : `Stock: ${formatStockLabel(selectedVariant.available_quantity)}`}
+              </p>
             )}
 
             {/* Cantidad */}

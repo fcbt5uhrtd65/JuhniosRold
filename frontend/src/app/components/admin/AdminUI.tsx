@@ -109,11 +109,11 @@ export function Drawer({ title, open, onClose, wide, children }: { title: string
   );
 }
 
-export function Modal({ title, open, onClose, wide, children }: { title: string; open: boolean; onClose: () => void; wide?: boolean; children: ReactNode }) {
+export function Modal({ title, open, onClose, wide, children, disableOverlayClose }: { title: string; open: boolean; onClose: () => void; wide?: boolean; children: ReactNode; disableOverlayClose?: boolean }) {
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={disableOverlayClose ? undefined : onClose} />
       <div className={`relative bg-white ${wide ? 'w-full max-w-2xl' : 'w-full max-w-lg'} max-h-[90vh] flex flex-col rounded-2xl shadow-2xl overflow-hidden`}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50">
           <h3 className="font-semibold text-gray-900">{title}</h3>

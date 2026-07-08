@@ -921,6 +921,10 @@ export async function deleteProduct(id: string): Promise<void> {
   await api.delete(`${PRODUCTS_PATH}${id}/`);
 }
 
+export async function deleteProductVariant(variantId: string): Promise<void> {
+  await api.delete(`${VARIANTS_PATH}${variantId}/`);
+}
+
 export type ExportFormat = 'xlsx' | 'pdf';
 export type PdfLayout = 'table' | 'catalog';
 

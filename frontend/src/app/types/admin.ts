@@ -51,6 +51,10 @@ export interface Inventory {
   stockActual: number;
   stockMinimo: number;
   ubicacion: string;
+  /** Presentación real de la variante de este registro (ej. "50 ML"), no la del producto colapsado. */
+  presentacionVariante?: string;
+  /** SKU real de la variante de este registro. */
+  codigoVariante?: string;
 }
 
 export interface OrderItem {
