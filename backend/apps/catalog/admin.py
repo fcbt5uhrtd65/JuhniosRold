@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Category, Price, Product, ProductImage, ProductReview, ProductVariant
+from .models import Category, FlipbookCatalog, Price, Product, ProductImage, ProductReview, ProductVariant
 
 
 class ProductVariantInline(admin.TabularInline):
@@ -29,6 +29,14 @@ class CategoryAdmin(admin.ModelAdmin):
     search_fields = ("name", "slug")
     prepopulated_fields = {"slug": ("name",)}
     list_select_related = ("parent",)
+
+
+@admin.register(FlipbookCatalog)
+class FlipbookCatalogAdmin(admin.ModelAdmin):
+    list_display = ("title", "label", "sort_order", "is_active", "updated_at")
+    list_filter = ("is_active",)
+    search_fields = ("title", "label", "description", "url")
+    ordering = ("sort_order", "title")
 
 
 @admin.register(Product)

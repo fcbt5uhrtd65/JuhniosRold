@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from apps.catalog.infrastructure.models import Category, Price, Product, ProductVariant
+from apps.catalog.infrastructure.models import Category, FlipbookCatalog, Price, Product, ProductVariant
 from apps.inventory.infrastructure.models import Stock
 
 
@@ -63,6 +63,93 @@ class PublicCatalogTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 403)
+
+
+class FlipbookCatalogTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.active_catalog = FlipbookCatalog.objects.create(
+            title="Catalogo comercial",
+            label="Productos Juhnios Rold",
+            description="Portafolio general",
+            url="https://heyzine.com/flip-book/5bc27eccc9.html#page/10",
+            accent_color="#2D3A1F",
+            sort_order=2,
+            is_active=True,
+        )
+        self.first_catalog = FlipbookCatalog.objects.create(
+            title="Catalogo profesional",
+            label="Linea para negocios",
+            url="https://heyzine.com/flip-book/8e41ab4a8b.html",
+            accent_color="#8B7355",
+            sort_order=1,
+            is_active=True,
+        )
+        self.hidden_catalog = FlipbookCatalog.objects.create(
+            title="Catalogo oculto",
+            url="https://heyzine.com/flip-book/d249fca6ef.html",
+            is_active=False,
+        )
+
+    def test_anonymous_users_can_list_only_active_flipbooks_ordered(self):
+        response = self.client.get("/api/v1/catalog/flipbooks/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], FlipbookCatalog.objects.filter(is_active=True).count())
+        response_ids = [item["id"] for item in response.data["results"]]
+        self.assertIn(str(self.active_catalog.id), response_ids)
+        self.assertIn(str(self.first_catalog.id), response_ids)
+        self.assertNotIn(str(self.hidden_catalog.id), response_ids)
+
+    def test_regular_authenticated_users_can_list_only_active_flipbooks(self):
+        user = get_user_model().objects.create_user(
+            email="cliente-catalogos@example.com",
+            password="password-seguro",
+        )
+        self.client.force_authenticate(user)
+
+        response = self.client.get("/api/v1/catalog/flipbooks/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], FlipbookCatalog.objects.filter(is_active=True).count())
+        response_ids = [item["id"] for item in response.data["results"]]
+        self.assertNotIn(str(self.hidden_catalog.id), response_ids)
+
+    def test_anonymous_users_cannot_create_flipbooks(self):
+        response = self.client.post(
+            "/api/v1/catalog/flipbooks/",
+            {
+                "title": "Nuevo catalogo",
+                "url": "https://heyzine.com/flip-book/new.html",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 401)
+
+    def test_admin_users_can_create_flipbooks(self):
+        admin = get_user_model().objects.create_superuser(
+            email="admin-catalogos@example.com",
+            password="SecurePass123!",
+        )
+        self.client.force_authenticate(admin)
+
+        response = self.client.post(
+            "/api/v1/catalog/flipbooks/",
+            {
+                "title": "Catalogo complementario",
+                "label": "Seleccion destacada",
+                "description": "Referencias adicionales",
+                "url": "https://heyzine.com/flip-book/d249fca6ef.html",
+                "accent_color": "#7C2D12",
+                "sort_order": 3,
+                "is_active": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(FlipbookCatalog.objects.filter(title="Catalogo complementario").exists())
 
 
 class CatalogSeederTests(TestCase):

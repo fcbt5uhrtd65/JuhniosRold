@@ -4,6 +4,7 @@ import { useAdmin } from '../../contexts/AdminContext';
 import {
   LayoutDashboard,
   Package,
+  BookOpen,
   Warehouse,
   Boxes,
   ShoppingCart,
@@ -34,6 +35,7 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['ADMIN', 'SELLER'] },
     { id: 'products', label: 'Productos', icon: Package, roles: ['ADMIN', 'SELLER'] },
+    { id: 'flipbook-catalogs', label: 'Catálogos', icon: BookOpen, roles: ['ADMIN'] },
     { id: 'inventory', label: 'Stock Rápido', icon: Warehouse, roles: ['ADMIN', 'SELLER'] },
     { id: 'inventory-production', label: 'Inventario', icon: Boxes, roles: ['ADMIN', 'SELLER'] },
     { id: 'orders', label: 'Pedidos', icon: ShoppingCart, roles: ['ADMIN', 'SELLER', 'DISTRIBUTOR', 'PEDIDOS'] },

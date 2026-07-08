@@ -9,6 +9,7 @@ import type { PromotionSummary } from './promotions.service';
 const CATALOG_BASE_PATH = '/catalog';
 const PRODUCTS_PATH = `${CATALOG_BASE_PATH}/products/`;
 const CATEGORIES_PATH = `${CATALOG_BASE_PATH}/categories/`;
+const FLIPBOOKS_PATH = `${CATALOG_BASE_PATH}/flipbooks/`;
 const VARIANTS_PATH = `${CATALOG_BASE_PATH}/variants/`;
 const PRICES_PATH = `${CATALOG_BASE_PATH}/prices/`;
 const IMAGES_PATH = `${CATALOG_BASE_PATH}/images/`;
@@ -115,6 +116,20 @@ interface BackendProduct {
   active_promotion?: PromotionSummary | null;
 }
 
+interface BackendFlipbookCatalog {
+  id: UUID;
+  title: string;
+  label: string;
+  description: string;
+  url: string;
+  accent_color: string;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
 export interface ProductCategory {
   id: UUID;
   name: string;
@@ -207,6 +222,29 @@ export interface Product {
   active_promotion: PromotionSummary | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface FlipbookCatalog {
+  id: UUID;
+  title: string;
+  label: string;
+  description: string;
+  url: string;
+  accent_color: string;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FlipbookCatalogPayload {
+  title: string;
+  label?: string;
+  description?: string;
+  url: string;
+  accent_color?: string;
+  sort_order?: number;
+  is_active?: boolean;
 }
 
 export interface ProductsQueryParams {
@@ -404,6 +442,21 @@ function normalizeCategory(category: BackendCategory): ProductCategory {
   };
 }
 
+function normalizeFlipbookCatalog(catalog: BackendFlipbookCatalog): FlipbookCatalog {
+  return {
+    id: catalog.id,
+    title: catalog.title,
+    label: catalog.label,
+    description: catalog.description,
+    url: catalog.url,
+    accent_color: catalog.accent_color,
+    sort_order: catalog.sort_order,
+    is_active: catalog.is_active,
+    created_at: catalog.created_at,
+    updated_at: catalog.updated_at,
+  };
+}
+
 function normalizeProduct(
   product: BackendProduct,
   categoryMap: Map<string, ProductCategory>,
@@ -527,6 +580,56 @@ export async function getCategories(useAuth = false, forceRefresh = false): Prom
     publicCategoriesCache = categories;
   }
   return categories;
+}
+
+export async function getFlipbookCatalogs(signal?: AbortSignal): Promise<FlipbookCatalog[]> {
+  const res = await publicApi.get<PaginatedResponse<BackendFlipbookCatalog>>(
+    `${FLIPBOOKS_PATH}?page_size=100`,
+    signal,
+  );
+
+  return (res.data?.results ?? []).map(normalizeFlipbookCatalog);
+}
+
+export async function getFlipbookCatalogsForAdmin(signal?: AbortSignal): Promise<FlipbookCatalog[]> {
+  const res = await api.get<PaginatedResponse<BackendFlipbookCatalog>>(
+    `${FLIPBOOKS_PATH}?page_size=100`,
+    signal,
+  );
+
+  return (res.data?.results ?? []).map(normalizeFlipbookCatalog);
+}
+
+export async function createFlipbookCatalog(payload: FlipbookCatalogPayload): Promise<FlipbookCatalog> {
+  const res = await api.post<BackendFlipbookCatalog>(FLIPBOOKS_PATH, {
+    title: payload.title,
+    label: payload.label ?? '',
+    description: payload.description ?? '',
+    url: payload.url,
+    accent_color: payload.accent_color ?? '#2D3A1F',
+    sort_order: payload.sort_order ?? 0,
+    is_active: payload.is_active ?? true,
+  });
+
+  if (!res.data) {
+    throw new Error('No se pudo crear el catálogo.');
+  }
+
+  return normalizeFlipbookCatalog(res.data);
+}
+
+export async function updateFlipbookCatalog(id: string, payload: Partial<FlipbookCatalogPayload>): Promise<FlipbookCatalog> {
+  const res = await api.patch<BackendFlipbookCatalog>(`${FLIPBOOKS_PATH}${id}/`, payload);
+
+  if (!res.data) {
+    throw new Error('No se pudo actualizar el catálogo.');
+  }
+
+  return normalizeFlipbookCatalog(res.data);
+}
+
+export async function deleteFlipbookCatalog(id: string): Promise<void> {
+  await api.delete(`${FLIPBOOKS_PATH}${id}/`);
 }
 
 async function fetchProducts(

@@ -18,6 +18,7 @@ import { AdminRoles } from './AdminRoles';
 import { AdminComponents } from './AdminComponents';
 import { AdminReferrals } from './AdminReferrals';
 import { AdminShipping } from './AdminShipping';
+import { AdminFlipbookCatalogs } from './AdminFlipbookCatalogs';
 
 function getDefaultViewForRole(role?: string) {
   switch (role) {
@@ -61,6 +62,8 @@ export function Admin() {
         return <AdminDashboard />;
       case 'products':
         return <AdminProducts onViewInInventory={goToInventory} />;
+      case 'flipbook-catalogs':
+        return <AdminFlipbookCatalogs />;
       case 'inventory':
         return <AdminInventory initialSearch={inventorySearch} />;
       case 'inventory-production':

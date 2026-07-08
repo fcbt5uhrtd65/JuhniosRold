@@ -8,12 +8,27 @@ from rest_framework import serializers
 from apps.promotions.application.services import resolve_best_promotion
 from apps.promotions.infrastructure.serializers import PromotionSummarySerializer
 
-from .models import Category, Price, Product, ProductImage, ProductReview, ProductVariant, ProductVariantImage
+from .models import (
+    Category,
+    FlipbookCatalog,
+    Price,
+    Product,
+    ProductImage,
+    ProductReview,
+    ProductVariant,
+    ProductVariantImage,
+)
 
 
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
+        fields = "__all__"
+
+
+class FlipbookCatalogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FlipbookCatalog
         fields = "__all__"
 
 

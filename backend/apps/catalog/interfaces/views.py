@@ -10,6 +10,7 @@ from shared.interfaces.viewsets import SoftDeleteModelViewSet
 from apps.inventory.infrastructure.models import Stock
 from ..infrastructure.models import (
     Category,
+    FlipbookCatalog,
     Price,
     Product,
     ProductImage,
@@ -21,6 +22,7 @@ from ..infrastructure.serializers import (
     CategorySerializer,
     CompleteProductSerializer,
     CompleteVariantSerializer,
+    FlipbookCatalogSerializer,
     PriceSerializer,
     ProductImageSerializer,
     ProductReviewSerializer,
@@ -140,6 +142,25 @@ class CategoryViewSet(SoftDeleteModelViewSet):
     def get_queryset(self):
         queryset = super().get_queryset()
         if self.action in ("list", "retrieve") and not self.request.user.is_authenticated:
+            return queryset.filter(is_active=True)
+        return queryset
+
+
+class FlipbookCatalogViewSet(SoftDeleteModelViewSet):
+    queryset = FlipbookCatalog.objects.all()
+    serializer_class = FlipbookCatalogSerializer
+    search_fields = ("title", "label", "description")
+    ordering_fields = ("sort_order", "title", "created_at", "updated_at")
+
+    def get_permissions(self):
+        if self.action in ("list", "retrieve"):
+            return (permissions.AllowAny(),)
+        return (permissions.IsAdminUser(),)
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        user = self.request.user
+        if self.action in ("list", "retrieve") and not getattr(user, "is_staff", False):
             return queryset.filter(is_active=True)
         return queryset
 

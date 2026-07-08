@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 
 from .views import (
     CategoryViewSet,
+    FlipbookCatalogViewSet,
     PriceViewSet,
     ProductCompleteCreateView,
     ProductExportStatusView,
@@ -18,6 +19,7 @@ from .views import (
 router = DefaultRouter()
 router.register("products", ProductViewSet)
 router.register("categories", CategoryViewSet)
+router.register("flipbooks", FlipbookCatalogViewSet)
 router.register("variants", ProductVariantViewSet)
 router.register("prices", PriceViewSet)
 router.register("images", ProductImageViewSet)

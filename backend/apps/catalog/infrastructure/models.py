@@ -1,5 +1,5 @@
 from django.conf import settings
-from django.core.validators import MaxValueValidator, MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models
 
 from shared.infrastructure.models import BaseModel
@@ -14,6 +14,31 @@ class Category(BaseModel):
 
     def __str__(self):
         return self.name
+
+
+class FlipbookCatalog(BaseModel):
+    title = models.CharField(max_length=140)
+    label = models.CharField(max_length=140, blank=True)
+    description = models.TextField(blank=True)
+    url = models.URLField(max_length=500)
+    accent_color = models.CharField(
+        max_length=7,
+        default="#2D3A1F",
+        validators=[
+            RegexValidator(
+                regex=r"^#[0-9A-Fa-f]{6}$",
+                message="Ingresa un color hexadecimal válido, por ejemplo #2D3A1F.",
+            )
+        ],
+    )
+    sort_order = models.PositiveSmallIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("sort_order", "title")
+
+    def __str__(self):
+        return self.title
 
 
 class Product(BaseModel):
