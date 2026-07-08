@@ -51,15 +51,13 @@ class CartItemSerializer(serializers.ModelSerializer):
         return price.currency if price else "COP"
 
     def get_image_url(self, item):
-        product = item.variant.product
-        primary = next((image for image in product.images.all() if image.is_primary), None)
+        variant = item.variant
+        primary = next((image for image in variant.images.all() if image.is_primary), None)
         if primary:
-            request = self.context.get("request")
-            return (
-                request.build_absolute_uri(primary.image.url)
-                if request
-                else primary.image.url
-            )
+            return primary.image
+        if variant.image_url:
+            return variant.image_url
+        product = variant.product
         return product.image_url or product.category.image_url
 
     def get_subtotal(self, item):

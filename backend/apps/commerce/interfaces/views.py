@@ -43,7 +43,7 @@ def _default_location():
 def _cart_queryset():
     return Cart.objects.select_related("customer").prefetch_related(
         "items__variant__product__category",
-        "items__variant__product__images",
+        "items__variant__images",
         "items__variant__prices",
     )
 
