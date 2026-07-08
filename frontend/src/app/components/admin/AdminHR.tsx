@@ -310,6 +310,18 @@ const DOCUMENT_TYPE_OPTIONS: Array<{ value: EmployeeDocumentType; label: string 
   { value: 'OTHER', label: 'Otros documentos' },
 ];
 
+const REQUIRED_DOCUMENT_TYPES = new Set<EmployeeDocumentType>([
+  'ID_COPY',
+  'RESUME',
+  'SIGNED_CONTRACT',
+  'BANK_CERTIFICATE',
+  'EPS_CERTIFICATE',
+  'PENSION_CERTIFICATE',
+  'SEVERANCE_CERTIFICATE',
+  'ARL_CERTIFICATE',
+  'COMPENSATION_CERTIFICATE',
+]);
+
 const MODAL_TABS: Array<{ id: EmployeeModalTab; label: string; icon: typeof Users }> = [
   { id: 'personal', label: 'Información Personal', icon: Users },
   { id: 'labor', label: 'Información Laboral', icon: Briefcase },
@@ -1624,13 +1636,21 @@ export function AdminHR() {
               onClick={() => setDocumentForm((current) => ({ ...current, document_type: docType.value, name: current.name || docType.label }))}
               className="text-left border border-gray-200 rounded-xl p-3 hover:border-[#2a4038] transition-colors"
             >
-              <div className="text-xs font-medium text-gray-900 mb-1.5">{docType.label}</div>
+              <div className="text-xs font-medium text-gray-900 mb-1.5">
+                {docType.label}
+                {REQUIRED_DOCUMENT_TYPES.has(docType.value) && (
+                  <span className="text-red-500 ml-0.5" title="Documento obligatorio" aria-label="Documento obligatorio">*</span>
+                )}
+              </div>
               <Badge label={latest ? documentStatusLabel(latest.status) : 'Pendiente'} color={statusBadge(latest?.status ?? 'PENDING')} />
               {docs.length > 1 && <div className="text-[10px] text-gray-400 mt-2">{docs.length} adjuntos</div>}
             </button>
           );
         })}
       </div>
+      <p className="text-[11px] text-gray-400">
+        <span className="text-red-500">*</span> Documento obligatorio para completar el expediente.
+      </p>
 
       <Card className="p-4 space-y-4">
         <div className="flex items-center gap-2 text-sm font-semibold text-gray-900">
