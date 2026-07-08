@@ -16,7 +16,7 @@ import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent,
 } from '../ui/dropdown-menu';
-import { requestProductsExport, getCategories, getProductById, updateProductVariant, updateVariantImages, createProductVariant, type ExportFormat, type PdfLayout, type ProductVariant } from '../../services/products.service';
+import { requestProductsExport, getCategories, getProductById, updateProductVariant, updateVariantImages, createProductVariant, deleteProductVariant, type ExportFormat, type PdfLayout, type ProductVariant } from '../../services/products.service';
 import { createInitialStock } from '../../services/inventory.service';
 import { getProductReviews, type ProductReview } from '../../services/reviews.service';
 import { getWholesaleSettingsApi, updateWholesaleSettingsApi } from '../../services/cart.service';
@@ -270,6 +270,8 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
   const [editVariantImages, setEditVariantImages] = useState<string[]>([]);
   const [primaryVariantId, setPrimaryVariantId] = useState<string | null>(null);
   const [isAddingVariant, setAddingVariant] = useState(false);
+  const [variantPendingDelete, setVariantPendingDelete] = useState<ProductVariant | null>(null);
+  const [isDeletingVariant, setIsDeletingVariant] = useState(false);
 
   const set = (patch: Partial<Omit<Product, 'id'>>) => setFormData(prev => ({ ...prev, ...patch }));
 
@@ -375,6 +377,32 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
     setAddingVariant(false);
     await refreshData();
     toast.success('Presentación agregada correctamente');
+  };
+
+  const handleDeleteVariant = async () => {
+    if (!variantPendingDelete || !selectedProduct) return;
+    if (editVariants.length <= 1) {
+      toast.error('Un producto debe tener al menos una presentación.');
+      setVariantPendingDelete(null);
+      return;
+    }
+    setIsDeletingVariant(true);
+    try {
+      await deleteProductVariant(variantPendingDelete.id);
+      const full = await getProductById(selectedProduct.id);
+      setEditVariants(full.variants);
+      if (editingVariantId === variantPendingDelete.id) {
+        const fallback = full.variants.find(v => v.presentation === selectedProduct.presentacion) ?? full.variants[0];
+        if (fallback) selectEditVariant(fallback);
+      }
+      await refreshData();
+      toast.success('Presentación eliminada correctamente');
+      setVariantPendingDelete(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo eliminar la presentación.');
+    } finally {
+      setIsDeletingVariant(false);
+    }
   };
 
   const openView = (product: Product) => {
@@ -1111,32 +1139,43 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
                       <FormLabel>Presentaciones de este producto</FormLabel>
                       <div className="flex gap-3 overflow-x-auto pb-1">
                         {editVariants.map(variant => (
-                          <button
-                            key={variant.id}
-                            type="button"
-                            onClick={() => selectEditVariant(variant)}
-                            title={variant.presentation}
-                            className={`flex flex-col items-center gap-1 flex-shrink-0 group`}
-                          >
-                            <div
-                              className={`w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${
-                                editingVariantId === variant.id
-                                  ? 'border-[#2a4038] shadow-sm'
-                                  : 'border-gray-200 opacity-60 group-hover:opacity-100 group-hover:border-gray-300'
-                              }`}
+                          <div key={variant.id} className="relative flex flex-col items-center gap-1 flex-shrink-0 group">
+                            <button
+                              type="button"
+                              onClick={() => selectEditVariant(variant)}
+                              title={variant.presentation}
+                              className="flex flex-col items-center gap-1"
                             >
-                              {variant.image_url ? (
-                                <img src={variant.image_url} alt={variant.presentation} className="w-full h-full object-contain bg-gray-50 p-1" />
-                              ) : (
-                                <div className="w-full h-full flex items-center justify-center bg-gray-50">
-                                  <Package size={16} className="text-gray-300" />
-                                </div>
-                              )}
-                            </div>
-                            <span className={`text-[10px] font-medium ${editingVariantId === variant.id ? 'text-[#2a4038]' : 'text-gray-400'}`}>
-                              {variant.presentation}
-                            </span>
-                          </button>
+                              <div
+                                className={`w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${
+                                  editingVariantId === variant.id
+                                    ? 'border-[#2a4038] shadow-sm'
+                                    : 'border-gray-200 opacity-60 group-hover:opacity-100 group-hover:border-gray-300'
+                                }`}
+                              >
+                                {variant.image_url ? (
+                                  <img src={variant.image_url} alt={variant.presentation} className="w-full h-full object-contain bg-gray-50 p-1" />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center bg-gray-50">
+                                    <Package size={16} className="text-gray-300" />
+                                  </div>
+                                )}
+                              </div>
+                              <span className={`text-[10px] font-medium ${editingVariantId === variant.id ? 'text-[#2a4038]' : 'text-gray-400'}`}>
+                                {variant.presentation}
+                              </span>
+                            </button>
+                            {editVariants.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => setVariantPendingDelete(variant)}
+                                title="Eliminar presentación"
+                                className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-white border border-gray-200 text-gray-400 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all shadow-sm"
+                              >
+                                <X size={11} />
+                              </button>
+                            )}
+                          </div>
                         ))}
                         <button
                           type="button"
@@ -1558,6 +1597,49 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
           productName={selectedProduct.nombre}
           onCreated={handleVariantCreated}
         />
+      )}
+
+      {variantPendingDelete && (
+        <Modal title="Eliminar presentación" open={variantPendingDelete !== null} onClose={() => setVariantPendingDelete(null)}>
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-lg overflow-hidden border border-gray-200 flex-shrink-0">
+                {variantPendingDelete.image_url ? (
+                  <img src={variantPendingDelete.image_url} alt={variantPendingDelete.presentation} className="w-full h-full object-contain bg-gray-50 p-1" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-gray-50">
+                    <Package size={16} className="text-gray-300" />
+                  </div>
+                )}
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-900">{variantPendingDelete.presentation}</p>
+                <p className="text-[11px] text-gray-400 font-mono">{variantPendingDelete.sku}</p>
+              </div>
+            </div>
+            <p className="text-xs text-gray-600">
+              ¿Eliminar esta presentación? Se eliminará su precio, imágenes e inventario asociados. Esta acción no se puede deshacer.
+            </p>
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={handleDeleteVariant}
+                disabled={isDeletingVariant}
+                className="flex-1 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 transition-colors disabled:opacity-50"
+              >
+                {isDeletingVariant ? 'Eliminando...' : 'Sí, eliminar'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setVariantPendingDelete(null)}
+                disabled={isDeletingVariant}
+                className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   );
