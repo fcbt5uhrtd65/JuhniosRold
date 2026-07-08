@@ -603,13 +603,7 @@ function ProductCard({ product, index, isSaved, onToggleSave, onAddToCart, onVie
           </span>
         </div>
 
-        {/* Overlay ojo + corazón: siempre visible en mobile/touch, hover en desktop */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          whileHover={{ opacity: 1 }}
-          className="absolute inset-0 md:bg-black/22 backdrop-blur-0 md:hover:backdrop-blur-[1px] flex items-start justify-end md:items-center md:justify-center gap-2 p-2 md:p-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
-        >
+        <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/0 p-2 opacity-0 pointer-events-none transition-all duration-300 group-hover:bg-black/15 group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:bg-black/15 group-focus-within:opacity-100 group-focus-within:pointer-events-auto">
           <motion.button
             whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
             onClick={e => { e.stopPropagation(); onView(product); }}
@@ -626,7 +620,7 @@ function ProductCard({ product, index, isSaved, onToggleSave, onAddToCart, onVie
           >
             <Heart className={`w-3.5 h-3.5 ${isSaved ? 'fill-current' : ''}`} strokeWidth={1.5} />
           </motion.button>
-        </motion.div>
+        </div>
       </div>
 
       {/* Info */}
@@ -645,7 +639,7 @@ function ProductCard({ product, index, isSaved, onToggleSave, onAddToCart, onVie
           <motion.button
             whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
             onClick={e => { e.stopPropagation(); onAddToCart(product); }}
-            className="flex items-center gap-1 px-3 py-1.5 text-white text-[9.5px] font-semibold rounded-xl hover:opacity-85 transition-opacity"
+            className="flex items-center gap-1 px-3 py-1.5 text-white text-[9.5px] font-semibold rounded-xl opacity-0 pointer-events-none transition-opacity group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto hover:opacity-85"
             style={{ backgroundColor: OLIVE }}
           >
             <ShoppingBag className="w-3 h-3" strokeWidth={1.5} />

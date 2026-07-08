@@ -1292,13 +1292,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                         </div>
                       )}
 
-                      {/* Overlay con botones: siempre visible en mobile/touch, hover en desktop */}
-                      <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        whileHover={{ opacity: 1 }}
-                        className="absolute inset-0 bg-black/10 md:bg-transparent md:hover:bg-black/25 backdrop-blur-[1px] md:backdrop-blur-0 md:hover:backdrop-blur-[1px] flex items-start justify-end md:items-center md:justify-center gap-2 p-2 md:p-0 transition-all opacity-100 md:opacity-0 md:group-hover:opacity-100"
-                      >
+                      <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/0 p-2 opacity-0 pointer-events-none transition-all duration-300 group-hover:bg-black/15 group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:bg-black/15 group-focus-within:opacity-100 group-focus-within:pointer-events-auto">
                         <motion.button
                           whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
                           onClick={e => { e.stopPropagation(); setQuickViewProduct(product); }}
@@ -1317,7 +1311,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                         >
                           <Heart className={`w-3.5 h-3.5 md:w-4 md:h-4 ${saved ? 'fill-current' : ''}`} strokeWidth={1.5} />
                         </motion.button>
-                      </motion.div>
+                      </div>
                     </div>
 
                     {/* Info */}
@@ -1383,7 +1377,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                           whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
                           onClick={e => { e.stopPropagation(); handleAddToCart(product); }}
                           disabled={isOutOfStock}
-                          className="flex items-center gap-1.5 px-3.5 py-2 text-white text-[10px] font-semibold rounded-xl transition-opacity hover:opacity-85 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+                          className="flex items-center gap-1.5 px-3.5 py-2 text-white text-[10px] font-semibold rounded-xl opacity-0 pointer-events-none transition-opacity group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto hover:opacity-85 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
                           style={{ backgroundColor: OLIVE }}
                         >
                           {isOutOfStock ? 'Agotado' : 'Añadir al carrito'}
