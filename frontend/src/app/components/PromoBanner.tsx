@@ -117,15 +117,11 @@ export function PromoBanner() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: '-60px' }}
           transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
-          className="relative overflow-hidden rounded-3xl border border-[#2D3A1F] bg-[#111510] text-white"
+          className="relative overflow-hidden rounded-3xl border border-[#2D3A1F] bg-[#111510] bg-cover bg-center text-white"
+          style={{ backgroundImage: "url('/images/promo-banner-bg.png')" }}
         >
-          <div
-            className="absolute inset-0 opacity-[0.08] pointer-events-none"
-            style={{
-              backgroundImage: 'linear-gradient(135deg, #ffffff 1px, transparent 1px)',
-              backgroundSize: '18px 18px',
-            }}
-          />
+          <div className="absolute inset-0 bg-black/45 pointer-events-none" />
+          <div className="absolute inset-0 bg-gradient-to-r from-black/50 via-black/25 to-black/45 pointer-events-none" />
 
           <div className="relative grid gap-6 px-6 py-7 md:grid-cols-[1fr_auto] md:items-center md:px-10 lg:px-14">
             <div className="min-w-0">

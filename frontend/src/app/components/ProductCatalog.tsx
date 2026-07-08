@@ -535,7 +535,7 @@ export function ProductPage({
                 <button
                   key={item.variantId ?? i}
                   onClick={() => (isSiblingMode ? item.size && onSelectSize(product.id, item.size) : activateGalleryImage(i))}
-                  className={`w-[100px] h-[100px] rounded-xl overflow-hidden border-2 transition-all duration-150 flex-shrink-0 ${
+                  className={`w-[100px] h-[100px] rounded-xl overflow-hidden border-2 bg-white transition-all duration-150 flex-shrink-0 ${
                     isActive
                       ? 'border-stone-800 shadow-sm'
                       : 'border-stone-200 opacity-55 hover:opacity-100 hover:border-stone-400'
@@ -555,7 +555,7 @@ export function ProductPage({
           </div>
 
           {/* Columna 2: Imagen principal */}
-          <div className="relative rounded-2xl overflow-hidden bg-[#F8F6F2]" style={{ aspectRatio: '3/4' }}>
+          <div className="relative rounded-2xl overflow-hidden bg-white" style={{ aspectRatio: '3/4' }}>
             <AnimatePresence mode="wait">
               <motion.img
                 key={`${product.id}-${activeImg}`}
@@ -746,7 +746,7 @@ export function ProductPage({
                     onClick={() => onNavigateTo(rp)}
                   >
                     {/* Imagen con overlay interactivo */}
-                    <div className="relative overflow-hidden bg-[#FAFAF8] aspect-[3/4]">
+                    <div className="relative overflow-hidden bg-white aspect-[3/4]">
                       <motion.img
                         whileHover={{ scale: 1.05 }} transition={{ duration: 0.45 }}
                         src={getProductImage(rp)} alt={rp.name}
@@ -1189,7 +1189,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setQuickViewProduct(product); } }}
                       className="group flex gap-4 bg-white rounded-2xl border border-stone-100 p-4 hover:border-stone-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-300"
                     >
-                      <div className="w-24 h-24 rounded-xl overflow-hidden bg-stone-50 flex-shrink-0 relative">
+                      <div className="w-24 h-24 rounded-xl overflow-hidden bg-white flex-shrink-0 relative">
                         <motion.img
                           whileHover={{ scale: 1.06 }} transition={{ duration: 0.4 }}
                           src={getProductImage(product, selVariant)} alt={product.name}
@@ -1274,7 +1274,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                     className="group flex flex-col bg-white rounded-2xl border border-stone-100 overflow-hidden hover:border-stone-200 hover:shadow-sm transition-all duration-300 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-300"
                   >
                     {/* Imagen */}
-                    <div className="relative overflow-hidden bg-[#FAFAF8] aspect-[4/5]">
+                    <div className="relative overflow-hidden bg-white aspect-[4/5]">
                       <motion.img
                         whileHover={{ scale: 1.06 }}
                         transition={{ duration: 0.55 }}

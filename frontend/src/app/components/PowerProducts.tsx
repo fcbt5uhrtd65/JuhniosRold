@@ -330,7 +330,7 @@ function ProductPage({
                 <button
                   key={item.variantId ?? i}
                   onClick={() => (isSiblingMode ? item.size && onSelectSize(product.id, item.size) : activateGalleryImage(i))}
-                  className={`w-[100px] h-[100px] rounded-xl overflow-hidden border-2 transition-all flex-shrink-0 ${
+                  className={`w-[100px] h-[100px] rounded-xl overflow-hidden border-2 bg-white transition-all flex-shrink-0 ${
                     isActive ? 'border-stone-800 shadow-sm' : 'border-stone-200 opacity-55 hover:opacity-100 hover:border-stone-400'
                   }`}
                 >
@@ -348,7 +348,7 @@ function ProductPage({
           </div>
 
           {/* Imagen principal */}
-          <div className="relative rounded-2xl overflow-hidden bg-[#F4F1EC]" style={{ aspectRatio: '3/4' }}>
+          <div className="relative rounded-2xl overflow-hidden bg-white" style={{ aspectRatio: '3/4' }}>
             <AnimatePresence mode="wait">
               <motion.img
                 key={activeImg}
@@ -508,7 +508,7 @@ function ProductPage({
                     tabIndex={0}
                     onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onNavigateTo(rp); } }}
                   >
-                    <div className="relative overflow-hidden bg-[#FAFAF8] aspect-[3/4]">
+                    <div className="relative overflow-hidden bg-white aspect-[3/4]">
                       <motion.img
                         whileHover={{ scale: 1.05 }} transition={{ duration: 0.45 }}
                         src={rp.images[0]} alt={rp.name}
@@ -585,7 +585,7 @@ function ProductCard({ product, index, isSaved, onToggleSave, onAddToCart, onVie
       className="group flex flex-col bg-white rounded-2xl border border-stone-100 overflow-hidden hover:border-stone-200 hover:shadow-sm transition-all duration-300 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-300"
     >
       {/* Imagen única */}
-      <div className="relative aspect-[3/4] overflow-hidden bg-[#FAFAF8]">
+      <div className="relative aspect-[3/4] overflow-hidden bg-white">
         <motion.img
           whileHover={{ scale: 1.05 }}
           transition={{ duration: 0.5 }}
