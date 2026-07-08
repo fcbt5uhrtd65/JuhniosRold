@@ -624,6 +624,9 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     resetAdminSession();
     clearTokens();
     localStorage.removeItem(STORAGE_KEYS.USER);
+    window.history.replaceState({}, '', '/');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    window.dispatchEvent(new Event('app:navigate'));
   }, [backendOnline, resetAdminSession]);
 
   // ---- Product CRUD ----
