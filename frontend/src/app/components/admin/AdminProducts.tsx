@@ -252,8 +252,6 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [activeSection, setActiveSection] = useState<'general' | 'precios' | 'inventario' | 'adicional'>('general');
-  const [saveGuardActive, setSaveGuardActive] = useState(false);
-
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilters, setActiveFilters] = useState<Record<string, string[]>>({});
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
@@ -395,11 +393,6 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
       // Un Enter dentro de un input dispara el submit del <form>; en un paso
       // intermedio del wizard eso debe avanzar de sección, no guardar ya.
       goToNextSection();
-      return;
-    }
-    if (saveGuardActive) {
-      // Protección contra el clic "fantasma": el botón "Siguiente" se
-      // reemplaza por "Guardar" en el mismo lugar al entrar a este paso.
       return;
     }
     const finalStepError = validateSection(activeSection);
@@ -609,25 +602,17 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
     { id: 'adicional', label: 'Adicional' },
   ] as const;
 
-  // El botón "Siguiente" y "Guardar Producto" ocupan el mismo lugar en pantalla;
-  // al entrar al último paso se bloquea el submit brevemente y se muestra
-  // "Espera un momento..." para que el cambio de botón sea visible y el
-  // usuario no confirme sin darse cuenta de que ya llegó al paso final.
+  // El botón "Guardar" ocupa el mismo lugar del DOM que ocupaba "Siguiente"
+  // en el paso anterior; si el foco del teclado quedó sobre ese botón,
+  // cualquier evento de activación residual (Enter, Space) podría reenviarse
+  // contra el nuevo botón submit. Se quita el foco explícitamente al entrar
+  // al último paso (los `key` distintos en cada botón ya evitan que el nodo
+  // DOM se reutilice, esto es una salvaguarda adicional).
   useEffect(() => {
-    if (activeSection !== 'adicional' || modalMode === null) {
-      setSaveGuardActive(false);
-      return;
-    }
-    setSaveGuardActive(true);
-    // El botón "Guardar" ocupa el mismo lugar del DOM que ocupaba "Siguiente";
-    // si el foco del teclado quedó sobre ese botón, cualquier evento de
-    // activación residual (Enter, Space) podría reenviarse contra el nuevo
-    // botón submit. Se quita el foco explícitamente al entrar a este paso.
+    if (activeSection !== 'adicional' || modalMode === null) return;
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
     }
-    const timer = setTimeout(() => setSaveGuardActive(false), 900);
-    return () => clearTimeout(timer);
   }, [activeSection, modalMode]);
 
   const sectionIndex = SECTIONS.findIndex(s => s.id === activeSection);
@@ -1517,21 +1502,17 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
                 <button
                   key="save-button"
                   type="submit"
-                  disabled={isSubmitting || saveGuardActive}
-                  className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-6 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 ${
-                    saveGuardActive ? 'bg-gray-300 text-gray-500' : 'bg-emerald-600 text-white hover:bg-emerald-700'
-                  }`}
+                  disabled={isSubmitting}
+                  className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-6 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 bg-emerald-600 text-white hover:bg-emerald-700"
                 >
                   {isSubmitting
                     ? 'Guardando...'
-                    : saveGuardActive
-                      ? 'Espera un momento...'
-                      : (
-                        <>
-                          <Check size={15} />
-                          {modalMode === 'edit' ? 'Actualizar Producto' : 'Guardar Producto'}
-                        </>
-                      )}
+                    : (
+                      <>
+                        <Check size={15} />
+                        {modalMode === 'edit' ? 'Actualizar Producto' : 'Guardar Producto'}
+                      </>
+                    )}
                 </button>
               ) : (
                 <button
