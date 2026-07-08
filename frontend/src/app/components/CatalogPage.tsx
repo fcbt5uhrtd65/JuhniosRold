@@ -85,14 +85,12 @@ export function CatalogPage({ onLoginClick }: { onLoginClick: () => void }) {
           </div>
 
           {isLoading ? (
-            <div className="mb-7 grid gap-3 md:grid-cols-3">
+            <div className="mb-7 grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
               {[0, 1, 2].map(item => (
-                <div key={item} className="min-h-[176px] rounded-lg border border-stone-200 bg-white p-5 shadow-sm">
-                  <div className="mb-5 h-10 w-10 animate-pulse rounded-md bg-stone-200" />
-                  <div className="mb-3 h-3 w-24 animate-pulse rounded bg-stone-200" />
-                  <div className="mb-3 h-5 w-40 animate-pulse rounded bg-stone-200" />
-                  <div className="h-3 w-full animate-pulse rounded bg-stone-200" />
-                  <div className="mt-2 h-3 w-2/3 animate-pulse rounded bg-stone-200" />
+                <div key={item} className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm">
+                  <div className="mb-4 h-11 w-11 animate-pulse rounded-full bg-stone-200" />
+                  <div className="mb-2 h-3 w-16 animate-pulse rounded bg-stone-200" />
+                  <div className="h-5 w-32 animate-pulse rounded bg-stone-200" />
                 </div>
               ))}
             </div>
@@ -111,37 +109,43 @@ export function CatalogPage({ onLoginClick }: { onLoginClick: () => void }) {
               <p className="mt-1 text-sm text-stone-500">Cuando se active un registro en el backend aparecerá aquí automáticamente.</p>
             </div>
           ) : (
-            <div className="mb-7 grid gap-3 md:grid-cols-3">
-              {catalogs.map((catalog, index) => {
+            <div className="mb-7 grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
+              {catalogs.map((catalog) => {
                 const isSelected = catalog.id === selectedCatalog?.id;
               return (
                 <button
                   key={catalog.id}
                   type="button"
+                  title={catalog.description || catalog.title}
                   onClick={() => setSelectedCatalogId(catalog.id)}
-                  className={`group flex h-full min-h-[176px] flex-col justify-between rounded-lg border bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${
+                  className={`group relative flex flex-col overflow-hidden rounded-xl border bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${
                     isSelected ? 'border-stone-900 ring-2 ring-stone-900/10' : 'border-stone-200'
                   }`}
                 >
                   <span
-                    className="mb-5 inline-flex h-10 w-10 items-center justify-center rounded-md text-white shadow-sm"
+                    className="absolute inset-x-0 top-0 h-1.5"
+                    style={{ backgroundColor: catalog.accent_color }}
+                    aria-hidden
+                  />
+                  <span
+                    className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-full text-white shadow-sm"
                     style={{ backgroundColor: catalog.accent_color }}
                   >
-                    <Layers3 className="h-4 w-4" strokeWidth={1.7} />
+                    <Layers3 className="h-4.5 w-4.5" strokeWidth={1.7} />
                   </span>
-                  <span className="block text-[10px] font-semibold uppercase tracking-[0.22em] text-stone-400">
-                    Catálogo {String(index + 1).padStart(2, '0')}
-                  </span>
-                  <span className="mt-1 block text-lg font-semibold leading-tight text-stone-950">
+                  {catalog.label && (
+                    <span className="mb-1 block truncate text-[10px] font-semibold uppercase tracking-[0.22em] text-[#8B7355]">
+                      {catalog.label}
+                    </span>
+                  )}
+                  <span className="block text-lg font-semibold leading-tight text-stone-950">
                     {catalog.title}
                   </span>
-                  <span className="mt-1 block text-xs font-medium text-[#8B7355]">
-                    {catalog.label}
-                  </span>
-                  <span className="mt-3 block text-sm leading-6 text-stone-600">
-                    {catalog.description}
-                  </span>
-                  <span className="mt-5 inline-flex items-center gap-2 text-xs font-semibold text-stone-900">
+                  <span
+                    className={`mt-2.5 inline-flex items-center gap-1.5 text-xs font-semibold transition-colors ${
+                      isSelected ? 'text-stone-900' : 'text-stone-400 group-hover:text-stone-700'
+                    }`}
+                  >
                     <Eye className="h-3.5 w-3.5" strokeWidth={1.8} />
                     {isSelected ? 'Visualizando ahora' : 'Visualizar'}
                   </span>
