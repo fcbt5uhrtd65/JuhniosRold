@@ -38,9 +38,18 @@ import {
 import { SearchBar } from './SearchBar';
 import { Pagination } from './Pagination';
 import { Badge, type BadgeColor, Card, Table, Th, Td, Modal, EmptyState, LoadingState, inputCls, selectCls } from './AdminUI';
+import { ComboWithOtherInput } from './ComboWithOtherInput';
 import { useToast } from '../../contexts/ToastContext';
 import { ApiError } from '../../services/api';
 import { getRoleLabel } from '../../utils/permissions';
+import {
+  ARL_OPTIONS,
+  ARL_RISK_LEVEL_OPTIONS,
+  COMPENSATION_FUND_OPTIONS,
+  EPS_OPTIONS,
+  PENSION_FUND_OPTIONS,
+  SEVERANCE_FUND_OPTIONS,
+} from '../../utils/socialSecurityCatalog';
 import {
   deleteEmployee,
   createBranch,
@@ -1548,12 +1557,12 @@ export function AdminHR() {
 
   const renderSocialTab = () => (
     <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      <TextInput label="EPS" value={employeeForm.eps} onChange={(value) => setFormField('eps', value)} />
-      <TextInput label="Fondo de pensiones" value={employeeForm.pension_fund} onChange={(value) => setFormField('pension_fund', value)} />
-      <TextInput label="Fondo de cesantías" value={employeeForm.severance_fund} onChange={(value) => setFormField('severance_fund', value)} />
-      <TextInput label="ARL" value={employeeForm.arl} onChange={(value) => setFormField('arl', value)} />
-      <TextInput label="Nivel de riesgo ARL" value={employeeForm.arl_risk_level} onChange={(value) => setFormField('arl_risk_level', value)} />
-      <TextInput label="Caja de compensación" value={employeeForm.compensation_fund} onChange={(value) => setFormField('compensation_fund', value)} />
+      <ComboWithOtherInput label="EPS" value={employeeForm.eps} onChange={(value) => setFormField('eps', value)} options={EPS_OPTIONS} />
+      <ComboWithOtherInput label="Fondo de pensiones" value={employeeForm.pension_fund} onChange={(value) => setFormField('pension_fund', value)} options={PENSION_FUND_OPTIONS} />
+      <ComboWithOtherInput label="Fondo de cesantías" value={employeeForm.severance_fund} onChange={(value) => setFormField('severance_fund', value)} options={SEVERANCE_FUND_OPTIONS} />
+      <ComboWithOtherInput label="ARL" value={employeeForm.arl} onChange={(value) => setFormField('arl', value)} options={ARL_OPTIONS} />
+      <SelectInput label="Nivel de riesgo ARL" value={employeeForm.arl_risk_level} onChange={(value) => setFormField('arl_risk_level', value)} options={ARL_RISK_LEVEL_OPTIONS} emptyLabel="Nivel de riesgo" />
+      <ComboWithOtherInput label="Caja de compensación" value={employeeForm.compensation_fund} onChange={(value) => setFormField('compensation_fund', value)} options={COMPENSATION_FUND_OPTIONS} />
     </div>
   );
 

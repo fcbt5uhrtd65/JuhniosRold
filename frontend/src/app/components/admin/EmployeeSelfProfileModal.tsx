@@ -16,8 +16,17 @@ import {
 import { getRoleLabel } from '../../utils/permissions';
 import { Badge, type BadgeColor, Card, EmptyState, LoadingState } from './AdminUI';
 import { TextInput, SelectInput, TextareaInput } from './AdminHR';
+import { ComboWithOtherInput } from './ComboWithOtherInput';
 import { LocationPicker } from '../ui/LocationPicker';
 import { EMPTY_LOCATION, type LocationValue } from '../../services/geography.types';
+import {
+  ARL_OPTIONS,
+  ARL_RISK_LEVEL_OPTIONS,
+  COMPENSATION_FUND_OPTIONS,
+  EPS_OPTIONS,
+  PENSION_FUND_OPTIONS,
+  SEVERANCE_FUND_OPTIONS,
+} from '../../utils/socialSecurityCatalog';
 
 type ProfileTab = 'personal' | 'social' | 'banking' | 'emergency' | 'documents' | 'access' | 'history';
 
@@ -420,12 +429,12 @@ export function EmployeeSelfProfileModal({ open, onClose }: { open: boolean; onC
 
               {activeTab === 'social' && (
                 <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <TextInput label="EPS" value={form.eps} onChange={(value) => setField('eps', value)} />
-                  <TextInput label="Fondo de pensiones" value={form.pension_fund} onChange={(value) => setField('pension_fund', value)} />
-                  <TextInput label="Fondo de cesantías" value={form.severance_fund} onChange={(value) => setField('severance_fund', value)} />
-                  <TextInput label="ARL" value={form.arl} onChange={(value) => setField('arl', value)} />
-                  <TextInput label="Nivel de riesgo ARL" value={form.arl_risk_level} onChange={(value) => setField('arl_risk_level', value)} />
-                  <TextInput label="Caja de compensación" value={form.compensation_fund} onChange={(value) => setField('compensation_fund', value)} />
+                  <ComboWithOtherInput label="EPS" value={form.eps} onChange={(value) => setField('eps', value)} options={EPS_OPTIONS} />
+                  <ComboWithOtherInput label="Fondo de pensiones" value={form.pension_fund} onChange={(value) => setField('pension_fund', value)} options={PENSION_FUND_OPTIONS} />
+                  <ComboWithOtherInput label="Fondo de cesantías" value={form.severance_fund} onChange={(value) => setField('severance_fund', value)} options={SEVERANCE_FUND_OPTIONS} />
+                  <ComboWithOtherInput label="ARL" value={form.arl} onChange={(value) => setField('arl', value)} options={ARL_OPTIONS} />
+                  <SelectInput label="Nivel de riesgo ARL" value={form.arl_risk_level} onChange={(value) => setField('arl_risk_level', value)} options={ARL_RISK_LEVEL_OPTIONS} emptyLabel="Nivel de riesgo" />
+                  <ComboWithOtherInput label="Caja de compensación" value={form.compensation_fund} onChange={(value) => setField('compensation_fund', value)} options={COMPENSATION_FUND_OPTIONS} />
                 </div>
               )}
 
