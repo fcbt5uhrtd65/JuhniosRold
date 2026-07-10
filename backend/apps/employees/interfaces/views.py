@@ -34,6 +34,7 @@ from ..infrastructure.serializers import (
     WorkDaySerializer,
 )
 from ..infrastructure.employee_pdf import render_employees_pdf
+from ..infrastructure.employee_profile_pdf import render_employee_profile_pdf
 from ..infrastructure.branch_pdf import render_branches_pdf
 from ..infrastructure.catalog_pdf import render_departments_pdf, render_positions_pdf
 
@@ -159,7 +160,9 @@ class EmployeeViewSet(SoftDeleteModelViewSet):
     def get_permissions(self):
         if self.action == "me":
             return (IsAuthenticated(),)
-        self.required_component_action = "view" if self.action in {"list", "retrieve", "export_pdf"} else "edit"
+        self.required_component_action = (
+            "view" if self.action in {"list", "retrieve", "export_pdf", "export_profile_pdf"} else "edit"
+        )
         return super().get_permissions()
 
     def perform_create(self, serializer):
@@ -202,6 +205,18 @@ class EmployeeViewSet(SoftDeleteModelViewSet):
             pdf_buffer,
             as_attachment=True,
             filename="empleados-juhnios-rold.pdf",
+            content_type="application/pdf",
+        )
+
+    @action(detail=True, methods=("get",), url_path="export-profile-pdf")
+    def export_profile_pdf(self, request, pk=None):
+        employee = self.get_object()
+        pdf_buffer = render_employee_profile_pdf(employee)
+        safe_code = (employee.employee_code or str(employee.id)).replace(" ", "-")
+        return FileResponse(
+            pdf_buffer,
+            as_attachment=True,
+            filename=f"perfil-{safe_code}.pdf",
             content_type="application/pdf",
         )
 

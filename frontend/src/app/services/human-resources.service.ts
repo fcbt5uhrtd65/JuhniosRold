@@ -652,6 +652,10 @@ export async function updateEmployeeDocument(id: string, payload: Partial<Employ
   throw new Error(res.message);
 }
 
+export async function deleteEmployeeDocument(id: string): Promise<void> {
+  await api.delete(`${DOCUMENTS_PATH}${id}/`);
+}
+
 export async function getMyEmployeeDocuments(): Promise<EmployeeDocument[]> {
   const res = await api.get<EmployeeDocument[]>(`${DOCUMENTS_PATH}me/`);
   return res.data ?? [];

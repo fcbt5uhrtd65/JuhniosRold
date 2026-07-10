@@ -55,6 +55,7 @@ import {
   createBranch,
   deleteBranch,
   exportEmployeesPdf,
+  exportEmployeeProfilePdf,
   exportBranchesPdf,
   getBranches,
   getDepartments,
@@ -83,6 +84,8 @@ import type { UserRole } from '../../services/auth.service';
 import {
   approveVacationRequest,
   createEmployeeDocument,
+  updateEmployeeDocument,
+  deleteEmployeeDocument,
   getEmployeeDocuments,
   getHRNotifications,
   getRequestsDashboard,
@@ -190,7 +193,7 @@ interface EmployeeFormState {
 }
 
 interface DocumentFormState {
-  document_type: EmployeeDocumentType;
+  document_type: EmployeeDocumentType | '';
   name: string;
   file: File | null;
   issued_at: string;
@@ -280,8 +283,8 @@ const EMPTY_EMPLOYEE_FORM: EmployeeFormState = {
 };
 
 const EMPTY_DOCUMENT_FORM: DocumentFormState = {
-  document_type: 'ID_COPY',
-  name: 'Cédula de Ciudadanía',
+  document_type: '',
+  name: '',
   file: null,
   issued_at: '',
   expires_at: '',
@@ -794,6 +797,7 @@ export function AdminHR() {
   const [exportingEmployeesPdf, setExportingEmployeesPdf] = useState(false);
   const [exportingBranchesPdf, setExportingBranchesPdf] = useState(false);
   const [deletingEmployeeId, setDeletingEmployeeId] = useState<string | null>(null);
+  const [exportingProfileId, setExportingProfileId] = useState<string | null>(null);
   const [deletingBranchId, setDeletingBranchId] = useState<string | null>(null);
   const [vacationActionId, setVacationActionId] = useState<string | null>(null);
   const [showEmployeeModal, setShowEmployeeModal] = useState(false);
@@ -836,6 +840,8 @@ export function AdminHR() {
   const [requestsDashboard, setRequestsDashboard] = useState<RequestsDashboard | null>(null);
   const [employeeForm, setEmployeeForm] = useState<EmployeeFormState>(EMPTY_EMPLOYEE_FORM);
   const [documentForm, setDocumentForm] = useState<DocumentFormState>(EMPTY_DOCUMENT_FORM);
+  const [editingDocumentId, setEditingDocumentId] = useState<string | null>(null);
+  const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
   const [branchForm, setBranchForm] = useState<BranchFormState>(EMPTY_BRANCH_FORM);
   const [employeeLocation, setEmployeeLocation] = useState<LocationValue>(EMPTY_LOCATION);
   const [branchLocation, setBranchLocation] = useState<LocationValue>(EMPTY_LOCATION);
@@ -1200,6 +1206,7 @@ export function AdminHR() {
     setEmployeeForm(EMPTY_EMPLOYEE_FORM);
     setEmployeeLocation(EMPTY_LOCATION);
     setDocumentForm(EMPTY_DOCUMENT_FORM);
+    setEditingDocumentId(null);
   };
 
   const resetBranchModal = () => {
@@ -1211,27 +1218,76 @@ export function AdminHR() {
     setBranchSuggestions([]);
   };
 
-  const handleDocumentUpload = async (employeeId: string) => {
-    if (!documentForm.document_type) return;
-    setSavingDocument(true);
+  const resetDocumentForm = () => {
+    setDocumentForm(EMPTY_DOCUMENT_FORM);
+    setEditingDocumentId(null);
+  };
+
+  const handleEditDocument = (document: EmployeeDocument) => {
+    setEditingDocumentId(document.id);
+    setDocumentForm({
+      document_type: document.document_type,
+      name: document.name,
+      file: null,
+      issued_at: document.issued_at ?? '',
+      expires_at: document.expires_at ?? '',
+      status: document.status,
+      observations: document.observations ?? '',
+    });
+  };
+
+  const handleDeleteDocument = async (employeeId: string, document: EmployeeDocument) => {
+    if (!window.confirm(`¿Eliminar el documento "${document.name}"?`)) return;
+    setDeletingDocumentId(document.id);
     try {
-      await createEmployeeDocument({
-        employee: employeeId,
-        document_type: documentForm.document_type,
-        name: documentForm.name || optionLabel(DOCUMENT_TYPE_OPTIONS, documentForm.document_type),
-        file: documentForm.file,
-        issued_at: cleanNullable(documentForm.issued_at),
-        expires_at: cleanNullable(documentForm.expires_at),
-        status: documentForm.status,
-        observations: documentForm.observations,
-      });
-      toast.success('Documento registrado');
-      setDocumentForm(EMPTY_DOCUMENT_FORM);
+      await deleteEmployeeDocument(document.id);
+      toast.info('Documento eliminado');
+      if (editingDocumentId === document.id) resetDocumentForm();
       await loadEmployeeExtras(employeeId);
       await loadData();
     } catch (error) {
       console.error(error);
-      toast.error('No se pudo registrar el documento');
+      toast.error('No se pudo eliminar el documento');
+    } finally {
+      setDeletingDocumentId(null);
+    }
+  };
+
+  const handleDocumentUpload = async (employeeId: string) => {
+    if (!documentForm.document_type) return;
+    setSavingDocument(true);
+    try {
+      const name = documentForm.name || optionLabel(DOCUMENT_TYPE_OPTIONS, documentForm.document_type);
+      if (editingDocumentId) {
+        await updateEmployeeDocument(editingDocumentId, {
+          document_type: documentForm.document_type,
+          name,
+          file: documentForm.file,
+          issued_at: cleanNullable(documentForm.issued_at),
+          expires_at: cleanNullable(documentForm.expires_at),
+          status: documentForm.status,
+          observations: documentForm.observations,
+        });
+        toast.success('Documento actualizado');
+      } else {
+        await createEmployeeDocument({
+          employee: employeeId,
+          document_type: documentForm.document_type,
+          name,
+          file: documentForm.file,
+          issued_at: cleanNullable(documentForm.issued_at),
+          expires_at: cleanNullable(documentForm.expires_at),
+          status: documentForm.status,
+          observations: documentForm.observations,
+        });
+        toast.success('Documento registrado');
+      }
+      resetDocumentForm();
+      await loadEmployeeExtras(employeeId);
+      await loadData();
+    } catch (error) {
+      console.error(error);
+      toast.error(editingDocumentId ? 'No se pudo actualizar el documento' : 'No se pudo registrar el documento');
     } finally {
       setSavingDocument(false);
     }
@@ -1295,6 +1351,19 @@ export function AdminHR() {
       toast.error(error instanceof Error ? error.message : 'No se pudo exportar el PDF de empleados');
     } finally {
       setExportingEmployeesPdf(false);
+    }
+  };
+
+  const handleEmployeeProfilePdfExport = async (employee: Employee) => {
+    setExportingProfileId(employee.id);
+    try {
+      await exportEmployeeProfilePdf(employee.id, employee.employee_code);
+      toast.success('PDF de perfil generado');
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo exportar el PDF del perfil');
+    } finally {
+      setExportingProfileId(null);
     }
   };
 
@@ -1681,8 +1750,8 @@ export function AdminHR() {
             options={DOCUMENT_TYPE_OPTIONS}
             emptyLabel="Documento"
           />
-          <TextInput label="Nombre" value={documentForm.name} onChange={(value) => setDocumentForm((current) => ({ ...current, name: value }))} />
-          <TextInput label="Fecha de expedición" type="date" value={documentForm.issued_at} onChange={(value) => setDocumentForm((current) => ({ ...current, issued_at: value }))} />
+          <TextInput label="Nombre" value={documentForm.name} onChange={(value) => setDocumentForm((current) => ({ ...current, name: value }))} placeholder={documentForm.document_type ? optionLabel(DOCUMENT_TYPE_OPTIONS, documentForm.document_type) : 'Nombre del documento'} />
+          <TextInput label={documentForm.document_type === 'ID_COPY' ? 'Fecha de expedición' : 'Fecha del documento'} type="date" value={documentForm.issued_at} onChange={(value) => setDocumentForm((current) => ({ ...current, issued_at: value }))} />
           <TextInput label="Fecha de vencimiento" type="date" value={documentForm.expires_at} onChange={(value) => setDocumentForm((current) => ({ ...current, expires_at: value }))} />
           <SelectInput label="Estado" value={documentForm.status} onChange={(value) => setDocumentForm((current) => ({ ...current, status: value as EmployeeDocumentStatus }))} options={[
             { value: 'PENDING', label: 'Pendiente' },
@@ -1697,15 +1766,30 @@ export function AdminHR() {
           </label>
         </div>
         <TextareaInput label="Observaciones" value={documentForm.observations} onChange={(value) => setDocumentForm((current) => ({ ...current, observations: value }))} />
+        {!documentForm.document_type && (
+          <p className="text-xs text-amber-600">Selecciona primero el tipo de documento; no todos los adjuntos son una cédula.</p>
+        )}
         {editingEmployee && (
-          <button
-            type="button"
-            onClick={() => void handleDocumentUpload(editingEmployee.id)}
-            disabled={savingDocument}
-            className="px-4 py-2.5 bg-[#2a4038] text-white text-xs font-semibold rounded-xl hover:bg-[#3d5c4e] transition-colors disabled:opacity-50"
-          >
-            {savingDocument ? 'Subiendo...' : 'Guardar documento'}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void handleDocumentUpload(editingEmployee.id)}
+              disabled={savingDocument || !documentForm.document_type}
+              className="px-4 py-2.5 bg-[#2a4038] text-white text-xs font-semibold rounded-xl hover:bg-[#3d5c4e] transition-colors disabled:opacity-50"
+            >
+              {editingDocumentId ? (savingDocument ? 'Actualizando...' : 'Actualizar documento') : (savingDocument ? 'Subiendo...' : 'Guardar documento')}
+            </button>
+            {editingDocumentId && (
+              <button
+                type="button"
+                onClick={resetDocumentForm}
+                disabled={savingDocument}
+                className="px-4 py-2.5 border border-gray-200 text-gray-600 text-xs font-semibold rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                Cancelar edición
+              </button>
+            )}
+          </div>
         )}
         {!editingEmployee && (
           <p className="text-xs text-gray-400">El documento se adjuntará automáticamente después de crear el empleado.</p>
@@ -1719,6 +1803,7 @@ export function AdminHR() {
             <Th>Estado</Th>
             <Th>Vence</Th>
             <Th>Archivo</Th>
+            <Th>Acciones</Th>
           </tr>
         </thead>
         <tbody>
@@ -1736,6 +1821,27 @@ export function AdminHR() {
                 {document.file ? (
                   <a href={getMediaUrl(document.file)} target="_blank" rel="noreferrer" className="text-[#2a4038] underline underline-offset-4">Ver archivo</a>
                 ) : 'Sin archivo'}
+              </Td>
+              <Td>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => handleEditDocument(document)}
+                    className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-amber-50 hover:text-amber-600 transition-colors"
+                    title="Editar documento"
+                  >
+                    <Edit2 size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => editingEmployee && void handleDeleteDocument(editingEmployee.id, document)}
+                    disabled={deletingDocumentId === document.id}
+                    className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors disabled:opacity-50"
+                    title="Eliminar documento"
+                  >
+                    {deletingDocumentId === document.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                  </button>
+                </div>
               </Td>
             </tr>
           ))}
@@ -2158,6 +2264,14 @@ export function AdminHR() {
                               </button>
                               <button onClick={() => openEditModal(employee)} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-amber-50 hover:text-amber-600 transition-colors" title="Editar empleado">
                                 <Edit2 size={13} />
+                              </button>
+                              <button
+                                onClick={() => void handleEmployeeProfilePdfExport(employee)}
+                                disabled={exportingProfileId === employee.id}
+                                className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-emerald-50 hover:text-emerald-600 transition-colors disabled:opacity-50"
+                                title="Descargar perfil en PDF"
+                              >
+                                {exportingProfileId === employee.id ? <Loader2 size={13} className="animate-spin" /> : <FileDown size={13} />}
                               </button>
                               <button onClick={() => handleDeleteEmployee(employee)} disabled={deletingEmployeeId === employee.id} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors disabled:opacity-50" title="Eliminar empleado">
                                 <Trash2 size={13} />
