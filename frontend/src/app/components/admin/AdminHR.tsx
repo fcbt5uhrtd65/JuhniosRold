@@ -839,6 +839,7 @@ export function AdminHR() {
   const [positionHistory, setPositionHistory] = useState<EmployeePositionHistory[]>([]);
   const [requestsDashboard, setRequestsDashboard] = useState<RequestsDashboard | null>(null);
   const [employeeForm, setEmployeeForm] = useState<EmployeeFormState>(EMPTY_EMPLOYEE_FORM);
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null);
   const [documentForm, setDocumentForm] = useState<DocumentFormState>(EMPTY_DOCUMENT_FORM);
   const [editingDocumentId, setEditingDocumentId] = useState<string | null>(null);
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
@@ -983,6 +984,16 @@ export function AdminHR() {
   useEffect(() => {
     setBranchPage(1);
   }, [branchPageSize]);
+
+  useEffect(() => {
+    if (!employeeForm.photo) {
+      setPhotoPreviewUrl(null);
+      return;
+    }
+    const objectUrl = URL.createObjectURL(employeeForm.photo);
+    setPhotoPreviewUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [employeeForm.photo]);
 
   const filteredVacationRequests = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
@@ -1563,7 +1574,20 @@ export function AdminHR() {
         ]} />
         <label className="block">
           <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Foto del empleado</span>
-          <input type="file" accept="image/*" onChange={(event) => setFormField('photo', event.target.files?.[0] ?? null)} className={inputCls} />
+          <div className="flex items-center gap-3">
+            {(photoPreviewUrl || editingEmployee?.photo) ? (
+              <img
+                src={photoPreviewUrl || getMediaUrl(editingEmployee!.photo)}
+                alt="Vista previa de la foto"
+                className="w-14 h-14 rounded-xl object-cover border border-gray-200 flex-shrink-0"
+              />
+            ) : (
+              <div className="w-14 h-14 rounded-xl border border-dashed border-gray-300 flex items-center justify-center text-gray-300 flex-shrink-0">
+                <Users size={20} />
+              </div>
+            )}
+            <input type="file" accept="image/*" onChange={(event) => setFormField('photo', event.target.files?.[0] ?? null)} className={inputCls} />
+          </div>
         </label>
       </div>
       <TextareaInput label="Dirección de residencia" value={employeeForm.address} onChange={(value) => setFormField('address', value)} />

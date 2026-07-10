@@ -1,3 +1,5 @@
+import logging
+
 from apps.identity.interfaces.permissions import HasComponentAccess
 from django.http import FileResponse
 from shared.interfaces.viewsets import SoftDeleteModelViewSet
@@ -7,6 +9,8 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+
+logger = logging.getLogger(__name__)
 
 from ..infrastructure.models import (
     Branch,
@@ -211,7 +215,14 @@ class EmployeeViewSet(SoftDeleteModelViewSet):
     @action(detail=True, methods=("get",), url_path="export-profile-pdf")
     def export_profile_pdf(self, request, pk=None):
         employee = self.get_object()
-        pdf_buffer = render_employee_profile_pdf(employee)
+        try:
+            pdf_buffer = render_employee_profile_pdf(employee)
+        except Exception:
+            logger.exception("Fallo al generar el PDF de perfil para el empleado %s", employee.id)
+            return Response(
+                {"detail": "No se pudo generar el PDF del perfil. Revisa los datos del empleado."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
         safe_code = (employee.employee_code or str(employee.id)).replace(" ", "-")
         return FileResponse(
             pdf_buffer,

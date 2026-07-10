@@ -101,9 +101,30 @@ def _draw_logo(c, x, y, size=42):
         return 0
     try:
         c.drawImage(ImageReader(LOGO_PATH), x, y - size, width=size, height=size, preserveAspectRatio=True, mask="auto")
-    except (OSError, ValueError):
+    except Exception:
         return 0
     return size
+
+
+def _draw_photo(c, x, y, size, employee):
+    """Dibuja la foto de perfil del empleado si tiene una cargada. Devuelve True si logro dibujarla."""
+    photo_field = getattr(employee, "photo", None)
+    if not photo_field:
+        return False
+    try:
+        if not photo_field.storage.exists(photo_field.name):
+            return False
+        with photo_field.open("rb") as photo_file:
+            image_reader = ImageReader(io.BytesIO(photo_file.read()))
+        c.saveState()
+        path = c.beginPath()
+        path.roundRect(x, y - size, size, size, 6)
+        c.clipPath(path, stroke=0, fill=0)
+        c.drawImage(image_reader, x, y - size, width=size, height=size, preserveAspectRatio=True, mask="auto")
+        c.restoreState()
+        return True
+    except Exception:
+        return False
 
 
 def _name(employee):
@@ -144,14 +165,31 @@ def _draw_header(c, x0, x1, y, employee):
 
 
 def _draw_summary_card(c, x0, y, w, employee):
-    h = 54
+    h = 68
+    photo_size = 48
     _round_rect(c, x0, y - h, w, h, fill_color=CARD, stroke_color=LINE, radius=8)
+
+    photo_x = x0 + 12
+    photo_y = y - 10
+    has_photo = _draw_photo(c, photo_x, photo_y, photo_size, employee)
+    if not has_photo:
+        c.setFillColor(WHITE)
+        c.setStrokeColor(LINE)
+        c.roundRect(photo_x, photo_y - photo_size, photo_size, photo_size, 6, stroke=1, fill=1)
+        initials = "".join(part[0] for part in (_safe(employee.first_name, ""), _safe(employee.last_name, "")) if part)[:2].upper() or "-"
+        _text(c, photo_x + photo_size / 2, photo_y - photo_size / 2 - 4, initials, size=15, bold=True, align="center", color=MUTED)
+
     department = employee.department.name if employee.department_id else "-"
     position = employee.position.name if employee.position_id else "-"
-    _field(c, x0 + 14, y - 17, "Empleado", _name(employee), 150)
-    _field(c, x0 + 172, y - 17, "Codigo", employee.employee_code or "-", 100)
-    _field(c, x0 + 280, y - 17, "Cargo", position, 140)
-    _field(c, x0 + 428, y - 17, "Area", department, 110)
+
+    fields_x = photo_x + photo_size + 16
+    fields_w = x0 + w - fields_x - 14
+    col_w = (fields_w - 24) / 3
+
+    _field(c, fields_x, y - 17, "Empleado", _name(employee), fields_w)
+    _field(c, fields_x, y - 44, "Codigo", employee.employee_code or "-", col_w)
+    _field(c, fields_x + col_w + 12, y - 44, "Cargo", position, col_w)
+    _field(c, fields_x + 2 * (col_w + 12), y - 44, "Area", department, col_w)
     return y - h
 
 
