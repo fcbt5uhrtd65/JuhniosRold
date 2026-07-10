@@ -240,9 +240,9 @@ def _draw_documents_card(c, x, y, w, documents):
             c.setFillColor(SUBTLE)
             c.rect(x + 6, current_y - row_h + 6, w - 12, row_h, stroke=0, fill=1)
         cursor = x + 14
-        _text(c, cursor, current_y - 5, _fit(document.name, name_w - 6, size=7.6), size=7.6, bold=True)
+        _text(c, cursor, current_y - 5, _fit(document.name, name_w - 6, font_size=7.6), size=7.6, bold=True)
         cursor += name_w
-        _text(c, cursor, current_y - 5, _fit(document.get_document_type_display(), type_w - 6, size=7.2), size=7.2, color=MUTED)
+        _text(c, cursor, current_y - 5, _fit(document.get_document_type_display(), type_w - 6, font_size=7.2), size=7.2, color=MUTED)
         cursor += type_w
         _text(c, cursor, current_y - 5, _date(document.expires_at), size=7.2, color=MUTED)
         cursor += date_w
