@@ -116,15 +116,23 @@ def _draw_photo(c, x, y, size, employee):
             return False
         with photo_field.open("rb") as photo_file:
             image_reader = ImageReader(io.BytesIO(photo_file.read()))
+    except Exception:
+        return False
+
+    state_saved = False
+    try:
         c.saveState()
+        state_saved = True
         path = c.beginPath()
-        path.roundRect(x, y - size, size, size, 6)
+        path.rect(x, y - size, size, size)
         c.clipPath(path, stroke=0, fill=0)
         c.drawImage(image_reader, x, y - size, width=size, height=size, preserveAspectRatio=True, mask="auto")
-        c.restoreState()
         return True
     except Exception:
         return False
+    finally:
+        if state_saved:
+            c.restoreState()
 
 
 def _name(employee):
