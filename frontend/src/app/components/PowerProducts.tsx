@@ -646,7 +646,7 @@ function StarProductsCarousel({ products, onView, onAddToCart }: {
 
   return (
     <div className="grid lg:grid-cols-2 gap-10 lg:gap-16 items-center">
-      {/* Carrusel 3D de imágenes */}
+      {/* Carrusel de imágenes: planas, sin efecto 3D */}
       <div
         className="relative flex items-center justify-center select-none"
         style={{ height: 'min(84vw, 420px)', touchAction: 'pan-y' }}
@@ -662,7 +662,7 @@ function StarProductsCarousel({ products, onView, onAddToCart }: {
           <ChevronLeft className="w-4 h-4" strokeWidth={2} />
         </button>
 
-        <div className="relative w-full h-full flex items-center justify-center" style={{ perspective: 1000 }}>
+        <div className="relative w-full h-full flex items-center justify-center">
           {products.map((product, index) => {
             const offset = circularOffset(index, active, total);
             const isActive = offset === 0;
@@ -674,13 +674,11 @@ function StarProductsCarousel({ products, onView, onAddToCart }: {
             return (
               <motion.div
                 key={product.id}
-                className="absolute rounded-2xl overflow-hidden bg-white border border-stone-100 shadow-lg"
+                className="absolute rounded-2xl overflow-hidden bg-white border border-stone-100"
                 style={{ zIndex: 10 - Math.abs(offset) }}
                 animate={{
                   x: `${offset * 130}%`,
-                  scale: isActive ? 1 : 0.82,
-                  opacity: isActive ? 1 : 0.5,
-                  filter: isActive ? 'blur(0px)' : 'blur(1px)',
+                  opacity: isActive ? 1 : 0.85,
                 }}
                 initial={false}
                 transition={{ type: 'spring', stiffness: 260, damping: 28 }}
