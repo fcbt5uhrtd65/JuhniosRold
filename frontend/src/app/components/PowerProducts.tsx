@@ -1,8 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  ShoppingBag, Heart, Star, X,
-  TrendingUp, Sparkles, Clock, Eye,
+  ShoppingBag, Heart, Star, X, Eye,
   ChevronLeft, ChevronRight, ChevronUp, ChevronDown,
   Minus, Plus, Truck, ShieldCheck, Leaf,
 } from 'lucide-react';
@@ -43,13 +42,6 @@ interface Product {
   ingredients?: string[];
   stock?: number;
 }
-
-const BADGE_CONFIG = {
-  top:   { label: 'Más vendido',       icon: TrendingUp, bg: 'bg-amber-500 text-white border-amber-500' },
-  nuevo: { label: 'Nuevo',             icon: Sparkles,   bg: 'bg-emerald-600 text-white border-emerald-600' },
-  pocas: { label: 'Últimas unidades',  icon: Clock,      bg: 'bg-rose-600 text-white border-rose-600' },
-  oferta: { label: 'Oferta',           icon: TrendingUp, bg: 'bg-red-600 text-white border-red-600' },
-};
 
 function formatPrice(value: number | null): string {
   return new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 }).format(value ?? 0);
@@ -176,6 +168,46 @@ function mapCatalogProduct(product: CatalogProduct): Product {
     benefits: pickVariantList(product, ['benefits', 'beneficios', 'beneficio']),
     ingredients: pickVariantList(product, ['ingredients', 'ingredientes', 'ingrediente']),
   };
+}
+
+/**
+ * Descripciones creativas por presentación de la Loción Térmica de Cannabis,
+ * usadas en el carrusel "Productos estrella". Se emparejan por tamaño (ml)
+ * detectado en el nombre real del producto que trae el catálogo.
+ */
+const STAR_PRODUCT_TAGLINES: Record<string, { tag: string; description: string }> = {
+  '60': {
+    tag: 'De bolsillo',
+    description: 'Tu dosis de calor y cuidado para el día a día. Cabe en cualquier bolso y protege del calor de la plancha o el secador en segundos.',
+  },
+  '150': {
+    tag: 'El clásico',
+    description: 'El tamaño ideal para el hogar. Termoprotección diaria que sella la fibra capilar y prepara tu cabello para cualquier herramienta de calor.',
+  },
+  '375': {
+    tag: 'Para toda la familia',
+    description: 'Rinde más, cuida más. Pensada para uso frecuente en casa o en el salón, con la misma fórmula de cannabis que calma y protege el cuero cabelludo.',
+  },
+};
+
+function starProductTagline(name: string): { tag: string; description: string } {
+  const match = name.match(/(\d+)\s*ML/i);
+  const size = match?.[1];
+  return (size && STAR_PRODUCT_TAGLINES[size]) || {
+    tag: 'Producto estrella',
+    description: 'Fórmula con extracto de cannabis que calma, protege y prepara tu cabello para el calor del día a día.',
+  };
+}
+
+/**
+ * Distancia circular más corta entre dos índices (mismo patrón que VideoRodillo),
+ * para que el carrusel "envuelva" sin saltos largos al pasar del último al primero.
+ */
+function circularOffset(index: number, active: number, length: number): number {
+  const raw = index - active;
+  if (raw > length / 2) return raw - length;
+  if (raw < -length / 2) return raw + length;
+  return raw;
 }
 
 function Stars({ rating }: { rating: number }) {
@@ -570,100 +602,176 @@ function ProductPage({
   );
 }
 
-/* ── Card limpia: una sola imagen, hover overlay con ojo + corazón ── */
-function ProductCard({ product, index, isSaved, onToggleSave, onAddToCart, onView }: {
-  product: Product;
-  index: number;
-  isSaved: boolean;
-  onToggleSave: (id: string, name: string) => void;
-  onAddToCart: (p: Product) => void;
+/* ── Carrusel 3D "Productos estrella": rota solo, imagen + descripción al lado ── */
+function StarProductsCarousel({ products, onView, onAddToCart }: {
+  products: Product[];
   onView: (p: Product) => void;
+  onAddToCart: (p: Product) => void;
 }) {
-  const badge = BADGE_CONFIG[product.badge];
+  const [active, setActive] = useState(0);
+  const touchStartX = useRef<number | null>(null);
+  const total = products.length;
+
+  const goTo = useCallback((index: number) => {
+    setActive(((index % total) + total) % total);
+  }, [total]);
+
+  useEffect(() => {
+    if (total <= 1) return;
+    const timer = setInterval(() => {
+      setActive(current => (current + 1) % total);
+    }, 4500);
+    return () => clearInterval(timer);
+  }, [total]);
+
+  useEffect(() => {
+    if (active >= total) setActive(0);
+  }, [active, total]);
+
+  const handleTouchStart = (event: React.TouchEvent) => {
+    touchStartX.current = event.touches[0].clientX;
+  };
+
+  const handleTouchEnd = (event: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const delta = event.changedTouches[0].clientX - touchStartX.current;
+    touchStartX.current = null;
+    if (Math.abs(delta) < 40) return;
+    goTo(active + (delta < 0 ? 1 : -1));
+  };
+
+  if (total === 0) return null;
+  const current = products[active];
+  const { tag, description } = starProductTagline(current.name);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 32 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: '-50px' }}
-      transition={{ duration: 0.6, delay: index * 0.12, ease: [0.16, 1, 0.3, 1] }}
-      onClick={() => onView(product)}
-      role="button"
-      tabIndex={0}
-      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onView(product); } }}
-      className="group flex flex-col bg-white rounded-2xl border border-stone-100 overflow-hidden hover:border-stone-200 hover:shadow-sm transition-all duration-300 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-300"
-    >
-      {/* Imagen única */}
-      <div className="relative aspect-[3/4] overflow-hidden bg-white">
-        <motion.img
-          whileHover={{ scale: 1.05 }}
-          transition={{ duration: 0.5 }}
-          src={product.images[0]}
-          alt={product.name}
-          className="w-full h-full object-contain p-4"
-          draggable={false}
-        />
+    <div className="grid lg:grid-cols-2 gap-10 lg:gap-16 items-center">
+      {/* Carrusel 3D de imágenes */}
+      <div
+        className="relative flex items-center justify-center select-none"
+        style={{ height: 'min(84vw, 420px)', touchAction: 'pan-y' }}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
+        <button
+          onClick={() => goTo(active - 1)}
+          aria-label="Producto anterior"
+          className="hidden sm:flex absolute left-0 z-20 w-10 h-10 rounded-full bg-white shadow-md items-center justify-center hover:scale-105 transition-transform"
+          style={{ color: OLIVE }}
+        >
+          <ChevronLeft className="w-4 h-4" strokeWidth={2} />
+        </button>
 
-        {/* Badge */}
-        <div className="absolute top-3 left-3">
-          <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[8px] font-semibold border ${badge.bg}`}>
-            <badge.icon className="w-2 h-2" strokeWidth={2} />
-            {product.badge === 'oferta' && product.discountPercent ? `-${product.discountPercent}% ${badge.label}` : badge.label}
+        <div className="relative w-full h-full flex items-center justify-center" style={{ perspective: 1000 }}>
+          {products.map((product, index) => {
+            const offset = circularOffset(index, active, total);
+            const isActive = offset === 0;
+            const visible = Math.abs(offset) <= 2;
+            if (!visible) return null;
+
+            const baseSize = isActive ? 'min(58vw, 300px)' : 'min(38vw, 190px)';
+
+            return (
+              <motion.div
+                key={product.id}
+                className="absolute rounded-2xl overflow-hidden bg-white border border-stone-100 shadow-lg"
+                style={{ zIndex: 10 - Math.abs(offset) }}
+                animate={{
+                  x: `${offset * 130}%`,
+                  scale: isActive ? 1 : 0.82,
+                  opacity: isActive ? 1 : 0.5,
+                  filter: isActive ? 'blur(0px)' : 'blur(1px)',
+                }}
+                initial={false}
+                transition={{ type: 'spring', stiffness: 260, damping: 28 }}
+                onClick={() => (isActive ? onView(product) : goTo(index))}
+              >
+                <div
+                  className="relative"
+                  style={{ width: baseSize, height: baseSize, cursor: 'pointer' }}
+                >
+                  <img
+                    src={product.images[0]}
+                    alt={product.name}
+                    className="absolute inset-0 w-full h-full object-contain p-6"
+                    draggable={false}
+                  />
+                </div>
+              </motion.div>
+            );
+          })}
+        </div>
+
+        <button
+          onClick={() => goTo(active + 1)}
+          aria-label="Siguiente producto"
+          className="hidden sm:flex absolute right-0 z-20 w-10 h-10 rounded-full bg-white shadow-md items-center justify-center hover:scale-105 transition-transform"
+          style={{ color: OLIVE }}
+        >
+          <ChevronRight className="w-4 h-4" strokeWidth={2} />
+        </button>
+      </div>
+
+      {/* Descripción del producto activo */}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={current.id}
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -12 }}
+          transition={{ duration: 0.3 }}
+        >
+          <span
+            className="inline-block text-[9px] tracking-[0.28em] uppercase font-semibold px-3 py-1 rounded-full mb-4"
+            style={{ backgroundColor: `${OLIVE}12`, color: OLIVE }}
+          >
+            {tag}
           </span>
-        </div>
-
-        <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/0 p-2 opacity-0 pointer-events-none transition-all duration-300 group-hover:bg-black/15 group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:bg-black/15 group-focus-within:opacity-100 group-focus-within:pointer-events-auto">
-          <motion.button
-            whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-            onClick={e => { e.stopPropagation(); onView(product); }}
-            className="p-2 md:p-2.5 bg-white rounded-full text-stone-700 shadow-md"
-            aria-label="Ver producto"
-          >
-            <Eye className="w-3.5 h-3.5" strokeWidth={1.5} />
-          </motion.button>
-          <motion.button
-            whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-            onClick={e => { e.stopPropagation(); onToggleSave(product.id, product.name); }}
-            className={`p-2 md:p-2.5 rounded-full shadow-md transition-all ${isSaved ? 'bg-rose-500 text-white' : 'bg-white text-stone-400'}`}
-            aria-label="Guardar"
-          >
-            <Heart className={`w-3.5 h-3.5 ${isSaved ? 'fill-current' : ''}`} strokeWidth={1.5} />
-          </motion.button>
-        </div>
-      </div>
-
-      {/* Info */}
-      <div className="flex flex-col flex-1 p-3.5">
-        <p className="text-[9px] tracking-[0.2em] uppercase text-stone-400 mb-1">{product.category}</p>
-        <h3 className="text-[13px] font-medium text-stone-900 leading-snug mb-1">{product.name}</h3>
-        <p className="text-[10.5px] text-stone-400 leading-snug mb-2.5 line-clamp-1">{product.shortDesc}</p>
-
-        <div className="flex items-center gap-2 mb-2.5">
-          <Stars rating={product.rating} />
-          <span className="text-[9.5px] text-stone-400">{product.rating} ({product.reviews})</span>
-        </div>
-
-        <div className="flex items-center justify-between mt-auto pt-2.5 border-t border-stone-100">
-          <div className="flex items-baseline gap-1.5">
-            {product.originalPriceValue != null && (
-              <span className="text-[11px] text-red-500 line-through">${formatPrice(product.originalPriceValue)}</span>
-            )}
-            <span className={`text-base font-semibold ${product.originalPriceValue != null ? 'text-green-600' : 'text-stone-900'}`}>
-              ${product.price} <span className="text-[9px] text-stone-400 font-normal">COP</span>
-            </span>
+          <h3 className="text-2xl md:text-3xl font-light text-stone-900 leading-snug mb-3" style={{ fontFamily: "'Playfair Display', serif" }}>
+            {current.name}
+          </h3>
+          <p className="text-sm text-stone-500 leading-relaxed mb-6 max-w-md">
+            {description}
+          </p>
+          <p className="text-2xl font-semibold text-stone-900 mb-6">
+            ${current.price} <span className="text-xs text-stone-400 font-normal">COP</span>
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <motion.button
+              whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+              onClick={() => onAddToCart(current)}
+              className="flex items-center gap-2 px-6 py-3 text-white text-[11px] tracking-[0.2em] uppercase font-semibold rounded-full"
+              style={{ backgroundColor: OLIVE }}
+            >
+              <ShoppingBag className="w-3.5 h-3.5" strokeWidth={1.5} />
+              Añadir al carrito
+            </motion.button>
+            <button
+              onClick={() => onView(current)}
+              className="flex items-center gap-2 px-5 py-3 border border-stone-300 text-stone-700 text-[11px] tracking-[0.18em] uppercase font-medium rounded-full hover:border-stone-700 transition-all"
+            >
+              Ver detalle
+            </button>
           </div>
-          <motion.button
-            whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-            onClick={e => { e.stopPropagation(); onAddToCart(product); }}
-            className="flex items-center gap-1 px-3 py-1.5 text-white text-[9.5px] font-semibold rounded-xl opacity-0 pointer-events-none transition-opacity group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto hover:opacity-85"
-            style={{ backgroundColor: OLIVE }}
-          >
-            <ShoppingBag className="w-3 h-3" strokeWidth={1.5} />
-            Añadir
-          </motion.button>
-        </div>
+        </motion.div>
+      </AnimatePresence>
+
+      {/* Indicadores */}
+      <div className="lg:col-span-2 flex items-center justify-center gap-2 -mt-2">
+        {products.map((product, index) => (
+          <button
+            key={product.id}
+            onClick={() => goTo(index)}
+            aria-label={`Ver ${product.name}`}
+            className="h-1.5 rounded-full transition-all"
+            style={{
+              width: index === active ? 20 : 6,
+              backgroundColor: index === active ? OLIVE : '#D8D3C8',
+            }}
+          />
+        ))}
       </div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -693,7 +801,6 @@ export function PowerProducts({ onLoginRequired }: { onLoginRequired?: () => voi
   const toast = useToast();
   const [selectedSize, setSelectedSize] = useState<Record<string, string>>({});
   const [viewProduct, setViewProduct]   = useState<Product | null>(null);
-  const [currentSlide, setCurrentSlide] = useState(0);
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -706,16 +813,20 @@ export function PowerProducts({ onLoginRequired }: { onLoginRequired?: () => voi
         setIsLoading(true);
         setLoadError(null);
 
-        const featured = await getFeaturedProducts(3);
-        let source = featured;
+        // "Productos estrella": las 3 presentaciones de la Loción Térmica de Cannabis.
+        const cannabisLotions = await getProducts({
+          search: 'termica de cannabis',
+          active: true,
+          limit: 10,
+          ordering: 'name',
+        });
 
-        if (source.length < 3) {
-          const catalog = await getProducts({ limit: 6, active: true });
-          const featuredIds = new Set(featured.map(product => product.id));
-          source = [
-            ...featured,
-            ...catalog.data.filter(product => !featuredIds.has(product.id)),
-          ];
+        let source = cannabisLotions.data;
+
+        if (source.length === 0) {
+          // Fallback por si el catálogo aún no tiene esos productos sembrados.
+          const featured = await getFeaturedProducts(3);
+          source = featured;
         }
 
         if (mounted) {
@@ -736,12 +847,6 @@ export function PowerProducts({ onLoginRequired }: { onLoginRequired?: () => voi
       mounted = false;
     };
   }, []);
-
-  useEffect(() => {
-    if (products.length > 0 && currentSlide >= products.length) {
-      setCurrentSlide(0);
-    }
-  }, [currentSlide, products.length]);
 
   const handleAddToCart = async (product: Product) => {
     const size = selectedSize[product.id] || product.sizes?.[0] || '';
@@ -775,8 +880,6 @@ export function PowerProducts({ onLoginRequired }: { onLoginRequired?: () => voi
     toast[was ? 'info' : 'success'](was ? `${name} eliminado de guardados` : `${name} guardado`);
   };
 
-  const total = products.length;
-
   return (
     <section id="productos" className="py-20 bg-white">
       <div className="max-w-[1400px] mx-auto px-6 md:px-10 lg:px-14">
@@ -791,17 +894,17 @@ export function PowerProducts({ onLoginRequired }: { onLoginRequired?: () => voi
         >
           <div>
             <p className="text-[9px] tracking-[0.38em] uppercase text-stone-400 font-medium mb-3">
-              Productos destacados
+              Productos estrella
             </p>
             <h2
               className="text-4xl md:text-5xl font-light text-stone-900 leading-tight"
               style={{ fontFamily: "'Playfair Display', serif" }}
             >
-              Esenciales para tu{' '}
-              <em style={{ fontStyle: 'italic', color: OLIVE }}>rutina capilar</em>
+              Loción Térmica{' '}
+              <em style={{ fontStyle: 'italic', color: OLIVE }}>de Cannabis</em>
             </h2>
             <p className="text-sm text-stone-500 mt-3 max-w-md leading-relaxed">
-              Fórmulas naturales seleccionadas para nutrir, reparar y transformar tu cabello.
+              La misma fórmula, en el tamaño perfecto para cada momento de tu rutina.
             </p>
           </div>
           <motion.a
@@ -813,52 +916,27 @@ export function PowerProducts({ onLoginRequired }: { onLoginRequired?: () => voi
           </motion.a>
         </motion.div>
 
-        {/* Grid */}
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          {isLoading
-            ? Array.from({ length: 3 }, (_, i) => <ProductCardSkeleton key={i} index={i} />)
-            : products.map((p, i) => (
-                <ProductCard
-                  key={p.id}
-                  product={p}
-                  index={i}
-                  isSaved={isProductSaved(p.id)}
-                  onToggleSave={handleToggleSave}
-                  onAddToCart={handleAddToCart}
-                  onView={setViewProduct}
-                />
-              ))}
-        </div>
+        {isLoading ? (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+            {Array.from({ length: 3 }, (_, i) => <ProductCardSkeleton key={i} index={i} />)}
+          </div>
+        ) : (
+          <StarProductsCarousel
+            products={products}
+            onView={setViewProduct}
+            onAddToCart={handleAddToCart}
+          />
+        )}
 
         {!isLoading && loadError && (
-          <div className="mb-8 rounded-xl border border-rose-100 bg-rose-50 px-5 py-4 text-sm text-rose-700">
+          <div className="mt-8 rounded-xl border border-rose-100 bg-rose-50 px-5 py-4 text-sm text-rose-700">
             {loadError}
           </div>
         )}
 
         {!isLoading && !loadError && products.length === 0 && (
-          <div className="mb-8 rounded-xl border border-stone-100 bg-stone-50 px-5 py-4 text-sm text-stone-500">
+          <div className="mt-8 rounded-xl border border-stone-100 bg-stone-50 px-5 py-4 text-sm text-stone-500">
             Aún no hay productos destacados disponibles.
-          </div>
-        )}
-
-        {/* Dots nav */}
-        {total > 1 && (
-          <div className="flex items-center justify-center gap-4">
-            <button onClick={() => setCurrentSlide(s => (s - 1 + total) % total)} className="p-1.5 text-stone-400 hover:text-stone-700 transition-colors">
-              <ChevronLeft className="w-4 h-4" strokeWidth={1.5} />
-            </button>
-            <div className="flex items-center gap-2">
-              {Array.from({ length: total }, (_, i) => (
-                <button key={i} onClick={() => setCurrentSlide(i)}
-                  className={`rounded-full transition-all duration-300 ${currentSlide === i ? 'w-5 h-1.5' : 'w-1.5 h-1.5 bg-stone-200 hover:bg-stone-400'}`}
-                  style={currentSlide === i ? { backgroundColor: OLIVE } : {}}
-                />
-              ))}
-            </div>
-            <button onClick={() => setCurrentSlide(s => (s + 1) % total)} className="p-1.5 text-stone-400 hover:text-stone-700 transition-colors">
-              <ChevronRight className="w-4 h-4" strokeWidth={1.5} />
-            </button>
           </div>
         )}
       </div>
