@@ -54,12 +54,14 @@ export function Pagination({
   if (totalPages === 0) return null;
 
   return (
-    <div className="flex items-center justify-between px-4 py-3 bg-white border border-gray-100 rounded-2xl shadow-sm">
-      <div className="flex items-center gap-4">
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-3 bg-white border border-gray-100 rounded-2xl shadow-sm">
+      <div className="flex items-center justify-between sm:justify-start gap-3 sm:gap-4">
         <p className="text-xs text-gray-500">
-          Mostrando <span className="text-gray-900 font-medium">{startItem}</span> a{' '}
+          <span className="hidden sm:inline">Mostrando </span>
+          <span className="text-gray-900 font-medium">{startItem}</span> a{' '}
           <span className="text-gray-900 font-medium">{endItem}</span> de{' '}
-          <span className="text-gray-900 font-medium">{totalItems}</span> resultados
+          <span className="text-gray-900 font-medium">{totalItems}</span>
+          <span className="hidden sm:inline"> resultados</span>
         </p>
 
         {onItemsPerPageChange && (
@@ -75,22 +77,22 @@ export function Pagination({
         )}
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center justify-center sm:justify-end gap-1.5 sm:gap-2">
         <button
           onClick={() => onPageChange(currentPage - 1)}
           disabled={currentPage === 1}
-          className="p-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="p-2.5 sm:p-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
         >
           <ChevronLeft size={14} />
         </button>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 overflow-x-auto">
           {getPageNumbers().map((page, idx) =>
             typeof page === 'number' ? (
               <button
                 key={idx}
                 onClick={() => onPageChange(page)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex-shrink-0 ${
                   page === currentPage
                     ? 'bg-[#2a4038] text-white'
                     : 'text-gray-600 hover:bg-gray-50'
@@ -99,7 +101,7 @@ export function Pagination({
                 {page}
               </button>
             ) : (
-              <span key={idx} className="px-2 text-xs text-gray-400">
+              <span key={idx} className="px-1.5 sm:px-2 text-xs text-gray-400 flex-shrink-0">
                 {page}
               </span>
             )
@@ -109,7 +111,7 @@ export function Pagination({
         <button
           onClick={() => onPageChange(currentPage + 1)}
           disabled={currentPage === totalPages}
-          className="p-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="p-2.5 sm:p-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
         >
           <ChevronRight size={14} />
         </button>

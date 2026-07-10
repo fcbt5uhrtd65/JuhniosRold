@@ -337,9 +337,9 @@ export function AdminEmployeePortal() {
             <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center flex-shrink-0">
               <UserRound size={16} />
             </div>
-            <div>
-              <p className="font-medium text-gray-900">{getEmployeeName(employeeProfile)}</p>
-              <p className="text-xs text-gray-400">{employeeProfile.employee_code} · {employeeProfile.email}</p>
+            <div className="min-w-0 flex-1">
+              <p className="font-medium text-gray-900 truncate">{getEmployeeName(employeeProfile)}</p>
+              <p className="text-xs text-gray-400 truncate">{employeeProfile.employee_code} · {employeeProfile.email}</p>
             </div>
           </div>
 
@@ -509,7 +509,7 @@ export function AdminEmployeePortal() {
                       event.stopPropagation();
                       setForm({ ...form, support_document: null });
                     }}
-                    className="p-2 rounded-lg hover:bg-white border border-gray-200 transition-colors"
+                    className="p-2.5 rounded-lg hover:bg-white border border-gray-200 transition-colors flex-shrink-0"
                     aria-label="Quitar documento de soporte"
                   >
                     <X size={14} />
@@ -630,8 +630,10 @@ export function AdminEmployeePortal() {
                       <p className="text-sm font-medium text-gray-900">{getRequestTypeLabel(request.request_type)}</p>
                       <p className="text-xs text-gray-400 truncate">{getRequestScheduleLabel(request)}</p>
                     </div>
-                    <Badge label={getStatusLabel(request.status)} color={getStatusColor(request.status)} />
-                    <ChevronRight size={16} className="text-gray-300 flex-shrink-0" />
+                    <div className="flex-shrink-0 whitespace-nowrap">
+                      <Badge label={getStatusLabel(request.status)} color={getStatusColor(request.status)} />
+                    </div>
+                    <ChevronRight size={16} className="text-gray-300 flex-shrink-0 hidden sm:block" />
                   </div>
                   {reasonText !== 'Sin motivo' && (
                     <div className="mt-2 pl-12 text-xs text-gray-500">
@@ -699,7 +701,7 @@ export function AdminEmployeePortal() {
                 })()}
                 <h3 className="font-semibold text-gray-900">{getRequestTypeLabel(selectedRequest.request_type)}</h3>
               </div>
-              <button onClick={() => setSelectedRequest(null)} className="p-2 rounded-lg hover:bg-gray-200"><X size={16} /></button>
+              <button onClick={() => setSelectedRequest(null)} className="p-2.5 rounded-lg hover:bg-gray-200 flex-shrink-0"><X size={16} /></button>
             </div>
             <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
               <Badge label={getStatusLabel(selectedRequest.status)} color={getStatusColor(selectedRequest.status)} />
