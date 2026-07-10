@@ -669,12 +669,12 @@ function StarProductsCarousel({ products, onView, onAddToCart }: {
             const visible = Math.abs(offset) <= 2;
             if (!visible) return null;
 
-            const baseSize = isActive ? 'min(58vw, 300px)' : 'min(38vw, 190px)';
+            const baseSize = isActive ? 'min(66vw, 360px)' : 'min(38vw, 190px)';
 
             return (
               <motion.div
                 key={product.id}
-                className="absolute rounded-2xl overflow-hidden bg-white border border-stone-100"
+                className={`absolute overflow-visible ${isActive ? '' : 'rounded-2xl border border-stone-100 bg-white'}`}
                 style={{ zIndex: 10 - Math.abs(offset) }}
                 animate={{
                   x: `${offset * 130}%`,
@@ -688,11 +688,18 @@ function StarProductsCarousel({ products, onView, onAddToCart }: {
                   className="relative"
                   style={{ width: baseSize, height: baseSize, cursor: 'pointer' }}
                 >
-                  <img
+                  <motion.img
                     src={product.images[0]}
                     alt={product.name}
                     className="absolute inset-0 w-full h-full object-contain p-6"
                     draggable={false}
+                    initial={{ y: 0, rotate: 0, scale: 1 }}
+                    whileHover={isActive ? {
+                      y: [-24, 0, -6, 0],
+                      rotate: [-4, 3, -1.5, 0],
+                      scale: [1.04, 0.97, 1.01, 1],
+                      transition: { duration: 0.7, ease: [0.34, 1.56, 0.64, 1] },
+                    } : undefined}
                   />
                 </div>
               </motion.div>
@@ -720,33 +727,33 @@ function StarProductsCarousel({ products, onView, onAddToCart }: {
           transition={{ duration: 0.3 }}
         >
           <span
-            className="inline-block text-[9px] tracking-[0.28em] uppercase font-semibold px-3 py-1 rounded-full mb-4"
+            className="inline-block text-[10px] tracking-[0.28em] uppercase font-semibold px-3.5 py-1.5 rounded-full mb-5"
             style={{ backgroundColor: `${OLIVE}12`, color: OLIVE }}
           >
             {tag}
           </span>
-          <h3 className="text-2xl md:text-3xl font-light text-stone-900 leading-snug mb-3" style={{ fontFamily: "'Playfair Display', serif" }}>
+          <h3 className="text-3xl md:text-4xl lg:text-5xl font-light text-stone-900 leading-tight mb-4" style={{ fontFamily: "'Playfair Display', serif" }}>
             {current.name}
           </h3>
-          <p className="text-sm text-stone-500 leading-relaxed mb-6 max-w-md">
+          <p className="text-base text-stone-500 leading-relaxed mb-7 max-w-lg">
             {description}
           </p>
-          <p className="text-2xl font-semibold text-stone-900 mb-6">
-            ${current.price} <span className="text-xs text-stone-400 font-normal">COP</span>
+          <p className="text-3xl md:text-4xl font-semibold text-stone-900 mb-7">
+            ${current.price} <span className="text-sm text-stone-400 font-normal">COP</span>
           </p>
           <div className="flex flex-wrap items-center gap-3">
             <motion.button
               whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
               onClick={() => onAddToCart(current)}
-              className="flex items-center gap-2 px-6 py-3 text-white text-[11px] tracking-[0.2em] uppercase font-semibold rounded-full"
+              className="flex items-center gap-2.5 px-7 py-4 text-white text-[12px] tracking-[0.2em] uppercase font-semibold rounded-full"
               style={{ backgroundColor: OLIVE }}
             >
-              <ShoppingBag className="w-3.5 h-3.5" strokeWidth={1.5} />
+              <ShoppingBag className="w-4 h-4" strokeWidth={1.5} />
               Añadir al carrito
             </motion.button>
             <button
               onClick={() => onView(current)}
-              className="flex items-center gap-2 px-5 py-3 border border-stone-300 text-stone-700 text-[11px] tracking-[0.18em] uppercase font-medium rounded-full hover:border-stone-700 transition-all"
+              className="flex items-center gap-2 px-6 py-4 border border-stone-300 text-stone-700 text-[12px] tracking-[0.18em] uppercase font-medium rounded-full hover:border-stone-700 transition-all"
             >
               Ver detalle
             </button>
@@ -811,15 +818,22 @@ export function PowerProducts({ onLoginRequired }: { onLoginRequired?: () => voi
         setIsLoading(true);
         setLoadError(null);
 
-        // "Productos estrella": las 3 presentaciones de la Loción Térmica de Cannabis.
-        const cannabisLotions = await getProducts({
-          search: 'termica de cannabis',
-          active: true,
-          limit: 10,
-          ordering: 'name',
-        });
+        // "Productos estrella": las presentaciones de la Loción Térmica de Cannabis.
+        // Se prueban varios términos porque el nombre exacto puede variar en el catálogo
+        // (p.ej. "Menthus Loción Térmica de Cannabis" vs "Loción Térmica de Cannabis").
+        const searchTerms = ['termica de cannabis', 'locion termica cannabis', 'cannabis'];
+        const found = new Map<string, CatalogProduct>();
+        for (const term of searchTerms) {
+          const result = await getProducts({ search: term, active: true, limit: 20, ordering: 'name' });
+          for (const item of result.data) {
+            if (!found.has(item.id) && /cannabis/i.test(`${item.name} ${item.description ?? ''}`)) {
+              found.set(item.id, item);
+            }
+          }
+          if (found.size >= 3) break;
+        }
 
-        let source = cannabisLotions.data;
+        let source = Array.from(found.values()).sort((a, b) => a.name.localeCompare(b.name));
 
         if (source.length === 0) {
           // Fallback por si el catálogo aún no tiene esos productos sembrados.
