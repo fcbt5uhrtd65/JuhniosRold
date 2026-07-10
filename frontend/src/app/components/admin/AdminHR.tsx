@@ -717,6 +717,112 @@ export function SelectInput({
   );
 }
 
+export function SearchableSelectInput({
+  label,
+  value,
+  onChange,
+  options,
+  required = false,
+  emptyLabel = 'Selecciona una opción',
+  disabled = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<{ value: string; label: string }>;
+  required?: boolean;
+  emptyLabel?: string;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+  const selectedLabel = options.find((option) => option.value === value)?.label ?? '';
+
+  useEffect(() => {
+    function onMouseDown(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+        setQuery('');
+      }
+    }
+    document.addEventListener('mousedown', onMouseDown);
+    return () => document.removeEventListener('mousedown', onMouseDown);
+  }, []);
+
+  const filteredOptions = query
+    ? options.filter((option) => option.label.toLowerCase().includes(query.toLowerCase()))
+    : options;
+
+  return (
+    <div className="block relative" ref={containerRef}>
+      <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">{label}{required && <span className="text-red-500 ml-1">*</span>}</span>
+      <div className="relative">
+        <input
+          type="text"
+          value={open ? query : selectedLabel}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            if (!open) setOpen(true);
+          }}
+          onFocus={() => {
+            setOpen(true);
+            setQuery('');
+          }}
+          placeholder={selectedLabel ? undefined : emptyLabel}
+          className={inputCls}
+          disabled={disabled}
+          required={required && !value}
+        />
+        {value && !disabled && (
+          <button
+            type="button"
+            tabIndex={-1}
+            onMouseDown={(event) => {
+              event.preventDefault();
+              onChange('');
+              setQuery('');
+            }}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500 text-xs"
+          >
+            ✕
+          </button>
+        )}
+      </div>
+      {open && !disabled && (
+        <ul className="absolute z-20 w-full bg-white border border-gray-100 rounded-lg shadow-lg max-h-56 overflow-y-auto mt-1">
+          <li
+            onMouseDown={() => {
+              onChange('');
+              setOpen(false);
+              setQuery('');
+            }}
+            className="px-3 py-2 text-sm text-gray-400 cursor-pointer hover:bg-gray-50"
+          >
+            {emptyLabel}
+          </li>
+          {filteredOptions.length === 0 && (
+            <li className="px-3 py-2 text-sm text-gray-300">Sin resultados</li>
+          )}
+          {filteredOptions.map((option) => (
+            <li
+              key={option.value}
+              onMouseDown={() => {
+                onChange(option.value);
+                setOpen(false);
+                setQuery('');
+              }}
+              className={`px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 ${option.value === value ? 'bg-gray-50 font-medium' : ''}`}
+            >
+              {option.label}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export function TextareaInput({
   label,
   value,
@@ -1634,7 +1740,7 @@ export function AdminHR() {
           { value: 'TERMINATED', label: 'Retirado' },
         ]} emptyLabel="Estado" />
         <SelectInput label="Sede o sucursal" value={employeeForm.branch} onChange={(value) => setFormField('branch', value)} options={branches.map((branch) => ({ value: branch.id, label: `${branch.name} · ${branch.city || 'Sin ciudad'}` }))} />
-        <SelectInput label="Jefe inmediato" value={employeeForm.manager} onChange={(value) => setFormField('manager', value)} options={activeEmployees.filter((employee) => employee.id !== editingEmployee?.id).map((employee) => ({ value: employee.id, label: getEmployeeName(employee) }))} emptyLabel="Sin jefe asignado" />
+        <SearchableSelectInput label="Jefe inmediato" value={employeeForm.manager} onChange={(value) => setFormField('manager', value)} options={activeEmployees.filter((employee) => employee.id !== editingEmployee?.id).map((employee) => ({ value: employee.id, label: getEmployeeName(employee) }))} emptyLabel="Sin jefe asignado" />
         <TextInput label="Centro de costos" value={employeeForm.cost_center} onChange={(value) => setFormField('cost_center', value)} />
         <SelectInput label="Modalidad de trabajo" value={employeeForm.work_modality} onChange={(value) => setFormField('work_modality', value)} options={[
           { value: 'ONSITE', label: 'Presencial' },
