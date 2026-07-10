@@ -75,6 +75,16 @@ def _field(c, x, y, label, value, max_width):
     _text(c, x, y - 12, _fit(value, max_width, font_size=9), size=9, color=TEXT)
 
 
+def _field_full(c, x, y, label, value, max_width, base_size=10.5, min_size=7.5):
+    """Como _field, pero nunca trunca el valor: reduce el tamaño de letra hasta que quepa completo."""
+    _text(c, x, y, label.upper(), size=6.8, bold=True, color=MUTED)
+    text = _safe(value, "")
+    size = base_size
+    while size > min_size and stringWidth(text, "Helvetica-Bold", size) > max_width:
+        size -= 0.5
+    _text(c, x, y - 13, text, size=size, bold=True, color=TEXT)
+
+
 def _pill(c, x, y, text, color, w=None):
     text = _safe(text, "-")
     w = w or max(58, stringWidth(text, "Helvetica-Bold", 7.3) + 16)
@@ -173,31 +183,41 @@ def _draw_header(c, x0, x1, y, employee):
 
 
 def _draw_summary_card(c, x0, y, w, employee):
-    h = 68
-    photo_size = 48
-    _round_rect(c, x0, y - h, w, h, fill_color=CARD, stroke_color=LINE, radius=8)
+    h = 104
+    photo_size = 76
+    _round_rect(c, x0, y - h, w, h, fill_color=WHITE, stroke_color=LINE, radius=8)
 
-    photo_x = x0 + 12
+    photo_x = x0 + 14
     photo_y = y - 10
     has_photo = _draw_photo(c, photo_x, photo_y, photo_size, employee)
     if not has_photo:
-        c.setFillColor(WHITE)
+        c.setFillColor(SUBTLE)
         c.setStrokeColor(LINE)
-        c.roundRect(photo_x, photo_y - photo_size, photo_size, photo_size, 6, stroke=1, fill=1)
+        c.roundRect(photo_x, photo_y - photo_size, photo_size, photo_size, 8, stroke=1, fill=1)
         initials = "".join(part[0] for part in (_safe(employee.first_name, ""), _safe(employee.last_name, "")) if part)[:2].upper() or "-"
-        _text(c, photo_x + photo_size / 2, photo_y - photo_size / 2 - 4, initials, size=15, bold=True, align="center", color=MUTED)
+        _text(c, photo_x + photo_size / 2, photo_y - photo_size / 2 - 6, initials, size=22, bold=True, align="center", color=MUTED)
 
     department = employee.department.name if employee.department_id else "-"
     position = employee.position.name if employee.position_id else "-"
 
-    fields_x = photo_x + photo_size + 16
-    fields_w = x0 + w - fields_x - 14
-    col_w = (fields_w - 24) / 3
+    fields_x = photo_x + photo_size + 20
+    fields_w = x0 + w - fields_x - 16
 
-    _field(c, fields_x, y - 17, "Empleado", _name(employee), fields_w)
-    _field(c, fields_x, y - 44, "Codigo", employee.employee_code or "-", col_w)
-    _field(c, fields_x + col_w + 12, y - 44, "Cargo", position, col_w)
-    _field(c, fields_x + 2 * (col_w + 12), y - 44, "Area", department, col_w)
+    _text(c, fields_x, y - 20, _fit(_name(employee), fields_w, "Helvetica-Bold", 14), size=14, bold=True)
+    _text(c, fields_x, y - 34, _fit(position, fields_w, font_size=9.5), size=9.5, color=MUTED)
+
+    row_y = y - 56
+    col_w = (fields_w - 24) / 3
+    _field(c, fields_x, row_y, "Codigo", employee.employee_code or "-", col_w)
+    _field(c, fields_x + col_w + 12, row_y, "Area", department, col_w)
+    _field(c, fields_x + 2 * (col_w + 12), row_y, "Sede", employee.branch.name if employee.branch_id else "-", col_w)
+
+    row_y -= 27
+    document_type_label = employee.get_document_type_display() if employee.document_type else "-"
+    document_number = _safe(employee.document_number, "Sin numero")
+    _field(c, fields_x, row_y, "Tipo de documento", document_type_label, (fields_w - 12) * 0.35)
+    _field_full(c, fields_x + (fields_w - 12) * 0.35 + 12, row_y, "Numero de documento", document_number, (fields_w - 12) * 0.65)
+
     return y - h
 
 
@@ -272,7 +292,8 @@ def render_employee_profile_pdf(employee):
     y -= 14
 
     personal_fields = [
-        ("Documento", " ".join(part for part in (employee.get_document_type_display() if employee.document_type else "", _safe(employee.document_number, "")) if part) or "-"),
+        ("Tipo de documento", employee.get_document_type_display() if employee.document_type else "-"),
+        ("Numero de documento", _safe(employee.document_number, "-")),
         ("Fecha de expedicion", _date(employee.document_issue_date)),
         ("Lugar de expedicion", _safe(employee.document_issue_place)),
         ("Fecha de nacimiento", _date(employee.date_of_birth)),
