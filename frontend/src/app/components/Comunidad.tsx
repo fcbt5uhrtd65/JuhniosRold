@@ -75,7 +75,7 @@ function MarqueeRow({ posts, direction = 1, speed = 35 }: { posts: Post[]; direc
         {duplicated.map((post, index) => (
           <div
             key={`${post.id}-${index}`}
-            className="relative w-64 h-64 flex-shrink-0 group overflow-hidden bg-secondary"
+            className="relative w-64 h-64 flex-shrink-0 group overflow-hidden bg-white"
           >
             <img
               src={post.image}
@@ -150,7 +150,7 @@ export function Comunidad() {
   ];
 
   return (
-    <section className="py-24 bg-background overflow-hidden">
+    <section className="py-24 bg-white overflow-hidden">
       {/* Header */}
       <div className="max-w-[1400px] mx-auto px-5 sm:px-8 md:px-12 mb-16">
         <motion.div
@@ -198,14 +198,14 @@ export function Comunidad() {
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          className="grid grid-cols-3 gap-px bg-border border border-border"
+          className="grid grid-cols-3 gap-px bg-stone-100 border border-stone-100"
         >
           {[
             { value: '10K+', label: 'Clientas felices' },
             { value: '4.9', label: 'Rating promedio' },
             { value: '98%', label: 'Recomendarían' },
           ].map((stat, i) => (
-            <div key={stat.label} className="bg-background px-6 py-8 text-center">
+            <div key={stat.label} className="bg-white px-6 py-8 text-center">
               <div className="text-2xl md:text-3xl mb-2">{stat.value}</div>
               <div className="text-[9px] tracking-[0.3em] uppercase text-muted-foreground">
                 {stat.label}

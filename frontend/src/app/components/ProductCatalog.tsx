@@ -296,7 +296,7 @@ function ProductReviewsSection({
 
       <div className="grid md:grid-cols-2 gap-8">
         {/* Formulario para escribir/editar reseña */}
-        <div className="bg-stone-50 rounded-xl p-5">
+        <div className="bg-white border border-stone-100 rounded-xl p-5">
           <p className="text-[12.5px] font-semibold text-stone-700 mb-3">
             {myReview ? 'Edita tu reseña' : '¿Ya probaste este producto?'}
           </p>
@@ -321,7 +321,7 @@ function ProductReviewsSection({
         </div>
 
         {/* Resumen */}
-        <div className="flex items-center justify-center bg-stone-50 rounded-xl p-5">
+        <div className="flex items-center justify-center bg-white border border-stone-100 rounded-xl p-5">
           {reviews.length > 0 ? (
             <div className="text-center">
               <p className="text-[36px] font-semibold text-stone-900 leading-none mb-1">
@@ -975,7 +975,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
   };
 
   return (
-    <section id="catalogo" className="py-20" style={{ backgroundColor: '#F7F5F1' }}>
+    <section id="catalogo" className="py-20 bg-white">
       <div className="max-w-[1400px] mx-auto px-6 md:px-10 lg:px-14">
 
         {/* ── HEADER editorial ── */}

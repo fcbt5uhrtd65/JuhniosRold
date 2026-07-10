@@ -130,7 +130,7 @@ export function VideoRodillo() {
   }, [active, muted, playing]);
 
   return (
-    <section className="py-16 sm:py-20 overflow-hidden" style={{ backgroundColor: '#FAFAF8' }}>
+    <section className="py-16 sm:py-20 overflow-hidden bg-white">
       <div className="max-w-[1400px] mx-auto px-6 md:px-10 lg:px-14">
         {/* Header */}
         <div className="flex flex-col items-center text-center mb-10 sm:mb-14">

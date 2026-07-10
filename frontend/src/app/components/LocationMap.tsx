@@ -148,7 +148,7 @@ export function LocationMap() {
   const countClients = useCounter(Math.floor(totalClients / 1000), inView, 1800);
 
   return (
-    <section ref={sectionRef} className="py-16 md:py-24 bg-[#F7F5F1] overflow-hidden">
+    <section ref={sectionRef} className="py-16 md:py-24 bg-white overflow-hidden">
       <div className="max-w-[1400px] mx-auto px-6 md:px-10 lg:px-14">
 
         {/* ── Header ── */}
@@ -205,7 +205,7 @@ export function LocationMap() {
           >
             <div
               className="relative w-full rounded-2xl overflow-hidden z-0"
-              style={{ aspectRatio: '16/9', minHeight: 280, background: '#EDEAE4' }}
+              style={{ aspectRatio: '16/9', minHeight: 280, background: '#FFFFFF' }}
             >
               <CoverageMap active={active} onSelect={(city) => setActive(city === active ? null : city)} inView={inView} />
 
@@ -254,8 +254,8 @@ export function LocationMap() {
 
             {/* Envío gratis */}
             <div
-              className="mt-2 rounded-xl p-4 border"
-              style={{ background: `${OLIVE}07`, borderColor: `${OLIVE}18` }}
+              className="mt-2 rounded-xl p-4 border bg-white"
+              style={{ borderColor: `${OLIVE}18` }}
             >
               <div className="flex items-center gap-2 mb-1.5">
                 <Package className="w-3.5 h-3.5" style={{ color: OLIVE }} strokeWidth={2} />

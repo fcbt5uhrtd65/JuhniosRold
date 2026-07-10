@@ -3,7 +3,7 @@ import { motion, AnimatePresence, useInView } from 'motion/react';
 import { ArrowRight } from 'lucide-react';
 
 const OLIVE = '#2D3A1F';
-const CREAM = '#F7F5F1';
+const CREAM = '#FFFFFF';
 
 interface Oil {
   index: string;
@@ -154,7 +154,7 @@ export function OilsSection() {
                   exit={{ opacity: 0 }}
                   transition={{ delay: 0.25 }}
                   className="absolute bottom-5 left-5 rounded-xl border border-white/20 backdrop-blur-md px-4 py-3"
-                  style={{ backgroundColor: 'rgba(247,245,241,0.90)' }}
+                  style={{ backgroundColor: 'rgba(255,255,255,0.90)' }}
                 >
                   <div className="flex items-center gap-1.5 mb-1.5">
                     <span className="text-[8px] tracking-[0.32em] uppercase text-stone-400 font-medium">

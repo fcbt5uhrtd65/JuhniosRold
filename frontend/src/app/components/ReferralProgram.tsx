@@ -199,7 +199,7 @@ export function ReferralProgram() {
             <div className="px-8 py-7">
 
               {/* Código */}
-              <div className="flex items-center justify-between px-5 py-4 rounded-2xl mb-4 border border-stone-100 bg-stone-50">
+              <div className="flex items-center justify-between px-5 py-4 rounded-2xl mb-4 border border-stone-100 bg-white">
                 <span
                   className="text-[22px] md:text-[26px] tracking-[0.35em] font-light text-stone-800"
                   style={{ fontFamily: "'Playfair Display', serif" }}

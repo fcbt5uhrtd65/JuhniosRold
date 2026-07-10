@@ -6,7 +6,7 @@ import { useToast } from '../contexts/ToastContext';
 import { getProducts, type Product, type ProductVariant } from '../services/products.service';
 
 const OLIVE = '#2D3A1F';
-const CREAM = '#F7F5F1';
+const CREAM = '#FFFFFF';
 
 interface Question {
   id: number;
@@ -235,7 +235,7 @@ export function DiagnosticoCapilar() {
   return (
     <>
       {/* ─── BANNER CTA ─────────────────────────────────────── */}
-      <section className="py-16 overflow-hidden" style={{ backgroundColor: '#FAFAF8' }}>
+      <section className="py-16 overflow-hidden bg-white">
         <div className="max-w-[1400px] mx-auto px-6 md:px-10 lg:px-14">
 
           {/* Banner horizontal */}

@@ -66,11 +66,11 @@ function ComparisonCard({ card, index, inView }: { card: Card; index: number; in
       initial={{ opacity: 0, y: 32 }}
       animate={inView ? { opacity: 1, y: 0 } : {}}
       transition={{ delay: index * 0.08, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-      className="overflow-hidden rounded-lg bg-stone-100 shadow-sm border border-stone-200"
+      className="overflow-hidden rounded-lg bg-white shadow-sm border border-stone-200"
     >
       <div
         ref={ref}
-        className="relative aspect-[4/5] select-none bg-stone-200"
+        className="relative aspect-[4/5] select-none bg-white"
         style={{ cursor: 'ew-resize', touchAction: 'none' }}
         onMouseDown={(e) => { setDragging(true); update(e.clientX); }}
         onMouseMove={(e) => { if (dragging) update(e.clientX); }}
@@ -143,7 +143,7 @@ export function BeforeAfter() {
   const inView = useInView(sectionRef, { once: true, margin: '-80px' });
 
   return (
-    <section ref={sectionRef} id="resultados" className="overflow-hidden bg-[#F7F5F1] py-20">
+    <section ref={sectionRef} id="resultados" className="overflow-hidden bg-white py-20">
       <div className="mx-auto max-w-[1400px] px-6 md:px-10 lg:px-14">
         <motion.div
           initial={{ opacity: 0, y: 24 }}

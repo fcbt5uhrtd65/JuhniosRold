@@ -649,7 +649,7 @@ function StarProductsCarousel({ products, onView, onAddToCart }: {
       {/* Carrusel de imágenes: planas, sin efecto 3D */}
       <div
         className="relative flex items-center justify-center select-none"
-        style={{ height: 'min(84vw, 420px)', touchAction: 'pan-y' }}
+        style={{ height: 'min(92vw, 460px)', touchAction: 'pan-y' }}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
@@ -669,12 +669,12 @@ function StarProductsCarousel({ products, onView, onAddToCart }: {
             const visible = Math.abs(offset) <= 2;
             if (!visible) return null;
 
-            const baseSize = isActive ? 'min(66vw, 360px)' : 'min(38vw, 190px)';
+            const baseSize = isActive ? 'min(74vw, 420px)' : 'min(42vw, 220px)';
 
             return (
               <motion.div
                 key={product.id}
-                className={`absolute overflow-visible ${isActive ? '' : 'rounded-2xl border border-stone-100 bg-white'}`}
+                className="absolute overflow-visible"
                 style={{ zIndex: 10 - Math.abs(offset) }}
                 animate={{
                   x: `${offset * 130}%`,
@@ -947,7 +947,7 @@ export function PowerProducts({ onLoginRequired }: { onLoginRequired?: () => voi
         )}
 
         {!isLoading && !loadError && products.length === 0 && (
-          <div className="mt-8 rounded-xl border border-stone-100 bg-stone-50 px-5 py-4 text-sm text-stone-500">
+          <div className="mt-8 rounded-xl border border-stone-100 bg-white px-5 py-4 text-sm text-stone-500">
             Aún no hay productos destacados disponibles.
           </div>
         )}
