@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   BarChart3,
@@ -362,6 +362,14 @@ function formatCurrency(amount: number | string | null | undefined): string {
 
 function getEmployeeName(employee: Employee): string {
   return `${employee.first_name} ${employee.last_name}`.trim() || employee.employee_code || 'Empleado sin nombre';
+}
+
+function normalizeSearchText(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .trim();
 }
 
 function optionLabel<T extends string>(options: Array<{ value: T; label: string }>, value: string): string {
@@ -901,20 +909,21 @@ export function AdminHR() {
   );
 
   const filteredEmployees = useMemo(() => {
-    const query = searchQuery.toLowerCase().trim();
+    const query = normalizeSearchText(searchQuery);
     return employees.filter((employee) => {
       const department = employee.department ? departmentById.get(employee.department) : null;
       const position = employee.position ? positionById.get(employee.position) : null;
       const branch = employee.branch ? branchById.get(employee.branch) : null;
       const matchesSearch =
         !query ||
-        getEmployeeName(employee).toLowerCase().includes(query) ||
-        employee.employee_code.toLowerCase().includes(query) ||
-        (employee.document_number ?? '').toLowerCase().includes(query) ||
-        employee.email.toLowerCase().includes(query) ||
-        department?.name.toLowerCase().includes(query) ||
-        position?.name.toLowerCase().includes(query) ||
-        branch?.name.toLowerCase().includes(query);
+        normalizeSearchText(getEmployeeName(employee)).includes(query) ||
+        normalizeSearchText(employee.employee_code).includes(query) ||
+        normalizeSearchText(employee.document_number ?? '').includes(query) ||
+        normalizeSearchText(employee.email).includes(query) ||
+        normalizeSearchText(employee.phone ?? '').includes(query) ||
+        (department?.name ? normalizeSearchText(department.name).includes(query) : false) ||
+        (position?.name ? normalizeSearchText(position.name).includes(query) : false) ||
+        (branch?.name ? normalizeSearchText(branch.name).includes(query) : false);
       const matchesDepartment = filterDepartment === 'all' || employee.department === filterDepartment;
       const matchesStatus = filterStatus === 'all' || employee.status === filterStatus || employee.profile_status === filterStatus;
       return matchesSearch && matchesDepartment && matchesStatus;
@@ -2210,7 +2219,7 @@ export function AdminHR() {
         </div>
 
         <div className="flex-1 min-w-0 space-y-4 px-4 sm:px-6 md:px-8 lg:px-0 pt-4 lg:pt-0">
-          <SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Buscar por nombre, código, documento, sede..." className="w-full" />
+          <SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Buscar por nombre, apellido, cédula, cargo, área, sede o correo..." className="w-full" />
           <div className="flex flex-col sm:flex-row gap-3">
             {(activeTab === 'employees' || activeTab === 'vacations') && (
               <select value={filterDepartment} onChange={(event) => setFilterDepartment(event.target.value)} className={selectCls}>

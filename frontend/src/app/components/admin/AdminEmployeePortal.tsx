@@ -74,6 +74,15 @@ function formatDate(value: string): string {
   return new Date(value).toLocaleDateString('es-CO');
 }
 
+function getMediaUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return parsed.pathname + parsed.search;
+  } catch {
+    return url;
+  }
+}
+
 function getDayCount(startDate: string, endDate: string): number {
   const start = new Date(startDate);
   const end = new Date(endDate);
@@ -715,14 +724,42 @@ export function AdminEmployeePortal() {
                   <dd className="text-gray-700 text-right whitespace-pre-wrap">{selectedRequest.reason || 'Sin motivo'}</dd>
                 </div>
                 <div className="flex items-start justify-between gap-4">
-                  <dt className="text-xs text-gray-400 flex-shrink-0">Documento</dt>
-                  <dd className="text-gray-900 font-medium text-right">{selectedRequest.support_document ? 'Adjunto' : 'Sin adjuntar'}</dd>
-                </div>
-                <div className="flex items-start justify-between gap-4">
                   <dt className="text-xs text-gray-400 flex-shrink-0">Registrada</dt>
                   <dd className="text-gray-900 font-medium text-right">{formatDate(selectedRequest.created_at)}</dd>
                 </div>
               </dl>
+
+              <div className="pt-2 border-t border-gray-100">
+                <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Documentos adjuntos</p>
+                <div className="space-y-1.5">
+                  {selectedRequest.support_document && (
+                    <a
+                      href={getMediaUrl(selectedRequest.support_document)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-2 text-xs text-[#2a4038] underline underline-offset-2"
+                    >
+                      <Paperclip size={12} className="flex-shrink-0" />
+                      Soporte principal
+                    </a>
+                  )}
+                  {selectedRequest.attachments.map((attachment) => (
+                    <a
+                      key={attachment.id}
+                      href={getMediaUrl(attachment.file)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-2 text-xs text-[#2a4038] underline underline-offset-2"
+                    >
+                      <Paperclip size={12} className="flex-shrink-0" />
+                      {attachment.name}
+                    </a>
+                  ))}
+                  {!selectedRequest.support_document && selectedRequest.attachments.length === 0 && (
+                    <p className="text-xs text-gray-400">Sin documentos adjuntos.</p>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>
