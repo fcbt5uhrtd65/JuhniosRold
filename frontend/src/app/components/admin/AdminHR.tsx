@@ -37,7 +37,7 @@ import {
 
 import { SearchBar } from './SearchBar';
 import { Pagination } from './Pagination';
-import { Badge, type BadgeColor, Card, Table, Th, Td, Modal, EmptyState, LoadingState, inputCls, selectCls, ActionsMenu } from './AdminUI';
+import { Badge, type BadgeColor, Card, Table, Th, Td, Modal, EmptyState, LoadingState, inputCls, selectCls, ActionsMenu, actionsCellCls } from './AdminUI';
 import { ComboWithOtherInput } from './ComboWithOtherInput';
 import { useToast } from '../../contexts/ToastContext';
 import { ApiError } from '../../services/api';
@@ -2282,7 +2282,7 @@ export function AdminHR() {
       </div>
 
       <div className="flex flex-col lg:flex-row gap-0 lg:gap-6 -mx-4 sm:-mx-6 md:-mx-8 lg:mx-0">
-        <div className="w-full lg:w-40 flex-shrink-0 bg-gray-50 lg:bg-transparent border-b lg:border-b-0 lg:border-r border-gray-100 lg:pr-3">
+        <div className="w-full lg:w-48 flex-shrink-0 bg-gray-50 lg:bg-transparent border-b lg:border-b-0 lg:border-r border-gray-100 lg:pr-3">
           <nav className="p-3 lg:p-0 lg:sticky lg:top-4">
             <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-gray-400 px-2.5 mb-1.5 hidden lg:block">Módulos</p>
             <div className="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-visible">
@@ -2306,7 +2306,7 @@ export function AdminHR() {
                     <Icon size={13} className={`flex-shrink-0 ${active ? 'text-white' : 'text-gray-400 group-hover:text-[#2a4038]'}`} />
                     <div className="flex-1 min-w-0">
                       <p className={`text-[11px] font-semibold whitespace-nowrap lg:whitespace-normal ${active ? 'text-white' : 'text-gray-700'}`}>{item.label}</p>
-                      <p className={`text-[9px] leading-tight mt-0.5 hidden lg:block ${active ? 'text-white/70' : 'text-gray-400'}`}>{item.desc}</p>
+                      <p className={`text-[9px] leading-tight mt-0.5 hidden lg:block whitespace-nowrap ${active ? 'text-white/70' : 'text-gray-400'}`}>{item.desc}</p>
                     </div>
                   </button>
                 );
@@ -2387,7 +2387,7 @@ export function AdminHR() {
                               Vencidos: {employee.expired_documents_count}
                             </div>
                           </Td>
-                          <Td>
+                          <Td className={actionsCellCls}>
                             <ActionsMenu
                               items={[
                                 { label: 'Ver empleado', icon: Eye, onClick: () => openEmployeeDetailModal(employee) },
