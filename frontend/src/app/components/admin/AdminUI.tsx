@@ -1,5 +1,5 @@
-import { useRef, type ReactNode } from 'react';
-import { Plus, Search, X, Save, Loader2, Inbox, AlertCircle, Upload } from 'lucide-react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Plus, Search, X, Save, Loader2, Inbox, AlertCircle, Upload, MoreVertical } from 'lucide-react';
 
 /* ═══════════════════════════════════════════════════════
    Librería visual compartida del panel administrativo.
@@ -86,11 +86,109 @@ export function Table({ children, scrollable }: { children: ReactNode; scrollabl
 }
 
 export function Th({ children }: { children: ReactNode }) {
-  return <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-gray-400 bg-gray-50 border-b border-gray-100 whitespace-nowrap">{children}</th>;
+  return (
+    <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-gray-400 bg-gray-50 border-b border-gray-100 whitespace-nowrap">
+      {children}
+    </th>
+  );
 }
 
-export function Td({ children, className }: { children: ReactNode; className?: string }) {
-  return <td className={`px-4 py-3 border-b border-gray-50 text-sm text-gray-700 ${className ?? ''}`}>{children}</td>;
+export function Td({ children, className, onClick }: { children: ReactNode; className?: string; onClick?: (e: React.MouseEvent<HTMLTableCellElement>) => void }) {
+  return (
+    <td onClick={onClick} className={`px-4 py-3 border-b border-gray-50 text-sm text-gray-700 ${className ?? ''}`}>
+      {children}
+    </td>
+  );
+}
+
+export type ActionMenuItem = {
+  label: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  onClick: () => void;
+  disabled?: boolean;
+  danger?: boolean;
+};
+
+function actionButtonColorCls(danger?: boolean) {
+  return danger
+    ? 'text-gray-400 hover:bg-red-50 hover:text-red-500'
+    : 'text-gray-400 hover:bg-gray-50 hover:text-gray-600';
+}
+
+// La celda de Acciones se declara @container (ver `actionsCellCls`, usado en
+// el Td correspondiente). Su ancho lo decide el layout normal de la tabla —
+// crece si sobra espacio en la fila, se angosta si no. La media query de
+// contenedor (@[132px]:flex / @[132px]:hidden en ActionsMenu) reacciona a
+// ese ancho ya resuelto por el navegador, en CSS puro: sin JS, sin ciclos de
+// medición ni parpadeos.
+export const actionsCellCls = '[container-type:inline-size]';
+
+export function ActionsMenu({ items }: { items: ActionMenuItem[] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      {/* Botones directos: visibles solo si el contenedor (celda @container)
+          tiene al menos ACTIONS_EXPAND_MIN_WIDTH de ancho. */}
+      <div className="hidden @[132px]:flex items-center gap-1">
+        {items.map((item, i) => {
+          const Icon = item.icon;
+          return (
+            <button
+              key={i}
+              onClick={item.onClick}
+              disabled={item.disabled}
+              title={item.label}
+              className={`p-1.5 rounded-lg border border-gray-200 transition-colors disabled:opacity-50 ${actionButtonColorCls(item.danger)}`}
+            >
+              <Icon size={13} />
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Menú kebab: visible solo si el contenedor NO tiene espacio suficiente. */}
+      <div className="@[132px]:hidden">
+        <button
+          onClick={() => setOpen(v => !v)}
+          className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50 hover:text-gray-600 transition-colors"
+          title="Acciones"
+        >
+          <MoreVertical size={14} />
+        </button>
+        {open && (
+          <div className="absolute right-0 top-full mt-1 z-30 w-44 bg-white border border-gray-100 rounded-xl shadow-lg py-1">
+            {items.map((item, i) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={i}
+                  onClick={() => { setOpen(false); item.onClick(); }}
+                  disabled={item.disabled}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-left transition-colors disabled:opacity-50 ${
+                    item.danger ? 'text-red-500 hover:bg-red-50' : 'text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  <Icon size={13} />
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export function Drawer({ title, open, onClose, wide, children }: { title: string; open: boolean; onClose: () => void; wide?: boolean; children: ReactNode }) {

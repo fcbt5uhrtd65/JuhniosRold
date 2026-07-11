@@ -37,7 +37,7 @@ import {
 
 import { SearchBar } from './SearchBar';
 import { Pagination } from './Pagination';
-import { Badge, type BadgeColor, Card, Table, Th, Td, Modal, EmptyState, LoadingState, inputCls, selectCls } from './AdminUI';
+import { Badge, type BadgeColor, Card, Table, Th, Td, Modal, EmptyState, LoadingState, inputCls, selectCls, ActionsMenu, actionsCellCls } from './AdminUI';
 import { ComboWithOtherInput } from './ComboWithOtherInput';
 import { useToast } from '../../contexts/ToastContext';
 import { ApiError } from '../../services/api';
@@ -722,6 +722,112 @@ export function SelectInput({
         ))}
       </select>
     </label>
+  );
+}
+
+export function SearchableSelectInput({
+  label,
+  value,
+  onChange,
+  options,
+  required = false,
+  emptyLabel = 'Selecciona una opción',
+  disabled = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<{ value: string; label: string }>;
+  required?: boolean;
+  emptyLabel?: string;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+  const selectedLabel = options.find((option) => option.value === value)?.label ?? '';
+
+  useEffect(() => {
+    function onMouseDown(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+        setQuery('');
+      }
+    }
+    document.addEventListener('mousedown', onMouseDown);
+    return () => document.removeEventListener('mousedown', onMouseDown);
+  }, []);
+
+  const filteredOptions = query
+    ? options.filter((option) => option.label.toLowerCase().includes(query.toLowerCase()))
+    : options;
+
+  return (
+    <div className="block relative" ref={containerRef}>
+      <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">{label}{required && <span className="text-red-500 ml-1">*</span>}</span>
+      <div className="relative">
+        <input
+          type="text"
+          value={open ? query : selectedLabel}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            if (!open) setOpen(true);
+          }}
+          onFocus={() => {
+            setOpen(true);
+            setQuery('');
+          }}
+          placeholder={selectedLabel ? undefined : emptyLabel}
+          className={inputCls}
+          disabled={disabled}
+          required={required && !value}
+        />
+        {value && !disabled && (
+          <button
+            type="button"
+            tabIndex={-1}
+            onMouseDown={(event) => {
+              event.preventDefault();
+              onChange('');
+              setQuery('');
+            }}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500 text-xs"
+          >
+            ✕
+          </button>
+        )}
+      </div>
+      {open && !disabled && (
+        <ul className="absolute z-20 w-full bg-white border border-gray-100 rounded-lg shadow-lg max-h-56 overflow-y-auto mt-1">
+          <li
+            onMouseDown={() => {
+              onChange('');
+              setOpen(false);
+              setQuery('');
+            }}
+            className="px-3 py-2 text-sm text-gray-400 cursor-pointer hover:bg-gray-50"
+          >
+            {emptyLabel}
+          </li>
+          {filteredOptions.length === 0 && (
+            <li className="px-3 py-2 text-sm text-gray-300">Sin resultados</li>
+          )}
+          {filteredOptions.map((option) => (
+            <li
+              key={option.value}
+              onMouseDown={() => {
+                onChange(option.value);
+                setOpen(false);
+                setQuery('');
+              }}
+              className={`px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 ${option.value === value ? 'bg-gray-50 font-medium' : ''}`}
+            >
+              {option.label}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -1643,7 +1749,7 @@ export function AdminHR() {
           { value: 'TERMINATED', label: 'Retirado' },
         ]} emptyLabel="Estado" />
         <SelectInput label="Sede o sucursal" value={employeeForm.branch} onChange={(value) => setFormField('branch', value)} options={branches.map((branch) => ({ value: branch.id, label: `${branch.name} · ${branch.city || 'Sin ciudad'}` }))} />
-        <SelectInput label="Jefe inmediato" value={employeeForm.manager} onChange={(value) => setFormField('manager', value)} options={activeEmployees.filter((employee) => employee.id !== editingEmployee?.id).map((employee) => ({ value: employee.id, label: getEmployeeName(employee) }))} emptyLabel="Sin jefe asignado" />
+        <SearchableSelectInput label="Jefe inmediato" value={employeeForm.manager} onChange={(value) => setFormField('manager', value)} options={activeEmployees.filter((employee) => employee.id !== editingEmployee?.id).map((employee) => ({ value: employee.id, label: getEmployeeName(employee) }))} emptyLabel="Sin jefe asignado" />
         <TextInput label="Centro de costos" value={employeeForm.cost_center} onChange={(value) => setFormField('cost_center', value)} />
         <SelectInput label="Modalidad de trabajo" value={employeeForm.work_modality} onChange={(value) => setFormField('work_modality', value)} options={[
           { value: 'ONSITE', label: 'Presencial' },
@@ -2185,9 +2291,9 @@ export function AdminHR() {
       </div>
 
       <div className="flex flex-col lg:flex-row gap-0 lg:gap-6 -mx-4 sm:-mx-6 md:-mx-8 lg:mx-0">
-        <div className="w-full lg:w-56 flex-shrink-0 bg-gray-50 lg:bg-transparent border-b lg:border-b-0 lg:border-r border-gray-100 lg:pr-4">
+        <div className="w-full lg:w-48 flex-shrink-0 bg-gray-50 lg:bg-transparent border-b lg:border-b-0 lg:border-r border-gray-100 lg:pr-3">
           <nav className="p-3 lg:p-0 lg:sticky lg:top-4">
-            <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-gray-400 px-3 mb-2 hidden lg:block">Módulos</p>
+            <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-gray-400 px-2.5 mb-1.5 hidden lg:block">Módulos</p>
             <div className="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-visible">
               {([
                 { id: 'employees', label: 'Empleados', icon: Users, desc: 'Expedientes y documentos' },
@@ -2204,12 +2310,12 @@ export function AdminHR() {
                       setActiveTab(item.id);
                       setFilterStatus('all');
                     }}
-                    className={`flex-shrink-0 lg:w-full flex items-start gap-3 px-3 py-2.5 rounded-xl text-left transition-all group ${active ? 'bg-[#2a4038] text-white shadow-sm' : 'hover:bg-white hover:shadow-sm text-gray-600'}`}
+                    className={`flex-shrink-0 lg:w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-all group ${active ? 'bg-[#2a4038] text-white shadow-sm' : 'hover:bg-white hover:shadow-sm text-gray-600'}`}
                   >
-                    <Icon size={14} className={`flex-shrink-0 mt-0.5 ${active ? 'text-white' : 'text-gray-400 group-hover:text-[#2a4038]'}`} />
+                    <Icon size={13} className={`flex-shrink-0 ${active ? 'text-white' : 'text-gray-400 group-hover:text-[#2a4038]'}`} />
                     <div className="flex-1 min-w-0">
-                      <p className={`text-xs font-semibold whitespace-nowrap lg:whitespace-normal ${active ? 'text-white' : 'text-gray-700'}`}>{item.label}</p>
-                      <p className={`text-[10px] leading-tight mt-0.5 hidden lg:block ${active ? 'text-white/70' : 'text-gray-400'}`}>{item.desc}</p>
+                      <p className={`text-[11px] font-semibold whitespace-nowrap lg:whitespace-normal ${active ? 'text-white' : 'text-gray-700'}`}>{item.label}</p>
+                      <p className={`text-[9px] leading-tight mt-0.5 hidden lg:block whitespace-nowrap ${active ? 'text-white/70' : 'text-gray-400'}`}>{item.desc}</p>
                     </div>
                   </button>
                 );
@@ -2259,7 +2365,20 @@ export function AdminHR() {
                       const position = employee.position ? positionById.get(employee.position) : null;
                       const branch = employee.branch ? branchById.get(employee.branch) : null;
                       return (
-                        <tr key={employee.id} className="hover:bg-gray-50/50">
+                        <tr
+                          key={employee.id}
+                          onClick={() => openEmployeeDetailModal(employee)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              openEmployeeDetailModal(employee);
+                            }
+                          }}
+                          tabIndex={0}
+                          role="button"
+                          aria-label={`Ver detalles de ${getEmployeeName(employee)}`}
+                          className="cursor-pointer transition-colors hover:bg-gray-50 focus:outline-none focus-visible:bg-gray-50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#2a4038]/30"
+                        >
                           <Td>
                             <div className="font-medium text-gray-900">{getEmployeeName(employee)}</div>
                             <div className="text-gray-400 text-[11px] mt-1">{employee.employee_code || 'Código autogenerado'} · {employee.document_number || 'Sin documento'}</div>
@@ -2290,26 +2409,26 @@ export function AdminHR() {
                               Vencidos: {employee.expired_documents_count}
                             </div>
                           </Td>
-                          <Td>
-                            <div className="flex items-center gap-1">
-                              <button onClick={() => openEmployeeDetailModal(employee)} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors" title="Ver empleado">
-                                <Eye size={13} />
-                              </button>
-                              <button onClick={() => openEditModal(employee)} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-amber-50 hover:text-amber-600 transition-colors" title="Editar empleado">
-                                <Edit2 size={13} />
-                              </button>
-                              <button
-                                onClick={() => void handleEmployeeProfilePdfExport(employee)}
-                                disabled={exportingProfileId === employee.id}
-                                className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-emerald-50 hover:text-emerald-600 transition-colors disabled:opacity-50"
-                                title="Descargar perfil en PDF"
-                              >
-                                {exportingProfileId === employee.id ? <Loader2 size={13} className="animate-spin" /> : <FileDown size={13} />}
-                              </button>
-                              <button onClick={() => handleDeleteEmployee(employee)} disabled={deletingEmployeeId === employee.id} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors disabled:opacity-50" title="Eliminar empleado">
-                                <Trash2 size={13} />
-                              </button>
-                            </div>
+                          <Td className={actionsCellCls} onClick={(e) => e.stopPropagation()}>
+                            <ActionsMenu
+                              items={[
+                                { label: 'Ver empleado', icon: Eye, onClick: () => openEmployeeDetailModal(employee) },
+                                { label: 'Editar empleado', icon: Edit2, onClick: () => openEditModal(employee) },
+                                {
+                                  label: exportingProfileId === employee.id ? 'Descargando...' : 'Descargar perfil PDF',
+                                  icon: exportingProfileId === employee.id ? Loader2 : FileDown,
+                                  onClick: () => void handleEmployeeProfilePdfExport(employee),
+                                  disabled: exportingProfileId === employee.id,
+                                },
+                                {
+                                  label: 'Eliminar empleado',
+                                  icon: Trash2,
+                                  onClick: () => handleDeleteEmployee(employee),
+                                  disabled: deletingEmployeeId === employee.id,
+                                  danger: true,
+                                },
+                              ]}
+                            />
                           </Td>
                         </tr>
                       );
