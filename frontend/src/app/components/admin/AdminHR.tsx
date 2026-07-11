@@ -2356,7 +2356,20 @@ export function AdminHR() {
                       const position = employee.position ? positionById.get(employee.position) : null;
                       const branch = employee.branch ? branchById.get(employee.branch) : null;
                       return (
-                        <tr key={employee.id} className="hover:bg-gray-50/50">
+                        <tr
+                          key={employee.id}
+                          onClick={() => openEmployeeDetailModal(employee)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              openEmployeeDetailModal(employee);
+                            }
+                          }}
+                          tabIndex={0}
+                          role="button"
+                          aria-label={`Ver detalles de ${getEmployeeName(employee)}`}
+                          className="cursor-pointer transition-colors hover:bg-gray-50 focus:outline-none focus-visible:bg-gray-50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#2a4038]/30"
+                        >
                           <Td>
                             <div className="font-medium text-gray-900">{getEmployeeName(employee)}</div>
                             <div className="text-gray-400 text-[11px] mt-1">{employee.employee_code || 'Código autogenerado'} · {employee.document_number || 'Sin documento'}</div>
@@ -2387,7 +2400,7 @@ export function AdminHR() {
                               Vencidos: {employee.expired_documents_count}
                             </div>
                           </Td>
-                          <Td className={actionsCellCls}>
+                          <Td className={actionsCellCls} onClick={(e) => e.stopPropagation()}>
                             <ActionsMenu
                               items={[
                                 { label: 'Ver empleado', icon: Eye, onClick: () => openEmployeeDetailModal(employee) },
