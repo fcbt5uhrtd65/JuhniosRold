@@ -37,7 +37,7 @@ import {
 
 import { SearchBar } from './SearchBar';
 import { Pagination } from './Pagination';
-import { Badge, type BadgeColor, Card, Table, Th, Td, Modal, EmptyState, LoadingState, inputCls, selectCls } from './AdminUI';
+import { Badge, type BadgeColor, Card, Table, Th, Td, Modal, EmptyState, LoadingState, inputCls, selectCls, ActionsMenu } from './AdminUI';
 import { ComboWithOtherInput } from './ComboWithOtherInput';
 import { useToast } from '../../contexts/ToastContext';
 import { ApiError } from '../../services/api';
@@ -2282,9 +2282,9 @@ export function AdminHR() {
       </div>
 
       <div className="flex flex-col lg:flex-row gap-0 lg:gap-6 -mx-4 sm:-mx-6 md:-mx-8 lg:mx-0">
-        <div className="w-full lg:w-56 flex-shrink-0 bg-gray-50 lg:bg-transparent border-b lg:border-b-0 lg:border-r border-gray-100 lg:pr-4">
+        <div className="w-full lg:w-40 flex-shrink-0 bg-gray-50 lg:bg-transparent border-b lg:border-b-0 lg:border-r border-gray-100 lg:pr-3">
           <nav className="p-3 lg:p-0 lg:sticky lg:top-4">
-            <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-gray-400 px-3 mb-2 hidden lg:block">Módulos</p>
+            <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-gray-400 px-2.5 mb-1.5 hidden lg:block">Módulos</p>
             <div className="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-visible">
               {([
                 { id: 'employees', label: 'Empleados', icon: Users, desc: 'Expedientes y documentos' },
@@ -2301,12 +2301,12 @@ export function AdminHR() {
                       setActiveTab(item.id);
                       setFilterStatus('all');
                     }}
-                    className={`flex-shrink-0 lg:w-full flex items-start gap-3 px-3 py-2.5 rounded-xl text-left transition-all group ${active ? 'bg-[#2a4038] text-white shadow-sm' : 'hover:bg-white hover:shadow-sm text-gray-600'}`}
+                    className={`flex-shrink-0 lg:w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-all group ${active ? 'bg-[#2a4038] text-white shadow-sm' : 'hover:bg-white hover:shadow-sm text-gray-600'}`}
                   >
-                    <Icon size={14} className={`flex-shrink-0 mt-0.5 ${active ? 'text-white' : 'text-gray-400 group-hover:text-[#2a4038]'}`} />
+                    <Icon size={13} className={`flex-shrink-0 ${active ? 'text-white' : 'text-gray-400 group-hover:text-[#2a4038]'}`} />
                     <div className="flex-1 min-w-0">
-                      <p className={`text-xs font-semibold whitespace-nowrap lg:whitespace-normal ${active ? 'text-white' : 'text-gray-700'}`}>{item.label}</p>
-                      <p className={`text-[10px] leading-tight mt-0.5 hidden lg:block ${active ? 'text-white/70' : 'text-gray-400'}`}>{item.desc}</p>
+                      <p className={`text-[11px] font-semibold whitespace-nowrap lg:whitespace-normal ${active ? 'text-white' : 'text-gray-700'}`}>{item.label}</p>
+                      <p className={`text-[9px] leading-tight mt-0.5 hidden lg:block ${active ? 'text-white/70' : 'text-gray-400'}`}>{item.desc}</p>
                     </div>
                   </button>
                 );
@@ -2388,25 +2388,25 @@ export function AdminHR() {
                             </div>
                           </Td>
                           <Td>
-                            <div className="flex items-center gap-1">
-                              <button onClick={() => openEmployeeDetailModal(employee)} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors" title="Ver empleado">
-                                <Eye size={13} />
-                              </button>
-                              <button onClick={() => openEditModal(employee)} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-amber-50 hover:text-amber-600 transition-colors" title="Editar empleado">
-                                <Edit2 size={13} />
-                              </button>
-                              <button
-                                onClick={() => void handleEmployeeProfilePdfExport(employee)}
-                                disabled={exportingProfileId === employee.id}
-                                className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-emerald-50 hover:text-emerald-600 transition-colors disabled:opacity-50"
-                                title="Descargar perfil en PDF"
-                              >
-                                {exportingProfileId === employee.id ? <Loader2 size={13} className="animate-spin" /> : <FileDown size={13} />}
-                              </button>
-                              <button onClick={() => handleDeleteEmployee(employee)} disabled={deletingEmployeeId === employee.id} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors disabled:opacity-50" title="Eliminar empleado">
-                                <Trash2 size={13} />
-                              </button>
-                            </div>
+                            <ActionsMenu
+                              items={[
+                                { label: 'Ver empleado', icon: Eye, onClick: () => openEmployeeDetailModal(employee) },
+                                { label: 'Editar empleado', icon: Edit2, onClick: () => openEditModal(employee) },
+                                {
+                                  label: exportingProfileId === employee.id ? 'Descargando...' : 'Descargar perfil PDF',
+                                  icon: exportingProfileId === employee.id ? Loader2 : FileDown,
+                                  onClick: () => void handleEmployeeProfilePdfExport(employee),
+                                  disabled: exportingProfileId === employee.id,
+                                },
+                                {
+                                  label: 'Eliminar empleado',
+                                  icon: Trash2,
+                                  onClick: () => handleDeleteEmployee(employee),
+                                  disabled: deletingEmployeeId === employee.id,
+                                  danger: true,
+                                },
+                              ]}
+                            />
                           </Td>
                         </tr>
                       );

@@ -1,5 +1,5 @@
-import { useRef, type ReactNode } from 'react';
-import { Plus, Search, X, Save, Loader2, Inbox, AlertCircle, Upload } from 'lucide-react';
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { Plus, Search, X, Save, Loader2, Inbox, AlertCircle, Upload, MoreVertical } from 'lucide-react';
 
 /* ═══════════════════════════════════════════════════════
    Librería visual compartida del panel administrativo.
@@ -75,22 +75,129 @@ export function Card({ children, className }: { children: ReactNode; className?:
   return <div className={`bg-white border border-gray-100 rounded-2xl shadow-sm ${className ?? ''}`}>{children}</div>;
 }
 
+const TableOverflowContext = createContext(false);
+
 export function Table({ children, scrollable }: { children: ReactNode; scrollable?: boolean }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [overflowing, setOverflowing] = useState(false);
+
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const check = () => setOverflowing(el.scrollWidth > el.clientWidth + 1);
+    check();
+    const observer = new ResizeObserver(check);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
-      <div className={`overflow-x-auto ${scrollable ? 'max-h-[600px] overflow-y-auto' : ''}`}>
-        <table className="w-full text-sm">{children}</table>
+      <div ref={scrollRef} className={`overflow-x-auto ${scrollable ? 'max-h-[600px] overflow-y-auto' : ''}`}>
+        <TableOverflowContext.Provider value={overflowing}>
+          <table className="w-full text-sm">{children}</table>
+        </TableOverflowContext.Provider>
       </div>
     </div>
   );
 }
 
 export function Th({ children }: { children: ReactNode }) {
-  return <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-gray-400 bg-gray-50 border-b border-gray-100 whitespace-nowrap">{children}</th>;
+  return (
+    <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-gray-400 bg-gray-50 border-b border-gray-100 whitespace-nowrap">
+      {children}
+    </th>
+  );
 }
 
 export function Td({ children, className }: { children: ReactNode; className?: string }) {
-  return <td className={`px-4 py-3 border-b border-gray-50 text-sm text-gray-700 ${className ?? ''}`}>{children}</td>;
+  return (
+    <td className={`px-4 py-3 border-b border-gray-50 text-sm text-gray-700 ${className ?? ''}`}>
+      {children}
+    </td>
+  );
+}
+
+export type ActionMenuItem = {
+  label: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  onClick: () => void;
+  disabled?: boolean;
+  danger?: boolean;
+};
+
+function actionButtonColorCls(danger?: boolean) {
+  return danger
+    ? 'text-gray-400 hover:bg-red-50 hover:text-red-500'
+    : 'text-gray-400 hover:bg-gray-50 hover:text-gray-600';
+}
+
+export function ActionsMenu({ items }: { items: ActionMenuItem[] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const collapsed = useContext(TableOverflowContext);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [open]);
+
+  if (!collapsed) {
+    return (
+      <div className="flex items-center gap-1">
+        {items.map((item, i) => {
+          const Icon = item.icon;
+          return (
+            <button
+              key={i}
+              onClick={item.onClick}
+              disabled={item.disabled}
+              title={item.label}
+              className={`p-1.5 rounded-lg border border-gray-200 transition-colors disabled:opacity-50 ${actionButtonColorCls(item.danger)}`}
+            >
+              <Icon size={13} />
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative inline-block" ref={ref}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50 hover:text-gray-600 transition-colors"
+        title="Acciones"
+      >
+        <MoreVertical size={14} />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-30 w-44 bg-white border border-gray-100 rounded-xl shadow-lg py-1">
+          {items.map((item, i) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={i}
+                onClick={() => { setOpen(false); item.onClick(); }}
+                disabled={item.disabled}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-left transition-colors disabled:opacity-50 ${
+                  item.danger ? 'text-red-500 hover:bg-red-50' : 'text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                <Icon size={13} />
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function Drawer({ title, open, onClose, wide, children }: { title: string; open: boolean; onClose: () => void; wide?: boolean; children: ReactNode }) {
