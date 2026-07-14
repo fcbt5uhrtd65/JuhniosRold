@@ -289,10 +289,15 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
     if (!formData.fullName.trim()) errors.fullName = 'Ingresa tu nombre completo.';
     if (!formData.email.trim()) errors.email = 'Ingresa tu correo electrónico.';
     if (!formData.phone.trim()) errors.phone = 'Ingresa tu número de teléfono.';
-    if (!deliveryLocation.address.trim()) errors.address = 'Confirma tu dirección de envío en el mapa.';
-    if (!shippingLocation.countryName.trim()) errors.country = 'Selecciona el país.';
-    if (!shippingLocation.stateName.trim()) errors.state = 'Selecciona el departamento o estado.';
-    if (!shippingLocation.cityName.trim()) errors.city = 'Selecciona la ciudad o municipio.';
+    if (!deliveryLocation.address.trim() || !deliveryLocation.confirmed) {
+      errors.address = 'Confirma tu dirección de envío en el mapa.';
+    }
+    const country = shippingLocation.countryName || deliveryLocation.country;
+    const state = shippingLocation.stateName || deliveryLocation.state;
+    const city = shippingLocation.cityName || deliveryLocation.city;
+    if (!country.trim()) errors.country = 'Selecciona el país.';
+    if (!state.trim()) errors.state = 'Selecciona el departamento o estado.';
+    if (!city.trim()) errors.city = 'Selecciona la ciudad o municipio.';
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
