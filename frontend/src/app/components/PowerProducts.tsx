@@ -84,7 +84,7 @@ function pickVariantList(product: CatalogProduct, keys: string[]): string[] {
 
 function buildShortDescription(description: string): string {
   const clean = description.replace(/\s+/g, ' ').trim();
-  if (!clean) return 'Producto de cuidado capilar disponible en nuestro catálogo.';
+  if (!clean) return 'Producto disponible en nuestro catálogo.';
   return clean.length > 110 ? `${clean.slice(0, 107).trim()}...` : clean;
 }
 
@@ -171,22 +171,22 @@ function mapCatalogProduct(product: CatalogProduct): Product {
 }
 
 /**
- * Descripciones creativas por presentación de la Loción Térmica de Cannabis,
- * usadas en el carrusel "Productos estrella". Se emparejan por tamaño (ml)
- * detectado en el nombre real del producto que trae el catálogo.
+ * Descripciones creativas por presentación de la Loción Térmica de Cannabis
+ * (loción corporal), usadas en el carrusel "Productos estrella". Se emparejan
+ * por tamaño (ml) detectado en el nombre real del producto que trae el catálogo.
  */
 const STAR_PRODUCT_TAGLINES: Record<string, { tag: string; description: string }> = {
   '60': {
     tag: 'De bolsillo',
-    description: 'Tu dosis de calor y cuidado para el día a día. Cabe en cualquier bolso y protege del calor de la plancha o el secador en segundos.',
+    description: 'Tu dosis de calor y relajación para llevar a donde vayas. Cabe en cualquier bolso y refresca tu piel después de un día largo.',
   },
   '150': {
     tag: 'El clásico',
-    description: 'El tamaño ideal para el hogar. Termoprotección diaria que sella la fibra capilar y prepara tu cabello para cualquier herramienta de calor.',
+    description: 'El tamaño ideal para el hogar. Efecto térmico refrescante y relajante para masajear tu cuerpo después de la ducha, cuando lo necesites.',
   },
   '375': {
     tag: 'Para toda la familia',
-    description: 'Rinde más, cuida más. Pensada para uso frecuente en casa o en el salón, con la misma fórmula de cannabis que calma y protege el cuero cabelludo.',
+    description: 'Rinde más, relaja más. Pensada para uso frecuente en casa, con la misma fórmula de cannabis que calma y refresca la piel de todo el cuerpo.',
   },
 };
 
@@ -195,7 +195,7 @@ function starProductTagline(name: string): { tag: string; description: string } 
   const size = match?.[1];
   return (size && STAR_PRODUCT_TAGLINES[size]) || {
     tag: 'Producto estrella',
-    description: 'Fórmula con extracto de cannabis que calma, protege y prepara tu cabello para el calor del día a día.',
+    description: 'Loción corporal con extracto de cannabis que refresca, relaja y calma la piel del cuerpo.',
   };
 }
 
@@ -520,7 +520,7 @@ function ProductPage({
                 {product.ingredients ? product.ingredients.join(', ') : 'Fórmula con ingredientes de origen botánico seleccionados por su eficacia.'}
               </Accordion>
               <Accordion label="Modo de uso">
-                Aplicar sobre el cabello húmedo o seco. Masajear suavemente y dejar actuar según el tipo de tratamiento.
+                Aplicar sobre la zona a tratar, húmeda o seca, y masajear suavemente hasta su completa absorción.
               </Accordion>
               <Accordion label="Envíos y devoluciones">
                 Envío estándar 3–5 días hábiles. Express 24–48 h. Devoluciones gratuitas en los primeros 30 días si el producto no ha sido abierto.

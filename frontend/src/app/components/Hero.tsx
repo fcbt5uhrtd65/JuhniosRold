@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Leaf } from 'lucide-react';
 import { NavigationBar } from './NavigationBar';
-import header1 from '../../assets/por1.png';
-import header2 from '../../assets/por2.png';
+import header1 from '../../assets/por1.jpg';
+import header2 from '../../assets/por2.jpg';
 
 interface HeroProps {
   onLoginClick?: () => void;

@@ -11,7 +11,7 @@ import { DeliveryLocationSection } from './ui/DeliveryLocationSection';
 import { geographyService, type City } from '../services/geography.service';
 import { EMPTY_LOCATION, type LocationValue } from '../services/geography.types';
 import { EMPTY_DELIVERY_LOCATION, type DeliveryLocationValue } from '../services/delivery-location.types';
-import authHeroImg from '../../assets/auth-hero.png';
+import authHeroImg from '../../assets/auth-hero.jpg';
 
 const OLIVE = '#2D3A1F';
 

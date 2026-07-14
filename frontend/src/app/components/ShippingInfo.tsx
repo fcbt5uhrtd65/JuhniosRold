@@ -1,7 +1,7 @@
 import { motion } from 'motion/react';
 import { MapPin } from 'lucide-react';
-import returnsIcon from '../../assets/icon-devoluciones.png';
-import freeShippingImg from '../../assets/envios-gratis.png';
+import returnsIcon from '../../assets/icon-devoluciones.jpg';
+import freeShippingImg from '../../assets/envios-gratis.jpg';
 import wompiLogo from '../../assets/logo-wompi.png';
 
 export function ShippingInfo() {

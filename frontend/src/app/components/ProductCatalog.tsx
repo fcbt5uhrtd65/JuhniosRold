@@ -728,7 +728,7 @@ export function ProductPage({
                 Fórmula con ingredientes de origen botánico seleccionados por su eficacia. Libre de sulfatos, parabenos y siliconas.
               </Accordion>
               <Accordion label="Modo de uso">
-                Aplicar sobre el cabello húmedo o seco. Masajear suavemente y dejar actuar. Enjuagar si es necesario.
+                Aplicar sobre la zona a tratar, húmeda o seca. Masajear suavemente y dejar actuar. Enjuagar si es necesario.
               </Accordion>
               <Accordion label="Envíos y devoluciones">
                 Envío estándar 3–5 días hábiles. Express 24–48 h. Devoluciones gratuitas los primeros 30 días.
