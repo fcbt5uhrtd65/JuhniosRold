@@ -235,36 +235,54 @@ def _draw_header(c, x0, x1, y, employee):
 
 
 def _draw_summary_card(c, x0, y, w, employee):
-    h = 104
-    photo_size = 76
-    _round_rect(c, x0, y - h, w, h, fill_color=WHITE, stroke_color=LINE, radius=8)
+    h = 150
+    photo_size = 118
+    band_w = photo_size + 28
 
-    photo_x = x0 + 14
-    photo_y = y - 10
+    _round_rect(c, x0, y - h, w, h, fill_color=WHITE, stroke_color=LINE, radius=10)
+
+    c.saveState()
+    path = c.beginPath()
+    path.roundRect(x0, y - h, band_w, h, 10)
+    c.clipPath(path, stroke=0, fill=0)
+    c.setFillColor(HEADER_BG)
+    c.rect(x0, y - h, band_w, h, stroke=0, fill=1)
+    c.restoreState()
+
+    photo_x = x0 + (band_w - photo_size) / 2
+    photo_y = y - (h - photo_size) / 2
     has_photo = _draw_photo(c, photo_x, photo_y, photo_size, employee)
     if not has_photo:
-        c.setFillColor(SUBTLE)
+        c.setFillColor(WHITE)
         c.setStrokeColor(LINE)
-        c.roundRect(photo_x, photo_y - photo_size, photo_size, photo_size, 8, stroke=1, fill=1)
+        c.roundRect(photo_x, photo_y - photo_size, photo_size, photo_size, 10, stroke=1, fill=1)
         initials = "".join(part[0] for part in (_safe(employee.first_name, ""), _safe(employee.last_name, "")) if part)[:2].upper() or "-"
-        _text(c, photo_x + photo_size / 2, photo_y - photo_size / 2 - 6, initials, size=22, bold=True, align="center", color=MUTED)
+        _text(c, photo_x + photo_size / 2, photo_y - photo_size / 2 - 9, initials, size=32, bold=True, align="center", color=BRAND)
+    else:
+        c.setStrokeColor(LINE)
+        c.setLineWidth(0.8)
+        c.roundRect(photo_x, photo_y - photo_size, photo_size, photo_size, 10, stroke=1, fill=0)
 
     department = employee.department.name if employee.department_id else "-"
     position = employee.position.name if employee.position_id else "-"
 
-    fields_x = photo_x + photo_size + 20
-    fields_w = x0 + w - fields_x - 16
+    fields_x = x0 + band_w + 22
+    fields_w = x0 + w - fields_x - 18
 
-    _text(c, fields_x, y - 20, _fit(_name(employee), fields_w, "Helvetica-Bold", 14), size=14, bold=True)
-    _text(c, fields_x, y - 34, _fit(position, fields_w, font_size=9.5), size=9.5, color=MUTED)
+    _text(c, fields_x, y - 30, _fit(_name(employee), fields_w, "Helvetica-Bold", 19), size=19, bold=True)
+    _text(c, fields_x, y - 48, _fit(position, fields_w, font_size=11), size=11, color=BRAND)
 
-    row_y = y - 56
+    c.setStrokeColor(LINE)
+    c.setLineWidth(0.6)
+    c.line(fields_x, y - 60, x0 + w - 18, y - 60)
+
+    row_y = y - 80
     col_w = (fields_w - 24) / 3
     _field(c, fields_x, row_y, "Codigo", employee.employee_code or "-", col_w)
     _field(c, fields_x + col_w + 12, row_y, "Area", department, col_w)
     _field(c, fields_x + 2 * (col_w + 12), row_y, "Sede", employee.branch.name if employee.branch_id else "-", col_w)
 
-    row_y -= 27
+    row_y -= 34
     document_type_label = employee.get_document_type_display() if employee.document_type else "-"
     document_number = _safe(employee.document_number, "Sin numero")
     _field(c, fields_x, row_y, "Tipo de documento", document_type_label, (fields_w - 12) * 0.35)
