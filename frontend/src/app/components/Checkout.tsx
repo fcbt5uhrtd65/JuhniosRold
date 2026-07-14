@@ -689,108 +689,103 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
                   <div className="rounded-3xl border border-stone-200 bg-white px-4 py-3 text-xs leading-relaxed text-stone-500">
                     Tus datos se usarán únicamente para gestionar el envío de tu pedido.
                   </div>
+
+                  {error && (
+                    <div className="mx-auto max-w-3xl rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                      {error}
+                    </div>
+                  )}
+                  <div className="mx-auto w-full max-w-3xl space-y-4 border-t border-stone-200 pt-5">
+                    <div className="rounded-3xl border border-stone-200 bg-[#F8F7F4] p-4">
+                      <h3 className="mb-3 text-sm font-semibold text-stone-950">Resumen del pedido</h3>
+
+                      <div className="mb-3 rounded-2xl border border-stone-200 bg-white px-3 py-2.5">
+                        <p className="text-[10px] uppercase tracking-wide text-stone-400 mb-1">Dirección de entrega</p>
+                        <p className="text-sm text-stone-800">
+                          {deliveryLocation.address
+                            ? [deliveryLocation.address, quoteCity, quoteDepartment].filter(Boolean).join(', ')
+                            : 'Ingresa tu dirección para calcular el envío'}
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-stone-500">Subtotal</span>
+                          <span className="font-medium text-stone-900">{formatMoney(subtotal)}</span>
+                        </div>
+                        {isWholesaleCustomer && (
+                          <>
+                            {wholesaleDiscount.isActive ? (
+                              <div className="flex justify-between text-sm text-emerald-700">
+                                <span>Descuento mayorista aplicado</span>
+                                <span className="font-semibold">-{formatMoney(wholesaleDiscount.discount)}</span>
+                              </div>
+                            ) : (
+                              <div className="rounded-2xl bg-amber-50 px-3 py-2 text-[11px] text-amber-700">
+                                Te faltan {formatMoney(wholesaleDiscount.remaining)} para activar tu descuento mayorista.
+                              </div>
+                            )}
+                            <div className="flex justify-between text-sm">
+                              <span className="text-stone-500">Subtotal con descuento</span>
+                              <span className="font-medium text-stone-900">{formatMoney(total)}</span>
+                            </div>
+                          </>
+                        )}
+                        <div className="flex justify-between text-sm">
+                          <span className="text-stone-500">Envío</span>
+                          {!deliveryLocation.address ? (
+                            <span className="text-stone-400">Ingresa tu dirección</span>
+                          ) : isQuotingShipping ? (
+                            <span className="flex items-center gap-1.5 text-stone-400">
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" /> Calculando…
+                            </span>
+                          ) : shippingQuote?.status === 'pendiente_manual' ? (
+                            <span className="font-medium text-amber-600">Pendiente por confirmar</span>
+                          ) : shippingQuote?.status === 'sin_cobertura' ? (
+                            <span className="font-medium text-red-500">Sin cobertura</span>
+                          ) : shippingCost === 0 && shippingQuote ? (
+                            <span className="font-semibold text-emerald-700">Gratis</span>
+                          ) : (
+                            <span className="font-medium text-stone-900">{formatMoney(shippingCost)}</span>
+                          )}
+                        </div>
+                        {shippingQuote && !isQuotingShipping && (
+                          <p className="text-[11px] text-stone-400">{shippingQuote.message}</p>
+                        )}
+                        {shippingQuoteError && !isQuotingShipping && (
+                          <p className="text-[11px] text-red-500">{shippingQuoteError}</p>
+                        )}
+                        <div className="flex justify-between border-t border-stone-200 pt-3 text-lg font-bold text-stone-950">
+                          <span>Total</span>
+                          <span>{formatMoney(finalTotal)}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="mb-3 flex flex-wrap items-center justify-center gap-1.5 text-center text-[11px] text-stone-500">
+                        <ShieldCheck className="h-3.5 w-3.5 text-[#2D3A1F]" strokeWidth={1.8} />
+                        <span>Compra segura</span>
+                        <span>|</span>
+                        <Lock className="h-3.5 w-3.5 text-[#2D3A1F]" strokeWidth={1.8} />
+                        <span>Pago protegido por Wompi</span>
+                        <span>|</span>
+                        <MessageCircle className="h-3.5 w-3.5 text-[#2D3A1F]" strokeWidth={1.8} />
+                        <span>Soporte por WhatsApp</span>
+                      </div>
+                      <button
+                        onClick={handlePayment}
+                        disabled={isSubmitting || isQuotingShipping || items.length === 0}
+                        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#2D3A1F] px-6 py-4 text-sm font-bold uppercase tracking-[0.12em] text-white shadow-lg shadow-[#2D3A1F]/15 transition-opacity hover:opacity-95 disabled:opacity-50"
+                      >
+                        <Lock className="h-4 w-4" />
+                        {isSubmitting ? 'Preparando pago...' : isQuotingShipping ? 'Calculando envío...' : 'Continuar al pago'}
+                      </button>
+                    </div>
+                  </div>
                 </>
               )}
-
             </div>
-
-            {!mockPayment && !wompiOrderId && (
-              <div className="max-h-[45vh] overflow-y-auto border-t border-stone-200 bg-white px-4 py-4 sm:rounded-b-[32px] md:px-8">
-                {error && (
-                  <div className="mx-auto mb-3 max-w-3xl rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                    {error}
-                  </div>
-                )}
-                <div className="mx-auto grid max-w-3xl gap-4 md:grid-cols-[1fr_auto] md:items-end">
-                  <div className="rounded-3xl border border-stone-200 bg-[#F8F7F4] p-4">
-                    <h3 className="mb-3 text-sm font-semibold text-stone-950">Resumen del pedido</h3>
-
-                    <div className="mb-3 rounded-2xl border border-stone-200 bg-white px-3 py-2.5">
-                      <p className="text-[10px] uppercase tracking-wide text-stone-400 mb-1">Dirección de entrega</p>
-                      <p className="text-sm text-stone-800">
-                        {deliveryLocation.address
-                          ? [deliveryLocation.address, quoteCity, quoteDepartment].filter(Boolean).join(', ')
-                          : 'Ingresa tu dirección para calcular el envío'}
-                      </p>
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-stone-500">Subtotal</span>
-                        <span className="font-medium text-stone-900">{formatMoney(subtotal)}</span>
-                      </div>
-                      {isWholesaleCustomer && (
-                        <>
-                          {wholesaleDiscount.isActive ? (
-                            <div className="flex justify-between text-sm text-emerald-700">
-                              <span>Descuento mayorista aplicado</span>
-                              <span className="font-semibold">-{formatMoney(wholesaleDiscount.discount)}</span>
-                            </div>
-                          ) : (
-                            <div className="rounded-2xl bg-amber-50 px-3 py-2 text-[11px] text-amber-700">
-                              Te faltan {formatMoney(wholesaleDiscount.remaining)} para activar tu descuento mayorista.
-                            </div>
-                          )}
-                          <div className="flex justify-between text-sm">
-                            <span className="text-stone-500">Subtotal con descuento</span>
-                            <span className="font-medium text-stone-900">{formatMoney(total)}</span>
-                          </div>
-                        </>
-                      )}
-                      <div className="flex justify-between text-sm">
-                        <span className="text-stone-500">Envío</span>
-                        {!deliveryLocation.address ? (
-                          <span className="text-stone-400">Ingresa tu dirección</span>
-                        ) : isQuotingShipping ? (
-                          <span className="flex items-center gap-1.5 text-stone-400">
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" /> Calculando…
-                          </span>
-                        ) : shippingQuote?.status === 'pendiente_manual' ? (
-                          <span className="font-medium text-amber-600">Pendiente por confirmar</span>
-                        ) : shippingQuote?.status === 'sin_cobertura' ? (
-                          <span className="font-medium text-red-500">Sin cobertura</span>
-                        ) : shippingCost === 0 && shippingQuote ? (
-                          <span className="font-semibold text-emerald-700">Gratis</span>
-                        ) : (
-                          <span className="font-medium text-stone-900">{formatMoney(shippingCost)}</span>
-                        )}
-                      </div>
-                      {shippingQuote && !isQuotingShipping && (
-                        <p className="text-[11px] text-stone-400">{shippingQuote.message}</p>
-                      )}
-                      {shippingQuoteError && !isQuotingShipping && (
-                        <p className="text-[11px] text-red-500">{shippingQuoteError}</p>
-                      )}
-                      <div className="flex justify-between border-t border-stone-200 pt-3 text-lg font-bold text-stone-950">
-                        <span>Total</span>
-                        <span>{formatMoney(finalTotal)}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="min-w-[260px]">
-                    <div className="mb-3 flex flex-wrap items-center justify-center gap-1.5 text-center text-[11px] text-stone-500 md:justify-end">
-                      <ShieldCheck className="h-3.5 w-3.5 text-[#2D3A1F]" strokeWidth={1.8} />
-                      <span>Compra segura</span>
-                      <span>|</span>
-                      <Lock className="h-3.5 w-3.5 text-[#2D3A1F]" strokeWidth={1.8} />
-                      <span>Pago protegido por Wompi</span>
-                      <span>|</span>
-                      <MessageCircle className="h-3.5 w-3.5 text-[#2D3A1F]" strokeWidth={1.8} />
-                      <span>Soporte por WhatsApp</span>
-                    </div>
-                    <button
-                      onClick={handlePayment}
-                      disabled={isSubmitting || isQuotingShipping || items.length === 0}
-                      className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#2D3A1F] px-6 py-4 text-sm font-bold uppercase tracking-[0.12em] text-white shadow-lg shadow-[#2D3A1F]/15 transition-opacity hover:opacity-95 disabled:opacity-50"
-                    >
-                      <Lock className="h-4 w-4" />
-                      {isSubmitting ? 'Preparando pago...' : isQuotingShipping ? 'Calculando envío...' : 'Continuar al pago'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
           </motion.div>
         </>
       )}
