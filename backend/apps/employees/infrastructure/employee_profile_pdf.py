@@ -59,6 +59,56 @@ def _fit(text, max_width, font_name="Helvetica", font_size=9):
     return text + suffix if text else suffix
 
 
+def _break_word(word, max_width, font_name, font_size):
+    """Parte una palabra sin espacios (ej. un correo largo) en trozos que quepan en max_width."""
+    chunks = []
+    current = ""
+    for ch in word:
+        candidate = current + ch
+        if stringWidth(candidate, font_name, font_size) <= max_width or not current:
+            current = candidate
+        else:
+            chunks.append(current)
+            current = ch
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def _wrap_lines(text, max_width, font_name="Helvetica", font_size=9, max_lines=2):
+    """Parte el texto en hasta max_lines lineas que quepan en max_width, truncando la ultima con '...' si sobra."""
+    text = _safe(text, "")
+    if stringWidth(text, font_name, font_size) <= max_width:
+        return [text]
+
+    pending = []
+    for word in text.split(" "):
+        if stringWidth(word, font_name, font_size) <= max_width:
+            pending.append(word)
+        else:
+            pending.extend(_break_word(word, max_width, font_name, font_size))
+
+    lines = []
+    current = ""
+    for token in pending:
+        candidate = f"{current} {token}".strip()
+        if stringWidth(candidate, font_name, font_size) <= max_width:
+            current = candidate
+        else:
+            lines.append(current)
+            current = token
+        if len(lines) == max_lines:
+            break
+    if current and len(lines) < max_lines:
+        lines.append(current)
+
+    consumed = " ".join(lines)
+    if consumed.replace(" ", "") != text.replace(" ", ""):
+        lines[-1] = _fit(lines[-1], max_width, font_name, font_size)
+
+    return lines[:max_lines]
+
+
 def _round_rect(c, x, y, w, h, fill_color=WHITE, stroke_color=LINE, radius=8):
     c.setFillColor(fill_color)
     c.setStrokeColor(stroke_color)
@@ -72,7 +122,9 @@ def _section_label(c, x, y, title):
 
 def _field(c, x, y, label, value, max_width):
     _text(c, x, y, label.upper(), size=6.8, bold=True, color=MUTED)
-    _text(c, x, y - 12, _fit(value, max_width, font_size=9), size=9, color=TEXT)
+    lines = _wrap_lines(value, max_width, font_size=9, max_lines=2)
+    for i, line in enumerate(lines):
+        _text(c, x, y - 12 - i * 10, line, size=9, color=TEXT)
 
 
 def _field_full(c, x, y, label, value, max_width, base_size=10.5, min_size=7.5):
@@ -222,16 +274,18 @@ def _draw_summary_card(c, x0, y, w, employee):
 
 
 def _draw_info_card(c, x, y, w, title, fields):
-    row_h = 31
+    row_h = 40
+    gap = 8
+    padding = 12
     rows = (len(fields) + 1) // 2
     h = 28 + rows * row_h
     _round_rect(c, x, y - h, w, h, fill_color=WHITE, stroke_color=LINE, radius=8)
     _section_label(c, x + 14, y - 16, title)
-    col_w = (w - 34) / 2
+    col_w = (w - 2 * padding - gap) / 2
     for idx, (label, value) in enumerate(fields):
         col = idx % 2
         row = idx // 2
-        fx = x + 14 + col * (col_w + 12)
+        fx = x + padding + col * (col_w + gap)
         fy = y - 39 - row * row_h
         _field(c, fx, fy, label, value, col_w)
     return y - h
@@ -282,7 +336,7 @@ def render_employee_profile_pdf(employee):
     c.setTitle(f"Perfil de {_name(employee)}")
 
     page_w, page_h = letter
-    x0, x1 = 40, page_w - 40
+    x0, x1 = 28, page_w - 28
     main_w = x1 - x0
     y = page_h - 36
 
