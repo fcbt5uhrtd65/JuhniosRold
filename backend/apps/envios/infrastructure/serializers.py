@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from rest_framework import serializers
 
@@ -228,18 +228,29 @@ class ShippingZoneSerializer(serializers.ModelSerializer):
         read_only_fields = ("id", "created_at", "updated_at")
 
 
+class RoundedCoordinateField(serializers.DecimalField):
+    """DecimalField que redondea el valor crudo a `decimal_places` antes de validar
+    dígitos totales. El navegador (geolocation/Leaflet) suele enviar coordenadas con
+    más de 6 decimales de precisión; DRF valida la precisión del número tal como
+    llega y solo cuantiza después (ver DecimalField.to_internal_value), por lo que
+    el `rounding=` nativo no evita el rechazo. Redondear antes de delegar sí lo hace,
+    y 6 decimales (~11cm) es más que suficiente precisión para este cálculo.
+    """
+
+    def to_internal_value(self, data):
+        try:
+            value = Decimal(str(data))
+        except Exception:
+            return super().to_internal_value(data)
+        quantized = value.quantize(Decimal("1." + "0" * self.decimal_places), rounding=ROUND_HALF_UP)
+        return super().to_internal_value(quantized)
+
+
 class ShippingQuoteRequestSerializer(serializers.Serializer):
     city = serializers.CharField(required=False, allow_blank=True, default="")
     department = serializers.CharField(required=False, allow_blank=True, default="")
-    # rounding=ROUND_HALF_UP: el navegador (geolocation/Leaflet) suele enviar coordenadas
-    # con más de 6 decimales de precisión; se truncan a 6 (~11cm) en vez de rechazar el
-    # request con un 400, ya que esa precisión ya es más que suficiente para el cálculo.
-    latitude = serializers.DecimalField(
-        max_digits=9, decimal_places=6, required=False, allow_null=True, default=None, rounding="ROUND_HALF_UP"
-    )
-    longitude = serializers.DecimalField(
-        max_digits=9, decimal_places=6, required=False, allow_null=True, default=None, rounding="ROUND_HALF_UP"
-    )
+    latitude = RoundedCoordinateField(max_digits=9, decimal_places=6, required=False, allow_null=True, default=None)
+    longitude = RoundedCoordinateField(max_digits=9, decimal_places=6, required=False, allow_null=True, default=None)
     subtotal = serializers.DecimalField(max_digits=14, decimal_places=2, required=False, default=Decimal("0"), min_value=Decimal("0"))
 
 
