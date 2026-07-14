@@ -231,8 +231,15 @@ class ShippingZoneSerializer(serializers.ModelSerializer):
 class ShippingQuoteRequestSerializer(serializers.Serializer):
     city = serializers.CharField(required=False, allow_blank=True, default="")
     department = serializers.CharField(required=False, allow_blank=True, default="")
-    latitude = serializers.DecimalField(max_digits=9, decimal_places=6, required=False, allow_null=True, default=None)
-    longitude = serializers.DecimalField(max_digits=9, decimal_places=6, required=False, allow_null=True, default=None)
+    # rounding=ROUND_HALF_UP: el navegador (geolocation/Leaflet) suele enviar coordenadas
+    # con más de 6 decimales de precisión; se truncan a 6 (~11cm) en vez de rechazar el
+    # request con un 400, ya que esa precisión ya es más que suficiente para el cálculo.
+    latitude = serializers.DecimalField(
+        max_digits=9, decimal_places=6, required=False, allow_null=True, default=None, rounding="ROUND_HALF_UP"
+    )
+    longitude = serializers.DecimalField(
+        max_digits=9, decimal_places=6, required=False, allow_null=True, default=None, rounding="ROUND_HALF_UP"
+    )
     subtotal = serializers.DecimalField(max_digits=14, decimal_places=2, required=False, default=Decimal("0"), min_value=Decimal("0"))
 
 
