@@ -45,6 +45,7 @@ import { getRoleLabel } from '../../utils/permissions';
 import {
   ARL_OPTIONS,
   ARL_RISK_LEVEL_OPTIONS,
+  BANK_OPTIONS,
   COMPENSATION_FUND_OPTIONS,
   EPS_OPTIONS,
   PENSION_FUND_OPTIONS,
@@ -1776,7 +1777,7 @@ export function AdminHR() {
 
   const renderBankingTab = () => (
     <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      <TextInput label="Banco" value={employeeForm.bank_name} onChange={(value) => setFormField('bank_name', value)} />
+      <ComboWithOtherInput label="Banco" value={employeeForm.bank_name} onChange={(value) => setFormField('bank_name', value)} options={BANK_OPTIONS} />
       <SelectInput label="Tipo de cuenta" value={employeeForm.bank_account_type} onChange={(value) => setFormField('bank_account_type', value)} options={[
         { value: 'SAVINGS', label: 'Ahorros' },
         { value: 'CHECKING', label: 'Corriente' },
