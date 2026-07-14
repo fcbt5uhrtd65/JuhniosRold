@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Plus, Search, X, Save, Loader2, Inbox, AlertCircle, Upload, MoreVertical } from 'lucide-react';
 
 /* ═══════════════════════════════════════════════════════
@@ -125,19 +126,50 @@ export const actionsCellCls = '[container-type:inline-size]';
 
 export function ActionsMenu({ items }: { items: ActionMenuItem[] }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [menuPos, setMenuPos] = useState({ top: 0, right: 0 });
+  const containerRef = useRef<HTMLDivElement>(null);
+  const kebabRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
     const handleClickOutside = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (containerRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      setOpen(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [open]);
 
+  // El menú se abre en un portal fuera de la tabla: la celda vive dentro de un
+  // contenedor con overflow (scroll de la tabla), que recorta cualquier
+  // position:absolute que se salga de sus límites — con una sola fila, el
+  // dropdown quedaba cortado. Posicionamos vía coordenadas de viewport en su
+  // lugar, y las recalculamos si la ventana cambia de tamaño o se scrollea.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const MENU_WIDTH = 176; // w-44
+    const EDGE_MARGIN = 8;
+    const updatePosition = () => {
+      const rect = kebabRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const maxRight = window.innerWidth - MENU_WIDTH - EDGE_MARGIN;
+      const right = Math.min(window.innerWidth - rect.right, maxRight);
+      setMenuPos({ top: rect.bottom + 4, right: Math.max(right, EDGE_MARGIN) });
+    };
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [open]);
+
   return (
-    <div ref={ref} className="relative">
+    <div ref={containerRef} className="relative">
       {/* Botones directos: visibles solo si el contenedor (celda @container)
           tiene al menos ACTIONS_EXPAND_MIN_WIDTH de ancho. */}
       <div className="hidden @[132px]:flex items-center gap-1">
@@ -160,14 +192,19 @@ export function ActionsMenu({ items }: { items: ActionMenuItem[] }) {
       {/* Menú kebab: visible solo si el contenedor NO tiene espacio suficiente. */}
       <div className="@[132px]:hidden">
         <button
+          ref={kebabRef}
           onClick={() => setOpen(v => !v)}
           className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50 hover:text-gray-600 transition-colors"
           title="Acciones"
         >
           <MoreVertical size={14} />
         </button>
-        {open && (
-          <div className="absolute right-0 top-full mt-1 z-30 w-44 bg-white border border-gray-100 rounded-xl shadow-lg py-1">
+        {open && createPortal(
+          <div
+            ref={menuRef}
+            style={{ position: 'fixed', top: menuPos.top, right: menuPos.right }}
+            className="z-50 w-44 bg-white border border-gray-100 rounded-xl shadow-lg py-1"
+          >
             {items.map((item, i) => {
               const Icon = item.icon;
               return (
@@ -184,7 +221,8 @@ export function ActionsMenu({ items }: { items: ActionMenuItem[] }) {
                 </button>
               );
             })}
-          </div>
+          </div>,
+          document.body
         )}
       </div>
     </div>
