@@ -76,7 +76,8 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
   const [wompiOrderId, setWompiOrderId] = useState<string | null>(null);
   const [wompiCheckoutUrl, setWompiCheckoutUrl] = useState<string | null>(null);
   const [wompiPopupBlocked, setWompiPopupBlocked] = useState(false);
-  const { state: wompiState, errorMessage: wompiErrorMessage } = usePaymentStatusPolling(wompiOrderId);
+  const [pollNonce, setPollNonce] = useState(0);
+  const { state: wompiState, errorMessage: wompiErrorMessage } = usePaymentStatusPolling(wompiOrderId, pollNonce);
   const [formData, setFormData] = useState({
     fullName: currentUser?.nombre ?? '',
     email: currentUser?.email ?? '',
@@ -227,6 +228,7 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
       setWompiOrderId(null);
       setWompiCheckoutUrl(null);
       setWompiPopupBlocked(false);
+      setPollNonce(0);
       onClose();
     }
   };
@@ -455,8 +457,15 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
                       <h3 className="text-xl">Aún no hay confirmación</h3>
                       <p className="text-sm text-muted-foreground">
                         {wompiErrorMessage ||
-                          'No detectamos una respuesta a tiempo. Si ya pagaste, revisa el estado en Mis pedidos en unos minutos.'}
+                          'No detectamos una respuesta a tiempo. Si ya completaste el pago en la otra pestaña, dale a "Verificar de nuevo".'}
                       </p>
+                      <button
+                        type="button"
+                        onClick={() => setPollNonce((n) => n + 1)}
+                        className="inline-flex items-center gap-2 px-6 py-3 border border-stone-300 text-xs uppercase tracking-wider hover:bg-stone-50"
+                      >
+                        Verificar de nuevo
+                      </button>
                     </>
                   ) : (
                     <>

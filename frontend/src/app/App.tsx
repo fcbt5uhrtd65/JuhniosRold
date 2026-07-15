@@ -160,6 +160,11 @@ function AppContent() {
     return (
       <PaymentResult
         onReturnToStore={() => {
+          // Esta pantalla vive en la pestaña emergente que abrió Wompi. La pestaña
+          // original ya se actualiza sola (BroadcastChannel en usePaymentStatusPolling),
+          // así que cerramos este popup en vez de navegarlo; si el navegador no deja
+          // cerrarlo (no fue abierto por script), caemos de vuelta al catálogo aquí mismo.
+          window.close();
           window.history.replaceState({}, '', '/#catalogo');
           setCurrentPath('/');
         }}
