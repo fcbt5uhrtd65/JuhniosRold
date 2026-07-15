@@ -207,27 +207,6 @@ const AUDITORIA: AuditoriaLog[] = [
 /* ═══════════════════════════════════════════════════════
    HELPERS
 ═══════════════════════════════════════════════════════ */
-const TODAY = new Date('2025-06-19');
-
-function loteBadge(vencimiento: string): { label: string; color: 'green' | 'yellow' | 'red' | 'gray' } {
-  if (!vencimiento) return { label: 'Sin venc.', color: 'gray' };
-  const exp = new Date(vencimiento);
-  const days = Math.ceil((exp.getTime() - TODAY.getTime()) / 86400000);
-  if (days < 0) return { label: 'Vencido', color: 'red' };
-  if (days <= 30) return { label: `${days}d`, color: 'red' };
-  if (days <= 60) return { label: `${days}d`, color: 'yellow' };
-  return { label: 'Vigente', color: 'green' };
-}
-
-function stockAlert(articuloId: string): 'ok' | 'low' | 'critical' {
-  const art = ARTICULOS.find(a => a.id === articuloId);
-  const stock = STOCKS.filter(s => s.articuloId === articuloId).reduce((a, s) => a + s.cantidad, 0);
-  if (!art) return 'ok';
-  if (stock <= 0) return 'critical';
-  if (stock < art.stockMin) return art.stockMin > 0 && stock < art.stockMin * 0.5 ? 'critical' : 'low';
-  return 'ok';
-}
-
 function useInventoryWorkspace() {
   const toast = useToast();
   const [data, setData] = useState<InventoryWorkspace | null>(null);
@@ -2238,7 +2217,8 @@ function ModuloAuditoria() {
 export function AdminInventarioProduccion() {
   const [modulo, setModulo] = useState<Modulo>('panel');
 
-  const alertCount = ARTICULOS.filter(a => stockAlert(a.id) !== 'ok').length + STOCKS.filter(s => loteBadge(s.vencimiento).color === 'red').length;
+  const { data: alertData } = useInventoryWorkspace();
+  const alertCount = (alertData?.stocks ?? []).filter(s => stockLevel(s) !== 'ok').length;
 
   type NavItem = { id: Modulo; label: string; icon: ComponentType<{ size?: number; className?: string }>; desc: string; badge?: number };
 
