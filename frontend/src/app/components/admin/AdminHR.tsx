@@ -55,7 +55,6 @@ import {
   deleteEmployee,
   createBranch,
   deleteBranch,
-  exportEmployeesPdf,
   exportEmployeeProfilePdf,
   exportBranchesPdf,
   getBranches,
@@ -78,6 +77,8 @@ import {
   type EmployeeProfileStatus,
   type EmployeeSalaryHistory,
   type EmployeeStatus,
+  type ContractType,
+  type EmploymentType,
   type Position,
   type WorkDay,
 } from '../../services/employees.service';
@@ -117,9 +118,71 @@ function toBranchDecimalString(value: number | string): string {
 }
 
 type HRTab = 'employees' | 'branches' | 'catalog' | 'vacations';
+type EmployeeDataQualityFilter =
+  | 'all'
+  | 'missing_age'
+  | 'missing_document'
+  | 'missing_email'
+  | 'missing_phone'
+  | 'missing_department'
+  | 'missing_position'
+  | 'missing_branch'
+  | 'missing_manager'
+  | 'missing_social_security'
+  | 'missing_banking'
+  | 'missing_emergency'
+  | 'incomplete_profile'
+  | 'pending_documents'
+  | 'expired_documents';
 
 const DEFAULT_PAGE_SIZE = 12;
 const PAGE_SIZE_OPTIONS = [12, 24, 48, 96];
+const EMPLOYEE_STATUS_OPTIONS: Array<{ value: EmployeeStatus; label: string }> = [
+  { value: 'ACTIVE', label: 'Activos' },
+  { value: 'INACTIVE', label: 'Inactivos' },
+  { value: 'LEAVE', label: 'En licencia' },
+  { value: 'SUSPENDED', label: 'Suspendidos' },
+  { value: 'TERMINATED', label: 'Retirados' },
+];
+const EMPLOYEE_PROFILE_STATUS_OPTIONS: Array<{ value: EmployeeProfileStatus; label: string }> = [
+  { value: 'DRAFT', label: 'Borrador' },
+  { value: 'REGISTERED', label: 'Registrado' },
+  { value: 'INCOMPLETE', label: 'Incompleto' },
+  { value: 'COMPLETE', label: 'Completo' },
+  { value: 'DOCUMENTED', label: 'Documentado' },
+  { value: 'RETIRED', label: 'Retirado' },
+];
+const EMPLOYMENT_TYPE_OPTIONS: Array<{ value: EmploymentType; label: string }> = [
+  { value: 'EMPLOYEE', label: 'Empleado' },
+  { value: 'SENA_APPRENTICE', label: 'Aprendiz SENA' },
+  { value: 'INTERN', label: 'Practicante' },
+  { value: 'CONTRACTOR', label: 'Contratista' },
+];
+const CONTRACT_TYPE_OPTIONS: Array<{ value: ContractType; label: string }> = [
+  { value: 'INDEFINITE', label: 'Indefinido' },
+  { value: 'FIXED_TERM', label: 'Término fijo' },
+  { value: 'SERVICES', label: 'Prestación de servicios' },
+  { value: 'APPRENTICESHIP', label: 'Aprendizaje' },
+  { value: 'INTERNSHIP', label: 'Práctica' },
+  { value: 'OTHER', label: 'Otro' },
+];
+const EMPLOYEE_DATA_QUALITY_FILTER_OPTIONS: Array<{ value: EmployeeDataQualityFilter; label: string }> = [
+  { value: 'all', label: 'Calidad de datos: todos' },
+  { value: 'missing_age', label: 'Sin edad / fecha de nacimiento' },
+  { value: 'missing_document', label: 'Sin documento' },
+  { value: 'missing_email', label: 'Sin correo' },
+  { value: 'missing_phone', label: 'Sin teléfono' },
+  { value: 'missing_department', label: 'Sin área' },
+  { value: 'missing_position', label: 'Sin cargo' },
+  { value: 'missing_branch', label: 'Sin sede' },
+  { value: 'missing_manager', label: 'Sin jefe inmediato' },
+  { value: 'missing_social_security', label: 'Seguridad social incompleta' },
+  { value: 'missing_banking', label: 'Datos bancarios incompletos' },
+  { value: 'missing_emergency', label: 'Contacto de emergencia incompleto' },
+  { value: 'incomplete_profile', label: 'Perfil incompleto' },
+  { value: 'pending_documents', label: 'Con documentos pendientes' },
+  { value: 'expired_documents', label: 'Con documentos vencidos' },
+];
 type EmployeeModalTab =
   | 'personal'
   | 'labor'
@@ -373,8 +436,171 @@ function normalizeSearchText(value: string): string {
     .trim();
 }
 
+function hasText(value: string | null | undefined): boolean {
+  return Boolean(value?.trim());
+}
+
 function optionLabel<T extends string>(options: Array<{ value: T; label: string }>, value: string): string {
   return options.find((option) => option.value === value)?.label ?? value;
+}
+
+function employmentTypeLabel(value: EmploymentType): string {
+  return optionLabel(EMPLOYMENT_TYPE_OPTIONS, value);
+}
+
+function contractTypeLabel(value: ContractType): string {
+  return optionLabel(CONTRACT_TYPE_OPTIONS, value);
+}
+
+function matchesEmployeeDataQuality(employee: Employee, filter: EmployeeDataQualityFilter): boolean {
+  switch (filter) {
+    case 'missing_age':
+      return employee.age == null || !hasText(employee.date_of_birth);
+    case 'missing_document':
+      return !hasText(employee.document_type) || !hasText(employee.document_number);
+    case 'missing_email':
+      return !hasText(employee.email);
+    case 'missing_phone':
+      return !hasText(employee.phone);
+    case 'missing_department':
+      return !hasText(employee.department);
+    case 'missing_position':
+      return !hasText(employee.position);
+    case 'missing_branch':
+      return !hasText(employee.branch);
+    case 'missing_manager':
+      return !hasText(employee.manager);
+    case 'missing_social_security':
+      return !hasText(employee.eps) || !hasText(employee.pension_fund) || !hasText(employee.severance_fund) || !hasText(employee.arl) || !hasText(employee.compensation_fund);
+    case 'missing_banking':
+      return !hasText(employee.bank_name) || !hasText(employee.bank_account_type) || !hasText(employee.bank_account_number) || !hasText(employee.bank_account_holder);
+    case 'missing_emergency':
+      return !hasText(employee.emergency_contact_name) || !hasText(employee.emergency_contact_relationship) || !hasText(employee.emergency_contact_mobile);
+    case 'incomplete_profile':
+      return employee.profile_completion_percentage < 100 || employee.profile_status === 'DRAFT' || employee.profile_status === 'INCOMPLETE';
+    case 'pending_documents':
+      return employee.pending_documents_count > 0;
+    case 'expired_documents':
+      return employee.expired_documents_count > 0;
+    default:
+      return true;
+  }
+}
+
+function slugifyFilename(value: string): string {
+  return normalizeSearchText(value)
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80) || 'empleados';
+}
+
+async function exportFilteredEmployeesPdf({
+  employees,
+  filters,
+  departmentById,
+  positionById,
+  branchById,
+}: {
+  employees: Employee[];
+  filters: string[];
+  departmentById: Map<string, Department>;
+  positionById: Map<string, Position>;
+  branchById: Map<string, Branch>;
+}): Promise<void> {
+  const { default: jsPDF } = await import('jspdf');
+  const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const pageWidth = 297;
+  const pageHeight = 210;
+  const margin = 12;
+  const headerHeight = 18;
+  const rowHeight = 8;
+  const columns = [
+    { label: 'Empleado', x: 12, width: 40 },
+    { label: 'Documento', x: 54, width: 30 },
+    { label: 'Area / Cargo', x: 86, width: 52 },
+    { label: 'Sede', x: 140, width: 34 },
+    { label: 'Estado', x: 176, width: 26 },
+    { label: 'Perfil', x: 204, width: 28 },
+    { label: 'Edad', x: 234, width: 14 },
+    { label: 'Docs', x: 250, width: 34 },
+  ];
+
+  const drawHeader = (pageNumber: number) => {
+    pdf.setFillColor(42, 64, 56);
+    pdf.rect(0, 0, pageWidth, headerHeight, 'F');
+    pdf.setTextColor(255, 255, 255);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(12);
+    pdf.text('Juhnios Rold - Empleados', margin, 7);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(8);
+    pdf.text(`Registros exportados: ${employees.length}`, margin, 13);
+    pdf.text(new Date().toLocaleString('es-CO'), pageWidth - margin, 7, { align: 'right' });
+    pdf.text(`Pagina ${pageNumber}`, pageWidth - margin, 13, { align: 'right' });
+  };
+
+  const drawTableHead = (y: number) => {
+    pdf.setFillColor(245, 247, 246);
+    pdf.rect(margin, y - 4, pageWidth - margin * 2, 7, 'F');
+    pdf.setTextColor(55, 65, 81);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(7);
+    columns.forEach((column) => pdf.text(column.label, column.x, y));
+  };
+
+  let page = 1;
+  let y = headerHeight + 10;
+  drawHeader(page);
+
+  pdf.setTextColor(75, 85, 99);
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(8);
+  pdf.text('Filtros aplicados', margin, y);
+  y += 5;
+  pdf.setFont('helvetica', 'normal');
+  const filterText = filters.length ? filters.join(' | ') : 'Sin filtros: todos los empleados disponibles';
+  const filterLines = pdf.splitTextToSize(filterText, pageWidth - margin * 2);
+  pdf.text(filterLines, margin, y);
+  y += filterLines.length * 4 + 6;
+  drawTableHead(y);
+  y += 6;
+
+  employees.forEach((employee) => {
+    if (y > pageHeight - margin) {
+      pdf.addPage();
+      page += 1;
+      y = headerHeight + 10;
+      drawHeader(page);
+      drawTableHead(y);
+      y += 6;
+    }
+
+    const department = employee.department ? departmentById.get(employee.department)?.name : null;
+    const position = employee.position ? positionById.get(employee.position)?.name : null;
+    const branch = employee.branch ? branchById.get(employee.branch)?.name : null;
+    const row = [
+      getEmployeeName(employee),
+      employee.document_number || 'Sin documento',
+      `${department ?? 'Sin area'} / ${position ?? 'Sin cargo'}`,
+      branch ?? 'Sin sede',
+      statusLabel(employee.status),
+      `${profileStatusLabel(employee.profile_status)} ${employee.profile_completion_percentage}%`,
+      employee.age == null ? 'N/D' : String(employee.age),
+      `Pend: ${employee.pending_documents_count} / Venc: ${employee.expired_documents_count}`,
+    ];
+
+    pdf.setTextColor(31, 41, 55);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(7);
+    row.forEach((value, index) => {
+      const column = columns[index];
+      const lines = pdf.splitTextToSize(value, column.width);
+      pdf.text(lines.slice(0, 2), column.x, y);
+    });
+    y += rowHeight;
+  });
+
+  pdf.save(`${slugifyFilename(`empleados-${filters.join('-') || 'todos'}`)}.pdf`);
 }
 
 function statusLabel(status: EmployeeStatus): string {
@@ -897,6 +1123,12 @@ export function AdminHR() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterDepartment, setFilterDepartment] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filterPosition, setFilterPosition] = useState<string>('all');
+  const [filterBranch, setFilterBranch] = useState<string>('all');
+  const [filterProfileStatus, setFilterProfileStatus] = useState<string>('all');
+  const [filterEmploymentType, setFilterEmploymentType] = useState<string>('all');
+  const [filterContractType, setFilterContractType] = useState<string>('all');
+  const [filterDataQuality, setFilterDataQuality] = useState<EmployeeDataQualityFilter>('all');
   const [branchSort, setBranchSort] = useState<'name' | 'code' | 'city' | 'status'>('name');
   const [branchPage, setBranchPage] = useState(1);
   const [branchPageSize, setBranchPageSize] = useState(DEFAULT_PAGE_SIZE);
@@ -1014,6 +1246,10 @@ export function AdminHR() {
     () => positions.filter((position) => position.department === employeeForm.department),
     [employeeForm.department, positions],
   );
+  const employeeFilterPositions = useMemo(
+    () => filterDepartment === 'all' ? positions : positions.filter((position) => position.department === filterDepartment),
+    [filterDepartment, positions],
+  );
 
   const filteredEmployees = useMemo(() => {
     const query = normalizeSearchText(searchQuery);
@@ -1032,10 +1268,16 @@ export function AdminHR() {
         (position?.name ? normalizeSearchText(position.name).includes(query) : false) ||
         (branch?.name ? normalizeSearchText(branch.name).includes(query) : false);
       const matchesDepartment = filterDepartment === 'all' || employee.department === filterDepartment;
-      const matchesStatus = filterStatus === 'all' || employee.status === filterStatus || employee.profile_status === filterStatus;
-      return matchesSearch && matchesDepartment && matchesStatus;
+      const matchesPosition = filterPosition === 'all' || employee.position === filterPosition;
+      const matchesBranch = filterBranch === 'all' || employee.branch === filterBranch;
+      const matchesStatus = filterStatus === 'all' || employee.status === filterStatus;
+      const matchesProfileStatus = filterProfileStatus === 'all' || employee.profile_status === filterProfileStatus;
+      const matchesEmploymentType = filterEmploymentType === 'all' || employee.employment_type === filterEmploymentType;
+      const matchesContractType = filterContractType === 'all' || employee.contract_type === filterContractType;
+      const matchesDataQuality = matchesEmployeeDataQuality(employee, filterDataQuality);
+      return matchesSearch && matchesDepartment && matchesPosition && matchesBranch && matchesStatus && matchesProfileStatus && matchesEmploymentType && matchesContractType && matchesDataQuality;
     });
-  }, [branchById, departmentById, employees, filterDepartment, filterStatus, positionById, searchQuery]);
+  }, [branchById, departmentById, employees, filterBranch, filterContractType, filterDataQuality, filterDepartment, filterEmploymentType, filterPosition, filterProfileStatus, filterStatus, positionById, searchQuery]);
 
   const sortedEmployees = useMemo(() => {
     return [...filteredEmployees].sort((left, right) => {
@@ -1062,9 +1304,35 @@ export function AdminHR() {
     return sortedEmployees.slice(start, start + employeePageSize);
   }, [employeePage, employeePageSize, sortedEmployees]);
 
+  const activeEmployeeFilterLabels = useMemo(() => {
+    const labels: string[] = [];
+    const trimmedSearch = searchQuery.trim();
+    if (trimmedSearch) labels.push(`Busqueda: "${trimmedSearch}"`);
+    if (filterDepartment !== 'all') labels.push(`Area: ${departmentById.get(filterDepartment)?.name ?? filterDepartment}`);
+    if (filterPosition !== 'all') labels.push(`Cargo: ${positionById.get(filterPosition)?.name ?? filterPosition}`);
+    if (filterBranch !== 'all') labels.push(`Sede: ${branchById.get(filterBranch)?.name ?? filterBranch}`);
+    if (filterStatus !== 'all') labels.push(`Estado laboral: ${statusLabel(filterStatus as EmployeeStatus)}`);
+    if (filterProfileStatus !== 'all') labels.push(`Expediente: ${profileStatusLabel(filterProfileStatus as EmployeeProfileStatus)}`);
+    if (filterEmploymentType !== 'all') labels.push(`Vinculacion: ${employmentTypeLabel(filterEmploymentType as EmploymentType)}`);
+    if (filterContractType !== 'all') labels.push(`Contrato: ${contractTypeLabel(filterContractType as ContractType)}`);
+    if (filterDataQuality !== 'all') labels.push(optionLabel(EMPLOYEE_DATA_QUALITY_FILTER_OPTIONS, filterDataQuality));
+    return labels;
+  }, [branchById, departmentById, filterBranch, filterContractType, filterDataQuality, filterDepartment, filterEmploymentType, filterPosition, filterProfileStatus, filterStatus, positionById, searchQuery]);
+
+  const hasActiveEmployeeFilters = activeEmployeeFilterLabels.length > 0;
+
   useEffect(() => {
     setEmployeePage(1);
-  }, [searchQuery, filterDepartment, filterStatus, employeePageSize]);
+  }, [searchQuery, filterDepartment, filterPosition, filterBranch, filterStatus, filterProfileStatus, filterEmploymentType, filterContractType, filterDataQuality, employeePageSize]);
+
+  useEffect(() => {
+    if (filterDepartment !== 'all' && filterPosition !== 'all') {
+      const selectedPosition = positions.find((position) => position.id === filterPosition);
+      if (selectedPosition && selectedPosition.department !== filterDepartment) {
+        setFilterPosition('all');
+      }
+    }
+  }, [filterDepartment, filterPosition, positions]);
 
   const filteredBranches = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
@@ -1469,10 +1737,20 @@ export function AdminHR() {
   };
 
   const handleEmployeesPdfExport = async () => {
+    if (sortedEmployees.length === 0) {
+      toast.error('No hay empleados para exportar con los filtros actuales');
+      return;
+    }
     setExportingEmployeesPdf(true);
     try {
-      await exportEmployeesPdf();
-      toast.success('PDF de empleados generado');
+      await exportFilteredEmployeesPdf({
+        employees: sortedEmployees,
+        filters: activeEmployeeFilterLabels,
+        departmentById,
+        positionById,
+        branchById,
+      });
+      toast.success(`PDF generado con ${sortedEmployees.length} empleado${sortedEmployees.length === 1 ? '' : 's'}`);
     } catch (error) {
       console.error(error);
       toast.error(error instanceof Error ? error.message : 'No se pudo exportar el PDF de empleados');
@@ -1613,6 +1891,18 @@ export function AdminHR() {
     }
   };
 
+  const clearEmployeeFilters = () => {
+    setSearchQuery('');
+    setFilterDepartment('all');
+    setFilterPosition('all');
+    setFilterBranch('all');
+    setFilterStatus('all');
+    setFilterProfileStatus('all');
+    setFilterEmploymentType('all');
+    setFilterContractType('all');
+    setFilterDataQuality('all');
+  };
+
   const activeEmployees = employees.filter((employee) => employee.status === 'ACTIVE');
   const statusOptions = activeTab === 'vacations'
     ? [
@@ -1635,13 +1925,7 @@ export function AdminHR() {
         ]
     : [
         { value: 'all', label: 'Todos los estados' },
-        { value: 'ACTIVE', label: 'Activos' },
-        { value: 'INACTIVE', label: 'Inactivos' },
-        { value: 'SUSPENDED', label: 'Suspendidos' },
-        { value: 'TERMINATED', label: 'Retirados' },
-        { value: 'DRAFT', label: 'Borradores' },
-        { value: 'INCOMPLETE', label: 'Incompletos' },
-        { value: 'DOCUMENTED', label: 'Documentados' },
+        ...EMPLOYEE_STATUS_OPTIONS,
       ];
 
   const renderPersonalTab = () => (
@@ -1715,12 +1999,7 @@ export function AdminHR() {
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <TextInput label="Código interno" value={employeeForm.employee_code} onChange={(value) => setFormField('employee_code', value)} placeholder="Autogenerado si queda vacío" />
         <SelectInput label="Estado del expediente" value={employeeForm.profile_status} onChange={(value) => setFormField('profile_status', value as EmployeeProfileStatus)} options={[
-          { value: 'DRAFT', label: 'Borrador' },
-          { value: 'REGISTERED', label: 'Registrado' },
-          { value: 'INCOMPLETE', label: 'Incompleto' },
-          { value: 'COMPLETE', label: 'Completo' },
-          { value: 'DOCUMENTED', label: 'Documentado' },
-          { value: 'RETIRED', label: 'Retirado' },
+          ...EMPLOYEE_PROFILE_STATUS_OPTIONS,
         ]} emptyLabel="Estado" />
         <SelectInput label="Área o dependencia" value={employeeForm.department} onChange={(value) => {
           const keepPosition = positions.some((position) => position.department === value && position.id === employeeForm.position);
@@ -1728,18 +2007,10 @@ export function AdminHR() {
         }} options={departments.map((department) => ({ value: department.id, label: department.name }))} />
         <SelectInput label="Cargo" value={employeeForm.position} onChange={(value) => setFormField('position', value)} options={positionsForSelectedDepartment.map((position) => ({ value: position.id, label: position.name }))} />
         <SelectInput label="Tipo de vinculación" value={employeeForm.employment_type} onChange={(value) => setFormField('employment_type', value)} options={[
-          { value: 'EMPLOYEE', label: 'Empleado' },
-          { value: 'SENA_APPRENTICE', label: 'Aprendiz SENA' },
-          { value: 'INTERN', label: 'Practicante' },
-          { value: 'CONTRACTOR', label: 'Contratista' },
+          ...EMPLOYMENT_TYPE_OPTIONS,
         ]} emptyLabel="Tipo" />
         <SelectInput label="Tipo de contrato" value={employeeForm.contract_type} onChange={(value) => setFormField('contract_type', value)} options={[
-          { value: 'INDEFINITE', label: 'Indefinido' },
-          { value: 'FIXED_TERM', label: 'Término fijo' },
-          { value: 'SERVICES', label: 'Prestación de servicios' },
-          { value: 'APPRENTICESHIP', label: 'Aprendizaje' },
-          { value: 'INTERNSHIP', label: 'Práctica' },
-          { value: 'OTHER', label: 'Otro' },
+          ...CONTRACT_TYPE_OPTIONS,
         ]} emptyLabel="Contrato" />
         <TextInput label="Fecha de ingreso" type="date" value={employeeForm.hire_date} onChange={(value) => setFormField('hire_date', value)} />
         <TextInput label="Salario básico" type="number" value={employeeForm.base_salary} onChange={(value) => setFormField('base_salary', value)} />
@@ -2112,8 +2383,8 @@ export function AdminHR() {
               ['Código interno', employee.employee_code],
               ['Cargo', position],
               ['Área', department],
-              ['Tipo de vinculación', employee.employment_type],
-              ['Tipo de contrato', employee.contract_type],
+              ['Tipo de vinculación', employmentTypeLabel(employee.employment_type)],
+              ['Tipo de contrato', contractTypeLabel(employee.contract_type)],
               ['Fecha de ingreso', parseDate(employee.hire_date)],
               ['Salario básico', formatCurrency(employee.base_salary)],
               ['Estado', statusLabel(employee.status)],
@@ -2244,11 +2515,11 @@ export function AdminHR() {
           {activeTab === 'employees' && (
             <button
               onClick={() => void handleEmployeesPdfExport()}
-              disabled={exportingEmployeesPdf}
+              disabled={exportingEmployeesPdf || isLoading || sortedEmployees.length === 0}
               className="flex items-center gap-2 px-4 py-2.5 border border-[#2a4038] text-[#2a4038] text-xs font-semibold rounded-xl hover:bg-[#eef4f1] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {exportingEmployeesPdf ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
-              {exportingEmployeesPdf ? 'Generando PDF...' : 'Exportar PDF'}
+              {exportingEmployeesPdf ? 'Generando PDF...' : 'Exportar filtro PDF'}
             </button>
           )}
           {activeTab === 'branches' && (
@@ -2327,17 +2598,81 @@ export function AdminHR() {
 
         <div className="flex-1 min-w-0 space-y-4 px-4 sm:px-6 md:px-8 lg:px-0 pt-4 lg:pt-0">
           <SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Buscar por nombre, apellido, cédula, cargo, área, sede o correo..." className="w-full" />
-          <div className="flex flex-col sm:flex-row gap-3">
-            {(activeTab === 'employees' || activeTab === 'vacations') && (
-              <select value={filterDepartment} onChange={(event) => setFilterDepartment(event.target.value)} className={selectCls}>
-                <option value="all">Todos los departamentos</option>
-                {departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
-              </select>
-            )}
-            <select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)} className={selectCls}>
-              {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
-          </div>
+          {activeTab === 'employees' ? (
+            <div className="space-y-3 rounded-xl border border-gray-100 bg-white p-3 shadow-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5">
+                <select value={filterDepartment} onChange={(event) => {
+                  setFilterDepartment(event.target.value);
+                  setFilterPosition('all');
+                }} className={`${selectCls} w-full`}>
+                  <option value="all">Todas las áreas</option>
+                  {departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
+                </select>
+                <select value={filterPosition} onChange={(event) => setFilterPosition(event.target.value)} className={`${selectCls} w-full`}>
+                  <option value="all">Todos los cargos</option>
+                  {employeeFilterPositions.map((position) => <option key={position.id} value={position.id}>{position.name}</option>)}
+                </select>
+                <select value={filterBranch} onChange={(event) => setFilterBranch(event.target.value)} className={`${selectCls} w-full`}>
+                  <option value="all">Todas las sedes</option>
+                  {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+                </select>
+                <select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)} className={`${selectCls} w-full`}>
+                  <option value="all">Todos los estados laborales</option>
+                  {EMPLOYEE_STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+                <select value={filterProfileStatus} onChange={(event) => setFilterProfileStatus(event.target.value)} className={`${selectCls} w-full`}>
+                  <option value="all">Todos los expedientes</option>
+                  {EMPLOYEE_PROFILE_STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+                <select value={filterEmploymentType} onChange={(event) => setFilterEmploymentType(event.target.value)} className={`${selectCls} w-full`}>
+                  <option value="all">Toda vinculación</option>
+                  {EMPLOYMENT_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+                <select value={filterContractType} onChange={(event) => setFilterContractType(event.target.value)} className={`${selectCls} w-full`}>
+                  <option value="all">Todos los contratos</option>
+                  {CONTRACT_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+                <select value={filterDataQuality} onChange={(event) => setFilterDataQuality(event.target.value as EmployeeDataQualityFilter)} className={`${selectCls} w-full`}>
+                  {EMPLOYEE_DATA_QUALITY_FILTER_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              </div>
+              <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex flex-wrap gap-1.5">
+                  {hasActiveEmployeeFilters ? activeEmployeeFilterLabels.map((label) => (
+                    <span key={label} className="inline-flex items-center rounded-full border border-[#2a4038]/15 bg-[#eef4f1] px-2.5 py-1 text-[10px] font-semibold text-[#2a4038]">
+                      {label}
+                    </span>
+                  )) : (
+                    <span className="text-[11px] text-gray-400">Sin filtros activos</span>
+                  )}
+                </div>
+                {hasActiveEmployeeFilters && (
+                  <button
+                    type="button"
+                    onClick={clearEmployeeFilters}
+                    className="inline-flex items-center justify-center gap-1.5 self-start rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-800 lg:self-auto"
+                  >
+                    <X size={12} />
+                    Limpiar filtros
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col sm:flex-row gap-3">
+              {activeTab === 'vacations' && (
+                <select value={filterDepartment} onChange={(event) => setFilterDepartment(event.target.value)} className={selectCls}>
+                  <option value="all">Todos los departamentos</option>
+                  {departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
+                </select>
+              )}
+              {(activeTab === 'branches' || activeTab === 'vacations') && (
+                <select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)} className={selectCls}>
+                  {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              )}
+            </div>
+          )}
 
       {isLoading ? (
         <LoadingState label="Cargando información de RRHH..." />
