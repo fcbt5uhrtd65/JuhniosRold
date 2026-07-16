@@ -23,6 +23,7 @@ import {
   type Item as ApiInventoryItem,
 } from '../../services/inventory-masters.service';
 import {
+  closeProductionOrder,
   createFormula,
   createInventoryMovement,
   createProductionOrder,
@@ -1567,6 +1568,8 @@ function ModuloProduccion() {
   const [tab, setTab] = useState<TabProduccion>('ordenes');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [cierreOP, setCierreOP] = useState<ProductionOrderRecord | null>(null);
+  const [cierreForm, setCierreForm] = useState({ actualQuantity: '', notes: '' });
+  const [closing, setClosing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [orderForm, setOrderForm] = useState({ formula: '', outputItem: '', plannedQuantity: '', batchCode: '', startedAt: currentDateInput(), responsible: '', notes: '' });
   const [formulaForm, setFormulaForm] = useState({ code: '', name: '', outputItem: '', yieldQuantity: '', yieldUnit: '', item: '', quantity: '' });
@@ -1607,6 +1610,29 @@ function ModuloProduccion() {
       toast.error(error instanceof Error ? error.message : 'No fue posible crear la OP');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleCloseOrder = async () => {
+    if (!cierreOP || !Number(cierreForm.actualQuantity)) {
+      toast.warning('Indica la cantidad real producida.');
+      return;
+    }
+    setClosing(true);
+    try {
+      await closeProductionOrder({
+        id: cierreOP.id,
+        actual_quantity: Number(cierreForm.actualQuantity),
+        closed_at: currentDateInput(),
+        notes: cierreForm.notes,
+      });
+      toast.success('Orden de producción cerrada');
+      setCierreOP(null);
+      await reload();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No fue posible cerrar la OP');
+    } finally {
+      setClosing(false);
     }
   };
 
@@ -1672,7 +1698,7 @@ function ModuloProduccion() {
                     <div className="flex gap-1">
                       <button className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600"><Eye size={13} /></button>
                       {op.status === 'IN_PROGRESS' && op.is_dispensed && op.is_output_received && (
-                        <button onClick={() => setCierreOP(op)} className="p-1.5 rounded-lg hover:bg-emerald-50 text-gray-400 hover:text-emerald-600" title="Cerrar orden"><ClipboardCheck size={13} /></button>
+                        <button onClick={() => { setCierreOP(op); setCierreForm({ actualQuantity: op.planned_quantity, notes: '' }); }} className="p-1.5 rounded-lg hover:bg-emerald-50 text-gray-400 hover:text-emerald-600" title="Cerrar orden"><ClipboardCheck size={13} /></button>
                       )}
                     </div>
                   </Td>
@@ -1701,11 +1727,11 @@ function ModuloProduccion() {
                     </div>
                   ))}
                 </div>
-                <div className="mb-4"><Field label="Cantidad real producida" required><input className={inp} type="number" defaultValue={numeric(cierreOP.planned_quantity)} /></Field></div>
-                <div className="mb-5"><Field label="Observaciones de cierre"><textarea className={inp + ' resize-none h-14'} placeholder="Notas finales de la orden..." /></Field></div>
+                <div className="mb-4"><Field label="Cantidad real producida" required><input className={inp} type="number" value={cierreForm.actualQuantity} onChange={e => setCierreForm(f => ({ ...f, actualQuantity: e.target.value }))} /></Field></div>
+                <div className="mb-5"><Field label="Observaciones de cierre"><textarea className={inp + ' resize-none h-14'} placeholder="Notas finales de la orden..." value={cierreForm.notes} onChange={e => setCierreForm(f => ({ ...f, notes: e.target.value }))} /></Field></div>
                 <div className="flex gap-3">
                   <button onClick={() => setCierreOP(null)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">Cancelar</button>
-                  <button className="flex-1 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-2"><CheckCircle size={14} /> Confirmar Cierre</button>
+                  <button onClick={handleCloseOrder} disabled={closing} className="flex-1 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50">{closing ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />} Confirmar Cierre</button>
                 </div>
               </div>
             </div>

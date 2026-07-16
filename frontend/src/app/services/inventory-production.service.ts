@@ -368,3 +368,18 @@ export async function createStockConversion(input: {
   });
   return data as StockConversionRecord;
 }
+
+export async function closeProductionOrder(input: {
+  id: string;
+  actual_quantity: number;
+  closed_at: string;
+  notes?: string;
+}): Promise<ProductionOrderRecord> {
+  const { data } = await api.patch<ProductionOrderRecord>(`${BASE}/production-orders/${input.id}/`, {
+    status: 'CLOSED',
+    actual_quantity: String(input.actual_quantity),
+    closed_at: input.closed_at,
+    ...(input.notes !== undefined ? { notes: input.notes } : {}),
+  });
+  return data as ProductionOrderRecord;
+}
