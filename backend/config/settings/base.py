@@ -288,6 +288,15 @@ CACHES = {
     }
 }
 
+FACTUS_ENVIRONMENT = os.getenv("FACTUS_ENVIRONMENT", "sandbox").lower()
+FACTUS_BASE_URL = os.getenv("FACTUS_BASE_URL", "https://api-sandbox.factus.com.co")
+FACTUS_CLIENT_ID = os.getenv("FACTUS_CLIENT_ID", "")
+FACTUS_CLIENT_SECRET = os.getenv("FACTUS_CLIENT_SECRET", "")
+FACTUS_USERNAME = os.getenv("FACTUS_USERNAME", "")
+FACTUS_PASSWORD = os.getenv("FACTUS_PASSWORD", "")
+FACTUS_HTTP_TIMEOUT = int(os.getenv("FACTUS_HTTP_TIMEOUT", "15"))
+FACTUS_MAX_RETRIES = int(os.getenv("FACTUS_MAX_RETRIES", "5"))
+
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0")
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://redis:6379/1")
 CELERY_TASK_TRACK_STARTED = True
@@ -300,5 +309,9 @@ CELERY_BEAT_SCHEDULE = {
     "update-external-shipping-tracking": {
         "task": "apps.envios.infrastructure.tasks.update_external_tracking",
         "schedule": SHIPPING_TRACKING_UPDATE_INTERVAL_MINUTES * 60.0,
+    },
+    "retry-pending-dian-invoices": {
+        "task": "apps.finance.infrastructure.tasks.retry_pending_dian_invoices",
+        "schedule": 900.0,
     },
 }

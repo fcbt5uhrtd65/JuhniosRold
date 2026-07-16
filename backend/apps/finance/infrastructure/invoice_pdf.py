@@ -617,13 +617,18 @@ def render_invoice_pdf(invoice):
     cufe_y = 286
     cufe_h = 14
 
+    cufe_display = (
+        invoice.dian_cufe
+        if invoice.dian_status == invoice.DianStatus.VALIDATED
+        else "PENDIENTE DE VALIDACION DIAN"
+    )
     _draw_rect(c, x0, cufe_y, main_w, cufe_h)
     _draw_text(c, x0 + 145, cufe_y + 4, "CUFE:", size=5.5, bold=True)
     _draw_text(
         c,
         x0 + 177,
         cufe_y + 4,
-        _fit_text(invoice.cufe, main_w - 185, font_size=5.2),
+        _fit_text(cufe_display, main_w - 185, font_size=5.2),
         size=5.2,
         bold=True,
     )

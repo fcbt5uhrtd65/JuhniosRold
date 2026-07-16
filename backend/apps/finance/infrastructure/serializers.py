@@ -52,5 +52,9 @@ class SalesInvoiceSerializer(serializers.ModelSerializer):
             "billing_address",
             "issued_at",
             "dian_resolution",
+            "dian_status",
+            "dian_cufe",
+            "dian_validated_at",
+            "dian_error_detail",
             "lines",
         )

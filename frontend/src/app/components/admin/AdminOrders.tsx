@@ -132,6 +132,11 @@ export function AdminOrders() {
     try {
       const invoice = await getInvoiceByOrder(orderId);
       if (!invoice) { toast.warning('No hay factura para este pedido.'); return; }
+      if (invoice.dianStatus === 'FAILED') {
+        toast.warning('Esta factura fue rechazada por la DIAN. Revísala en Facturas y reintenta la validación.');
+      } else if (invoice.dianStatus === 'PENDING') {
+        toast.info('Esta factura aún está pendiente de validación ante la DIAN.');
+      }
       await openInvoicePdf(invoice.id);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo abrir la factura.');

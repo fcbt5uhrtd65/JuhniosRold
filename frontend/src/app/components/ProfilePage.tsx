@@ -647,6 +647,9 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
     try {
       const invoice = await getInvoiceByOrder(orderId);
       if (!invoice) { toast.warning('No hay factura disponible para este pedido.'); return; }
+      if (invoice.dianStatus !== 'VALIDATED') {
+        toast.info('Esta factura aún está pendiente de validación ante la DIAN. El documento puede tardar en confirmarse.');
+      }
       await openInvoicePdf(invoice.id);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo abrir la factura.');

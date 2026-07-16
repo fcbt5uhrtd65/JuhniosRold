@@ -1,6 +1,7 @@
 from django.http import FileResponse
 from django.shortcuts import get_object_or_404
-from rest_framework import viewsets
+from rest_framework import status, viewsets
+from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.identity.interfaces.permissions import HasComponentAccess
@@ -12,6 +13,7 @@ from ..infrastructure.serializers import (
     FinancialTransactionSerializer,
     SalesInvoiceSerializer,
 )
+from ..infrastructure.tasks import submit_invoice_to_dian
 
 
 class FinancialTransactionViewSet(SoftDeleteModelViewSet):
@@ -64,3 +66,25 @@ class SalesInvoicePdfView(APIView):
             filename=f"{invoice.number}.pdf",
             content_type="application/pdf",
         )
+
+
+class SalesInvoiceRetryDianView(APIView):
+    permission_classes = (HasComponentAccess,)
+    required_component = "finance.management"
+    required_component_action = "edit"
+
+    def post(self, request, pk):
+        invoice = get_object_or_404(SalesInvoice, pk=pk)
+        if invoice.dian_status == SalesInvoice.DianStatus.VALIDATED:
+            return Response(
+                {"detail": "La factura ya fue validada por la DIAN."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        invoice.dian_status = SalesInvoice.DianStatus.PENDING
+        invoice.dian_retry_count = 0
+        invoice.dian_error_detail = ""
+        invoice.save(
+            update_fields=("dian_status", "dian_retry_count", "dian_error_detail", "updated_at")
+        )
+        submit_invoice_to_dian.delay(invoice.id)
+        return Response(SalesInvoiceSerializer(invoice).data)

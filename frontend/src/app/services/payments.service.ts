@@ -62,10 +62,13 @@ function normalizeAdminPayment(payment: BackendAdminPayment): AdminPayment {
   };
 }
 
+export type DianStatus = 'PENDING' | 'VALIDATED' | 'FAILED';
+
 export interface OrderInvoice {
   id: string;
   number: string;
   orderId: string;
+  dianStatus: DianStatus;
 }
 
 export async function getInvoiceByOrder(orderId: string): Promise<OrderInvoice | null> {
@@ -77,10 +80,10 @@ export async function getInvoiceByOrder(orderId: string): Promise<OrderInvoice |
   });
   if (!response.ok) return null;
   const data = await response.json();
-  const results: Array<{ id: string; number: string; order: string }> = data.results ?? data;
+  const results: Array<{ id: string; number: string; order: string; dian_status: DianStatus }> = data.results ?? data;
   const match = results[0];
   if (!match) return null;
-  return { id: match.id, number: match.number, orderId: match.order };
+  return { id: match.id, number: match.number, orderId: match.order, dianStatus: match.dian_status };
 }
 
 export async function openInvoicePdf(invoiceId: string): Promise<void> {

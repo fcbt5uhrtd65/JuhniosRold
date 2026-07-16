@@ -7,6 +7,7 @@ from ..infrastructure.models import (
     SalesInvoice,
     SalesInvoiceLine,
 )
+from ..infrastructure.tasks import submit_invoice_to_dian
 
 
 class GenerateSalesInvoice:
@@ -56,4 +57,5 @@ class GenerateSalesInvoice:
                 for item in order.items.all()
             ]
         )
+        transaction.on_commit(lambda: submit_invoice_to_dian.delay(invoice.id))
         return invoice
