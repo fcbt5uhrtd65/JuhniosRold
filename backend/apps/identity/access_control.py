@@ -143,6 +143,11 @@ COMPONENT_DEFINITIONS = (
         "name": "Seguimiento",
         "description": "Consulta y actualización del seguimiento logístico.",
     },
+    {
+        "code": "manufacturing.management",
+        "name": "Producción",
+        "description": "Expediente de fabricación de lotes: estados, dispensación y liberación.",
+    },
 )
 
 
