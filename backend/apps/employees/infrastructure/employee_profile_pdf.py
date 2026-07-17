@@ -414,7 +414,7 @@ def render_employee_profile_pdf(employee):
     if y < bottom_limit + 180:
         c.showPage()
         draw_letterhead_footer(c, page_w, x0, x1)
-        y = draw_letterhead_header(c, page_w, page_h, x0, x1) - 20
+        y = draw_letterhead_header(c, page_w, page_h, x0, x1)
 
     left_bottom = _draw_info_card(c, x0, y, left_w, "Seguridad social", social_security_fields)
     right_bottom = _draw_info_card(c, x0 + left_w + 12, y, left_w, "Datos bancarios", banking_fields)
@@ -423,7 +423,7 @@ def render_employee_profile_pdf(employee):
     if y < bottom_limit + 180:
         c.showPage()
         draw_letterhead_footer(c, page_w, x0, x1)
-        y = draw_letterhead_header(c, page_w, page_h, x0, x1) - 20
+        y = draw_letterhead_header(c, page_w, page_h, x0, x1)
 
     y = _draw_info_card(c, x0, y, main_w, "Contacto de emergencia", emergency_fields)
     y -= 14
@@ -432,7 +432,7 @@ def render_employee_profile_pdf(employee):
     if y < bottom_limit + 120:
         c.showPage()
         draw_letterhead_footer(c, page_w, x0, x1)
-        y = draw_letterhead_header(c, page_w, page_h, x0, x1) - 20
+        y = draw_letterhead_header(c, page_w, page_h, x0, x1)
     y = _draw_documents_card(c, x0, y, main_w, documents)
 
     c.setFillColor(MUTED)

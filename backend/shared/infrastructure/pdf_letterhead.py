@@ -14,6 +14,11 @@ FOOTER_IMAGE_PATH = os.path.join(_ASSETS_DIR, "letterhead_footer.png")
 SIGNATURE_WIDTH = 120
 SIGNATURE_HEIGHT = 40
 
+# Aire entre la franja del membrete y el contenido del encabezado (nombre de área,
+# número de documento, etc.). Se mantiene igual en los tres documentos para dar
+# una jerarquía visual consistente: franja pegada arriba -> respiro -> contenido.
+HEADER_CONTENT_GAP = 34
+
 _image_cache: dict[str, ImageReader] = {}
 
 
@@ -27,28 +32,30 @@ def _cached_image(path):
 
 
 def draw_letterhead_header(c, page_w, page_h, x0, x1):
-    """Dibuja la franja decorativa oficial pegada al borde superior de la hoja, con
-    margen lateral (respeta x0/x1, igual que el resto del contenido). Devuelve la
-    coordenada y donde puede comenzar el resto del encabezado."""
+    """Dibuja la franja decorativa oficial completamente pegada al borde superior de
+    la hoja (sin ningún espacio en blanco por encima), a todo el ancho de la página
+    (fuera de los márgenes de contenido, igual que en el membrete original). Devuelve
+    la coordenada y donde debe comenzar el resto del encabezado, ya con el respiro
+    (HEADER_CONTENT_GAP) aplicado para que el contenido no quede pegado a la franja."""
     image = _cached_image(HEADER_IMAGE_PATH)
-    top_y = page_h - 34
     if image is None:
-        return top_y
+        return page_h - HEADER_CONTENT_GAP
     iw, ih = image.getSize()
-    w = x1 - x0
-    h = w * (ih / iw) if iw else 0
+    h = page_w * (ih / iw) if iw else 0
     y = page_h - h
     try:
-        c.drawImage(image, x0, y, width=w, height=h, preserveAspectRatio=False, mask="auto")
+        c.drawImage(image, 0, y, width=page_w, height=h, preserveAspectRatio=False, mask="auto")
     except Exception:
-        return top_y
-    return y - 26
+        return page_h - HEADER_CONTENT_GAP
+    return y - HEADER_CONTENT_GAP
 
 
 def draw_letterhead_footer(c, page_w, x0, x1):
-    """Dibuja la franja de pie de página oficial (contacto) pegada al borde inferior e
-    izquierdo/derecho de la hoja (a todo el ancho de la página). Devuelve la altura
-    ocupada (para reservar margen inferior en el contenido)."""
+    """Dibuja la franja de pie de página oficial (contacto), completamente pegada al
+    borde inferior y a todo el ancho de la página, con los íconos y datos de contacto
+    centrados/distribuidos tal como en el diseño original (no se recorta ni se
+    reubica ningún elemento). Devuelve la altura ocupada, para que el contenido
+    reserve el margen inferior correspondiente y nunca invada la franja."""
     image = _cached_image(FOOTER_IMAGE_PATH)
     if image is None:
         return 0

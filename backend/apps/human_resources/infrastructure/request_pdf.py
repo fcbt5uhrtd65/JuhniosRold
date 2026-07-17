@@ -200,25 +200,24 @@ def _draw_rich_paragraph(c, x, y, parts, max_width, size=10, leading=15, align="
 
 
 # ── Encabezado ─────────────────────────────────────────────────────────────────
-def _draw_letterhead(c, page_w, page_h, x0, x1, y):
-    y = draw_letterhead_header(c, page_w, page_h, x0, x1)
-    _text(c, x0, y, "Gestión de Talento Humano", size=8.2, color=MUTED)
-    return y - 22
+def _draw_letterhead(c, page_w, page_h, x0, x1):
+    """Franja del membrete + una sola línea de metadatos del documento (área y número
+    de solicitud a la izquierda, fecha de generación a la derecha), ya con aire
+    respecto a la franja. Una sola línea, bien alineada, sin trazos divisorios."""
+    return draw_letterhead_header(c, page_w, page_h, x0, x1)
 
 
 def _draw_title(c, x0, x1, cx, y, vacation, request_number):
-    _text(c, cx, y, "CONSTANCIA DE SOLICITUD", size=15, bold=True, color=TEXT, align="center")
-    y -= 16
+    _text(c, x0, y, f"Gestión de Talento Humano  ·  {request_number}", size=8.5, bold=True, color=MUTED)
+    _text(c, x1, y, f"Generado el {timezone.now():%d/%m/%Y a las %H:%M}", size=8, color=MUTED, align="right")
+    y -= 38
+
+    _text(c, cx, y, "CONSTANCIA DE SOLICITUD", size=17, bold=True, color=TEXT, align="center")
+    y -= 18
     status_color = _status_color(vacation.status)
     _text(c, cx, y, vacation.get_status_display().upper(), size=9.5, bold=True, color=status_color, align="center")
-    y -= 20
 
-    # Franja de identificación del documento: separa la identidad de la empresa (membrete)
-    # de los metadatos propios de este documento (número, fecha de generación). Sin trazos ni cuadros.
-    _text(c, x0, y, request_number, size=9, bold=True, color=TEXT)
-    _text(c, x1, y, f"Generado el {timezone.now():%d/%m/%Y a las %H:%M}", size=8, color=MUTED, align="right")
-
-    return y - 40
+    return y - 36
 
 
 # ── Cuerpo narrativo ───────────────────────────────────────────────────────────
@@ -390,7 +389,7 @@ def render_request_pdf(vacation):
 
     employee = vacation.employee
 
-    y = _draw_letterhead(c, page_w, page_h, x0, x1, page_h - 34)
+    y = _draw_letterhead(c, page_w, page_h, x0, x1)
     y = _draw_title(c, x0, x1, cx, y, vacation, vacation.request_number or str(vacation.id))
     y = _draw_body(c, x0, x1, y, vacation, employee)
     y = _draw_approval_narrative(c, x0, x1, y, vacation)
@@ -399,7 +398,7 @@ def render_request_pdf(vacation):
     if y - 100 < bottom_limit:
         c.showPage()
         draw_letterhead_footer(c, page_w, x0, x1)
-        y = draw_letterhead_header(c, page_w, page_h, x0, x1) - 10
+        y = draw_letterhead_header(c, page_w, page_h, x0, x1)
 
     _draw_signatures_section(c, x0, x1, y, vacation)
 

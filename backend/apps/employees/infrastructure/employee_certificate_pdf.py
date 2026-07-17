@@ -62,7 +62,8 @@ def _signer_document_label(issued_by):
 # ── Encabezado membretado ──────────────────────────────────────────────────────
 def _draw_header(c, page_w, page_h, x0, x1):
     """Membrete oficial (franja superior); el nombre de la empresa ya queda comunicado
-    por el membrete, así que aquí solo se ubica el subtítulo de área.
+    por el membrete, así que aquí solo se ubica el subtítulo de área, con aire
+    suficiente respecto a la franja para que no se vea pegado.
     Retorna la coordenada y donde termina el encabezado."""
     y = draw_letterhead_header(c, page_w, page_h, x0, x1)
 
@@ -70,21 +71,16 @@ def _draw_header(c, page_w, page_h, x0, x1):
     c.setFillColor(MUTED)
     c.drawRightString(x1, y, "Gestión de Talento Humano  ·  Recursos Humanos")
 
-    return y - 26
+    return y - 40
 
 
 # ── Título del documento ───────────────────────────────────────────────────────
 def _draw_title(c, cx, y):
     c.setFillColor(TEXT)
-    c.setFont(FONT_BOLD, 15)
+    c.setFont(FONT_BOLD, 17)
     c.drawCentredString(cx, y, "CERTIFICADO LABORAL")
 
-    # línea decorativa bajo el título
-    c.setStrokeColor(MUTED)
-    c.setLineWidth(1.2)
-    c.line(cx - 90, y - 8, cx + 90, y - 8)
-
-    return y - 42
+    return y - 40
 
 
 # ── Párrafo con negritas ───────────────────────────────────────────────────────
@@ -160,10 +156,9 @@ def _draw_signature_block(c, x0, w, line_y, signer_name, signer_role, signature_
 # ── Pie de página ──────────────────────────────────────────────────────────────
 def _draw_footer(c, page_w, x0, x1):
     footer_h = draw_letterhead_footer(c, page_w, x0, x1)
-    y = footer_h + 14
-    c.setFont(FONT, 7.5)
+    c.setFont(FONT, 7.2)
     c.setFillColor(MUTED)
-    c.drawRightString(x1, y, "1 / 1")
+    c.drawCentredString(page_w / 2, footer_h + 12, f"Documento oficial · {COMPANY_NAME} · Certificado válido con firma digital registrada.")
     return footer_h
 
 
