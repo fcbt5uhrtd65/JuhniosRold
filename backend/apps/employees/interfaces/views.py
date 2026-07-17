@@ -237,6 +237,11 @@ class EmployeeViewSet(SoftDeleteModelViewSet):
         employee = self.get_object()
         issued_by = getattr(request.user, "employee_profile", None) or get_default_hr_signer()
         signature_file = request.FILES.get("signature")
+        if not signature_file and not (issued_by and issued_by.signature):
+            return Response(
+                {"detail": "Debes firmar (dibujar o subir tu firma) antes de generar el certificado."},
+                status=status.HTTP_409_CONFLICT,
+            )
         try:
             pdf_buffer = render_employee_certificate_pdf(employee, issued_by=issued_by, signature_file=signature_file)
         except Exception:
@@ -261,6 +266,17 @@ class EmployeeViewSet(SoftDeleteModelViewSet):
             raise NotFound("Tu usuario no tiene un perfil de empleado asociado.")
 
         issued_by = get_default_hr_signer()
+        if not issued_by or not issued_by.signature:
+            return Response(
+                {
+                    "detail": (
+                        "Aún no hay una firma digital registrada en Recursos Humanos. "
+                        "Solicita a un administrador o a RRHH que guarde su firma en su perfil "
+                        "para poder emitir tu certificado laboral firmado."
+                    )
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
         try:
             pdf_buffer = render_employee_certificate_pdf(employee, issued_by=issued_by)
         except Exception:

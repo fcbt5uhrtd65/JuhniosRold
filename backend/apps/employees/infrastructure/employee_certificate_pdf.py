@@ -203,6 +203,8 @@ def render_employee_certificate_pdf(
         "Sr(a)."
     )
     position_name   = employee.position.name.upper() if employee.position_id else "COLABORADOR(A)"
+    department_name = employee.department.name if employee.department_id else None
+    contract_label   = employee.get_contract_type_display().lower() if employee.contract_type else None
 
     # ── Párrafo introductorio ─────────────────────────────────────────────────
     intro_parts = [
@@ -213,9 +215,23 @@ def render_employee_certificate_pdf(
         (_name(employee).upper() + ",", True),
         (f" con {emp_doc_label} {_safe(employee.document_number)}, se desempeña en el cargo de", False),
         (f" {position_name} ", True),
-        (f"en {COMPANY_NAME}, vinculado(a) desde el {_short_date(employee.hire_date)},", False),
+    ]
+    if department_name:
+        intro_parts += [
+            (", adscrito(a) al área de", False),
+            (f" {department_name.upper()}", True),
+        ]
+    intro_parts += [
+        (f", en {COMPANY_NAME}, vinculado(a) desde el {_short_date(employee.hire_date)}", False),
+    ]
+    if contract_label:
+        intro_parts += [
+            (" mediante un contrato de tipo", False),
+            (f" {contract_label}", True),
+        ]
+    intro_parts += [
         (
-            " tiempo en el cual ha demostrado excelentes habilidades en el desempeño de sus funciones"
+            ", tiempo en el cual ha demostrado excelentes habilidades en el desempeño de sus funciones"
             " y un comportamiento acorde con los valores de la organización, convirtiéndose en un"
             " elemento valioso dentro de nuestro equipo de trabajo.",
             False,
@@ -232,6 +248,8 @@ def render_employee_certificate_pdf(
             (_money(employee.base_salary), True),
             (" mensuales.", False),
         ]
+        if employee.status == Employee.Status.ACTIVE:
+            salary_parts += [(" A la fecha de expedición de este certificado, se encuentra activo(a) en la empresa.", False)]
         y = _draw_rich_paragraph(c, x0, y, salary_parts, main_w)
         y -= 18
 

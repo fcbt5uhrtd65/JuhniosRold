@@ -742,7 +742,8 @@ export async function exportEmployeeCertificatePdf(id: string, employeeCode?: st
   });
 
   if (!response.ok) {
-    throw new Error('No se pudo generar el certificado laboral.');
+    const detail = await response.json().catch(() => null);
+    throw new Error(detail?.detail || 'No se pudo generar el certificado laboral.');
   }
 
   const blob = await response.blob();
@@ -767,7 +768,8 @@ export async function exportMyEmployeeCertificatePdf(employeeCode?: string): Pro
   });
 
   if (!response.ok) {
-    throw new Error('No se pudo generar tu certificado laboral.');
+    const detail = await response.json().catch(() => null);
+    throw new Error(detail?.detail || 'No se pudo generar tu certificado laboral.');
   }
 
   const blob = await response.blob();

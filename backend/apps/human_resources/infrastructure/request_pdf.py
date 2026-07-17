@@ -301,33 +301,48 @@ def _approval_steps_data(vacation):
 
 
 def _draw_approval_narrative(c, x0, x1, y, vacation):
-    """Flujo de aprobación narrado como texto corrido, sin cuadros ni marcadores graficos."""
+    """Flujo de aprobación narrado como texto corrido, sin cuadros ni marcadores graficos.
+    Cada paso queda claramente separado del siguiente, con su etiqueta de estado en la
+    primera línea y los datos de trazabilidad (responsable, fecha, detalle) en líneas
+    propias con sangría, para una lectura ordenada de arriba hacia abajo."""
     w = x1 - x0
     _text(c, x0, y, "Trazabilidad del proceso de aprobación", size=10.5, bold=True, color=TEXT)
-    y -= 16
+    y -= 22
 
     steps = _approval_steps_data(vacation)
     if not steps:
         _text(c, x0, y, "Aún no se han registrado pasos de aprobación para esta solicitud.", size=9, color=MUTED)
         return y - 14
 
+    indent = 12
     for index, step in enumerate(steps, start=1):
         status_color = _status_color(step["status"])
         # Etapa + estado en una linea (estado con color de estado, resto en texto normal)
-        c.setFont(FONT_BOLD, 9.3)
+        c.setFont(FONT_BOLD, 9.5)
         c.setFillColor(TEXT)
         c.drawString(x0, y, f"{index}. {step['label']}:")
-        label_w = stringWidth(f"{index}. {step['label']}: ", FONT_BOLD, 9.3)
-        c.setFont(FONT_BOLD, 9.3)
+        label_w = stringWidth(f"{index}. {step['label']}: ", FONT_BOLD, 9.5)
+        c.setFont(FONT_BOLD, 9.5)
         c.setFillColor(status_color)
         c.drawString(x0 + label_w, y, step["status"])
-        y -= 12
+        y -= 15
 
-        detail_text = f"Responsable: {step['actor']}  ·  Fecha: {step['date'] or 'sin fecha'}  ·  {step['detail']}"
-        y = _draw_wrapped_text(c, x0 + 10, y, detail_text, w - 10, size=8.3, leading=11, color=MUTED)
-        y -= 8
+        c.setFont(FONT_BOLD, 8)
+        c.setFillColor(MUTED)
+        c.drawString(x0 + indent, y, "RESPONSABLE")
+        c.drawString(x0 + indent + 90, y, "FECHA")
+        y -= 11
 
-    return y
+        c.setFont(FONT, 8.6)
+        c.setFillColor(TEXT)
+        c.drawString(x0 + indent, y, _fit_text(step["actor"], 85, FONT, 8.6))
+        c.drawString(x0 + indent + 90, y, step["date"] or "Sin fecha")
+        y -= 15
+
+        y = _draw_wrapped_text(c, x0 + indent, y, step["detail"], w - indent, size=8.6, leading=11.5, color=MUTED)
+        y -= 20
+
+    return y - 4
 
 
 def _signing_steps(vacation):
@@ -345,11 +360,11 @@ def _signing_steps(vacation):
 def _draw_signatures_section(c, x0, x1, y, vacation):
     w = x1 - x0
     _text(c, x0, y, "Firmas de aprobación", size=10.5, bold=True, color=TEXT)
-    y -= 44
+    y -= 60
 
     steps = _signing_steps(vacation)
     if not steps:
-        y += 20
+        y += 30
         _text(c, x0, y, "Aún no hay firmas registradas para esta solicitud.", size=9, color=MUTED)
         return y - 14
 
