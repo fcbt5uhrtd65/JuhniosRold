@@ -6,6 +6,8 @@ import {
   Briefcase,
   Building2,
   CalendarClock,
+  CalendarDays,
+  Cake,
   Check,
   Clock3,
   Download,
@@ -38,6 +40,7 @@ import {
 import { SearchBar } from './SearchBar';
 import { Pagination } from './Pagination';
 import { SignaturePad } from './SignaturePad';
+import { CalendarChip, CalendarMoreChip, CalendarMonthNav, MonthCalendar, toDateKey, type CalendarChipColor } from './HRCalendar';
 import { Badge, type BadgeColor, Card, Table, Th, Td, Modal, EmptyState, LoadingState, inputCls, selectCls, ActionsMenu, actionsCellCls } from './AdminUI';
 import { ComboWithOtherInput } from './ComboWithOtherInput';
 import { useToast } from '../../contexts/ToastContext';
@@ -103,6 +106,7 @@ import {
   type RequestsDashboard,
   type VacationRequest,
   type VacationRequestStatus,
+  type VacationRequestType,
 } from '../../services/human-resources.service';
 import { AdminStructure } from './AdminStructure';
 import { LocationPicker } from '../ui/LocationPicker';
@@ -119,7 +123,8 @@ function toBranchDecimalString(value: number | string): string {
   return Number(value).toFixed(6);
 }
 
-type HRTab = 'employees' | 'branches' | 'catalog' | 'vacations';
+type HRTab = 'employees' | 'branches' | 'catalog' | 'vacations' | 'calendar';
+type HRCalendarView = 'requests' | 'birthdays';
 type EmployeeDataQualityFilter =
   | 'all'
   | 'missing_age'
@@ -1131,6 +1136,14 @@ export function AdminHR() {
   const [filterEmploymentType, setFilterEmploymentType] = useState<string>('all');
   const [filterContractType, setFilterContractType] = useState<string>('all');
   const [filterDataQuality, setFilterDataQuality] = useState<EmployeeDataQualityFilter>('all');
+  const [calendarView, setCalendarView] = useState<HRCalendarView>('requests');
+  const [calendarMonth, setCalendarMonth] = useState<Date>(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
+  const [calendarTypeFilter, setCalendarTypeFilter] = useState<VacationRequestType | 'all'>('all');
+  const [calendarDepartmentFilter, setCalendarDepartmentFilter] = useState<string>('all');
+  const [calendarDayDetail, setCalendarDayDetail] = useState<Date | null>(null);
   const [branchSort, setBranchSort] = useState<'name' | 'code' | 'city' | 'status'>('name');
   const [branchPage, setBranchPage] = useState(1);
   const [branchPageSize, setBranchPageSize] = useState(DEFAULT_PAGE_SIZE);
@@ -1414,6 +1427,73 @@ export function AdminHR() {
   useEffect(() => {
     setVacationPage(1);
   }, [searchQuery, filterDepartment, filterStatus, vacationPageSize]);
+
+  const REQUEST_TYPE_CALENDAR_COLOR: Record<VacationRequestType, CalendarChipColor> = {
+    VACATION: 'green',
+    PERMISSION: 'blue',
+    OVERTIME: 'amber',
+    LEAVE: 'purple',
+    INCAPACITY: 'red',
+    OTHER: 'pink',
+  };
+
+  const calendarEventsByDay = useMemo(() => {
+    const map = new Map<string, Array<{ request: VacationRequest; employee: Employee | undefined }>>();
+    const nonCancelled = vacationRequests.filter((request) => request.status !== 'CANCELLED' && request.status !== 'REJECTED');
+    for (const request of nonCancelled) {
+      const employee = employeeById.get(request.employee);
+      if (calendarTypeFilter !== 'all' && request.request_type !== calendarTypeFilter) continue;
+      if (calendarDepartmentFilter !== 'all' && employee?.department !== calendarDepartmentFilter) continue;
+
+      const start = new Date(`${request.start_date}T00:00:00`);
+      const end = new Date(`${request.end_date}T00:00:00`);
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) continue;
+
+      const cursor = new Date(start);
+      while (cursor.getTime() <= end.getTime()) {
+        const key = toDateKey(cursor);
+        const existing = map.get(key) ?? [];
+        existing.push({ request, employee });
+        map.set(key, existing);
+        cursor.setDate(cursor.getDate() + 1);
+      }
+    }
+    return map;
+  }, [vacationRequests, employeeById, calendarTypeFilter, calendarDepartmentFilter]);
+
+  const birthdaysByDay = useMemo(() => {
+    const map = new Map<string, Employee[]>();
+    for (const employee of employees) {
+      if (employee.status !== 'ACTIVE' || !employee.date_of_birth) continue;
+      const birth = new Date(`${employee.date_of_birth}T00:00:00`);
+      if (Number.isNaN(birth.getTime())) continue;
+      const key = `${birth.getMonth()}-${birth.getDate()}`;
+      const existing = map.get(key) ?? [];
+      existing.push(employee);
+      map.set(key, existing);
+    }
+    return map;
+  }, [employees]);
+
+  const upcomingBirthdays = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const withNextDate = employees
+      .filter((employee) => employee.status === 'ACTIVE' && employee.date_of_birth)
+      .map((employee) => {
+        const birth = new Date(`${employee.date_of_birth}T00:00:00`);
+        let next = new Date(today.getFullYear(), birth.getMonth(), birth.getDate());
+        if (next.getTime() < today.getTime()) {
+          next = new Date(today.getFullYear() + 1, birth.getMonth(), birth.getDate());
+        }
+        const daysUntil = Math.round((next.getTime() - today.getTime()) / 86_400_000);
+        const turningAge = next.getFullYear() - birth.getFullYear();
+        return { employee, next, daysUntil, turningAge };
+      })
+      .filter((item) => item.daysUntil <= 30)
+      .sort((a, b) => a.daysUntil - b.daysUntil);
+    return withNextDate;
+  }, [employees]);
 
   const stats = useMemo(() => ({
     profileCompletion: employees.length
@@ -2623,6 +2703,7 @@ export function AdminHR() {
                 { id: 'branches', label: 'Sedes', icon: Building2, desc: 'Sucursales y ubicaciones' },
                 { id: 'catalog', label: 'Catálogos', icon: Briefcase, desc: 'Áreas, cargos y horarios' },
                 { id: 'vacations', label: 'Solicitudes', icon: CalendarClock, desc: 'Vacaciones y permisos' },
+                { id: 'calendar', label: 'Calendario', icon: CalendarDays, desc: 'Novedades y cumpleaños' },
               ] as const).map((item) => {
                 const Icon = item.icon;
                 const active = activeTab === item.id;
@@ -2648,7 +2729,9 @@ export function AdminHR() {
         </div>
 
         <div className="flex-1 min-w-0 space-y-4 px-4 sm:px-6 md:px-8 lg:px-0 pt-4 lg:pt-0">
-          <SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Buscar por nombre, apellido, cédula, cargo, área, sede o correo..." className="w-full" />
+          {activeTab !== 'calendar' && (
+            <SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Buscar por nombre, apellido, cédula, cargo, área, sede o correo..." className="w-full" />
+          )}
           {activeTab === 'employees' ? (
             <div className="space-y-3 rounded-xl border border-gray-100 bg-white p-3 shadow-sm">
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5">
@@ -3106,6 +3189,136 @@ export function AdminHR() {
               )}
             </div>
           )}
+
+          {activeTab === 'calendar' && (
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
+                  <button
+                    type="button"
+                    onClick={() => setCalendarView('requests')}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${calendarView === 'requests' ? 'bg-white text-[#2a4038] shadow-sm font-semibold' : 'text-gray-500 hover:text-gray-700'}`}
+                  >
+                    <CalendarClock size={13} />
+                    Novedades
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCalendarView('birthdays')}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${calendarView === 'birthdays' ? 'bg-white text-[#2a4038] shadow-sm font-semibold' : 'text-gray-500 hover:text-gray-700'}`}
+                  >
+                    <Cake size={13} />
+                    Cumpleaños
+                  </button>
+                </div>
+                <CalendarMonthNav month={calendarMonth} onChange={setCalendarMonth} />
+              </div>
+
+              {calendarView === 'requests' && (
+                <>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <select
+                      value={calendarTypeFilter}
+                      onChange={(event) => setCalendarTypeFilter(event.target.value as VacationRequestType | 'all')}
+                      className={selectCls}
+                    >
+                      <option value="all">Todos los tipos</option>
+                      <option value="VACATION">Vacaciones</option>
+                      <option value="PERMISSION">Permisos</option>
+                      <option value="OVERTIME">Horas extras</option>
+                      <option value="LEAVE">Licencias</option>
+                      <option value="INCAPACITY">Incapacidades</option>
+                      <option value="OTHER">Otro</option>
+                    </select>
+                    <select
+                      value={calendarDepartmentFilter}
+                      onChange={(event) => setCalendarDepartmentFilter(event.target.value)}
+                      className={selectCls}
+                    >
+                      <option value="all">Todos los departamentos</option>
+                      {departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
+                    </select>
+                  </div>
+
+                  <Card className="p-4">
+                    <MonthCalendar
+                      month={calendarMonth}
+                      renderDay={(date) => {
+                        const events = calendarEventsByDay.get(toDateKey(date)) ?? [];
+                        const visible = events.slice(0, 2);
+                        const remaining = events.length - visible.length;
+                        return (
+                          <>
+                            {visible.map(({ request, employee }) => (
+                              <CalendarChip
+                                key={request.id}
+                                label={`${employee ? getEmployeeName(employee) : 'Empleado'} · ${getRequestTypeLabel(request.request_type)}`}
+                                color={REQUEST_TYPE_CALENDAR_COLOR[request.request_type]}
+                                onClick={() => openRequestDetailModal(request)}
+                              />
+                            ))}
+                            {remaining > 0 && (
+                              <CalendarMoreChip count={remaining} onClick={() => setCalendarDayDetail(date)} />
+                            )}
+                          </>
+                        );
+                      }}
+                    />
+                  </Card>
+                </>
+              )}
+
+              {calendarView === 'birthdays' && (
+                <>
+                  {upcomingBirthdays.length > 0 && (
+                    <Card className="p-4">
+                      <p className="text-xs font-semibold text-gray-900 mb-3">Próximos cumpleaños (30 días)</p>
+                      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                        {upcomingBirthdays.map(({ employee, next, daysUntil, turningAge }) => (
+                          <div key={employee.id} className="flex items-center gap-2 px-3 py-2 bg-pink-50 border border-pink-100 rounded-lg">
+                            <Cake size={14} className="text-pink-500 flex-shrink-0" />
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold text-gray-900 truncate">{getEmployeeName(employee)}</p>
+                              <p className="text-[10px] text-gray-500">
+                                {next.toLocaleDateString('es-CO', { day: 'numeric', month: 'long' })} · cumple {turningAge} años
+                                {daysUntil === 0 ? ' · ¡Hoy!' : ` · en ${daysUntil} día${daysUntil === 1 ? '' : 's'}`}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </Card>
+                  )}
+
+                  <Card className="p-4">
+                    <MonthCalendar
+                      month={calendarMonth}
+                      renderDay={(date) => {
+                        const key = `${date.getMonth()}-${date.getDate()}`;
+                        const people = birthdaysByDay.get(key) ?? [];
+                        const visible = people.slice(0, 2);
+                        const remaining = people.length - visible.length;
+                        return (
+                          <>
+                            {visible.map((person) => (
+                              <CalendarChip
+                                key={person.id}
+                                label={getEmployeeName(person)}
+                                color="pink"
+                              />
+                            ))}
+                            {remaining > 0 && (
+                              <CalendarMoreChip count={remaining} onClick={() => setCalendarDayDetail(date)} />
+                            )}
+                          </>
+                        );
+                      }}
+                    />
+                  </Card>
+                </>
+              )}
+            </div>
+          )}
         </>
       )}
         </div>
@@ -3310,6 +3523,43 @@ export function AdminHR() {
             </button>
           </div>
         </div>
+      </Modal>
+
+      <Modal
+        title={calendarDayDetail ? calendarDayDetail.toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Detalle del día'}
+        open={Boolean(calendarDayDetail)}
+        onClose={() => setCalendarDayDetail(null)}
+      >
+        {calendarDayDetail && calendarView === 'requests' && (
+          <div className="space-y-2">
+            {(calendarEventsByDay.get(toDateKey(calendarDayDetail)) ?? []).map(({ request, employee }) => (
+              <button
+                key={request.id}
+                onClick={() => {
+                  setCalendarDayDetail(null);
+                  openRequestDetailModal(request);
+                }}
+                className="w-full text-left flex items-center justify-between gap-3 px-3 py-2.5 border border-gray-100 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-gray-900 truncate">{employee ? getEmployeeName(employee) : 'Empleado'}</p>
+                  <p className="text-[10px] text-gray-400">{getRequestTypeLabel(request.request_type)} · {requestStatusLabel(request.status)}</p>
+                </div>
+                <Badge label={requestStatusLabel(request.status)} color={statusBadge(request.status)} />
+              </button>
+            ))}
+          </div>
+        )}
+        {calendarDayDetail && calendarView === 'birthdays' && (
+          <div className="space-y-2">
+            {(birthdaysByDay.get(`${calendarDayDetail.getMonth()}-${calendarDayDetail.getDate()}`) ?? []).map((person) => (
+              <div key={person.id} className="flex items-center gap-2 px-3 py-2.5 border border-gray-100 rounded-lg">
+                <Cake size={14} className="text-pink-500 flex-shrink-0" />
+                <p className="text-xs font-semibold text-gray-900">{getEmployeeName(person)}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </Modal>
 
       <Modal title="Aprobar solicitud" open={showApproveModal && Boolean(approvingRequest)} onClose={closeApproveModal}>
