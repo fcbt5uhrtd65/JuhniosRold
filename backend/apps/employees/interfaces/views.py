@@ -232,12 +232,13 @@ class EmployeeViewSet(SoftDeleteModelViewSet):
             content_type="application/pdf",
         )
 
-    @action(detail=True, methods=("get",), url_path="export-certificate-pdf")
+    @action(detail=True, methods=("post",), url_path="export-certificate-pdf")
     def export_certificate_pdf(self, request, pk=None):
         employee = self.get_object()
         issued_by = getattr(request.user, "employee_profile", None) or get_default_hr_signer()
+        signature_file = request.FILES.get("signature")
         try:
-            pdf_buffer = render_employee_certificate_pdf(employee, issued_by=issued_by)
+            pdf_buffer = render_employee_certificate_pdf(employee, issued_by=issued_by, signature_file=signature_file)
         except Exception:
             logger.exception("Fallo al generar el certificado laboral para el empleado %s", employee.id)
             return Response(

@@ -8,23 +8,17 @@ from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
 
-from shared.infrastructure.signature_pdf import draw_signature_block, signature_block_height
-
 from .models import Employee
 
 COMPANY_NAME = "PRODUCTOS JUHNIOS ROLD SAS"
-COMPANY_NIT = "NIT en registro interno"
 LOGO_PATH = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "finance", "infrastructure", "assets", "logo.jpeg")
 )
-BRAND = HexColor("#2a4038")
-TEXT = HexColor("#111827")
-MUTED = HexColor("#6b7280")
-LINE = HexColor("#e5e7eb")
-CARD = HexColor("#f7faf8")
-HEADER_BG = HexColor("#eef4f1")
-WHITE = HexColor("#ffffff")
-GOLD = HexColor("#b08d3f")
+TEXT = HexColor("#000000")
+MUTED = HexColor("#444444")
+
+FONT = "Helvetica"
+FONT_BOLD = "Helvetica-Bold"
 
 
 def _safe(value, default="-"):
@@ -38,12 +32,12 @@ def _name(employee):
     return f"{_safe(employee.first_name, '')} {_safe(employee.last_name, '')}".strip() or _safe(employee.employee_code)
 
 
-def _date(value):
-    return f"{value:%d de %B de %Y}" if value else "-"
-
-
 def _short_date(value):
     return f"{value:%d/%m/%Y}" if value else "-"
+
+
+def _date_long(value):
+    return f"{value:%d de %B de %Y}" if value else "-"
 
 
 def _money(value):
@@ -52,46 +46,13 @@ def _money(value):
     return f"${value:,.0f} COP"
 
 
-def _text(c, x, y, text, size=9, bold=False, color=TEXT, align="left", font="Helvetica"):
-    c.setFillColor(color)
-    c.setFont(f"{font}-Bold" if bold else font, size)
-    text = _safe(text, "")
-    if align == "right":
-        c.drawRightString(x, y, text)
-    elif align == "center":
-        c.drawCentredString(x, y, text)
-    else:
-        c.drawString(x, y, text)
+def _signer_document_label(issued_by):
+    if issued_by and issued_by.document_type:
+        return issued_by.get_document_type_display().lower()
+    return "documento"
 
 
-def _wrap_lines(text, max_width, font_name="Helvetica", font_size=10.5, leading=None):
-    text = _safe(text, "")
-    words = text.split()
-    lines = []
-    current = ""
-    for word in words:
-        candidate = word if not current else f"{current} {word}"
-        if stringWidth(candidate, font_name, font_size) <= max_width:
-            current = candidate
-        else:
-            if current:
-                lines.append(current)
-            current = word
-    if current:
-        lines.append(current)
-    return lines or [""]
-
-
-def _draw_paragraph(c, x, y, text, max_width, size=10.5, leading=16, color=TEXT):
-    lines = _wrap_lines(text, max_width, font_size=size)
-    c.setFillColor(color)
-    c.setFont("Helvetica", size)
-    for idx, line in enumerate(lines):
-        c.drawString(x, y - idx * leading, line)
-    return y - len(lines) * leading
-
-
-def _draw_logo(c, x, y, size=48):
+def _draw_logo(c, x, y, size=40):
     if not os.path.exists(LOGO_PATH):
         return 0
     try:
@@ -101,160 +62,214 @@ def _draw_logo(c, x, y, size=48):
     return size
 
 
-def _draw_page_frame(c, x0, x1, page_h, top_y, bottom_y):
-    c.setStrokeColor(GOLD)
-    c.setLineWidth(1.2)
-    c.rect(x0 - 14, bottom_y - 14, (x1 - x0) + 28, (top_y - bottom_y) + 28, stroke=1, fill=0)
-    c.setStrokeColor(LINE)
-    c.setLineWidth(0.5)
-    c.rect(x0 - 10, bottom_y - 10, (x1 - x0) + 20, (top_y - bottom_y) + 20, stroke=1, fill=0)
+def _draw_header(c, x0, x1, y):
+    """Encabezado con logo a la izquierda y datos de la empresa alineados a la derecha,
+    igual al patron de una carta membretada clasica."""
+    logo_size = _draw_logo(c, x0, y, 40)
+
+    c.setFillColor(TEXT)
+    c.setFont(FONT_BOLD, 12)
+    c.drawRightString(x1, y - 12, COMPANY_NAME)
+    c.setFont(FONT, 9)
+    c.drawRightString(x1, y - 25, "Recursos Humanos")
+
+    return y - max(logo_size, 30) - 20
 
 
-def _draw_letterhead(c, x0, x1, y, certificate_number):
-    logo_size = _draw_logo(c, x0, y, 48)
-    text_x = x0 + logo_size + (12 if logo_size else 0)
-    _text(c, text_x, y - 16, COMPANY_NAME, size=13.5, bold=True)
-    _text(c, text_x, y - 30, "Recursos Humanos · Gestión del Talento Humano", size=8.5, color=MUTED)
-    _text(c, x1, y - 16, "CERTIFICADO No.", size=7.5, bold=True, color=MUTED, align="right")
-    _text(c, x1, y - 28, certificate_number, size=10.5, bold=True, color=BRAND, align="right")
-    c.setStrokeColor(GOLD)
-    c.setLineWidth(1.4)
-    c.line(x0, y - 44, x1, y - 44)
-    return y - 60
+def _parse_runs(parts):
+    """parts es una lista de (texto, bold). Devuelve tokens (palabra, bold) preservando
+    los espacios entre palabras para poder envolver el parrafo respetando negritas."""
+    tokens = []
+    for text, bold in parts:
+        words = text.split(" ")
+        for index, word in enumerate(words):
+            if index > 0:
+                tokens.append((" ", bold))
+            if word:
+                tokens.append((word, bold))
+    return tokens
 
 
-def _draw_title(c, x0, x1, y):
-    _text(c, (x0 + x1) / 2, y, "CERTIFICADO LABORAL", size=17, bold=True, color=BRAND, align="center")
-    label_w = stringWidth("CERTIFICADO LABORAL", "Helvetica-Bold", 17)
-    c.setStrokeColor(GOLD)
-    c.setLineWidth(1)
-    mid_x = (x0 + x1) / 2
-    c.line(mid_x - label_w / 2, y - 8, mid_x + label_w / 2, y - 8)
-    return y - 24
+def _draw_rich_paragraph(c, x, y, parts, max_width, size=10.5, leading=16, align="justify"):
+    """Dibuja un parrafo con tramos en negrita, envolviendo palabras al ancho maximo.
+    parts: lista de tuplas (texto, bold: bool). Devuelve el nuevo y.
+    """
+    tokens = _parse_runs(parts)
+
+    lines = []
+    current_line = []
+    current_width = 0.0
+    for word, bold in tokens:
+        if word == " ":
+            word_width = stringWidth(" ", FONT, size)
+        else:
+            word_width = stringWidth(word, FONT_BOLD if bold else FONT, size)
+        if word != " " and current_width + word_width > max_width and current_line:
+            while current_line and current_line[-1][0] == " ":
+                current_line.pop()
+            lines.append(current_line)
+            current_line = []
+            current_width = 0.0
+        current_line.append((word, bold))
+        current_width += word_width
+    if current_line:
+        while current_line and current_line[-1][0] == " ":
+            current_line.pop()
+        lines.append(current_line)
+
+    c.setFillColor(TEXT)
+    for line_index, line in enumerate(lines):
+        line_y = y - line_index * leading
+        is_last_line = line_index == len(lines) - 1
+        words_only = [tok for tok in line if tok[0] != " "]
+        natural_width = sum(
+            stringWidth(word, FONT_BOLD if bold else FONT, size) for word, bold in line
+        )
+
+        if align == "justify" and not is_last_line and len(words_only) > 1:
+            extra_space = max(max_width - natural_width, 0)
+            gap_count = sum(1 for word, _ in line if word == " ")
+            extra_per_gap = (extra_space / gap_count) if gap_count else 0
+            cursor_x = x
+            for word, bold in line:
+                if word == " ":
+                    cursor_x += stringWidth(" ", FONT, size) + extra_per_gap
+                    continue
+                c.setFont(FONT_BOLD if bold else FONT, size)
+                c.drawString(cursor_x, line_y, word)
+                cursor_x += stringWidth(word, FONT_BOLD if bold else FONT, size)
+        else:
+            cursor_x = x
+            for word, bold in line:
+                if word == " ":
+                    cursor_x += stringWidth(" ", FONT, size)
+                    continue
+                c.setFont(FONT_BOLD if bold else FONT, size)
+                c.drawString(cursor_x, line_y, word)
+                cursor_x += stringWidth(word, FONT_BOLD if bold else FONT, size)
+
+    return y - len(lines) * leading
 
 
-def _draw_field_row(c, x, y, w, label, value):
-    _text(c, x, y, label.upper(), size=6.8, bold=True, color=MUTED)
-    _text(c, x, y - 12, _safe(value), size=9.5, bold=True, color=TEXT)
+def _draw_signature_image(c, x, y, max_w, max_h, signature_file):
+    if not signature_file:
+        return 0
+    try:
+        if not signature_file.storage.exists(signature_file.name):
+            return 0
+        with signature_file.open("rb") as file_obj:
+            image = ImageReader(io.BytesIO(file_obj.read()))
+        iw, ih = image.getSize()
+        draw_w = max_w
+        draw_h = draw_w * (ih / iw) if iw else max_h
+        if draw_h > max_h:
+            draw_h = max_h
+            draw_w = draw_h * (iw / ih) if ih else max_w
+        c.drawImage(image, x, y, width=draw_w, height=draw_h, preserveAspectRatio=True, mask="auto")
+        return draw_h
+    except Exception:
+        return 0
 
 
-def _draw_summary_grid(c, x0, y, w, employee):
-    rows = [
-        [("Nombre completo", _name(employee)), ("Documento", f"{employee.get_document_type_display() if employee.document_type else ''} {_safe(employee.document_number)}".strip())],
-        [("Cargo", employee.position.name if employee.position_id else "-"), ("Área / Departamento", employee.department.name if employee.department_id else "-")],
-        [("Tipo de vinculación", employee.get_employment_type_display()), ("Tipo de contrato", employee.get_contract_type_display())],
-        [("Fecha de ingreso", _short_date(employee.hire_date)), ("Sede", employee.branch.name if employee.branch_id else "-")],
-    ]
-    row_h = 34
-    h = 20 + len(rows) * row_h
-    c.setFillColor(CARD)
-    c.setStrokeColor(LINE)
-    c.setLineWidth(0.6)
-    c.roundRect(x0, y - h, w, h, 8, stroke=1, fill=1)
-    col_w = (w - 40) / 2
-    current_y = y - 22
-    for row in rows:
-        _draw_field_row(c, x0 + 18, current_y, col_w, *row[0])
-        _draw_field_row(c, x0 + 18 + col_w + 22, current_y, col_w, *row[1])
-        current_y -= row_h
-    return y - h
+def render_employee_certificate_pdf(employee: Employee, issued_by: Employee | None = None, include_salary: bool = True, signature_file=None):
+    """Genera el certificado laboral en formato de carta formal (tipo carta clasica,
+    sin cuadros ni marcos), con la firma de quien lo emite justo antes del cierre.
 
-
-def _certificate_number(employee: Employee) -> str:
-    today = timezone.localdate()
-    code = (employee.employee_code or str(employee.id)[:8]).replace(" ", "")
-    return f"CL-{today:%Y%m}-{code}"
-
-
-def render_employee_certificate_pdf(employee: Employee, issued_by: Employee | None = None, include_salary: bool = True):
+    signature_file: archivo de firma a usar para este certificado puntual (tiene
+    prioridad); si no se pasa, se usa la firma guardada de issued_by.
+    """
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=letter)
     c.setTitle(f"Certificado laboral - {_name(employee)}")
 
     page_w, page_h = letter
-    x0, x1 = 62, page_w - 62
+    x0, x1 = 72, page_w - 72
     main_w = x1 - x0
-    top_y = page_h - 56
-    bottom_y = 60
-    y = page_h - 62
+    y = page_h - 64
 
-    _draw_page_frame(c, x0, x1, page_h, top_y, bottom_y)
-
-    y = _draw_letterhead(c, x0, x1, y, _certificate_number(employee))
-    y -= 10
-    y = _draw_title(c, x0, x1, y)
-    y -= 22
-
-    today = timezone.localdate()
-    intro = (
-        f"{COMPANY_NAME} certifica que {_name(employee)}, identificado(a) con "
-        f"{employee.get_document_type_display() if employee.document_type else 'documento'} "
-        f"N.° {_safe(employee.document_number)}, labora actualmente en la compañía desempeñando el cargo de "
-        f"{employee.position.name if employee.position_id else 'un cargo asignado'}, en el área de "
-        f"{employee.department.name if employee.department_id else 'la organización'}, "
-        f"desde el {_short_date(employee.hire_date)}, bajo un contrato de tipo "
-        f"{employee.get_contract_type_display().lower()}."
-    )
-    y = _draw_paragraph(c, x0, y, intro, main_w, size=10.5, leading=15.5)
-    y -= 18
-
-    if include_salary and employee.base_salary:
-        salary_text = (
-            f"Actualmente devenga un salario {employee.get_salary_type_display().lower()} de "
-            f"{_money(employee.base_salary)} mensuales."
-        )
-        y = _draw_paragraph(c, x0, y, salary_text, main_w, size=10.5, leading=15.5)
-        y -= 18
-
-    status_text = (
-        "El(la) colaborador(a) se encuentra activo(a) en la compañía a la fecha de expedición de este certificado."
-        if employee.status == Employee.Status.ACTIVE
-        else f"El estado actual del(de la) colaborador(a) en la compañía es: {employee.get_status_display()}."
-    )
-    y = _draw_paragraph(c, x0, y, status_text, main_w, size=10.5, leading=15.5)
+    y = _draw_header(c, x0, x1, y)
     y -= 24
 
-    y = _draw_summary_grid(c, x0, y, main_w, employee)
-    y -= 30
-
-    closing = (
-        "Este certificado se expide a solicitud del(de la) interesado(a) para los fines que estime convenientes, "
-        "a los datos consignados en los registros de Recursos Humanos de la compañía."
-    )
-    y = _draw_paragraph(c, x0, y, closing, main_w, size=9.5, leading=14, color=MUTED)
-    y -= 26
-
-    _text(c, x0, y, f"Expedido en Colombia, {_date(today)}.", size=9.5, color=TEXT)
+    c.setFillColor(TEXT)
+    c.setFont(FONT_BOLD, 15)
+    c.drawCentredString((x0 + x1) / 2, y, "CERTIFICADO LABORAL")
+    y -= 36
 
     signer_name = _name(issued_by) if issued_by else "Recursos Humanos"
-    role_label = issued_by.position.name if issued_by and issued_by.position_id else "Recursos Humanos"
-    signature_file = getattr(issued_by, "signature", None) if issued_by else None
-    signature_w = 240
-    image_h = 92
-    signature_h = signature_block_height(image_h)
+    signer_role = issued_by.position.name if issued_by and issued_by.position_id else "Recursos Humanos"
+    signer_document = _safe(issued_by.document_number) if issued_by else "-"
 
-    # La firma se ancla a una posicion fija cerca del pie de pagina, en vez de
-    # seguir el flujo del texto, para que siempre quede dentro del marco decorativo.
-    footer_y = bottom_y - 6
-    signature_top = footer_y + 22 + signature_h
-    if signature_top > y - 26:
-        signature_top = y - 26
+    employee_document_label = employee.get_document_type_display() if employee.document_type else "C.I."
+    treatment = "Sr." if employee.gender == Employee.Gender.MALE else "Sra." if employee.gender == Employee.Gender.FEMALE else "Sr(a)."
 
-    draw_signature_block(
-        c,
-        x0 + (main_w - signature_w) / 2,
-        signature_top,
-        signature_w,
-        signature_file=signature_file,
-        signer_name=signer_name,
-        role_label=role_label,
-        decided_at=timezone.now(),
-        image_h=image_h,
+    intro_parts = [
+        ("Quien suscribe, ", False),
+        (signer_name.upper() + ",", True),
+        (f" con número de {_signer_document_label(issued_by)} {signer_document}, por medio de la presente, certifico que", False),
+        (f" el/la {treatment} ", False),
+        (_name(employee).upper() + ",", True),
+        (f" con {employee_document_label} {_safe(employee.document_number)}, se desempeña como", False),
+        (f" {employee.position.name.upper() if employee.position_id else 'COLABORADOR(A)'} ", True),
+        (f"en {COMPANY_NAME}, desde el {_short_date(employee.hire_date)}", False),
+        (
+            f", tiempo en el cual ha demostrado excelentes habilidades en el desempeño de sus funciones y "
+            f"un comportamiento acorde con los valores de la organización, convirtiéndose en un elemento valioso "
+            f"dentro de nuestro equipo de trabajo.",
+            False,
+        ),
+    ]
+    y = _draw_rich_paragraph(c, x0, y, intro_parts, main_w, size=10.8, leading=17)
+    y -= 20
+
+    if include_salary and employee.base_salary:
+        salary_parts = [
+            ("Devenga un salario ", False),
+            (employee.get_salary_type_display().lower() + " de ", False),
+            (_money(employee.base_salary), True),
+            (" mensuales.", False),
+        ]
+        y = _draw_rich_paragraph(c, x0, y, salary_parts, main_w, size=10.8, leading=17)
+        y -= 20
+
+    recommendation = (
+        "Por lo anterior, no tengo ningún inconveniente en recomendarlo(a) para cualquier aspecto que esté "
+        "solicitando, ya que estoy segura de que lo hará con la misma excelencia que lo ha caracterizado."
     )
+    y = _draw_rich_paragraph(c, x0, y, [(recommendation, False)], main_w, size=10.8, leading=17)
+    y -= 20
 
-    c.setFillColor(MUTED)
-    c.setFont("Helvetica", 7)
-    c.drawCentredString(page_w / 2, footer_y, "Documento generado digitalmente por el sistema de gestión de Recursos Humanos.")
+    usage_note = "El(la) interesado(a) puede hacer uso de este certificado como a bien tuviere."
+    y = _draw_rich_paragraph(c, x0, y, [(usage_note, False)], main_w, size=10.8, leading=17)
+    y -= 24
+
+    c.setFont(FONT, 10.8)
+    c.setFillColor(TEXT)
+    today = timezone.localdate()
+    c.drawString(x0, y, "Atentamente,")
+    y -= 20
+    c.drawString(x0, y, f"Expedido el {_date_long(today)}.")
+
+    # Firma anclada al pie de pagina, sin depender del largo del texto anterior.
+    signature_zone_h = 140
+    signature_y = max(y - signature_zone_h, 130)
+
+    file_to_draw = signature_file or (getattr(issued_by, "signature", None) if issued_by else None)
+    _draw_signature_image(c, x0, signature_y + 34, 200, 60, file_to_draw)
+
+    line_y = signature_y + 28
+    c.setStrokeColor(MUTED)
+    c.setLineWidth(0.7)
+    c.line(x0, line_y, x0 + 220, line_y)
+
+    c.setFont(FONT_BOLD, 10.5)
+    c.setFillColor(TEXT)
+    c.drawString(x0, line_y - 15, signer_name.upper())
+    c.setFont(FONT_BOLD, 9.5)
+    c.drawString(x0, line_y - 28, signer_role.upper())
+    if issued_by and issued_by.phone:
+        c.setFont(FONT, 8.5)
+        c.setFillColor(MUTED)
+        c.drawString(x0, line_y - 41, f"Cel: {issued_by.phone}")
 
     c.save()
     buffer.seek(0)
