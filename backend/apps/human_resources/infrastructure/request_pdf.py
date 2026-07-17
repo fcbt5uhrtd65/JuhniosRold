@@ -15,8 +15,6 @@ from shared.infrastructure.pdf_letterhead import (
 
 COMPANY_NAME = "PRODUCTOS JUHNIOS ROLD SAS"
 
-NAVY = HexColor("#1b3a6b")
-STEEL = HexColor("#2e6da4")
 TEXT = HexColor("#1a1a1a")
 MUTED = HexColor("#5d6d7e")
 SUCCESS = HexColor("#1f8a4c")
@@ -209,7 +207,7 @@ def _draw_letterhead(c, page_w, page_h, x0, x1, y):
 
 
 def _draw_title(c, x0, x1, cx, y, vacation, request_number):
-    _text(c, cx, y, "CONSTANCIA DE SOLICITUD", size=15, bold=True, color=NAVY, align="center")
+    _text(c, cx, y, "CONSTANCIA DE SOLICITUD", size=15, bold=True, color=TEXT, align="center")
     y -= 16
     status_color = _status_color(vacation.status)
     _text(c, cx, y, vacation.get_status_display().upper(), size=9.5, bold=True, color=status_color, align="center")
@@ -217,10 +215,10 @@ def _draw_title(c, x0, x1, cx, y, vacation, request_number):
 
     # Franja de identificación del documento: separa la identidad de la empresa (membrete)
     # de los metadatos propios de este documento (número, fecha de generación). Sin trazos ni cuadros.
-    _text(c, x0, y, request_number, size=9, bold=True, color=STEEL)
+    _text(c, x0, y, request_number, size=9, bold=True, color=TEXT)
     _text(c, x1, y, f"Generado el {timezone.now():%d/%m/%Y a las %H:%M}", size=8, color=MUTED, align="right")
 
-    return y - 26
+    return y - 40
 
 
 # ── Cuerpo narrativo ───────────────────────────────────────────────────────────
@@ -306,7 +304,7 @@ def _approval_steps_data(vacation):
 def _draw_approval_narrative(c, x0, x1, y, vacation):
     """Flujo de aprobación narrado como texto corrido, sin cuadros ni marcadores graficos."""
     w = x1 - x0
-    _text(c, x0, y, "Trazabilidad del proceso de aprobación", size=10.5, bold=True, color=NAVY)
+    _text(c, x0, y, "Trazabilidad del proceso de aprobación", size=10.5, bold=True, color=TEXT)
     y -= 16
 
     steps = _approval_steps_data(vacation)
@@ -318,7 +316,7 @@ def _draw_approval_narrative(c, x0, x1, y, vacation):
         status_color = _status_color(step["status"])
         # Etapa + estado en una linea (estado con color de estado, resto en texto normal)
         c.setFont(FONT_BOLD, 9.3)
-        c.setFillColor(NAVY)
+        c.setFillColor(TEXT)
         c.drawString(x0, y, f"{index}. {step['label']}:")
         label_w = stringWidth(f"{index}. {step['label']}: ", FONT_BOLD, 9.3)
         c.setFont(FONT_BOLD, 9.3)
@@ -347,7 +345,7 @@ def _signing_steps(vacation):
 
 def _draw_signatures_section(c, x0, x1, y, vacation):
     w = x1 - x0
-    _text(c, x0, y, "Firmas de aprobación", size=10.5, bold=True, color=NAVY)
+    _text(c, x0, y, "Firmas de aprobación", size=10.5, bold=True, color=TEXT)
     y -= 44
 
     steps = _signing_steps(vacation)
@@ -373,7 +371,7 @@ def _draw_signatures_section(c, x0, x1, y, vacation):
             f"{step.get_step_display()} · {step.get_status_display()} · {_datetime_label(step.acted_at)}",
             signature_file,
             font=(FONT, FONT_BOLD),
-            navy=NAVY,
+            navy=TEXT,
             muted=MUTED,
         )
     return y - 40

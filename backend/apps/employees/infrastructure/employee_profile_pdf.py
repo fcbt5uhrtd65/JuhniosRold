@@ -10,7 +10,6 @@ from reportlab.pdfgen import canvas
 from shared.infrastructure.pdf_letterhead import draw_letterhead_footer, draw_letterhead_header
 
 COMPANY_NAME = "PRODUCTOS JUHNIOS ROLD SAS"
-BRAND = HexColor("#2a4038")
 TEXT = HexColor("#111827")
 MUTED = HexColor("#6b7280")
 LINE = HexColor("#e5e7eb")
@@ -115,7 +114,7 @@ def _round_rect(c, x, y, w, h, fill_color=WHITE, stroke_color=LINE, radius=8):
 
 
 def _section_label(c, x, y, title):
-    _text(c, x, y, title.upper(), size=8.5, bold=True, color=BRAND)
+    _text(c, x, y, title.upper(), size=8.5, bold=True, color=TEXT)
 
 
 def _field(c, x, y, label, value, max_width):
@@ -214,14 +213,14 @@ def _hours(value):
 def _draw_header(c, page_w, page_h, x0, x1, employee):
     y = draw_letterhead_header(c, page_w, page_h, x0, x1)
 
-    _text(c, x0, y, COMPANY_NAME, size=13.5, bold=True)
-    _text(c, x1, y, "Perfil de empleado", size=12, bold=True, align="right", color=BRAND)
+    _text(c, x0, y, COMPANY_NAME, size=13.5, bold=True, color=TEXT)
+    _text(c, x1, y, "Perfil de empleado", size=12, bold=True, align="right", color=TEXT)
     y -= 16
     _text(c, x1, y, f"Generado: {timezone.now():%d/%m/%Y %H:%M}", size=8.5, align="right", color=MUTED)
     status_text = employee.get_status_display()
     pill_w = max(84, stringWidth(status_text, "Helvetica-Bold", 7.3) + 18)
     _pill(c, x1 - pill_w, y - 15, status_text, _status_color(employee.status), pill_w)
-    return y - 35
+    return y - 46
 
 
 def _draw_summary_card(c, x0, y, w, employee):
@@ -247,7 +246,7 @@ def _draw_summary_card(c, x0, y, w, employee):
         c.setStrokeColor(LINE)
         c.roundRect(photo_x, photo_y - photo_size, photo_size, photo_size, 10, stroke=1, fill=1)
         initials = "".join(part[0] for part in (_safe(employee.first_name, ""), _safe(employee.last_name, "")) if part)[:2].upper() or "-"
-        _text(c, photo_x + photo_size / 2, photo_y - photo_size / 2 - 9, initials, size=32, bold=True, align="center", color=BRAND)
+        _text(c, photo_x + photo_size / 2, photo_y - photo_size / 2 - 9, initials, size=32, bold=True, align="center", color=TEXT)
     else:
         c.setStrokeColor(LINE)
         c.setLineWidth(0.8)
@@ -260,7 +259,7 @@ def _draw_summary_card(c, x0, y, w, employee):
     fields_w = x0 + w - fields_x - 18
 
     _text(c, fields_x, y - 30, _fit(_name(employee), fields_w, "Helvetica-Bold", 19), size=19, bold=True)
-    _text(c, fields_x, y - 48, _fit(position, fields_w, font_size=11), size=11, color=BRAND)
+    _text(c, fields_x, y - 48, _fit(position, fields_w, font_size=11), size=11, color=TEXT)
 
     c.setStrokeColor(LINE)
     c.setLineWidth(0.6)

@@ -17,8 +17,6 @@ from .models import Employee
 COMPANY_NAME = "PRODUCTOS JUHNIOS ROLD SAS"
 
 # ── Paleta ─────────────────────────────────────────────────────────────────────
-NAVY       = HexColor("#1B3A6B")   # azul marino — acento principal
-STEEL      = HexColor("#2E6DA4")   # azul acero  — elementos secundarios
 TEXT       = HexColor("#1A1A1A")   # cuerpo del texto
 MUTED      = HexColor("#5D6D7E")   # metadatos y pies
 
@@ -67,12 +65,12 @@ def _draw_header(c, page_w, page_h, x0, x1):
     Retorna la coordenada y donde termina el encabezado."""
     y = draw_letterhead_header(c, page_w, page_h, x0, x1)
 
-    c.setFillColor(NAVY)
+    c.setFillColor(TEXT)
     c.setFont(FONT_BOLD, 11.5)
     c.drawRightString(x1, y, COMPANY_NAME)
     y -= 13
     c.setFont(FONT, 8.5)
-    c.setFillColor(STEEL)
+    c.setFillColor(MUTED)
     c.drawRightString(x1, y, "Gestión de Talento Humano  ·  Recursos Humanos")
 
     return y - 22
@@ -80,16 +78,16 @@ def _draw_header(c, page_w, page_h, x0, x1):
 
 # ── Título del documento ───────────────────────────────────────────────────────
 def _draw_title(c, cx, y):
-    c.setFillColor(NAVY)
+    c.setFillColor(TEXT)
     c.setFont(FONT_BOLD, 15)
     c.drawCentredString(cx, y, "CERTIFICADO LABORAL")
 
     # línea decorativa bajo el título
-    c.setStrokeColor(STEEL)
+    c.setStrokeColor(MUTED)
     c.setLineWidth(1.2)
     c.line(cx - 90, y - 8, cx + 90, y - 8)
 
-    return y - 28
+    return y - 42
 
 
 # ── Párrafo con negritas ───────────────────────────────────────────────────────
@@ -158,7 +156,7 @@ def _draw_signature_block(c, x0, w, line_y, signer_name, signer_role, signature_
     """Firma pegada directamente a la línea, tamaño fijo y moderado (helper compartido)."""
     draw_signature_line_block(
         c, x0, line_y, w, signer_name, signer_role, signature_file,
-        font=(FONT, FONT_BOLD), navy=NAVY, muted=MUTED,
+        font=(FONT, FONT_BOLD), navy=TEXT, muted=MUTED,
     )
 
 
