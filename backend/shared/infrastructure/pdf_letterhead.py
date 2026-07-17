@@ -69,14 +69,25 @@ def draw_letterhead_footer(c, page_w, x0, x1):
 
 
 def resolve_signature_image(signature_file):
-    """Devuelve un ImageReader a partir de un FileField de firma, o None si no hay/está corrupto."""
+    """Devuelve un ImageReader a partir de una firma, o None si no hay/está corrupta.
+
+    Acepta dos tipos de entrada, ya que ambos se usan indistintamente según el flujo:
+    - Un ``FieldFile`` ya guardado en storage (ej. ``employee.signature``).
+    - Un archivo recién subido en el request (``request.FILES.get("signature")``,
+      ``InMemoryUploadedFile``/``TemporaryUploadedFile``), que no tiene ``.storage``
+      y debe leerse directamente con ``.read()``.
+    """
     if not signature_file:
         return None
     try:
-        if not signature_file.storage.exists(signature_file.name):
-            return None
-        with signature_file.open("rb") as fobj:
-            return ImageReader(io.BytesIO(fobj.read()))
+        storage = getattr(signature_file, "storage", None)
+        if storage is not None:
+            if not storage.exists(signature_file.name):
+                return None
+            with signature_file.open("rb") as fobj:
+                return ImageReader(io.BytesIO(fobj.read()))
+        signature_file.seek(0)
+        return ImageReader(io.BytesIO(signature_file.read()))
     except Exception:
         return None
 
