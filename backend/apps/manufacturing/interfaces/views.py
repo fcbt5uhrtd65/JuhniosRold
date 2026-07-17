@@ -21,6 +21,8 @@ from ..application.use_cases import (
     ApproveLineClearance,
     ChangeBatchStatus,
     CloseDispensingOrder,
+    LoadCertificateTestsFromSpecification,
+    LoadMicrobiologySpecificationFromMaster,
     ReleaseBatch,
     StartBatch,
     VerifyDispensingLine,
@@ -52,6 +54,8 @@ from ..infrastructure.models import (
     PackagingControl,
     ProductionControl,
     ProductionControlMaterial,
+    ProductSpecification,
+    ProductSpecificationTest,
     RawMaterialBatch,
     RawMaterialIdentificationPrint,
     SealIntegrityControl,
@@ -85,6 +89,8 @@ from ..infrastructure.serializers import (
     PackagingControlSerializer,
     ProductionControlMaterialSerializer,
     ProductionControlSerializer,
+    ProductSpecificationSerializer,
+    ProductSpecificationTestSerializer,
     RawMaterialBatchSerializer,
     RawMaterialIdentificationPrintSerializer,
     SealIntegrityControlSerializer,
@@ -485,6 +491,15 @@ class AnalysisCertificateViewSet(ManufacturingBaseViewSet):
             filename_prefix="certificado-analisis",
         )
 
+    @action(detail=True, methods=("post",), url_path="load-from-specification")
+    def load_from_specification(self, request, pk=None):
+        certificate = self.get_object()
+        try:
+            certificate = LoadCertificateTestsFromSpecification().execute(certificate)
+        except BusinessRuleViolation as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(self.get_serializer(certificate).data)
+
 
 class AnalysisTestResultViewSet(ManufacturingBaseViewSet):
     queryset = AnalysisTestResult.objects.select_related("certificate", "performed_by", "verified_by")
@@ -496,6 +511,29 @@ class MicrobiologyAnalysisViewSet(ManufacturingBaseViewSet):
     queryset = MicrobiologyAnalysis.objects.select_related("batch", "taken_by", "approved_by")
     serializer_class = MicrobiologyAnalysisSerializer
     filterset_fields = ("batch", "overall_result")
+
+    @action(detail=True, methods=("post",), url_path="load-from-specification")
+    def load_from_specification(self, request, pk=None):
+        microbiology = self.get_object()
+        try:
+            microbiology = LoadMicrobiologySpecificationFromMaster().execute(microbiology)
+        except BusinessRuleViolation as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(self.get_serializer(microbiology).data)
+
+
+# ── Maestro de especificaciones de producto ──────────────────────────────────
+
+class ProductSpecificationViewSet(ManufacturingBaseViewSet):
+    queryset = ProductSpecification.objects.select_related("item").prefetch_related("tests")
+    serializer_class = ProductSpecificationSerializer
+    filterset_fields = ("item", "is_active")
+
+
+class ProductSpecificationTestViewSet(ManufacturingBaseViewSet):
+    queryset = ProductSpecificationTest.objects.select_related("specification")
+    serializer_class = ProductSpecificationTestSerializer
+    filterset_fields = ("specification", "category")
 
 
 # ── Verificación documental ───────────────────────────────────────────────────

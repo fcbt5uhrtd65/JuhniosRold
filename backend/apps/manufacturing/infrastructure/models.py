@@ -841,11 +841,58 @@ class BatchLotMarking(BaseModel):
         ordering = ("stage", "created_at")
 
 
+# ── Maestro de especificaciones de producto ──────────────────────────────────
+# Catálogo de ensayos (nombre, unidad, límites, método, equipo) por producto
+# (Item), reutilizable entre certificados de análisis y análisis microbiológicos
+# de todos los lotes de ese producto — evita digitar la especificación cada vez.
+
+class ProductSpecification(BaseModel):
+    item = models.OneToOneField("inventory.Item", on_delete=models.CASCADE, related_name="specification")
+    version = models.CharField(max_length=20, default="1.0")
+    effective_date = models.DateField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    notes = models.TextField(blank=True)
+
+    class Meta(BaseModel.Meta):
+        ordering = ("-created_at",)
+
+    def __str__(self):
+        return f"Especificación {self.item.code} v{self.version}"
+
+
+class ProductSpecificationTest(BaseModel):
+    class Category(models.TextChoices):
+        PHYSICOCHEMICAL = "PHYSICOCHEMICAL", "Fisicoquímico"
+        MICROBIOLOGICAL = "MICROBIOLOGICAL", "Microbiológico"
+
+    specification = models.ForeignKey(ProductSpecification, on_delete=models.CASCADE, related_name="tests")
+    category = models.CharField(max_length=20, choices=Category.choices, default=Category.PHYSICOCHEMICAL)
+    sequence = models.PositiveSmallIntegerField(default=1)
+    name = models.CharField(max_length=120)
+    unit = models.CharField(max_length=40, blank=True)
+    specification_text = models.CharField(max_length=255, blank=True)
+    lower_limit = models.CharField(max_length=60, blank=True)
+    upper_limit = models.CharField(max_length=60, blank=True)
+    method = models.CharField(max_length=180, blank=True)
+    equipment = models.CharField(max_length=120, blank=True)
+    equipment_parameters = models.CharField(max_length=255, blank=True)
+    is_mandatory = models.BooleanField(default=True)
+
+    class Meta(BaseModel.Meta):
+        ordering = ("specification", "category", "sequence")
+        constraints = [
+            models.UniqueConstraint(fields=("specification", "category", "sequence"), name="unique_spec_test_sequence"),
+        ]
+
+    def __str__(self):
+        return f"{self.specification.item.code} · {self.name}"
+
+
 # ── Certificado de análisis y microbiología ─────────────────────────────────────
-# Las especificaciones/ensayos son configurables por certificado (no hay todavía
-# un "maestro de especificaciones de producto" en el sistema — ver plan entregado,
-# punto pendiente de confirmación). Cada AnalysisTestResult define su propio
-# ensayo, unidad y límites en vez de asumir una lista fija.
+# Las especificaciones/ensayos por defecto provienen del maestro de
+# especificaciones (ProductSpecification) cuando existe para el producto del
+# lote; AnalysisTestResult conserva sus propios campos porque cada resultado es
+# específico de ese lote (no modifica el maestro).
 
 class AnalysisCertificate(BaseModel):
     class Concept(models.TextChoices):

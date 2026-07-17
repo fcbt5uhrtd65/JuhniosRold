@@ -1,5 +1,4 @@
 import io
-import os
 
 from django.utils import timezone
 from reportlab.lib.colors import HexColor
@@ -8,10 +7,9 @@ from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
 
+from shared.infrastructure.pdf_letterhead import draw_letterhead_footer, draw_letterhead_header
+
 COMPANY_NAME = "PRODUCTOS JUHNIOS ROLD SAS"
-LOGO_PATH = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "finance", "infrastructure", "assets", "logo.jpeg")
-)
 BRAND = HexColor("#2a4038")
 TEXT = HexColor("#111827")
 MUTED = HexColor("#6b7280")
@@ -158,16 +156,6 @@ def _status_color(status):
     return NEUTRAL
 
 
-def _draw_logo(c, x, y, size=42):
-    if not os.path.exists(LOGO_PATH):
-        return 0
-    try:
-        c.drawImage(ImageReader(LOGO_PATH), x, y - size, width=size, height=size, preserveAspectRatio=True, mask="auto")
-    except Exception:
-        return 0
-    return size
-
-
 def _draw_photo(c, x, y, size, employee):
     """Dibuja la foto de perfil del empleado si tiene una cargada. Devuelve True si logro dibujarla."""
     photo_field = getattr(employee, "photo", None)
@@ -223,15 +211,17 @@ def _hours(value):
     return f"{text} h/semana"
 
 
-def _draw_header(c, x0, x1, y, employee):
-    logo_size = _draw_logo(c, x0, y - 13, size=42)
-    text_x = x0 + logo_size + (12 if logo_size else 0)
-    _text(c, text_x, y - 28, COMPANY_NAME, size=13.5, bold=True)
-    _text(c, x1, y - 22, "Perfil de empleado", size=12, bold=True, align="right", color=BRAND)
-    _text(c, x1, y - 38, f"Generado: {timezone.now():%d/%m/%Y %H:%M}", size=8.5, align="right", color=MUTED)
+def _draw_header(c, page_w, page_h, x0, x1, employee):
+    y = draw_letterhead_header(c, page_w, page_h, x0, x1)
+
+    _text(c, x0, y, COMPANY_NAME, size=13.5, bold=True)
+    _text(c, x1, y, "Perfil de empleado", size=12, bold=True, align="right", color=BRAND)
+    y -= 16
+    _text(c, x1, y, f"Generado: {timezone.now():%d/%m/%Y %H:%M}", size=8.5, align="right", color=MUTED)
     status_text = employee.get_status_display()
     pill_w = max(84, stringWidth(status_text, "Helvetica-Bold", 7.3) + 18)
-    _pill(c, x1 - pill_w, y - 53, status_text, _status_color(employee.status), pill_w)
+    _pill(c, x1 - pill_w, y - 15, status_text, _status_color(employee.status), pill_w)
+    return y - 35
 
 
 def _draw_summary_card(c, x0, y, w, employee):
@@ -356,10 +346,10 @@ def render_employee_profile_pdf(employee):
     page_w, page_h = letter
     x0, x1 = 28, page_w - 28
     main_w = x1 - x0
-    y = page_h - 36
+    footer_h = draw_letterhead_footer(c, page_w, x0, x1)
+    bottom_limit = footer_h + 30
 
-    _draw_header(c, x0, x1, y, employee)
-    y -= 82
+    y = _draw_header(c, page_w, page_h, x0, x1, employee)
     y = _draw_summary_card(c, x0, y, main_w, employee)
     y -= 14
 
@@ -424,30 +414,33 @@ def render_employee_profile_pdf(employee):
     right_bottom = _draw_info_card(c, x0 + left_w + 12, y, left_w, "Datos laborales", labor_fields)
     y = min(left_bottom, right_bottom) - 14
 
-    if y < 220:
+    if y < bottom_limit + 180:
         c.showPage()
-        y = page_h - 40
+        draw_letterhead_footer(c, page_w, x0, x1)
+        y = draw_letterhead_header(c, page_w, page_h, x0, x1) - 20
 
     left_bottom = _draw_info_card(c, x0, y, left_w, "Seguridad social", social_security_fields)
     right_bottom = _draw_info_card(c, x0 + left_w + 12, y, left_w, "Datos bancarios", banking_fields)
     y = min(left_bottom, right_bottom) - 14
 
-    if y < 220:
+    if y < bottom_limit + 180:
         c.showPage()
-        y = page_h - 40
+        draw_letterhead_footer(c, page_w, x0, x1)
+        y = draw_letterhead_header(c, page_w, page_h, x0, x1) - 20
 
     y = _draw_info_card(c, x0, y, main_w, "Contacto de emergencia", emergency_fields)
     y -= 14
 
     documents = list(employee.documents.order_by("-uploaded_at"))
-    if y < 160:
+    if y < bottom_limit + 120:
         c.showPage()
-        y = page_h - 40
+        draw_letterhead_footer(c, page_w, x0, x1)
+        y = draw_letterhead_header(c, page_w, page_h, x0, x1) - 20
     y = _draw_documents_card(c, x0, y, main_w, documents)
 
     c.setFillColor(MUTED)
     c.setFont("Helvetica", 7)
-    c.drawCentredString(page_w / 2, 24, "Documento generado automaticamente para control interno de Recursos Humanos.")
+    c.drawCentredString(page_w / 2, bottom_limit - 12, "Documento generado automaticamente para control interno de Recursos Humanos.")
 
     c.save()
     buffer.seek(0)

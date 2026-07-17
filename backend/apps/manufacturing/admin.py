@@ -9,6 +9,7 @@ from .models import (
     DocumentChecklistItem,
     ItemStock,
     LineClearance,
+    ProductSpecification,
     RawMaterialBatch,
 )
 
@@ -83,3 +84,11 @@ class BatchReleaseAdmin(admin.ModelAdmin):
     list_filter = ("condition",)
     search_fields = ("batch__production_order__number",)
     list_select_related = ("batch", "released_by_quality", "approved_by_technical_director")
+
+
+@admin.register(ProductSpecification)
+class ProductSpecificationAdmin(admin.ModelAdmin):
+    list_display = ("item", "version", "effective_date", "is_active")
+    list_filter = ("is_active",)
+    search_fields = ("item__code", "item__name")
+    list_select_related = ("item",)

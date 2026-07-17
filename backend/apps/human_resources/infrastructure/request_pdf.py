@@ -1,24 +1,24 @@
 import io
-import os
 from datetime import datetime
 
 from django.utils import timezone
 from reportlab.lib.colors import HexColor
 from reportlab.lib.pagesizes import letter
-from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
 
-COMPANY_NAME = "PRODUCTOS JUHNIOS ROLD SAS"
-LOGO_PATH = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "finance", "infrastructure", "assets", "logo.jpeg")
+from shared.infrastructure.pdf_letterhead import (
+    draw_letterhead_footer,
+    draw_letterhead_header,
+    draw_signature_line_block,
 )
+
+COMPANY_NAME = "PRODUCTOS JUHNIOS ROLD SAS"
 
 NAVY = HexColor("#1b3a6b")
 STEEL = HexColor("#2e6da4")
 TEXT = HexColor("#1a1a1a")
 MUTED = HexColor("#5d6d7e")
-RULE = HexColor("#c8d8e8")
 SUCCESS = HexColor("#1f8a4c")
 WARNING = HexColor("#b7791f")
 DANGER = HexColor("#b3261e")
@@ -201,76 +201,26 @@ def _draw_rich_paragraph(c, x, y, parts, max_width, size=10, leading=15, align="
     return y - len(lines) * leading
 
 
-# ── Imagenes ───────────────────────────────────────────────────────────────────
-def _draw_logo(c, x, y, size=40):
-    if not os.path.exists(LOGO_PATH):
-        return 0
-    try:
-        c.drawImage(ImageReader(LOGO_PATH), x, y - size, width=size, height=size, preserveAspectRatio=True, mask="auto")
-    except Exception:
-        return 0
-    return size
-
-
-def _draw_signature_image(c, x, y, max_w, max_h, signature_file):
-    if not signature_file:
-        return 0
-    try:
-        if not signature_file.storage.exists(signature_file.name):
-            return 0
-        with signature_file.open("rb") as fobj:
-            image = ImageReader(io.BytesIO(fobj.read()))
-        iw, ih = image.getSize()
-        draw_w = max_w
-        draw_h = draw_w * (ih / iw) if iw else max_h
-        if draw_h > max_h:
-            draw_h = max_h
-            draw_w = draw_h * (iw / ih) if ih else max_w
-        c.drawImage(image, x, y, width=draw_w, height=draw_h, preserveAspectRatio=True, mask="auto")
-        return draw_h
-    except Exception:
-        return 0
-
-
-def _draw_signature_block(c, x0, y_anchor, w, signer_name, role_label, signature_file):
-    """Bloque de firma con franja punteada decorativa (mismo estilo que el certificado laboral)."""
-    _draw_signature_image(c, x0, y_anchor + 10, min(w, 200), 56, signature_file)
-
-    dot_y = y_anchor + 6
-    dot_x = x0
-    dot_end = x0 + min(w, 220)
-    c.setFillColor(RULE)
-    step = 5
-    while dot_x < dot_end:
-        c.rect(dot_x, dot_y, 2.5, 1.2, stroke=0, fill=1)
-        dot_x += step
-
-    c.setFont(FONT_BOLD, 10)
-    c.setFillColor(NAVY)
-    c.drawString(x0, y_anchor - 10, signer_name.upper())
-    c.setFont(FONT, 8.3)
-    c.setFillColor(MUTED)
-    c.drawString(x0, y_anchor - 22, role_label)
-
-
 # ── Encabezado ─────────────────────────────────────────────────────────────────
-def _draw_letterhead(c, x0, x1, y, request_number):
-    logo_size = _draw_logo(c, x0, y, 36)
-    text_x = x0 + logo_size + (10 if logo_size else 0)
-    _text(c, text_x, y - 12, COMPANY_NAME, size=12, bold=True, color=NAVY)
-    _text(c, text_x, y - 25, "Gestión de Talento Humano", size=8.2, color=MUTED)
-
-    _text(c, x1, y - 12, request_number, size=11, bold=True, color=STEEL, align="right")
-    _text(c, x1, y - 25, f"Generado el {timezone.now():%d/%m/%Y a las %H:%M}", size=7.6, color=MUTED, align="right")
-
-    return y - max(logo_size, 30) - 22
+def _draw_letterhead(c, page_w, page_h, x0, x1, y):
+    y = draw_letterhead_header(c, page_w, page_h, x0, x1)
+    _text(c, x0, y, "Gestión de Talento Humano", size=8.2, color=MUTED)
+    return y - 22
 
 
-def _draw_title(c, cx, y, vacation):
+def _draw_title(c, x0, x1, cx, y, vacation, request_number):
     _text(c, cx, y, "CONSTANCIA DE SOLICITUD", size=15, bold=True, color=NAVY, align="center")
+    y -= 16
     status_color = _status_color(vacation.status)
-    _text(c, cx, y - 16, vacation.get_status_display().upper(), size=9.5, bold=True, color=status_color, align="center")
-    return y - 34
+    _text(c, cx, y, vacation.get_status_display().upper(), size=9.5, bold=True, color=status_color, align="center")
+    y -= 20
+
+    # Franja de identificación del documento: separa la identidad de la empresa (membrete)
+    # de los metadatos propios de este documento (número, fecha de generación). Sin trazos ni cuadros.
+    _text(c, x0, y, request_number, size=9, bold=True, color=STEEL)
+    _text(c, x1, y, f"Generado el {timezone.now():%d/%m/%Y a las %H:%M}", size=8, color=MUTED, align="right")
+
+    return y - 26
 
 
 # ── Cuerpo narrativo ───────────────────────────────────────────────────────────
@@ -398,30 +348,35 @@ def _signing_steps(vacation):
 def _draw_signatures_section(c, x0, x1, y, vacation):
     w = x1 - x0
     _text(c, x0, y, "Firmas de aprobación", size=10.5, bold=True, color=NAVY)
-    y -= 20
+    y -= 44
 
     steps = _signing_steps(vacation)
     if not steps:
+        y += 20
         _text(c, x0, y, "Aún no hay firmas registradas para esta solicitud.", size=9, color=MUTED)
         return y - 14
 
     count = len(steps)
-    col_w = w / count
+    gap = 30
+    col_w = (w - gap * (count - 1)) / count
     for index, step in enumerate(steps):
-        col_x = x0 + index * col_w
+        col_x = x0 + index * (col_w + gap)
         employee = getattr(step.user, "employee_profile", None)
         signer_name = _employee_name(employee) if employee else _safe(getattr(step.user, "email", None))
         signature_file = getattr(step, "signature", None) or (getattr(employee, "signature", None) if employee else None)
-        _draw_signature_block(
+        draw_signature_line_block(
             c,
             col_x,
             y,
-            col_w - 20,
+            col_w,
             signer_name,
             f"{step.get_step_display()} · {step.get_status_display()} · {_datetime_label(step.acted_at)}",
             signature_file,
+            font=(FONT, FONT_BOLD),
+            navy=NAVY,
+            muted=MUTED,
         )
-    return y - 66
+    return y - 40
 
 
 def render_request_pdf(vacation):
@@ -432,25 +387,27 @@ def render_request_pdf(vacation):
     page_w, page_h = letter
     x0, x1 = 64, page_w - 64
     cx = (x0 + x1) / 2
-    y = page_h - 52
+    footer_h = draw_letterhead_footer(c, page_w, x0, x1)
+    bottom_limit = footer_h + 26
 
     employee = vacation.employee
 
-    y = _draw_letterhead(c, x0, x1, y, vacation.request_number or str(vacation.id))
-    y = _draw_title(c, cx, y, vacation)
+    y = _draw_letterhead(c, page_w, page_h, x0, x1, page_h - 34)
+    y = _draw_title(c, x0, x1, cx, y, vacation, vacation.request_number or str(vacation.id))
     y = _draw_body(c, x0, x1, y, vacation, employee)
     y = _draw_approval_narrative(c, x0, x1, y, vacation)
     y -= 8
 
-    if y - 100 < 70:
+    if y - 100 < bottom_limit:
         c.showPage()
-        y = page_h - 52
+        draw_letterhead_footer(c, page_w, x0, x1)
+        y = draw_letterhead_header(c, page_w, page_h, x0, x1) - 10
 
-    y = _draw_signatures_section(c, x0, x1, y, vacation)
+    _draw_signatures_section(c, x0, x1, y, vacation)
 
     c.setFillColor(MUTED)
     c.setFont(FONT, 7.2)
-    c.drawCentredString(page_w / 2, 30, f"Documento oficial · {COMPANY_NAME} · Válido con firmas digitales registradas.")
+    c.drawCentredString(page_w / 2, bottom_limit - 12, f"Documento oficial · {COMPANY_NAME} · Válido con firmas digitales registradas.")
 
     c.save()
     buffer.seek(0)

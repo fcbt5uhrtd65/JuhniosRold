@@ -5,7 +5,7 @@ import {
   BarChart3, Layers, AlertTriangle, CheckCircle, Clock,
   Truck, RefreshCw, FileText, Scale, Box,
   Download, Eye, ShoppingCart,
-  LayoutDashboard, TrendingDown, TrendingUp, Bell,
+  LayoutDashboard, TrendingDown, Bell,
   MoveRight, Beaker, ClipboardCheck, Loader2,
 } from 'lucide-react';
 import {
@@ -69,10 +69,6 @@ interface Traslado { id: string; numero: string; fecha: string; bOrigen: string;
 interface OrdenProduccion { id: string; numero: string; producto: string; formula: string; cantidadPlan: number; cantidadReal: number; estado: 'pendiente' | 'en-proceso' | 'cerrada' | 'anulada'; fechaInicio: string; fechaCierre: string; responsable: string; dispensada: boolean; ptRecibido: boolean; }
 interface Formula { id: string; codigo: string; nombre: string; producto: string; rendimiento: number; unidad: string; lineas: FormulaLinea[]; }
 interface FormulaLinea { id: string; materia: string; cantidad: number; unidad: string; }
-interface OrdenDispensacion { id: string; numero: string; ordenProduccion: string; producto: string; lote: string; fecha: string; pesador: string; verificador: string; estado: 'pendiente' | 'pesado' | 'verificado'; lineas: DispensacionLinea[]; }
-interface DispensacionLinea { id: string; materia: string; cantidadTeorica: number; cantidadPesada: number; unidad: string; }
-interface RecepcionPT { id: string; numero: string; ordenProduccion: string; producto: string; lote: string; cantidadProducida: number; cantidadRecibida: number; cantidadRechazada: number; cantidadDeterioro: number; cajas: number; entregadoPor: string; recibidoPor: string; bodegaDestino: string; estado: 'pendiente' | 'recibido' | 'parcial'; fecha: string; }
-interface MermaSobrante { id: string; fecha: string; ordenProduccion: string; tipo: 'merma' | 'sobrante'; articulo: string; cantidad: number; unidad: string; motivo: string; responsable: string; }
 interface AuditoriaLog { id: string; fecha: string; hora: string; usuario: string; modulo: string; accion: string; detalle: string; ip: string; }
 
 /* ═══════════════════════════════════════════════════════
@@ -182,19 +178,6 @@ const FORMULAS: Formula[] = [
   { id: '1', codigo: 'FM-SHB-001', nombre: 'Shampoo Botánico Base', producto: 'Shampoo Botánico 400ml', rendimiento: 100, unidad: 'Kg', lineas: [{ id: '1', materia: 'Agua Purificada', cantidad: 60.0, unidad: 'Kg' }, { id: '2', materia: 'Betaína de Coco 30%', cantidad: 18.0, unidad: 'Kg' }, { id: '3', materia: 'Glicerina Vegetal USP', cantidad: 5.0, unidad: 'Kg' }, { id: '4', materia: 'Extracto de Aguacate', cantidad: 2.0, unidad: 'Kg' }, { id: '5', materia: 'Aceite de Argán', cantidad: 1.5, unidad: 'Kg' }, { id: '6', materia: 'Fragancia Coco Tahití', cantidad: 1.0, unidad: 'Kg' }, { id: '7', materia: 'Preservante Optiphen', cantidad: 0.5, unidad: 'Kg' }] },
 ];
 
-const ORDENES_DISPENSACION: OrdenDispensacion[] = [
-  { id: '1', numero: 'OD-2025-042', ordenProduccion: 'OP-2025-042', producto: 'Shampoo Botánico 400ml', lote: 'PT2025-021', fecha: '2025-06-18', pesador: 'Jhon Pérez', verificador: 'Ana González', estado: 'verificado', lineas: [{ id: '1', materia: 'Agua Purificada', cantidadTeorica: 30.0, cantidadPesada: 30.02, unidad: 'Kg' }, { id: '2', materia: 'Betaína de Coco 30%', cantidadTeorica: 9.0, cantidadPesada: 9.01, unidad: 'Kg' }, { id: '3', materia: 'Glicerina Vegetal USP', cantidadTeorica: 2.5, cantidadPesada: 2.50, unidad: 'Kg' }] },
-];
-
-const RECEPCIONES_PT: RecepcionPT[] = [
-  { id: '1', numero: 'RPT-2025-018', ordenProduccion: 'OP-2025-041', producto: 'Mascarilla Regeneradora 250g', lote: 'PT2024-019', cantidadProducida: 300, cantidadRecibida: 298, cantidadRechazada: 1, cantidadDeterioro: 1, cajas: 25, entregadoPor: 'Ana González', recibidoPor: 'Laura Mejía', bodegaDestino: 'Bodega Producto Terminado', estado: 'recibido', fecha: '2025-06-17' },
-];
-
-const MERMAS_SOBRANTES: MermaSobrante[] = [
-  { id: '1', fecha: '2025-06-17', ordenProduccion: 'OP-2025-041', tipo: 'merma', articulo: 'Glicerina Vegetal USP', cantidad: 0.8, unidad: 'Kg', motivo: 'Adherencia en paredes del reactor', responsable: 'Ana González' },
-  { id: '2', fecha: '2025-06-17', ordenProduccion: 'OP-2025-041', tipo: 'sobrante', articulo: 'Agua Purificada', cantidad: 2.5, unidad: 'Kg', motivo: 'Ajuste de viscosidad no requerido', responsable: 'Ana González' },
-  { id: '3', fecha: '2025-06-13', ordenProduccion: 'OP-2025-040', tipo: 'merma', articulo: 'Aceite de Argán', cantidad: 0.15, unidad: 'Kg', motivo: 'Merma por trasvase', responsable: 'Pedro Vásquez' },
-];
 
 const AUDITORIA: AuditoriaLog[] = [
   { id: '1', fecha: '2025-06-18', hora: '09:14', usuario: 'Carlos Roldán', modulo: 'Compras', accion: 'Cierre OC', detalle: 'OC-2025-089 marcada como cerrada. 50 Kg Glicerina recibida.', ip: '192.168.1.10' },
@@ -1820,150 +1803,41 @@ function ModuloProduccion() {
 
       {/* DISPENSACIÓN */}
       {tab === 'dispensacion' && (
-        <>
-          <Hdr title="Órdenes de Dispensación" subtitle="Pesaje y verificación de materias primas" onNew={() => setDrawerOpen(true)} newLabel="Nueva Dispensación" />
-          {ORDENES_DISPENSACION.map(od => (
-            <div key={od.id} className="bg-white border border-gray-100 rounded-2xl shadow-sm mb-4">
-              <div className="grid grid-cols-3 gap-4 px-5 py-4 border-b border-gray-100">
-                <div><p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Número</p><p className="font-mono font-semibold text-[#2a4038]">{od.numero}</p></div>
-                <div><p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Orden Producción</p><p className="font-semibold">{od.ordenProduccion}</p></div>
-                <div><p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Estado</p><Badge label={od.estado === 'verificado' ? 'Verificado' : od.estado === 'pesado' ? 'Pesado' : 'Pendiente'} color={od.estado === 'verificado' ? 'green' : od.estado === 'pesado' ? 'blue' : 'yellow'} /></div>
-                <div><p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Pesador</p><p className="text-gray-700">{od.pesador}</p></div>
-                <div><p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Verificador</p><p className="text-gray-700">{od.verificador}</p></div>
-                <div><p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Fecha</p><p className="text-gray-700">{od.fecha}</p></div>
-              </div>
-              <div className="px-5 py-3 overflow-x-auto">
-                <table className="w-full text-sm min-w-[560px]">
-                  <thead><tr className="text-[10px] font-bold uppercase tracking-wider text-gray-400"><th className="py-2 text-left">Materia Prima</th><th className="py-2 text-right">Teórico</th><th className="py-2 text-right">Pesado</th><th className="py-2 text-right">Diferencia</th><th className="py-2 text-right">Und</th><th className="py-2 text-center">OK</th></tr></thead>
-                  <tbody>
-                    {od.lineas.map(l => {
-                      const diff = l.cantidadPesada - l.cantidadTeorica;
-                      return <tr key={l.id} className="border-t border-gray-50"><td className="py-2.5 font-medium text-gray-800">{l.materia}</td><td className="py-2.5 text-right">{l.cantidadTeorica}</td><td className="py-2.5 text-right font-bold">{l.cantidadPesada}</td><td className={`py-2.5 text-right font-semibold ${Math.abs(diff) > 0.1 ? 'text-red-500' : 'text-emerald-500'}`}>{diff >= 0 ? '+' : ''}{diff.toFixed(2)}</td><td className="py-2.5 text-right text-gray-500">{l.unidad}</td><td className="py-2.5 text-center">{Math.abs(diff) <= 0.1 ? <CheckCircle size={14} className="text-emerald-500 mx-auto" /> : <AlertTriangle size={14} className="text-amber-500 mx-auto" />}</td></tr>;
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ))}
-          <Drawer title="Nueva Orden de Dispensación" open={drawerOpen} onClose={() => setDrawerOpen(false)} wide>
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Orden de producción" required><select className={sel}><option value="">Seleccionar...</option>{ORDENES_PRODUCCION.filter(op => op.estado !== 'cerrada').map(op => <option key={op.id}>{op.numero} — {op.producto}</option>)}</select></Field>
-              <Field label="Fecha" required><input className={inp} type="date" defaultValue="2025-06-19" /></Field>
-              <Field label="Lote de producción" required><input className={inp} placeholder="Ej: PT2025-022" /></Field>
-              <Field label="Cantidad a dispensar (Kg)" required><input className={inp} type="number" placeholder="0" /></Field>
-              <Field label="Persona que pesa" required><input className={inp} placeholder="Nombre del pesador" /></Field>
-              <Field label="Persona que verifica" required><input className={inp} placeholder="Nombre del verificador" /></Field>
-            </div>
-            <div className="mt-5">
-              <div className="flex items-center justify-between mb-3"><p className="text-xs font-bold uppercase tracking-wider text-gray-500">Materias primas a dispensar</p><button className="text-xs text-[#2a4038] font-semibold flex items-center gap-1"><Plus size={12} /> Agregar materia</button></div>
-              <div className="space-y-2">
-                {[1, 2, 3].map(i => (
-                  <div key={i} className="grid grid-cols-12 gap-2 items-center bg-gray-50 rounded-lg p-2">
-                    <div className="col-span-4"><select className={sel + ' text-xs py-2'}><option>Materia prima...</option>{ARTICULOS.filter(a => a.tipo === 'Materia Prima').map(a => <option key={a.id}>{a.nombre}</option>)}</select></div>
-                    <div className="col-span-2"><input className={inp + ' text-xs py-2 bg-gray-100'} placeholder="Teórico" readOnly /></div>
-                    <div className="col-span-2"><input className={inp + ' text-xs py-2'} placeholder="Pesado" /></div>
-                    <div className="col-span-2"><input className={inp + ' text-xs py-2 bg-gray-100'} placeholder="Diferencia" readOnly /></div>
-                    <div className="col-span-1"><select className={sel + ' text-xs py-2'}><option>Kg</option><option>g</option><option>L</option></select></div>
-                    <div className="col-span-1 flex justify-center"><button className="p-1 text-red-400 hover:text-red-600"><X size={14} /></button></div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <DrawerFooter onClose={() => setDrawerOpen(false)} />
-          </Drawer>
-        </>
+        <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-10 text-center">
+          <Beaker size={28} className="mx-auto text-gray-300 mb-3" />
+          <p className="text-sm font-semibold text-gray-700">La dispensación ahora se gestiona en el módulo de Producción</p>
+          <p className="text-xs text-gray-400 mt-1 max-w-md mx-auto">
+            El pesaje y verificación real de materias primas por lote (con trazabilidad, tolerancias y descuento de
+            inventario) vive en <strong>Producción</strong>, dentro del expediente de cada lote. Esta pestaña quedó
+            reservada para no perder el enlace histórico; los datos de ejemplo que mostraba antes fueron retirados.
+          </p>
+        </div>
       )}
 
       {/* RECEPCIÓN PT */}
       {tab === 'recepcion-pt' && (
-        <>
-          <Hdr title="Recepción de Producto Terminado" subtitle="Digitalización de la boleta de entrega física" onNew={() => setDrawerOpen(true)} newLabel="Nueva Recepción" />
-          {RECEPCIONES_PT.map(r => (
-            <div key={r.id} className="bg-white border border-gray-100 rounded-2xl shadow-sm mb-4 p-5">
-              <div className="flex items-center justify-between mb-4"><div className="flex items-center gap-3"><span className="font-mono font-semibold text-[#2a4038]">{r.numero}</span><Badge label={r.estado === 'recibido' ? 'Recibido' : r.estado === 'parcial' ? 'Parcial' : 'Pendiente'} color={r.estado === 'recibido' ? 'green' : r.estado === 'parcial' ? 'yellow' : 'gray'} /></div><span className="text-xs text-gray-400">{r.fecha}</span></div>
-              <div className="grid grid-cols-3 gap-4 mb-4">
-                <div><p className="text-[10px] text-gray-400 uppercase font-bold mb-1">Orden Producción</p><p className="font-semibold">{r.ordenProduccion}</p></div>
-                <div><p className="text-[10px] text-gray-400 uppercase font-bold mb-1">Producto</p><p className="font-medium text-gray-900">{r.producto}</p></div>
-                <div><p className="text-[10px] text-gray-400 uppercase font-bold mb-1">Lote</p><p className="font-mono text-[#2a4038]">{r.lote}</p></div>
-                <div><p className="text-[10px] text-gray-400 uppercase font-bold mb-1">Entregado por</p><p>{r.entregadoPor}</p></div>
-                <div><p className="text-[10px] text-gray-400 uppercase font-bold mb-1">Recibido por</p><p>{r.recibidoPor}</p></div>
-                <div><p className="text-[10px] text-gray-400 uppercase font-bold mb-1">Bodega destino</p><p className="text-gray-700">{r.bodegaDestino}</p></div>
-              </div>
-              <div className="grid grid-cols-5 gap-3 bg-gray-50 rounded-xl p-3">
-                {[{ label: 'Producida', value: r.cantidadProducida, color: 'text-gray-900' }, { label: 'Recibida', value: r.cantidadRecibida, color: 'text-emerald-600' }, { label: 'Rechazada', value: r.cantidadRechazada, color: 'text-red-600' }, { label: 'Deterioro', value: r.cantidadDeterioro, color: 'text-amber-600' }, { label: 'Cajas', value: r.cajas, color: 'text-blue-600' }].map(s => <div key={s.label} className="text-center"><p className={`text-2xl font-bold ${s.color}`}>{s.value}</p><p className="text-[10px] text-gray-500 uppercase font-medium mt-0.5">{s.label}</p></div>)}
-              </div>
-            </div>
-          ))}
-          <Drawer title="Nueva Recepción de PT" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Orden de producción" required><select className={sel}><option value="">Seleccionar...</option>{ORDENES_PRODUCCION.map(op => <option key={op.id}>{op.numero} — {op.producto}</option>)}</select></Field>
-              <Field label="Fecha" required><input className={inp} type="date" defaultValue="2025-06-19" /></Field>
-              <div className="col-span-2"><Field label="Producto fabricado"><input className={inp + ' bg-gray-50'} readOnly placeholder="Se carga de la OP" /></Field></div>
-              <Field label="Lote" required><input className={inp} placeholder="Número de lote" /></Field>
-              <Field label="Bodega destino" required><select className={sel}><option>Bodega Producto Terminado</option>{BODEGAS.map(b => <option key={b.id}>{b.nombre}</option>)}</select></Field>
-              <Field label="Cantidad producida" required><input className={inp} type="number" placeholder="0" /></Field>
-              <Field label="Cantidad recibida" required><input className={inp} type="number" placeholder="0" /></Field>
-              <Field label="Cantidad rechazada"><input className={inp} type="number" defaultValue="0" /></Field>
-              <Field label="Cantidad deterioro"><input className={inp} type="number" defaultValue="0" /></Field>
-              <Field label="Número de cajas" required><input className={inp} type="number" placeholder="0" /></Field>
-              <Field label="Unidades por caja"><input className={inp} type="number" placeholder="0" /></Field>
-              <Field label="Entregado por (Producción)" required><input className={inp} placeholder="Nombre" /></Field>
-              <Field label="Recibido por (Almacén)" required><input className={inp} placeholder="Nombre" /></Field>
-              <div className="col-span-2"><Field label="Observaciones"><textarea className={inp + ' resize-none h-14'} placeholder="Notas sobre la recepción..." /></Field></div>
-            </div>
-            <DrawerFooter onClose={() => setDrawerOpen(false)} />
-          </Drawer>
-        </>
+        <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-10 text-center">
+          <Beaker size={28} className="mx-auto text-gray-300 mb-3" />
+          <p className="text-sm font-semibold text-gray-700">La liberación de producto terminado ahora se gestiona en el módulo de Producción</p>
+          <p className="text-xs text-gray-400 mt-1 max-w-md mx-auto">
+            El control de llenado, acondicionamiento, calidad y liberación de cada lote vive en <strong>Producción</strong>,
+            dentro del expediente del lote correspondiente. Esta pestaña quedó reservada para no perder el enlace
+            histórico; los datos de ejemplo que mostraba antes fueron retirados.
+          </p>
+        </div>
       )}
 
       {/* MERMAS Y SOBRANTES */}
       {tab === 'mermas' && (
-        <>
-          <Hdr title="Mermas y Sobrantes" subtitle="Registro de pérdidas y excedentes en producción" onNew={() => setDrawerOpen(true)} newLabel="Registrar Merma/Sobrante" />
-          <div className="grid grid-cols-3 gap-4 mb-5">
-            {[
-              { label: 'Total mermas (mes)', value: `${MERMAS_SOBRANTES.filter(m => m.tipo === 'merma').reduce((a, m) => a + m.cantidad, 0).toFixed(2)} Kg`, color: 'bg-red-50 text-red-600 border-red-100', icon: TrendingDown },
-              { label: 'Total sobrantes (mes)', value: `${MERMAS_SOBRANTES.filter(m => m.tipo === 'sobrante').reduce((a, m) => a + m.cantidad, 0).toFixed(2)} Kg`, color: 'bg-emerald-50 text-emerald-600 border-emerald-100', icon: TrendingUp },
-              { label: 'Registros del mes', value: MERMAS_SOBRANTES.length, color: 'bg-gray-50 text-gray-600 border-gray-100', icon: FileText },
-            ].map(s => <div key={s.label} className={`border rounded-2xl p-4 ${s.color}`}><div className="flex items-center gap-2 mb-2"><s.icon size={16} /></div><p className="text-2xl font-bold">{s.value}</p><p className="text-xs font-medium mt-0.5">{s.label}</p></div>)}
-          </div>
-          <Tbl>
-            <thead><tr><Th>Fecha</Th><Th>OP</Th><Th>Tipo</Th><Th>Artículo</Th><Th>Cantidad</Th><Th>Und</Th><Th>Motivo</Th><Th>Responsable</Th></tr></thead>
-            <tbody>
-              {MERMAS_SOBRANTES.map(m => (
-                <tr key={m.id} className="hover:bg-gray-50/50">
-                  <Td className="text-xs text-gray-500">{m.fecha}</Td>
-                  <Td><span className="font-mono text-xs text-[#2a4038]">{m.ordenProduccion}</span></Td>
-                  <Td><Badge label={m.tipo === 'merma' ? 'Merma' : 'Sobrante'} color={m.tipo === 'merma' ? 'red' : 'green'} /></Td>
-                  <Td className="font-medium text-gray-900">{m.articulo}</Td>
-                  <Td className={`font-bold ${m.tipo === 'merma' ? 'text-red-600' : 'text-emerald-600'}`}>{m.tipo === 'merma' ? '-' : '+'}{m.cantidad}</Td>
-                  <Td className="text-gray-500">{m.unidad}</Td>
-                  <Td className="text-xs text-gray-500">{m.motivo}</Td>
-                  <Td className="text-xs text-gray-500">{m.responsable}</Td>
-                </tr>
-              ))}
-            </tbody>
-          </Tbl>
-          <Drawer title="Registrar Merma / Sobrante" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
-            <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 mb-4 flex gap-2">
-              <AlertTriangle size={14} className="text-amber-600 flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-amber-700">Las mermas generan un movimiento de <strong>Salida por Merma</strong>. Los sobrantes generan un movimiento de <strong>Entrada por Sobrante</strong> y deben retornar a la bodega de materias primas.</p>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Tipo" required><select className={sel}><option>Merma</option><option>Sobrante</option></select></Field>
-              <Field label="Fecha" required><input className={inp} type="date" defaultValue="2025-06-19" /></Field>
-              <div className="col-span-2"><Field label="Orden de producción" required><select className={sel}><option value="">Seleccionar OP...</option>{ORDENES_PRODUCCION.map(op => <option key={op.id}>{op.numero} — {op.producto}</option>)}</select></Field></div>
-              <div className="col-span-2"><Field label="Artículo" required><select className={sel}><option value="">Seleccionar artículo...</option>{ARTICULOS.map(a => <option key={a.id}>{a.nombre}</option>)}</select></Field></div>
-              <Field label="Cantidad" required><input className={inp} type="number" placeholder="0.00" step="0.001" /></Field>
-              <Field label="Unidad de medida"><select className={sel}>{UNIDADES.map(u => <option key={u.id}>{u.nombre}</option>)}</select></Field>
-              <div className="col-span-2"><Field label="Motivo" required><select className={sel}><option>Adherencia en equipos</option><option>Derrame accidental</option><option>Evaporación</option><option>Ajuste de formulación</option><option>No requerido en proceso</option><option>Otro</option></select></Field></div>
-              <div className="col-span-2"><Field label="Descripción detallada" required><textarea className={inp + ' resize-none h-16'} placeholder="Descripción del motivo de la merma o sobrante..." /></Field></div>
-              <Field label="Responsable" required><input className={inp} placeholder="Nombre del operario" /></Field>
-              <Field label="Bodega destino (sobrante)"><select className={sel}><option>N/A — Merma</option>{BODEGAS.map(b => <option key={b.id}>{b.nombre}</option>)}</select></Field>
-            </div>
-            <DrawerFooter onClose={() => setDrawerOpen(false)} />
-          </Drawer>
-        </>
+        <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-10 text-center">
+          <Beaker size={28} className="mx-auto text-gray-300 mb-3" />
+          <p className="text-sm font-semibold text-gray-700">Las mermas y sobrantes reales ya se gestionan en Inventario</p>
+          <p className="text-xs text-gray-400 mt-1 max-w-md mx-auto">
+            Usa el módulo <strong>Conversión</strong> (pestaña de Inventario) para registrar mermas y sobrantes reales
+            contra el inventario de materias primas — esa pestaña ya está conectada a datos reales. Esta sección
+            quedó reservada para no perder el enlace histórico; los datos de ejemplo que mostraba antes fueron retirados.
+          </p>
+        </div>
       )}
     </div>
   );

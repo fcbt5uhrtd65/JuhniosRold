@@ -838,3 +838,351 @@ export async function releaseBatch(input: {
 export async function exportBatchRelease(id: string, batchCode: string): Promise<void> {
   await downloadBlob(`${BASE}/batch-releases/${id}/export/`, `liberacion-${batchCode}.pdf`);
 }
+
+// ── Maestro de especificaciones de producto ──────────────────────────────────
+
+export interface ProductSpecificationTestRecord {
+  id: UUID;
+  specification: UUID;
+  category: 'PHYSICOCHEMICAL' | 'MICROBIOLOGICAL';
+  sequence: number;
+  name: string;
+  unit: string;
+  specification_text: string;
+  lower_limit: string;
+  upper_limit: string;
+  method: string;
+  equipment: string;
+  equipment_parameters: string;
+  is_mandatory: boolean;
+}
+
+export interface ProductSpecificationRecord {
+  id: UUID;
+  item: UUID;
+  version: string;
+  effective_date: string | null;
+  is_active: boolean;
+  notes: string;
+  tests: ProductSpecificationTestRecord[];
+}
+
+export async function getProductSpecifications(): Promise<ProductSpecificationRecord[]> {
+  return getPage<ProductSpecificationRecord>(`${BASE}/product-specifications/`);
+}
+
+export async function getProductSpecificationByItem(itemId: string): Promise<ProductSpecificationRecord | null> {
+  const { data } = await api.get<PaginatedResponse<ProductSpecificationRecord>>(`${BASE}/product-specifications/?item=${itemId}`);
+  return data?.results?.[0] ?? null;
+}
+
+export async function createProductSpecification(input: {
+  item: string;
+  version?: string;
+  effective_date?: string | null;
+  notes?: string;
+}): Promise<ProductSpecificationRecord> {
+  const { data } = await api.post<ProductSpecificationRecord>(`${BASE}/product-specifications/`, input);
+  return data as ProductSpecificationRecord;
+}
+
+export async function createProductSpecificationTest(input: {
+  specification: string;
+  category: 'PHYSICOCHEMICAL' | 'MICROBIOLOGICAL';
+  sequence: number;
+  name: string;
+  unit?: string;
+  specification_text?: string;
+  lower_limit?: string;
+  upper_limit?: string;
+  method?: string;
+  equipment?: string;
+  equipment_parameters?: string;
+  is_mandatory?: boolean;
+}): Promise<ProductSpecificationTestRecord> {
+  const { data } = await api.post<ProductSpecificationTestRecord>(`${BASE}/product-specification-tests/`, input);
+  return data as ProductSpecificationTestRecord;
+}
+
+export async function loadCertificateTestsFromSpecification(certificateId: string): Promise<AnalysisCertificateRecord> {
+  const { data } = await api.post<AnalysisCertificateRecord>(`${BASE}/analysis-certificates/${certificateId}/load-from-specification/`, {});
+  return data as AnalysisCertificateRecord;
+}
+
+export async function loadMicrobiologyFromSpecification(microbiologyId: string): Promise<MicrobiologyAnalysisRecord> {
+  const { data } = await api.post<MicrobiologyAnalysisRecord>(`${BASE}/microbiology-analyses/${microbiologyId}/load-from-specification/`, {});
+  return data as MicrobiologyAnalysisRecord;
+}
+
+// ── Creación de registros por fase (captura desde cero) ──────────────────────
+
+export async function createLineClearance(input: {
+  batch: string;
+  phase: 'DISPENSING' | 'MANUFACTURING' | 'FILLING' | 'PACKAGING';
+  area?: string;
+  production_line?: string;
+  previous_product?: string;
+  previous_batch_code?: string;
+  performed_by?: string | null;
+}): Promise<LineClearanceRecord> {
+  const { data } = await api.post<LineClearanceRecord>(`${BASE}/line-clearances/`, input);
+  return data as LineClearanceRecord;
+}
+
+export async function createLineClearanceCriterion(input: {
+  clearance: string;
+  criterion: string;
+  result: ResultStatus;
+  observation?: string;
+}): Promise<LineClearanceCriterionRecord> {
+  const { data } = await api.post<LineClearanceCriterionRecord>(`${BASE}/line-clearance-criteria/`, input);
+  return data as LineClearanceCriterionRecord;
+}
+
+export async function createCleaningRecord(input: {
+  batch: string;
+  record_type: 'AREA' | 'EQUIPMENT';
+  area?: string;
+  equipment?: string;
+  equipment_code?: string;
+  cleaned_at?: string | null;
+  previous_product?: string;
+  previous_batch_code?: string;
+  cleaning_method?: string;
+  sanitizer?: string;
+  sanitizer_concentration?: string;
+  sanitizer_batch?: string;
+  sanitizer_expires_at?: string | null;
+  performed_by?: string | null;
+  verified_by?: string | null;
+  result?: 'APPROVED' | 'REJECTED';
+  observations?: string;
+  valid_until?: string | null;
+}): Promise<CleaningRecordRecord> {
+  const { data } = await api.post<CleaningRecordRecord>(`${BASE}/cleaning-records/`, input);
+  return data as CleaningRecordRecord;
+}
+
+export async function createLineIdentification(input: {
+  batch: string;
+  area?: string;
+  production_line?: string;
+  placed_at?: string | null;
+  placed_by?: string | null;
+}): Promise<LineIdentificationRecord> {
+  const { data } = await api.post<LineIdentificationRecord>(`${BASE}/line-identifications/`, input);
+  return data as LineIdentificationRecord;
+}
+
+export async function createProductionControl(input: { batch: string; lot_size?: number | null; unit?: string | null; notes?: string }): Promise<ProductionControlRecord> {
+  const { data } = await api.post<ProductionControlRecord>(`${BASE}/production-controls/`, input);
+  return data as ProductionControlRecord;
+}
+
+export async function createProductionControlMaterial(input: {
+  control: string;
+  item: string;
+  requested_quantity?: number;
+  delivered_quantity?: number;
+  returned_quantity?: number;
+  additional_quantity?: number;
+  good_units?: number;
+  process_rejects?: number;
+  factory_rejects?: number;
+  observations?: string;
+}): Promise<ProductionControlMaterialRecord> {
+  const { data } = await api.post<ProductionControlMaterialRecord>(`${BASE}/production-control-materials/`, input);
+  return data as ProductionControlMaterialRecord;
+}
+
+export async function createFillingControl(input: {
+  batch: string;
+  production_line?: string;
+  equipment?: string;
+  source_tank?: string;
+  started_at?: string | null;
+  responsible?: string | null;
+  verifier?: string | null;
+  planned_quantity?: number | null;
+}): Promise<FillingControlRecord> {
+  const { data } = await api.post<FillingControlRecord>(`${BASE}/filling-controls/`, input);
+  return data as FillingControlRecord;
+}
+
+export async function createFillingLogEntry(input: {
+  control: string;
+  recorded_at: string;
+  units_produced?: number;
+  displays?: number;
+  boxes?: number;
+  units_rejected?: number;
+  rejection_reason?: string;
+  performed_by?: string | null;
+  verified_by?: string | null;
+  observations?: string;
+}): Promise<FillingLogEntryRecord> {
+  const { data } = await api.post<FillingLogEntryRecord>(`${BASE}/filling-log-entries/`, input);
+  return data as FillingLogEntryRecord;
+}
+
+export async function createFillingParticipant(input: {
+  control: string;
+  employee?: string | null;
+  role?: string;
+  activity?: string;
+  check_in?: string | null;
+  check_out?: string | null;
+}): Promise<FillingParticipantRecord> {
+  const { data } = await api.post<FillingParticipantRecord>(`${BASE}/filling-participants/`, input);
+  return data as FillingParticipantRecord;
+}
+
+export async function createWeightVolumeControl(input: {
+  batch: string;
+  tare?: number | null;
+  lower_limit?: number | null;
+  upper_limit?: number | null;
+  unit?: string | null;
+}): Promise<WeightVolumeControlRecord> {
+  const { data } = await api.post<WeightVolumeControlRecord>(`${BASE}/weight-volume-controls/`, input);
+  return data as WeightVolumeControlRecord;
+}
+
+export async function createWeightVolumeSample(input: {
+  control: string;
+  sample_number: number;
+  sampled_at?: string | null;
+  gross_weight?: number | null;
+  tare?: number | null;
+  volume?: number | null;
+  result?: ResultStatus;
+  observation?: string;
+}): Promise<WeightVolumeSampleRecord> {
+  const { data } = await api.post<WeightVolumeSampleRecord>(`${BASE}/weight-volume-samples/`, input);
+  return data as WeightVolumeSampleRecord;
+}
+
+export async function createSealIntegrityControl(input: {
+  batch: string;
+  tested_at?: string | null;
+  equipment?: string;
+  equipment_code?: string;
+  pressure_bar?: number | null;
+  time_seconds?: number | null;
+  performed_by?: string | null;
+  verified_by?: string | null;
+}): Promise<SealIntegrityControlRecord> {
+  const { data } = await api.post<SealIntegrityControlRecord>(`${BASE}/seal-integrity-controls/`, input);
+  return data as SealIntegrityControlRecord;
+}
+
+export async function createSealIntegritySample(input: {
+  control: string;
+  sample_number: number;
+  result: 'CONFORMING' | 'LEAK' | 'DEFORMATION' | 'RUPTURE' | 'OTHER';
+  observation?: string;
+}): Promise<SealIntegritySampleRecord> {
+  const { data } = await api.post<SealIntegritySampleRecord>(`${BASE}/seal-integrity-samples/`, input);
+  return data as SealIntegritySampleRecord;
+}
+
+export async function createPackagingControl(input: {
+  batch: string;
+  responsible?: string | null;
+  verifier?: string | null;
+  label_code?: string;
+  artwork_version?: string;
+  label_material_batch?: string;
+  label_result?: ResultStatus;
+  units_per_display?: number | null;
+  displays_per_box?: number | null;
+  units_per_box?: number | null;
+  complete_boxes?: number;
+  incomplete_displays?: number;
+  loose_units?: number;
+  total_reconciled?: number;
+  rejections?: number;
+  rejection_reasons?: string;
+}): Promise<PackagingControlRecord> {
+  const { data } = await api.post<PackagingControlRecord>(`${BASE}/packaging-controls/`, input);
+  return data as PackagingControlRecord;
+}
+
+export async function createBatchLotMarking(input: {
+  packaging_control: string;
+  stage: 'INITIAL' | 'FINAL';
+  printed_batch_code?: string;
+  manufacture_date?: string | null;
+  expiry_date?: string | null;
+  printed_at?: string | null;
+  is_legible?: boolean | null;
+  is_correctly_placed?: boolean | null;
+  result?: ResultStatus;
+  performed_by?: string | null;
+  verified_by?: string | null;
+}): Promise<BatchLotMarkingRecord> {
+  const { data } = await api.post<BatchLotMarkingRecord>(`${BASE}/batch-lot-markings/`, input);
+  return data as BatchLotMarkingRecord;
+}
+
+export async function createAnalysisCertificate(input: {
+  batch: string;
+  manufactured_at?: string | null;
+  sampled_at?: string | null;
+  analyzed_at?: string | null;
+  analyzed_by?: string | null;
+  verified_by?: string | null;
+  concept?: 'APPROVED' | 'REJECTED' | 'QUARANTINE' | 'REANALYSIS';
+  observations?: string;
+}): Promise<AnalysisCertificateRecord> {
+  const { data } = await api.post<AnalysisCertificateRecord>(`${BASE}/analysis-certificates/`, input);
+  return data as AnalysisCertificateRecord;
+}
+
+export async function createAnalysisTestResult(input: {
+  certificate: string;
+  name: string;
+  unit?: string;
+  specification?: string;
+  lower_limit?: string;
+  upper_limit?: string;
+  method?: string;
+  bulk_result?: string;
+  finished_product_result?: string;
+  complies?: boolean | null;
+  observations?: string;
+}): Promise<AnalysisTestResultRecord> {
+  const { data } = await api.post<AnalysisTestResultRecord>(`${BASE}/analysis-test-results/`, input);
+  return data as AnalysisTestResultRecord;
+}
+
+export async function createMicrobiologyAnalysis(input: {
+  batch: string;
+  sample_code?: string;
+  sample_type?: string;
+  taken_at?: string | null;
+  taken_by?: string | null;
+  sent_at?: string | null;
+  laboratory?: string;
+  report_number?: string;
+  overall_result?: 'APPROVED' | 'REJECTED' | 'PENDING';
+  observations?: string;
+}): Promise<MicrobiologyAnalysisRecord> {
+  const { data } = await api.post<MicrobiologyAnalysisRecord>(`${BASE}/microbiology-analyses/`, input);
+  return data as MicrobiologyAnalysisRecord;
+}
+
+export async function updateDocumentChecklistItem(
+  id: string,
+  input: Partial<{
+    status: DocumentChecklistItemRecord['status'];
+    result: ResultStatus;
+    applies: boolean;
+    observations: string;
+    responsible: string | null;
+    verifier: string | null;
+  }>,
+): Promise<DocumentChecklistItemRecord> {
+  const { data } = await api.patch<DocumentChecklistItemRecord>(`${BASE}/document-checklist-items/${id}/`, input);
+  return data as DocumentChecklistItemRecord;
+}

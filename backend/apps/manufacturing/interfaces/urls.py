@@ -26,6 +26,8 @@ from .views import (
     PackagingControlViewSet,
     ProductionControlMaterialViewSet,
     ProductionControlViewSet,
+    ProductSpecificationTestViewSet,
+    ProductSpecificationViewSet,
     RawMaterialBatchViewSet,
     RawMaterialIdentificationPrintViewSet,
     SealIntegrityControlViewSet,
@@ -50,6 +52,8 @@ router.register("cleaning-records", CleaningRecordViewSet)
 router.register("line-identifications", LineIdentificationViewSet)
 router.register("production-controls", ProductionControlViewSet)
 router.register("production-control-materials", ProductionControlMaterialViewSet)
+router.register("product-specifications", ProductSpecificationViewSet)
+router.register("product-specification-tests", ProductSpecificationTestViewSet)
 router.register("filling-controls", FillingControlViewSet)
 router.register("filling-participants", FillingParticipantViewSet)
 router.register("filling-log-entries", FillingLogEntryViewSet)

@@ -59,6 +59,83 @@ ROLE_DEFINITIONS = (
         "is_superuser": False,
         "is_default": False,
     },
+    {
+        "code": "PLANEACION",
+        "name": "Planeación de producción",
+        "description": "Programa órdenes de producción y crea el expediente de lote.",
+        "is_superuser": False,
+        "is_default": False,
+    },
+    {
+        "code": "DISPENSADOR",
+        "name": "Dispensador",
+        "description": "Pesa materias primas durante la dispensación de un lote.",
+        "is_superuser": False,
+        "is_default": False,
+    },
+    {
+        "code": "VERIFICADOR_DISPENSACION",
+        "name": "Verificador de dispensación",
+        "description": "Verifica las pesadas de materias primas dispensadas.",
+        "is_superuser": False,
+        "is_default": False,
+    },
+    {
+        "code": "OPERARIO_PRODUCCION",
+        "name": "Operario de producción",
+        "description": "Ejecuta los pasos de fabricación y el control de producción del lote.",
+        "is_superuser": False,
+        "is_default": False,
+    },
+    {
+        "code": "SUPERVISOR_PRODUCCION",
+        "name": "Supervisor de producción",
+        "description": "Supervisa fabricación, despejes de línea y limpieza de áreas y equipos.",
+        "is_superuser": False,
+        "is_default": False,
+    },
+    {
+        "code": "OPERARIO_LLENADO",
+        "name": "Operario de llenado",
+        "description": "Registra el control de llenado del lote.",
+        "is_superuser": False,
+        "is_default": False,
+    },
+    {
+        "code": "OPERARIO_ACONDICIONAMIENTO",
+        "name": "Operario de acondicionamiento",
+        "description": "Registra el control de acondicionamiento y loteado del lote.",
+        "is_superuser": False,
+        "is_default": False,
+    },
+    {
+        "code": "ASEGURAMIENTO_CALIDAD",
+        "name": "Aseguramiento de calidad",
+        "description": "Verifica el expediente documental y gestiona no conformidades del lote.",
+        "is_superuser": False,
+        "is_default": False,
+    },
+    {
+        "code": "CONTROL_CALIDAD",
+        "name": "Control de calidad",
+        "description": "Registra certificados de análisis, microbiología y controles físicos del lote.",
+        "is_superuser": False,
+        "is_default": False,
+    },
+    {
+        "code": "DIRECTOR_TECNICO",
+        "name": "Director técnico",
+        "description": "Aprueba la liberación final de lotes de producto terminado.",
+        "is_superuser": False,
+        "is_default": False,
+    },
+    {
+        "code": "AUDITOR",
+        "name": "Auditor",
+        "description": "Consulta el expediente completo y la auditoría del sistema, sin editar.",
+        "is_superuser": False,
+        "is_default": False,
+    },
 )
 
 
@@ -190,5 +267,45 @@ def build_default_role_permissions():
         "envios.management": {"can_view": True, "can_edit": True},
         "envios.manual_guides": {"can_view": True, "can_edit": True},
         "envios.tracking": {"can_view": True, "can_edit": True},
+    }
+    permissions["PLANEACION"] = {
+        "manufacturing.management": {"can_view": True, "can_edit": True},
+        "inventory.management": {"can_view": True, "can_edit": True},
+    }
+    permissions["DISPENSADOR"] = {
+        "manufacturing.management": {"can_view": True, "can_edit": True},
+        "inventory.management": {"can_view": True, "can_edit": False},
+    }
+    permissions["VERIFICADOR_DISPENSACION"] = {
+        "manufacturing.management": {"can_view": True, "can_edit": True},
+    }
+    permissions["OPERARIO_PRODUCCION"] = {
+        "manufacturing.management": {"can_view": True, "can_edit": True},
+    }
+    permissions["SUPERVISOR_PRODUCCION"] = {
+        "manufacturing.management": {"can_view": True, "can_edit": True},
+    }
+    permissions["OPERARIO_LLENADO"] = {
+        "manufacturing.management": {"can_view": True, "can_edit": True},
+    }
+    permissions["OPERARIO_ACONDICIONAMIENTO"] = {
+        "manufacturing.management": {"can_view": True, "can_edit": True},
+    }
+    permissions["ASEGURAMIENTO_CALIDAD"] = {
+        "manufacturing.management": {"can_view": True, "can_edit": True},
+    }
+    permissions["CONTROL_CALIDAD"] = {
+        "manufacturing.management": {"can_view": True, "can_edit": True},
+    }
+    permissions["DIRECTOR_TECNICO"] = {
+        "manufacturing.management": {"can_view": True, "can_edit": True},
+    }
+    permissions["AUDITOR"] = {
+        "manufacturing.management": {"can_view": True, "can_edit": False},
+        "audit.logs": {"can_view": True, "can_edit": False},
+        "human_resources.management": {"can_view": True, "can_edit": False},
+        "inventory.management": {"can_view": True, "can_edit": False},
+        "employees.management": {"can_view": True, "can_edit": False},
+        "commerce.orders": {"can_view": True, "can_edit": False},
     }
     return permissions

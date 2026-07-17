@@ -4,6 +4,8 @@ from django.utils import timezone
 from shared.domain.exceptions import BusinessRuleViolation
 
 from ..infrastructure.models import (
+    AnalysisCertificate,
+    AnalysisTestResult,
     Batch,
     BatchRelease,
     BatchStatusHistory,
@@ -13,6 +15,8 @@ from ..infrastructure.models import (
     ItemStock,
     ItemStockMovement,
     LineClearance,
+    MicrobiologyAnalysis,
+    ProductSpecification,
     ResultStatus,
 )
 
@@ -181,6 +185,66 @@ class ApproveLineClearance:
         clearance.verified_by = actor
         clearance.save(update_fields=("status", "verified_by", "updated_at"))
         return clearance
+
+
+class LoadCertificateTestsFromSpecification:
+    """Autocompleta los ensayos fisicoquímicos del certificado de análisis desde
+    el maestro de especificaciones del producto de la orden, cuando existe.
+    No sobreescribe ensayos ya creados manualmente para el certificado."""
+
+    @transaction.atomic
+    def execute(self, certificate: AnalysisCertificate):
+        output_item = certificate.batch.production_order.output_item
+        specification = ProductSpecification.objects.filter(item=output_item, is_active=True).prefetch_related("tests").first()
+        if specification is None:
+            raise BusinessRuleViolation("Este producto no tiene un maestro de especificaciones registrado.")
+
+        existing_names = set(certificate.tests.values_list("name", flat=True))
+        created = []
+        for spec_test in specification.tests.filter(category=specification.tests.model.Category.PHYSICOCHEMICAL):
+            if spec_test.name in existing_names:
+                continue
+            created.append(
+                AnalysisTestResult(
+                    certificate=certificate,
+                    name=spec_test.name,
+                    unit=spec_test.unit,
+                    specification=spec_test.specification_text,
+                    lower_limit=spec_test.lower_limit,
+                    upper_limit=spec_test.upper_limit,
+                    method=spec_test.method,
+                    equipment=spec_test.equipment,
+                    equipment_parameters=spec_test.equipment_parameters,
+                )
+            )
+        AnalysisTestResult.objects.bulk_create(created)
+        return certificate
+
+
+class LoadMicrobiologySpecificationFromMaster:
+    """Autocompleta las especificaciones del análisis microbiológico desde el
+    maestro de especificaciones del producto, cuando existe."""
+
+    def execute(self, microbiology: MicrobiologyAnalysis):
+        output_item = microbiology.batch.production_order.output_item
+        specification = ProductSpecification.objects.filter(item=output_item, is_active=True).prefetch_related("tests").first()
+        if specification is None:
+            raise BusinessRuleViolation("Este producto no tiene un maestro de especificaciones registrado.")
+
+        microbiological_tests = specification.tests.filter(category=specification.tests.model.Category.MICROBIOLOGICAL)
+        microbiology.specifications = [
+            {
+                "name": test.name,
+                "unit": test.unit,
+                "specification": test.specification_text,
+                "lower_limit": test.lower_limit,
+                "upper_limit": test.upper_limit,
+                "method": test.method,
+            }
+            for test in microbiological_tests
+        ]
+        microbiology.save(update_fields=("specifications", "updated_at"))
+        return microbiology
 
 
 class ReleaseBatch:

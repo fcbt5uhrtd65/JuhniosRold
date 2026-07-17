@@ -33,6 +33,18 @@ function getDefaultViewForRole(role?: string) {
       return 'products';
     case 'DISTRIBUTOR':
       return 'orders';
+    case 'PLANEACION':
+    case 'DISPENSADOR':
+    case 'VERIFICADOR_DISPENSACION':
+    case 'OPERARIO_PRODUCCION':
+    case 'SUPERVISOR_PRODUCCION':
+    case 'OPERARIO_LLENADO':
+    case 'OPERARIO_ACONDICIONAMIENTO':
+    case 'ASEGURAMIENTO_CALIDAD':
+    case 'CONTROL_CALIDAD':
+    case 'DIRECTOR_TECNICO':
+    case 'AUDITOR':
+      return 'manufacturing';
     case 'ADMIN':
     default:
       return 'dashboard';

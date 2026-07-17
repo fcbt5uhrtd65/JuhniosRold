@@ -27,6 +27,8 @@ from .models import (
     PackagingControl,
     ProductionControl,
     ProductionControlMaterial,
+    ProductSpecification,
+    ProductSpecificationTest,
     RawMaterialBatch,
     RawMaterialIdentificationPrint,
     SealIntegrityControl,
@@ -267,6 +269,22 @@ class PackagingControlSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = PackagingControl
+        fields = "__all__"
+
+
+# ── Maestro de especificaciones de producto ──────────────────────────────────
+
+class ProductSpecificationTestSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProductSpecificationTest
+        fields = "__all__"
+
+
+class ProductSpecificationSerializer(serializers.ModelSerializer):
+    tests = ProductSpecificationTestSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = ProductSpecification
         fields = "__all__"
 
 

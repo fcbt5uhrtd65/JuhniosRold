@@ -6,7 +6,18 @@ type Role =
   | 'DISTRIBUTOR'
   | 'RRHH'
   | 'EMPLEADO'
-  | 'PEDIDOS';
+  | 'PEDIDOS'
+  | 'PLANEACION'
+  | 'DISPENSADOR'
+  | 'VERIFICADOR_DISPENSACION'
+  | 'OPERARIO_PRODUCCION'
+  | 'SUPERVISOR_PRODUCCION'
+  | 'OPERARIO_LLENADO'
+  | 'OPERARIO_ACONDICIONAMIENTO'
+  | 'ASEGURAMIENTO_CALIDAD'
+  | 'CONTROL_CALIDAD'
+  | 'DIRECTOR_TECNICO'
+  | 'AUDITOR';
 
 interface Permission {
   canCreateProducts: boolean;
@@ -235,6 +246,28 @@ export function getRoleLabel(role: Role): string {
       return 'Empleado';
     case 'PEDIDOS':
       return 'Pedidos y seguimiento';
+    case 'PLANEACION':
+      return 'Planeación de producción';
+    case 'DISPENSADOR':
+      return 'Dispensador';
+    case 'VERIFICADOR_DISPENSACION':
+      return 'Verificador de dispensación';
+    case 'OPERARIO_PRODUCCION':
+      return 'Operario de producción';
+    case 'SUPERVISOR_PRODUCCION':
+      return 'Supervisor de producción';
+    case 'OPERARIO_LLENADO':
+      return 'Operario de llenado';
+    case 'OPERARIO_ACONDICIONAMIENTO':
+      return 'Operario de acondicionamiento';
+    case 'ASEGURAMIENTO_CALIDAD':
+      return 'Aseguramiento de calidad';
+    case 'CONTROL_CALIDAD':
+      return 'Control de calidad';
+    case 'DIRECTOR_TECNICO':
+      return 'Director técnico';
+    case 'AUDITOR':
+      return 'Auditor';
     default:
       return role;
   }

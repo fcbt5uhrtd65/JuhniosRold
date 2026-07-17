@@ -39,7 +39,16 @@ import { SignaturePad } from './SignaturePad';
 import {
   approveLineClearance,
   changeBatchStatus,
+  createAnalysisCertificate,
   createBatch,
+  createCleaningRecord,
+  createFillingControl,
+  createLineClearance,
+  createLineIdentification,
+  createMicrobiologyAnalysis,
+  createPackagingControl,
+  createSealIntegrityControl,
+  createWeightVolumeControl,
   exportAnalysisCertificate,
   exportBatchDossier,
   exportDispensingOrder,
@@ -62,6 +71,7 @@ import {
   getBatchRelease,
   getSealIntegrityControl,
   getWeightVolumeControl,
+  loadCertificateTestsFromSpecification,
   rejectLineClearance,
   releaseBatch,
   startBatch,
@@ -740,32 +750,35 @@ function ManufacturingTab({ batch, employeeById }: { batch: BatchRecord; employe
   const [steps, setSteps] = useState<ManufacturingStepExecutionRecord[]>([]);
   const [productionControl, setProductionControl] = useState<ProductionControlRecord | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showClearanceModal, setShowClearanceModal] = useState(false);
+  const [showCleaningModal, setShowCleaningModal] = useState(false);
+  const [showLineModal, setShowLineModal] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
+  const load = useCallback(async () => {
     setLoading(true);
-    Promise.allSettled([
-      getLineClearances(batch.id),
-      getCleaningRecords(batch.id),
-      getLineIdentification(batch.id),
-      getManufacturingStepExecutions(batch.id),
-      getProductionControl(batch.id),
-    ]).then(([clearancesRes, cleaningsRes, lineRes, stepsRes, controlRes]) => {
-      if (cancelled) return;
+    try {
+      const [clearancesRes, cleaningsRes, lineRes, stepsRes, controlRes] = await Promise.allSettled([
+        getLineClearances(batch.id),
+        getCleaningRecords(batch.id),
+        getLineIdentification(batch.id),
+        getManufacturingStepExecutions(batch.id),
+        getProductionControl(batch.id),
+      ]);
       if (clearancesRes.status === 'fulfilled') setClearances(clearancesRes.value);
       if (cleaningsRes.status === 'fulfilled') setCleanings(cleaningsRes.value);
       if (lineRes.status === 'fulfilled') setLineIdentification(lineRes.value);
       if (stepsRes.status === 'fulfilled') setSteps(stepsRes.value);
       if (controlRes.status === 'fulfilled') setProductionControl(controlRes.value);
+    } catch {
+      toast.error('No se pudo cargar la información de fabricación');
+    } finally {
       setLoading(false);
-    }).catch(() => {
-      if (!cancelled) {
-        toast.error('No se pudo cargar la información de fabricación');
-        setLoading(false);
-      }
-    });
-    return () => { cancelled = true; };
+    }
   }, [batch.id, toast]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const handleApprove = async (id: string) => {
     try {
@@ -803,7 +816,10 @@ function ManufacturingTab({ batch, employeeById }: { batch: BatchRecord; employe
   return (
     <div className="space-y-4">
       <Card className="p-5">
-        <p className="text-sm font-semibold text-gray-900 mb-3">Despejes de línea</p>
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-sm font-semibold text-gray-900">Despejes de línea</p>
+          <SecondaryButton onClick={() => setShowClearanceModal(true)} icon={<Plus size={13} />}>Nuevo despeje</SecondaryButton>
+        </div>
         {clearances.length === 0 ? (
           <EmptyState title="Sin despejes registrados" />
         ) : (
@@ -833,7 +849,10 @@ function ManufacturingTab({ batch, employeeById }: { batch: BatchRecord; employe
       </Card>
 
       <Card className="p-5">
-        <p className="text-sm font-semibold text-gray-900 mb-3">Limpieza de áreas y equipos</p>
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-sm font-semibold text-gray-900">Limpieza de áreas y equipos</p>
+          <SecondaryButton onClick={() => setShowCleaningModal(true)} icon={<Plus size={13} />}>Nueva limpieza</SecondaryButton>
+        </div>
         {cleanings.length === 0 ? (
           <EmptyState title="Sin registros de limpieza" />
         ) : (
@@ -855,7 +874,12 @@ function ManufacturingTab({ batch, employeeById }: { batch: BatchRecord; employe
       </Card>
 
       <Card className="p-5">
-        <p className="text-sm font-semibold text-gray-900 mb-3">Identificación de línea</p>
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-sm font-semibold text-gray-900">Identificación de línea</p>
+          {!lineIdentification && (
+            <SecondaryButton onClick={() => setShowLineModal(true)} icon={<Plus size={13} />}>Registrar</SecondaryButton>
+          )}
+        </div>
         {lineIdentification ? (
           <div className="grid sm:grid-cols-2 gap-4">
             <SectionField label="Área" value={lineIdentification.area || 'Sin asignar'} />
@@ -924,7 +948,299 @@ function ManufacturingTab({ batch, employeeById }: { batch: BatchRecord; employe
           </div>
         )}
       </Card>
+
+      <NewLineClearanceModal
+        open={showClearanceModal}
+        batchId={batch.id}
+        onClose={() => setShowClearanceModal(false)}
+        onCreated={async () => {
+          setShowClearanceModal(false);
+          await load();
+        }}
+      />
+      <NewCleaningRecordModal
+        open={showCleaningModal}
+        batchId={batch.id}
+        onClose={() => setShowCleaningModal(false)}
+        onCreated={async () => {
+          setShowCleaningModal(false);
+          await load();
+        }}
+      />
+      <NewLineIdentificationModal
+        open={showLineModal}
+        batchId={batch.id}
+        onClose={() => setShowLineModal(false)}
+        onCreated={async () => {
+          setShowLineModal(false);
+          await load();
+        }}
+      />
     </div>
+  );
+}
+
+function NewLineClearanceModal({
+  open,
+  batchId,
+  onClose,
+  onCreated,
+}: {
+  open: boolean;
+  batchId: string;
+  onClose: () => void;
+  onCreated: () => Promise<void>;
+}) {
+  const toast = useToast();
+  const [phase, setPhase] = useState<'DISPENSING' | 'MANUFACTURING' | 'FILLING' | 'PACKAGING'>('MANUFACTURING');
+  const [area, setArea] = useState('');
+  const [productionLine, setProductionLine] = useState('');
+  const [previousProduct, setPreviousProduct] = useState('');
+  const [previousBatchCode, setPreviousBatchCode] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async () => {
+    setSaving(true);
+    try {
+      await createLineClearance({
+        batch: batchId,
+        phase,
+        area,
+        production_line: productionLine,
+        previous_product: previousProduct,
+        previous_batch_code: previousBatchCode,
+      });
+      toast.success('Despeje registrado');
+      setArea('');
+      setProductionLine('');
+      setPreviousProduct('');
+      setPreviousBatchCode('');
+      await onCreated();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo registrar el despeje');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title="Nuevo despeje de línea" open={open} onClose={onClose}>
+      <div className="space-y-4">
+        <label className="block">
+          <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Fase</span>
+          <select value={phase} onChange={(e) => setPhase(e.target.value as typeof phase)} className={selectCls}>
+            <option value="DISPENSING">Dispensación</option>
+            <option value="MANUFACTURING">Fabricación</option>
+            <option value="FILLING">Llenado</option>
+            <option value="PACKAGING">Acondicionamiento</option>
+          </select>
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Área</span>
+            <input value={area} onChange={(e) => setArea(e.target.value)} className={inputCls} />
+          </label>
+          <label className="block">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Línea</span>
+            <input value={productionLine} onChange={(e) => setProductionLine(e.target.value)} className={inputCls} />
+          </label>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Producto anterior</span>
+            <input value={previousProduct} onChange={(e) => setPreviousProduct(e.target.value)} className={inputCls} />
+          </label>
+          <label className="block">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Lote anterior</span>
+            <input value={previousBatchCode} onChange={(e) => setPreviousBatchCode(e.target.value)} className={inputCls} />
+          </label>
+        </div>
+        <p className="text-[11px] text-gray-400">
+          El checklist de criterios (limpieza, ausencia de materiales de otro producto, etc.) se diligencia después de crear el despeje.
+        </p>
+        <div className="flex justify-end gap-2">
+          <SecondaryButton onClick={onClose}>Cancelar</SecondaryButton>
+          <PrimaryButton onClick={() => void handleSubmit()} disabled={saving}>
+            {saving ? 'Guardando...' : 'Crear despeje'}
+          </PrimaryButton>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function NewCleaningRecordModal({
+  open,
+  batchId,
+  onClose,
+  onCreated,
+}: {
+  open: boolean;
+  batchId: string;
+  onClose: () => void;
+  onCreated: () => Promise<void>;
+}) {
+  const toast = useToast();
+  const [recordType, setRecordType] = useState<'AREA' | 'EQUIPMENT'>('AREA');
+  const [area, setArea] = useState('');
+  const [equipment, setEquipment] = useState('');
+  const [equipmentCode, setEquipmentCode] = useState('');
+  const [sanitizer, setSanitizer] = useState('');
+  const [sanitizerConcentration, setSanitizerConcentration] = useState('');
+  const [sanitizerBatch, setSanitizerBatch] = useState('');
+  const [sanitizerExpiresAt, setSanitizerExpiresAt] = useState('');
+  const [cleaningMethod, setCleaningMethod] = useState('');
+  const [validUntil, setValidUntil] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async () => {
+    setSaving(true);
+    try {
+      await createCleaningRecord({
+        batch: batchId,
+        record_type: recordType,
+        area: recordType === 'AREA' ? area : '',
+        equipment: recordType === 'EQUIPMENT' ? equipment : '',
+        equipment_code: equipmentCode,
+        cleaned_at: new Date().toISOString(),
+        cleaning_method: cleaningMethod,
+        sanitizer,
+        sanitizer_concentration: sanitizerConcentration,
+        sanitizer_batch: sanitizerBatch,
+        sanitizer_expires_at: sanitizerExpiresAt || null,
+        valid_until: validUntil ? new Date(validUntil).toISOString() : null,
+      });
+      toast.success('Limpieza registrada');
+      await onCreated();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo registrar la limpieza');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title="Nueva limpieza de área o equipo" open={open} onClose={onClose} wide>
+      <div className="space-y-4">
+        <label className="block">
+          <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Tipo</span>
+          <select value={recordType} onChange={(e) => setRecordType(e.target.value as typeof recordType)} className={selectCls}>
+            <option value="AREA">Área limpia</option>
+            <option value="EQUIPMENT">Equipo limpio</option>
+          </select>
+        </label>
+        {recordType === 'AREA' ? (
+          <label className="block">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Área</span>
+            <input value={area} onChange={(e) => setArea(e.target.value)} className={inputCls} />
+          </label>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Equipo</span>
+              <input value={equipment} onChange={(e) => setEquipment(e.target.value)} className={inputCls} />
+            </label>
+            <label className="block">
+              <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Código del equipo</span>
+              <input value={equipmentCode} onChange={(e) => setEquipmentCode(e.target.value)} className={inputCls} />
+            </label>
+          </div>
+        )}
+        <label className="block">
+          <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Método de limpieza</span>
+          <textarea value={cleaningMethod} onChange={(e) => setCleaningMethod(e.target.value)} rows={2} className={`${inputCls} resize-none`} />
+        </label>
+        <div className="grid grid-cols-3 gap-3">
+          <label className="block">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Sanitizante</span>
+            <input value={sanitizer} onChange={(e) => setSanitizer(e.target.value)} className={inputCls} placeholder="Ej: Alcohol etílico 70%" />
+          </label>
+          <label className="block">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Concentración</span>
+            <input value={sanitizerConcentration} onChange={(e) => setSanitizerConcentration(e.target.value)} className={inputCls} />
+          </label>
+          <label className="block">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Lote sanitizante</span>
+            <input value={sanitizerBatch} onChange={(e) => setSanitizerBatch(e.target.value)} className={inputCls} />
+          </label>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Vencimiento del sanitizante</span>
+            <input type="date" value={sanitizerExpiresAt} onChange={(e) => setSanitizerExpiresAt(e.target.value)} className={inputCls} />
+          </label>
+          <label className="block">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Vigencia de esta limpieza hasta</span>
+            <input type="datetime-local" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} className={inputCls} />
+          </label>
+        </div>
+        <div className="flex justify-end gap-2">
+          <SecondaryButton onClick={onClose}>Cancelar</SecondaryButton>
+          <PrimaryButton onClick={() => void handleSubmit()} disabled={saving}>
+            {saving ? 'Guardando...' : 'Registrar limpieza'}
+          </PrimaryButton>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function NewLineIdentificationModal({
+  open,
+  batchId,
+  onClose,
+  onCreated,
+}: {
+  open: boolean;
+  batchId: string;
+  onClose: () => void;
+  onCreated: () => Promise<void>;
+}) {
+  const toast = useToast();
+  const [area, setArea] = useState('');
+  const [productionLine, setProductionLine] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async () => {
+    setSaving(true);
+    try {
+      await createLineIdentification({
+        batch: batchId,
+        area,
+        production_line: productionLine,
+        placed_at: new Date().toISOString(),
+      });
+      toast.success('Identificación de línea registrada');
+      await onCreated();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo registrar la identificación');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title="Identificación de línea" open={open} onClose={onClose}>
+      <div className="space-y-4">
+        <label className="block">
+          <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Área</span>
+          <input value={area} onChange={(e) => setArea(e.target.value)} className={inputCls} />
+        </label>
+        <label className="block">
+          <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Línea</span>
+          <input value={productionLine} onChange={(e) => setProductionLine(e.target.value)} className={inputCls} />
+        </label>
+        <div className="flex justify-end gap-2">
+          <SecondaryButton onClick={onClose}>Cancelar</SecondaryButton>
+          <PrimaryButton onClick={() => void handleSubmit()} disabled={saving}>
+            {saving ? 'Guardando...' : 'Registrar'}
+          </PrimaryButton>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -933,17 +1249,24 @@ function BulkQualityTab({ batch }: { batch: BatchRecord }) {
   const [certificate, setCertificate] = useState<AnalysisCertificateRecord | null>(null);
   const [microbiology, setMicrobiology] = useState<MicrobiologyAnalysisRecord | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showCertificateModal, setShowCertificateModal] = useState(false);
+  const [showMicrobiologyModal, setShowMicrobiologyModal] = useState(false);
+  const [loadingFromSpec, setLoadingFromSpec] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    Promise.allSettled([getAnalysisCertificate(batch.id), getMicrobiologyAnalysis(batch.id)]).then(([certRes, microRes]) => {
-      if (cancelled) return;
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [certRes, microRes] = await Promise.allSettled([getAnalysisCertificate(batch.id), getMicrobiologyAnalysis(batch.id)]);
       if (certRes.status === 'fulfilled') setCertificate(certRes.value);
       if (microRes.status === 'fulfilled') setMicrobiology(microRes.value);
+    } finally {
       setLoading(false);
-    });
-    return () => { cancelled = true; };
+    }
   }, [batch.id]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const handleExport = async () => {
     if (!certificate) return;
@@ -955,6 +1278,21 @@ function BulkQualityTab({ batch }: { batch: BatchRecord }) {
     }
   };
 
+  const handleLoadFromSpecification = async () => {
+    if (!certificate) return;
+    setLoadingFromSpec(true);
+    try {
+      await loadCertificateTestsFromSpecification(certificate.id);
+      toast.success('Ensayos cargados desde el maestro de especificaciones');
+      await load();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo cargar el maestro de especificaciones');
+    } finally {
+      setLoadingFromSpec(false);
+    }
+  };
+
   if (loading) return <LoadingState label="Cargando calidad del granel..." />;
 
   return (
@@ -962,7 +1300,23 @@ function BulkQualityTab({ batch }: { batch: BatchRecord }) {
       <Card className="p-5">
         <div className="flex items-center justify-between mb-3">
           <p className="text-sm font-semibold text-gray-900">Certificado de análisis</p>
-          {certificate && <SecondaryButton onClick={() => void handleExport()} icon={<FileDown size={13} />}>Exportar</SecondaryButton>}
+          <div className="flex items-center gap-2">
+            {certificate && (
+              <>
+                <button
+                  onClick={() => void handleLoadFromSpecification()}
+                  disabled={loadingFromSpec}
+                  className="flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                >
+                  {loadingFromSpec ? 'Cargando...' : 'Cargar desde maestro'}
+                </button>
+                <SecondaryButton onClick={() => void handleExport()} icon={<FileDown size={13} />}>Exportar</SecondaryButton>
+              </>
+            )}
+            {!certificate && (
+              <SecondaryButton onClick={() => setShowCertificateModal(true)} icon={<Plus size={13} />}>Nuevo certificado</SecondaryButton>
+            )}
+          </div>
         </div>
         {!certificate ? (
           <EmptyState title="Sin certificado de análisis registrado" />
@@ -972,38 +1326,47 @@ function BulkQualityTab({ batch }: { batch: BatchRecord }) {
               <Badge label={certificate.concept} color={certificate.concept === 'APPROVED' ? 'green' : certificate.concept === 'REJECTED' ? 'red' : 'yellow'} />
               <p className="text-xs text-gray-400">Analizado: {formatDate(certificate.analyzed_at)}</p>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="text-left text-[10px] uppercase text-gray-400 border-b border-gray-100">
-                    <th className="py-2 pr-3">Ensayo</th>
-                    <th className="py-2 pr-3">Especificación</th>
-                    <th className="py-2 pr-3">Granel</th>
-                    <th className="py-2 pr-3">Terminado</th>
-                    <th className="py-2 pr-3">Cumple</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {certificate.tests.map((test) => (
-                    <tr key={test.id} className="border-b border-gray-50">
-                      <td className="py-2 pr-3">{test.name}</td>
-                      <td className="py-2 pr-3">{test.specification}</td>
-                      <td className="py-2 pr-3">{test.bulk_result}</td>
-                      <td className="py-2 pr-3">{test.finished_product_result}</td>
-                      <td className="py-2 pr-3">
-                        {test.complies === null ? '-' : <Badge label={test.complies ? 'Cumple' : 'No cumple'} color={test.complies ? 'green' : 'red'} />}
-                      </td>
+            {certificate.tests.length === 0 ? (
+              <EmptyState title="Sin ensayos registrados" description="Usa 'Cargar desde maestro' si el producto tiene especificaciones configuradas." />
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-left text-[10px] uppercase text-gray-400 border-b border-gray-100">
+                      <th className="py-2 pr-3">Ensayo</th>
+                      <th className="py-2 pr-3">Especificación</th>
+                      <th className="py-2 pr-3">Granel</th>
+                      <th className="py-2 pr-3">Terminado</th>
+                      <th className="py-2 pr-3">Cumple</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {certificate.tests.map((test) => (
+                      <tr key={test.id} className="border-b border-gray-50">
+                        <td className="py-2 pr-3">{test.name}</td>
+                        <td className="py-2 pr-3">{test.specification}</td>
+                        <td className="py-2 pr-3">{test.bulk_result}</td>
+                        <td className="py-2 pr-3">{test.finished_product_result}</td>
+                        <td className="py-2 pr-3">
+                          {test.complies === null ? '-' : <Badge label={test.complies ? 'Cumple' : 'No cumple'} color={test.complies ? 'green' : 'red'} />}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </>
         )}
       </Card>
 
       <Card className="p-5">
-        <p className="text-sm font-semibold text-gray-900 mb-3">Análisis microbiológico</p>
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-sm font-semibold text-gray-900">Análisis microbiológico</p>
+          {!microbiology && (
+            <SecondaryButton onClick={() => setShowMicrobiologyModal(true)} icon={<Plus size={13} />}>Nuevo análisis</SecondaryButton>
+          )}
+        </div>
         {!microbiology ? (
           <EmptyState title="Sin análisis microbiológico registrado" />
         ) : (
@@ -1015,27 +1378,229 @@ function BulkQualityTab({ batch }: { batch: BatchRecord }) {
           </div>
         )}
       </Card>
+
+      <NewAnalysisCertificateModal
+        open={showCertificateModal}
+        batchId={batch.id}
+        onClose={() => setShowCertificateModal(false)}
+        onCreated={async () => {
+          setShowCertificateModal(false);
+          await load();
+        }}
+      />
+      <NewMicrobiologyAnalysisModal
+        open={showMicrobiologyModal}
+        batchId={batch.id}
+        onClose={() => setShowMicrobiologyModal(false)}
+        onCreated={async () => {
+          setShowMicrobiologyModal(false);
+          await load();
+        }}
+      />
     </div>
   );
 }
 
+function NewAnalysisCertificateModal({
+  open,
+  batchId,
+  onClose,
+  onCreated,
+}: {
+  open: boolean;
+  batchId: string;
+  onClose: () => void;
+  onCreated: () => Promise<void>;
+}) {
+  const toast = useToast();
+  const [concept, setConcept] = useState<'APPROVED' | 'REJECTED' | 'QUARANTINE' | 'REANALYSIS'>('QUARANTINE');
+  const [observations, setObservations] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async () => {
+    setSaving(true);
+    try {
+      await createAnalysisCertificate({ batch: batchId, concept, observations, analyzed_at: new Date().toISOString().slice(0, 10) });
+      toast.success('Certificado creado');
+      await onCreated();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo crear el certificado');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title="Nuevo certificado de análisis" open={open} onClose={onClose}>
+      <div className="space-y-4">
+        <label className="block">
+          <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Concepto</span>
+          <select value={concept} onChange={(e) => setConcept(e.target.value as typeof concept)} className={selectCls}>
+            <option value="QUARANTINE">Cuarentena</option>
+            <option value="APPROVED">Aprobado</option>
+            <option value="REJECTED">Rechazado</option>
+            <option value="REANALYSIS">Reanálisis</option>
+          </select>
+        </label>
+        <label className="block">
+          <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Observaciones</span>
+          <textarea value={observations} onChange={(e) => setObservations(e.target.value)} rows={3} className={`${inputCls} resize-none`} />
+        </label>
+        <div className="flex justify-end gap-2">
+          <SecondaryButton onClick={onClose}>Cancelar</SecondaryButton>
+          <PrimaryButton onClick={() => void handleSubmit()} disabled={saving}>
+            {saving ? 'Guardando...' : 'Crear certificado'}
+          </PrimaryButton>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function NewMicrobiologyAnalysisModal({
+  open,
+  batchId,
+  onClose,
+  onCreated,
+}: {
+  open: boolean;
+  batchId: string;
+  onClose: () => void;
+  onCreated: () => Promise<void>;
+}) {
+  const toast = useToast();
+  const [sampleCode, setSampleCode] = useState('');
+  const [laboratory, setLaboratory] = useState('');
+  const [reportNumber, setReportNumber] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async () => {
+    setSaving(true);
+    try {
+      await createMicrobiologyAnalysis({
+        batch: batchId,
+        sample_code: sampleCode,
+        laboratory,
+        report_number: reportNumber,
+        overall_result: 'PENDING',
+      });
+      toast.success('Análisis microbiológico creado');
+      await onCreated();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo crear el análisis');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title="Nuevo análisis microbiológico" open={open} onClose={onClose}>
+      <div className="space-y-4">
+        <label className="block">
+          <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Código de muestra</span>
+          <input value={sampleCode} onChange={(e) => setSampleCode(e.target.value)} className={inputCls} />
+        </label>
+        <label className="block">
+          <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Laboratorio</span>
+          <input value={laboratory} onChange={(e) => setLaboratory(e.target.value)} className={inputCls} />
+        </label>
+        <label className="block">
+          <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">N.º informe</span>
+          <input value={reportNumber} onChange={(e) => setReportNumber(e.target.value)} className={inputCls} />
+        </label>
+        <div className="flex justify-end gap-2">
+          <SecondaryButton onClick={onClose}>Cancelar</SecondaryButton>
+          <PrimaryButton onClick={() => void handleSubmit()} disabled={saving}>
+            {saving ? 'Guardando...' : 'Crear análisis'}
+          </PrimaryButton>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 function FillingTab({ batch }: { batch: BatchRecord }) {
+  const toast = useToast();
   const [control, setControl] = useState<FillingControlRecord | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [productionLine, setProductionLine] = useState('');
+  const [equipment, setEquipment] = useState('');
+  const [plannedQuantity, setPlannedQuantity] = useState('');
+  const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    getFillingControl(batch.id).then((result) => {
-      if (!cancelled) {
-        setControl(result);
-        setLoading(false);
-      }
-    }).catch(() => setLoading(false));
-    return () => { cancelled = true; };
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setControl(await getFillingControl(batch.id));
+    } finally {
+      setLoading(false);
+    }
   }, [batch.id]);
 
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const handleCreate = async () => {
+    setSaving(true);
+    try {
+      await createFillingControl({
+        batch: batch.id,
+        production_line: productionLine,
+        equipment,
+        started_at: new Date().toISOString(),
+        planned_quantity: plannedQuantity ? Number(plannedQuantity) : null,
+      });
+      toast.success('Control de llenado creado');
+      setShowModal(false);
+      await load();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo crear el control de llenado');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) return <LoadingState label="Cargando llenado..." />;
-  if (!control) return <EmptyState title="Sin control de llenado registrado" />;
+
+  if (!control) {
+    return (
+      <Card className="p-5">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-sm font-semibold text-gray-900">Control de llenado</p>
+          <SecondaryButton onClick={() => setShowModal(true)} icon={<Plus size={13} />}>Nuevo control</SecondaryButton>
+        </div>
+        <EmptyState title="Sin control de llenado registrado" />
+
+        <Modal title="Nuevo control de llenado" open={showModal} onClose={() => setShowModal(false)}>
+          <div className="space-y-4">
+            <label className="block">
+              <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Línea</span>
+              <input value={productionLine} onChange={(e) => setProductionLine(e.target.value)} className={inputCls} />
+            </label>
+            <label className="block">
+              <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Equipo</span>
+              <input value={equipment} onChange={(e) => setEquipment(e.target.value)} className={inputCls} />
+            </label>
+            <label className="block">
+              <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Cantidad programada</span>
+              <input type="number" value={plannedQuantity} onChange={(e) => setPlannedQuantity(e.target.value)} className={inputCls} />
+            </label>
+            <div className="flex justify-end gap-2">
+              <SecondaryButton onClick={() => setShowModal(false)}>Cancelar</SecondaryButton>
+              <PrimaryButton onClick={() => void handleCreate()} disabled={saving}>
+                {saving ? 'Guardando...' : 'Crear control'}
+              </PrimaryButton>
+            </div>
+          </div>
+        </Modal>
+      </Card>
+    );
+  }
 
   return (
     <Card className="p-5">
@@ -1068,27 +1633,39 @@ function PackagingTab({ batch }: { batch: BatchRecord }) {
   const [seal, setSeal] = useState<SealIntegrityControlRecord | null>(null);
   const [weight, setWeight] = useState<WeightVolumeControlRecord | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showPackagingModal, setShowPackagingModal] = useState(false);
+  const [showSealModal, setShowSealModal] = useState(false);
+  const [showWeightModal, setShowWeightModal] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [packagingRes, sealRes, weightRes] = await Promise.allSettled([
+        getPackagingControl(batch.id),
+        getSealIntegrityControl(batch.id),
+        getWeightVolumeControl(batch.id),
+      ]);
+      if (packagingRes.status === 'fulfilled') setControl(packagingRes.value);
+      if (sealRes.status === 'fulfilled') setSeal(sealRes.value);
+      if (weightRes.status === 'fulfilled') setWeight(weightRes.value);
+    } finally {
+      setLoading(false);
+    }
+  }, [batch.id]);
 
   useEffect(() => {
-    let cancelled = false;
-    Promise.allSettled([getPackagingControl(batch.id), getSealIntegrityControl(batch.id), getWeightVolumeControl(batch.id)]).then(
-      ([packagingRes, sealRes, weightRes]) => {
-        if (cancelled) return;
-        if (packagingRes.status === 'fulfilled') setControl(packagingRes.value);
-        if (sealRes.status === 'fulfilled') setSeal(sealRes.value);
-        if (weightRes.status === 'fulfilled') setWeight(weightRes.value);
-        setLoading(false);
-      },
-    );
-    return () => { cancelled = true; };
-  }, [batch.id]);
+    void load();
+  }, [load]);
 
   if (loading) return <LoadingState label="Cargando acondicionamiento..." />;
 
   return (
     <div className="space-y-4">
       <Card className="p-5">
-        <p className="text-sm font-semibold text-gray-900 mb-3">Control de acondicionamiento</p>
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-sm font-semibold text-gray-900">Control de acondicionamiento</p>
+          {!control && <SecondaryButton onClick={() => setShowPackagingModal(true)} icon={<Plus size={13} />}>Nuevo control</SecondaryButton>}
+        </div>
         {!control ? (
           <EmptyState title="Sin control de acondicionamiento registrado" />
         ) : (
@@ -1121,7 +1698,10 @@ function PackagingTab({ batch }: { batch: BatchRecord }) {
 
       <div className="grid sm:grid-cols-2 gap-4">
         <Card className="p-5">
-          <p className="text-sm font-semibold text-gray-900 mb-3">Control de hermeticidad</p>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-semibold text-gray-900">Control de hermeticidad</p>
+            {!seal && <SecondaryButton onClick={() => setShowSealModal(true)} icon={<Plus size={13} />}>Nuevo</SecondaryButton>}
+          </div>
           {!seal ? <EmptyState title="Sin registro" /> : (
             <div className="space-y-2">
               <Badge label={seal.overall_result} color={seal.overall_result === 'APPROVED' ? 'green' : seal.overall_result === 'REJECTED' ? 'red' : 'yellow'} />
@@ -1131,7 +1711,10 @@ function PackagingTab({ batch }: { batch: BatchRecord }) {
           )}
         </Card>
         <Card className="p-5">
-          <p className="text-sm font-semibold text-gray-900 mb-3">Control de peso o volumen</p>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-semibold text-gray-900">Control de peso o volumen</p>
+            {!weight && <SecondaryButton onClick={() => setShowWeightModal(true)} icon={<Plus size={13} />}>Nuevo</SecondaryButton>}
+          </div>
           {!weight ? <EmptyState title="Sin registro" /> : (
             <div className="space-y-2">
               <Badge label={weight.overall_result} color={weight.overall_result === 'APPROVED' ? 'green' : weight.overall_result === 'REJECTED' ? 'red' : 'yellow'} />
@@ -1142,7 +1725,220 @@ function PackagingTab({ batch }: { batch: BatchRecord }) {
           )}
         </Card>
       </div>
+
+      <NewPackagingControlModal
+        open={showPackagingModal}
+        batchId={batch.id}
+        onClose={() => setShowPackagingModal(false)}
+        onCreated={async () => {
+          setShowPackagingModal(false);
+          await load();
+        }}
+      />
+      <NewSealIntegrityControlModal
+        open={showSealModal}
+        batchId={batch.id}
+        onClose={() => setShowSealModal(false)}
+        onCreated={async () => {
+          setShowSealModal(false);
+          await load();
+        }}
+      />
+      <NewWeightVolumeControlModal
+        open={showWeightModal}
+        batchId={batch.id}
+        onClose={() => setShowWeightModal(false)}
+        onCreated={async () => {
+          setShowWeightModal(false);
+          await load();
+        }}
+      />
     </div>
+  );
+}
+
+function NewPackagingControlModal({
+  open,
+  batchId,
+  onClose,
+  onCreated,
+}: {
+  open: boolean;
+  batchId: string;
+  onClose: () => void;
+  onCreated: () => Promise<void>;
+}) {
+  const toast = useToast();
+  const [unitsPerDisplay, setUnitsPerDisplay] = useState('');
+  const [displaysPerBox, setDisplaysPerBox] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async () => {
+    setSaving(true);
+    try {
+      await createPackagingControl({
+        batch: batchId,
+        units_per_display: unitsPerDisplay ? Number(unitsPerDisplay) : null,
+        displays_per_box: displaysPerBox ? Number(displaysPerBox) : null,
+      });
+      toast.success('Control de acondicionamiento creado');
+      await onCreated();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo crear el control');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title="Nuevo control de acondicionamiento" open={open} onClose={onClose}>
+      <div className="space-y-4">
+        <label className="block">
+          <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Unidades por display</span>
+          <input type="number" value={unitsPerDisplay} onChange={(e) => setUnitsPerDisplay(e.target.value)} className={inputCls} />
+        </label>
+        <label className="block">
+          <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Displays por caja</span>
+          <input type="number" value={displaysPerBox} onChange={(e) => setDisplaysPerBox(e.target.value)} className={inputCls} />
+        </label>
+        <div className="flex justify-end gap-2">
+          <SecondaryButton onClick={onClose}>Cancelar</SecondaryButton>
+          <PrimaryButton onClick={() => void handleSubmit()} disabled={saving}>
+            {saving ? 'Guardando...' : 'Crear control'}
+          </PrimaryButton>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function NewSealIntegrityControlModal({
+  open,
+  batchId,
+  onClose,
+  onCreated,
+}: {
+  open: boolean;
+  batchId: string;
+  onClose: () => void;
+  onCreated: () => Promise<void>;
+}) {
+  const toast = useToast();
+  const [equipment, setEquipment] = useState('');
+  const [pressureBar, setPressureBar] = useState('');
+  const [timeSeconds, setTimeSeconds] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async () => {
+    setSaving(true);
+    try {
+      await createSealIntegrityControl({
+        batch: batchId,
+        tested_at: new Date().toISOString(),
+        equipment,
+        pressure_bar: pressureBar ? Number(pressureBar) : null,
+        time_seconds: timeSeconds ? Number(timeSeconds) : null,
+      });
+      toast.success('Control de hermeticidad creado');
+      await onCreated();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo crear el control');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title="Nuevo control de hermeticidad" open={open} onClose={onClose}>
+      <div className="space-y-4">
+        <label className="block">
+          <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Equipo</span>
+          <input value={equipment} onChange={(e) => setEquipment(e.target.value)} className={inputCls} />
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Presión (bar)</span>
+            <input type="number" step="0.01" value={pressureBar} onChange={(e) => setPressureBar(e.target.value)} className={inputCls} />
+          </label>
+          <label className="block">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Tiempo (segundos)</span>
+            <input type="number" value={timeSeconds} onChange={(e) => setTimeSeconds(e.target.value)} className={inputCls} />
+          </label>
+        </div>
+        <div className="flex justify-end gap-2">
+          <SecondaryButton onClick={onClose}>Cancelar</SecondaryButton>
+          <PrimaryButton onClick={() => void handleSubmit()} disabled={saving}>
+            {saving ? 'Guardando...' : 'Crear control'}
+          </PrimaryButton>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function NewWeightVolumeControlModal({
+  open,
+  batchId,
+  onClose,
+  onCreated,
+}: {
+  open: boolean;
+  batchId: string;
+  onClose: () => void;
+  onCreated: () => Promise<void>;
+}) {
+  const toast = useToast();
+  const [lowerLimit, setLowerLimit] = useState('');
+  const [upperLimit, setUpperLimit] = useState('');
+  const [tare, setTare] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async () => {
+    setSaving(true);
+    try {
+      await createWeightVolumeControl({
+        batch: batchId,
+        tare: tare ? Number(tare) : null,
+        lower_limit: lowerLimit ? Number(lowerLimit) : null,
+        upper_limit: upperLimit ? Number(upperLimit) : null,
+      });
+      toast.success('Control de peso o volumen creado');
+      await onCreated();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo crear el control');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title="Nuevo control de peso o volumen" open={open} onClose={onClose}>
+      <div className="space-y-4">
+        <label className="block">
+          <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Tara</span>
+          <input type="number" step="0.001" value={tare} onChange={(e) => setTare(e.target.value)} className={inputCls} />
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Límite inferior</span>
+            <input type="number" step="0.001" value={lowerLimit} onChange={(e) => setLowerLimit(e.target.value)} className={inputCls} />
+          </label>
+          <label className="block">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Límite superior</span>
+            <input type="number" step="0.001" value={upperLimit} onChange={(e) => setUpperLimit(e.target.value)} className={inputCls} />
+          </label>
+        </div>
+        <div className="flex justify-end gap-2">
+          <SecondaryButton onClick={onClose}>Cancelar</SecondaryButton>
+          <PrimaryButton onClick={() => void handleSubmit()} disabled={saving}>
+            {saving ? 'Guardando...' : 'Crear control'}
+          </PrimaryButton>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
