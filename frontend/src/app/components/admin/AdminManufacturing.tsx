@@ -96,6 +96,7 @@ import {
   type WeightVolumeControlRecord,
 } from '../../services/manufacturing.service';
 import { getEmployees, type Employee } from '../../services/employees.service';
+import { getProductionOrders, type ProductionOrderRecord } from '../../services/inventory-production.service';
 
 type BatchTab =
   | 'general'
@@ -176,17 +177,28 @@ export function AdminManufacturing() {
   const [isLoading, setIsLoading] = useState(true);
   const [batches, setBatches] = useState<BatchRecord[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [productionOrders, setProductionOrders] = useState<ProductionOrderRecord[]>([]);
   const [selectedBatch, setSelectedBatch] = useState<BatchRecord | null>(null);
   const [showNewBatchModal, setShowNewBatchModal] = useState(false);
 
   const employeeById = useMemo(() => new Map(employees.map((employee) => [employee.id, employee])), [employees]);
 
+  const availableProductionOrders = useMemo(() => {
+    const assignedOrderIds = new Set(batches.map((batch) => batch.production_order));
+    return productionOrders.filter((order) => !assignedOrderIds.has(order.id));
+  }, [productionOrders, batches]);
+
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [batchesRes, employeesRes] = await Promise.allSettled([getBatches(), getEmployees({ limit: 500 })]);
+      const [batchesRes, employeesRes, productionOrdersRes] = await Promise.allSettled([
+        getBatches(),
+        getEmployees({ limit: 500 }),
+        getProductionOrders(),
+      ]);
       if (batchesRes.status === 'fulfilled') setBatches(batchesRes.value);
       if (employeesRes.status === 'fulfilled') setEmployees(employeesRes.value.data);
+      if (productionOrdersRes.status === 'fulfilled') setProductionOrders(productionOrdersRes.value);
     } catch (error) {
       console.error(error);
       toast.error('No se pudo cargar el módulo de producción');
@@ -304,6 +316,7 @@ export function AdminManufacturing() {
       <NewBatchModal
         open={showNewBatchModal}
         employees={employees}
+        productionOrders={availableProductionOrders}
         onClose={() => setShowNewBatchModal(false)}
         onCreated={async () => {
           setShowNewBatchModal(false);
@@ -317,11 +330,13 @@ export function AdminManufacturing() {
 function NewBatchModal({
   open,
   employees,
+  productionOrders,
   onClose,
   onCreated,
 }: {
   open: boolean;
   employees: Employee[];
+  productionOrders: ProductionOrderRecord[];
   onClose: () => void;
   onCreated: () => Promise<void>;
 }) {
@@ -335,14 +350,14 @@ function NewBatchModal({
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async () => {
-    if (!productionOrderId.trim()) {
-      toast.error('Debes indicar el ID de la orden de producción');
+    if (!productionOrderId) {
+      toast.error('Debes seleccionar una orden de producción');
       return;
     }
     setSaving(true);
     try {
       await createBatch({
-        production_order: productionOrderId.trim(),
+        production_order: productionOrderId,
         area,
         production_line: productionLine,
         production_manager: productionManager || null,
@@ -372,8 +387,20 @@ function NewBatchModal({
           El lote se crea a partir de una orden de producción ya existente en el módulo de Inventario (Producción).
         </p>
         <label className="block">
-          <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">ID de la orden de producción</span>
-          <input value={productionOrderId} onChange={(e) => setProductionOrderId(e.target.value)} className={inputCls} placeholder="UUID de la orden" />
+          <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Orden de producción</span>
+          <select value={productionOrderId} onChange={(e) => setProductionOrderId(e.target.value)} className={selectCls}>
+            <option value="">Seleccionar orden...</option>
+            {productionOrders.map((order) => (
+              <option key={order.id} value={order.id}>
+                {order.number}{order.batch_code ? ` · ${order.batch_code}` : ''}
+              </option>
+            ))}
+          </select>
+          {productionOrders.length === 0 && (
+            <p className="text-[11px] text-amber-600 mt-1">
+              No hay órdenes de producción disponibles sin lote asignado. Crea una en Inventario &gt; Producción.
+            </p>
+          )}
         </label>
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
@@ -411,7 +438,7 @@ function NewBatchModal({
         </label>
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancelar</SecondaryButton>
-          <PrimaryButton onClick={() => void handleSubmit()} disabled={saving} icon={saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}>
+          <PrimaryButton onClick={() => void handleSubmit()} disabled={saving || !productionOrderId} icon={saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}>
             {saving ? 'Creando...' : 'Crear lote'}
           </PrimaryButton>
         </div>
