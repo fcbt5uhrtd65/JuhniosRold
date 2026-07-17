@@ -15,17 +15,19 @@ COMPANY_NAME = "PRODUCTOS JUHNIOS ROLD SAS"
 LOGO_PATH = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "finance", "infrastructure", "assets", "logo.jpeg")
 )
-BRAND_COLOR = HexColor("#2a4038")
-TEXT_COLOR = HexColor("#111827")
-MUTED_COLOR = HexColor("#6b7280")
-LINE_COLOR = HexColor("#e5e7eb")
-CARD_BG = HexColor("#f7faf8")
-SUBTLE_BG = HexColor("#fbfcfb")
+PRIMARY = HexColor("#1b3a4b")
+ACCENT = HexColor("#2e6da4")
+TEXT = HexColor("#1f2937")
+MUTED = HexColor("#5d6d7e")
+LINE = HexColor("#c7d2d9")
+SUCCESS = HexColor("#1f8a4c")
+WARNING = HexColor("#b7791f")
+DANGER = HexColor("#b3261e")
+NEUTRAL = HexColor("#5d6d7e")
 WHITE = HexColor("#ffffff")
-SUCCESS = HexColor("#0f7a45")
-WARNING = HexColor("#9a6700")
-DANGER = HexColor("#b42318")
-NEUTRAL = HexColor("#4b5563")
+
+FONT = "Helvetica"
+FONT_BOLD = "Helvetica-Bold"
 
 
 def _safe(value, default="-"):
@@ -35,13 +37,9 @@ def _safe(value, default="-"):
     return value if value else default
 
 
-def _font(bold=False):
-    return "Helvetica-Bold" if bold else "Helvetica"
-
-
-def _draw_text(c, x, y, text, size=9, bold=False, align="left", color=TEXT_COLOR):
+def _text(c, x, y, text, size=9, bold=False, align="left", color=TEXT):
     c.setFillColor(color)
-    c.setFont(_font(bold), size)
+    c.setFont(FONT_BOLD if bold else FONT, size)
     text = _safe(text, "")
     if align == "center":
         c.drawCentredString(x, y, text)
@@ -51,7 +49,7 @@ def _draw_text(c, x, y, text, size=9, bold=False, align="left", color=TEXT_COLOR
         c.drawString(x, y, text)
 
 
-def _fit_text(text, max_width, font_name="Helvetica", font_size=9):
+def _fit_text(text, max_width, font_name=FONT, font_size=9):
     text = _safe(text, "")
     if stringWidth(text, font_name, font_size) <= max_width:
         return text
@@ -61,7 +59,7 @@ def _fit_text(text, max_width, font_name="Helvetica", font_size=9):
     return text + suffix if text else suffix
 
 
-def _wrap_lines(text, max_width, font_name="Helvetica", font_size=9):
+def _wrap_lines(text, max_width, font_name=FONT, font_size=9):
     text = _safe(text, "")
     words = text.split()
     lines = []
@@ -79,8 +77,8 @@ def _wrap_lines(text, max_width, font_name="Helvetica", font_size=9):
     return lines or [""]
 
 
-def _draw_wrapped_text(c, x, y, text, max_width, size=9, bold=False, leading=None, max_lines=None, color=TEXT_COLOR):
-    font_name = _font(bold)
+def _draw_wrapped_text(c, x, y, text, max_width, size=9, bold=False, leading=None, max_lines=None, color=TEXT):
+    font_name = FONT_BOLD if bold else FONT
     leading = leading or size + 3
     lines = _wrap_lines(text, max_width, font_name, size)
     truncated = bool(max_lines) and len(lines) > max_lines
@@ -95,55 +93,22 @@ def _draw_wrapped_text(c, x, y, text, max_width, size=9, bold=False, leading=Non
     return y - (len(lines) * leading)
 
 
-def _round_rect(c, x, y, w, h, fill_color=WHITE, stroke_color=LINE_COLOR, radius=8):
-    c.setFillColor(fill_color)
-    c.setStrokeColor(stroke_color)
-    c.setLineWidth(0.6)
-    c.roundRect(x, y, w, h, radius, stroke=1, fill=1)
-
-
-def _section_label(c, x, y, title):
-    _draw_text(c, x, y, title.upper(), size=8.5, bold=True, color=BRAND_COLOR)
-
-
-def _field(c, x, y, label, value, max_width):
-    _draw_text(c, x, y, label.upper(), size=6.8, bold=True, color=MUTED_COLOR)
-    _draw_text(c, x, y - 12, _fit_text(value, max_width, font_size=9), size=9, color=TEXT_COLOR)
-
-
 def _status_color(status):
     status = _safe(status, "").upper()
-    if "APROB" in status:
+    if "APROB" in status or status in {"APPROVED", "FINALIZED"}:
         return SUCCESS
-    if "RECHAZ" in status or "CANCEL" in status:
+    if "RECHAZ" in status or "CANCEL" in status or status in {"REJECTED", "CANCELLED"}:
         return DANGER
-    if "PEND" in status or "REVISION" in status or "REVIS" in status:
-        return WARNING
-    if status in {"APPROVED", "FINALIZED"}:
-        return SUCCESS
-    if status in {"REJECTED", "CANCELLED"}:
-        return DANGER
-    if status in {"PENDING", "IN_REVIEW", "PENDING_HR", "PENDING_ADMIN"}:
+    if "PEND" in status or "REVIS" in status or status in {"PENDING", "IN_REVIEW", "PENDING_HR", "PENDING_ADMIN"}:
         return WARNING
     return NEUTRAL
 
 
-def _pill(c, x, y, text, color, w=None):
-    text = _safe(text, "-")
-    w = w or max(58, stringWidth(text, "Helvetica-Bold", 7.3) + 16)
-    c.setFillColor(color)
-    c.setStrokeColor(color)
-    c.roundRect(x, y - 9, w, 14, 7, stroke=1, fill=1)
-    _draw_text(c, x + w / 2, y - 5, text, size=7.3, bold=True, align="center", color=WHITE)
-    return w
-
-
-def _draw_logo(c, x, y, size=44):
+def _draw_logo(c, x, y, size=38):
     if not os.path.exists(LOGO_PATH):
         return 0
     try:
-        logo = ImageReader(LOGO_PATH)
-        c.drawImage(logo, x, y - size, width=size, height=size, preserveAspectRatio=True, mask="auto")
+        c.drawImage(ImageReader(LOGO_PATH), x, y - size, width=size, height=size, preserveAspectRatio=True, mask="auto")
     except (OSError, ValueError):
         return 0
     return size
@@ -195,115 +160,178 @@ def _employee_name(employee):
     return f"{_safe(employee.first_name, '')} {_safe(employee.last_name, '')}".strip() or "-"
 
 
-def _draw_header(c, x0, x1, y, vacation):
-    logo_size = _draw_logo(c, x0, y - 13, size=42)
-    text_x = x0 + logo_size + (12 if logo_size else 0)
-    _draw_text(c, text_x, y - 28, COMPANY_NAME, size=13.5, bold=True)
-    _draw_text(c, x1, y - 22, "Documento de solicitud", size=12, bold=True, align="right", color=BRAND_COLOR)
-    _draw_text(c, x1, y - 38, f"Generado: {timezone.now():%d/%m/%Y %H:%M}", size=8.5, align="right", color=MUTED_COLOR)
-    status_text = vacation.get_status_display()
-    pill_w = max(84, stringWidth(status_text, "Helvetica-Bold", 7.3) + 18)
-    _pill(c, x1 - pill_w, y - 53, status_text, _status_color(vacation.status), pill_w)
+def _hline(c, x0, x1, y, color=ACCENT, width=1.2):
+    c.setStrokeColor(color)
+    c.setLineWidth(width)
+    c.line(x0, y, x1, y)
 
 
-def _draw_summary_card(c, x0, y, w, vacation, employee):
-    h = 54
-    _round_rect(c, x0, y - h, w, h, fill_color=CARD_BG, stroke_color=LINE_COLOR, radius=8)
-    _field(c, x0 + 14, y - 17, "Solicitud", vacation.request_number or str(vacation.id), 115)
-    _field(c, x0 + 142, y - 17, "Tipo", _request_type_label(vacation), 125)
-    _field(c, x0 + 278, y - 17, "Periodo", f"{_date_label(vacation.start_date)} - {_date_label(vacation.end_date)}", 130)
-    _field(c, x0 + 420, y - 17, "Solicitante", _employee_name(employee), 120)
-    return y - h
+def _draw_letterhead(c, x0, x1, y, request_number):
+    """Encabezado de carta: logo + nombre a la izquierda, numero de solicitud a la derecha."""
+    logo_size = _draw_logo(c, x0, y, 38)
+    text_x = x0 + logo_size + (10 if logo_size else 0)
+    _text(c, text_x, y - 13, COMPANY_NAME, size=12.5, bold=True, color=PRIMARY)
+    _text(c, text_x, y - 26, "Gestión de Talento Humano", size=8.3, color=MUTED)
+
+    _text(c, x1, y - 12, request_number, size=11.5, bold=True, color=ACCENT, align="right")
+    _text(c, x1, y - 25, f"Generado: {timezone.now():%d/%m/%Y %H:%M}", size=7.8, color=MUTED, align="right")
+
+    line_y = y - max(logo_size, 30) - 8
+    _hline(c, x0, x1, line_y, color=ACCENT, width=1.6)
+    return line_y - 16
 
 
-def _draw_info_card(c, x, y, w, title, fields):
-    row_h = 31
-    rows = (len(fields) + 1) // 2
-    h = 28 + rows * row_h
-    _round_rect(c, x, y - h, w, h, fill_color=WHITE, stroke_color=LINE_COLOR, radius=8)
-    _section_label(c, x + 14, y - 16, title)
-    col_w = (w - 34) / 2
-    for idx, (label, value) in enumerate(fields):
-        col = idx % 2
-        row = idx // 2
-        fx = x + 14 + col * (col_w + 12)
-        fy = y - 39 - row * row_h
-        _field(c, fx, fy, label, value, col_w)
-    return y - h
+def _draw_status_banner(c, x0, x1, y, vacation):
+    """Banner de estado solido (sin cuadro con borde), tipo carta oficial."""
+    h = 40
+    status_text = vacation.get_status_display().upper()
+    color = _status_color(vacation.status)
+
+    c.setFillColor(color)
+    c.rect(x0, y - h, x1 - x0, h, stroke=0, fill=1)
+
+    _text(c, x0 + 14, y - 17, f"SOLICITUD {status_text}", size=13, bold=True, color=WHITE)
+    _text(c, x0 + 14, y - 31, f"{_request_type_label(vacation)} · Periodo: {_date_label(vacation.start_date)} - {_date_label(vacation.end_date)}", size=8.3, color=WHITE)
+
+    _text(c, x1 - 14, y - 15, "TIPO DE SOLICITUD", size=7, bold=True, color=WHITE, align="right")
+    _text(c, x1 - 14, y - 30, _request_type_label(vacation), size=10.5, bold=True, color=WHITE, align="right")
+
+    return y - h - 16
 
 
-def _draw_reason_card(c, x, y, w, reason):
-    lines = _wrap_lines(reason, w - 28, "Helvetica", 9)
-    max_lines = min(max(len(lines), 2), 3)
-    h = 34 + max_lines * 12
-    _round_rect(c, x, y - h, w, h, fill_color=WHITE, stroke_color=LINE_COLOR, radius=8)
-    _section_label(c, x + 14, y - 16, "Motivo / descripcion")
-    _draw_wrapped_text(c, x + 14, y - 36, reason, w - 28, size=9, max_lines=3)
-    return y - h
+def _section_title(c, x0, x1, y, number, title):
+    _text(c, x0, y, f"{number}.  {title}", size=11, bold=True, color=PRIMARY)
+    _hline(c, x0, x1, y - 6, color=LINE, width=0.9)
+    return y - 20
 
 
-def _draw_step(c, x, y, w, number, step_name, status, actor, date_text, comment):
-    h = 43
-    fill = CARD_BG if number % 2 else SUBTLE_BG
-    _round_rect(c, x, y - h, w, h, fill_color=fill, stroke_color=LINE_COLOR, radius=7)
-    status_label = _safe(status, "Pendiente")
-    status_color = _status_color(status_label)
-    c.setFillColor(WHITE)
-    c.setStrokeColor(status_color)
-    c.setLineWidth(1.1)
-    c.circle(x + 14, y - 20, 8, stroke=1, fill=1)
-    _draw_text(c, x + 14, y - 23, str(number), size=7, bold=True, align="center", color=status_color)
-    status_x = x + w - 248
-    date_x = x + w - 150
-    detail_x = status_x
-    _draw_text(c, x + 30, y - 13, _fit_text(step_name, 158, font_size=8.5), size=8.5, bold=True)
-    _pill(c, status_x, y - 12, _fit_text(status_label, 72, "Helvetica-Bold", 7.2), status_color, 82)
-    _draw_text(c, date_x, y - 13, _fit_text(f"Fecha: {date_text}", w - 154, font_size=7.4), size=7.4, color=TEXT_COLOR)
-    detail = comment if comment and comment != "-" else "Pendiente de gestion" if date_text == "-" else "Accion registrada"
-    _draw_text(c, x + 30, y - 28, _fit_text(f"Responsable: {actor}", 218, font_size=7.4), size=7.4, color=MUTED_COLOR)
-    _draw_text(c, detail_x, y - 28, _fit_text(f"Detalle: {detail}", w - 252, font_size=7.4), size=7.4, color=MUTED_COLOR)
+def _draw_data_row(c, x0, col_w, y, pairs, row_h=17):
+    """Dibuja una fila de pares etiqueta/valor sin cuadros, solo texto alineado en columnas."""
+    for index, (label, value) in enumerate(pairs):
+        if label is None:
+            continue
+        cx = x0 + index * col_w
+        _text(c, cx, y, label.upper(), size=6.8, bold=True, color=MUTED)
+        _text(c, cx, y - 11, _fit_text(value, col_w - 6, font_size=9.2), size=9.2, color=TEXT)
+    return y - row_h - 8
 
 
-def _draw_approval_flow(c, x, y, w, vacation):
+def _draw_full_row(c, x0, w, y, label, value, max_lines=2):
+    _text(c, x0, y, label.upper(), size=6.8, bold=True, color=MUTED)
+    return _draw_wrapped_text(c, x0, y - 11, value, w, size=9.2, leading=12, max_lines=max_lines) - 6
+
+
+def _draw_applicant_section(c, x0, x1, y, employee):
+    w = x1 - x0
+    col_w = w / 2
+    y = _section_title(c, x0, x1, y, 1, "Datos del Solicitante")
+    y = _draw_data_row(c, x0, col_w, y, [
+        ("Nombre completo", _employee_name(employee)),
+        ("Código empleado", getattr(employee, "employee_code", "") or "-"),
+    ])
+    y = _draw_data_row(c, x0, col_w, y, [
+        ("Cargo", employee.position.name if employee.position_id else "-"),
+        ("Departamento", employee.department.name if employee.department_id else "-"),
+    ])
+    y = _draw_data_row(c, x0, col_w, y, [
+        ("Sede", employee.branch.name if employee.branch_id else "-"),
+        ("Correo", _safe(employee.email)),
+    ])
+    return y
+
+
+def _draw_request_section(c, x0, x1, y, vacation):
+    w = x1 - x0
+    col_w = w / 2
+    y = _section_title(c, x0, x1, y, 2, "Datos de la Solicitud")
+    y = _draw_data_row(c, x0, col_w, y, [
+        ("N.º Solicitud", vacation.request_number or str(vacation.id)),
+        ("Fecha de creación", _datetime_label(vacation.created_at)),
+    ])
+    y = _draw_data_row(c, x0, col_w, y, [
+        ("Subtipo", vacation.get_subtype_display() if vacation.subtype else "-"),
+        ("Estado actual", vacation.get_status_display()),
+    ])
+    y = _draw_data_row(c, x0, col_w, y, [
+        ("Fecha desde", _date_label(vacation.start_date)),
+        ("Fecha hasta", _date_label(vacation.end_date)),
+    ])
+    if _is_overtime(vacation):
+        y = _draw_data_row(c, x0, col_w, y, [
+            ("Hora inicio", _time_label(vacation.start_time)),
+            ("Hora fin", _time_label(vacation.end_time)),
+        ])
+        y = _draw_data_row(c, x0, col_w, y, [
+            ("Total horas", _calculate_hours_label(vacation)),
+            (None, None),
+        ])
+    y = _draw_full_row(c, x0, w, y, "Motivo / Descripción", vacation.reason or vacation.description or "Sin descripcion.", max_lines=2)
+    return y
+
+
+def _approval_steps_data(vacation):
     steps = list(vacation.approval_steps.all())
-    if not steps:
-        decisions = [
-            ("Administrador", vacation.admin_decision, vacation.admin_decided_by, vacation.admin_decided_at, vacation.admin_comment),
-            ("Recursos Humanos", vacation.hr_decision, vacation.hr_decided_by, vacation.hr_decided_at, vacation.hr_comment),
+    if steps:
+        return [
+            {
+                "label": step.get_step_display(),
+                "status": step.get_status_display(),
+                "actor": _safe(getattr(step.user, "email", None)),
+                "date": _datetime_label(step.acted_at),
+                "detail": _safe(step.comment, "") or ("Pendiente de gestión" if not step.acted_at else "Acción registrada"),
+            }
+            for step in steps[:4]
         ]
-        steps = []
-        for role_label, decision, decided_by, decided_at, comment in decisions:
-            decision_label = dict(vacation.Status.choices).get(decision, "Pendiente") if decision else "Pendiente"
-            steps.append((role_label, decision_label, decided_by, decided_at, comment))
+    decisions = [
+        ("Administrador", vacation.admin_decision, vacation.admin_decided_by, vacation.admin_decided_at, vacation.admin_comment),
+        ("Recursos Humanos", vacation.hr_decision, vacation.hr_decided_by, vacation.hr_decided_at, vacation.hr_comment),
+    ]
+    result = []
+    for role_label, decision, decided_by, decided_at, comment in decisions:
+        decision_label = dict(vacation.Status.choices).get(decision, "Pendiente") if decision else "Pendiente"
+        result.append({
+            "label": role_label,
+            "status": decision_label,
+            "actor": _safe(getattr(decided_by, "email", None)),
+            "date": _datetime_label(decided_at),
+            "detail": _safe(comment, "") or ("Pendiente de gestión" if not decided_at else "Acción registrada"),
+        })
+    return result
 
-    visible_steps = steps[:4]
-    h = 35 + max(len(visible_steps), 1) * 47
-    _round_rect(c, x, y - h, w, h, fill_color=WHITE, stroke_color=LINE_COLOR, radius=8)
-    _section_label(c, x + 14, y - 16, "Flujo de aprobacion")
-    _draw_text(c, x + w - 14, y - 16, "Estado, responsable, fecha y detalle", size=7.4, align="right", color=MUTED_COLOR)
-    current_y = y - 38
 
+def _draw_approval_section(c, x0, x1, y, vacation):
+    w = x1 - x0
+    y = _section_title(c, x0, x1, y, 3, "Flujo de Aprobación")
+    steps = _approval_steps_data(vacation)
     if not steps:
-        _draw_text(c, x + 14, current_y, "Sin pasos de aprobacion registrados.", size=8.5, color=MUTED_COLOR)
-        return y - h
+        _text(c, x0, y, "Sin pasos de aprobación registrados.", size=8.7, color=MUTED)
+        return y - 14
 
-    for number, item in enumerate(visible_steps, start=1):
-        if isinstance(item, tuple):
-            step_name, status, user, acted_at, comment = item
-            actor = _safe(getattr(user, "email", None), "-")
-            date_text = _datetime_label(acted_at)
-        else:
-            step_name = item.get_step_display()
-            status = item.get_status_display()
-            actor = _safe(getattr(item.user, "email", None), "-")
-            date_text = _datetime_label(item.acted_at)
-            comment = item.comment
-        _draw_step(c, x + 14, current_y, w - 28, number, step_name, status, actor, date_text, _safe(comment))
-        current_y -= 47
+    count = len(steps)
+    col_w = w / count
+    row_h = 62
+    top_y = y
 
-    if len(steps) > 4:
-        _draw_text(c, x + 14, current_y + 6, f"+ {len(steps) - 4} paso(s) adicional(es) no mostrados para conservar una hoja.", size=8, bold=True, color=MUTED_COLOR)
-    return y - h
+    for index, step in enumerate(steps):
+        cx = x0 + index * col_w
+        if index > 0:
+            c.setStrokeColor(LINE)
+            c.setLineWidth(0.6)
+            c.line(cx - 6, top_y + 2, cx - 6, top_y - row_h + 10)
+
+        status_color = _status_color(step["status"])
+        c.setFillColor(status_color)
+        c.circle(cx + 6, top_y - 5, 4.4, stroke=0, fill=1)
+        _text(c, cx + 16, top_y - 8, _fit_text(f"{index + 1}. {step['label']}", col_w - 20, FONT_BOLD, 8.6), size=8.6, bold=True)
+
+        _text(c, cx + 16, top_y - 21, step["status"].upper(), size=7.2, bold=True, color=status_color)
+        _text(c, cx + 16, top_y - 33, _fit_text(f"Resp: {step['actor']}", col_w - 22, font_size=7), size=7, color=MUTED)
+        _text(c, cx + 16, top_y - 44, _fit_text(step["date"] or "Sin fecha", col_w - 22, font_size=7), size=7, color=MUTED)
+        detail_lines = _wrap_lines(step["detail"], col_w - 22, font_size=6.8)
+        for line_idx, line in enumerate(detail_lines[:2]):
+            _text(c, cx + 16, top_y - 55 - line_idx * 8, line, size=6.8, color=MUTED)
+
+    return top_y - row_h
 
 
 def _signing_steps(vacation):
@@ -320,35 +348,34 @@ def _signing_steps(vacation):
     return steps[:2]
 
 
-def _draw_signatures_section(c, x, y, w, vacation):
+def _draw_signatures_section(c, x0, x1, y, vacation, image_h=58):
     steps = _signing_steps(vacation)
-    if not steps:
-        return y
+    w = x1 - x0
+    y = _section_title(c, x0, x1, y, 4, "Registro de Firmas")
 
-    image_h = 92
-    block_h = 26 + signature_block_height(image_h) + 16
-    _round_rect(c, x, y - block_h, w, block_h, fill_color=WHITE, stroke_color=LINE_COLOR, radius=8)
-    _section_label(c, x + 14, y - 16, "Firmas")
+    if not steps:
+        _text(c, x0, y, "Aún no hay firmas registradas para esta solicitud.", size=8.7, color=MUTED)
+        return y - 14
 
     count = len(steps)
-    col_w = (w - 28) / count
+    col_w = w / count
     for index, step in enumerate(steps):
-        col_x = x + 14 + index * col_w
+        col_x = x0 + index * col_w
         employee = getattr(step.user, "employee_profile", None)
         signer_name = _employee_name(employee) if employee else _safe(getattr(step.user, "email", None))
         signature_file = resolve_signature_file(step=step, employee=employee)
         draw_signature_block(
             c,
             col_x,
-            y - 26,
-            col_w,
+            y,
+            col_w - 14,
             signature_file=signature_file,
             signer_name=signer_name,
             role_label=f"{step.get_step_display()} · {step.get_status_display()}",
             decided_at=step.acted_at,
             image_h=image_h,
         )
-    return y - block_h
+    return y - signature_block_height(image_h) - 8
 
 
 def render_request_pdf(vacation):
@@ -357,57 +384,29 @@ def render_request_pdf(vacation):
     c.setTitle(f"Solicitud {vacation.request_number or vacation.id}")
 
     page_w, page_h = letter
-    x0, x1 = 40, page_w - 40
-    main_w = x1 - x0
-    y = page_h - 36
+    x0, x1 = 46, page_w - 46
+    y = page_h - 40
 
     employee = vacation.employee
 
-    _draw_header(c, x0, x1, y, vacation)
-    y -= 82
-    y = _draw_summary_card(c, x0, y, main_w, vacation, employee)
-    y -= 14
+    y = _draw_letterhead(c, x0, x1, y, vacation.request_number or str(vacation.id))
+    y = _draw_status_banner(c, x0, x1, y, vacation)
+    y = _draw_applicant_section(c, x0, x1, y, employee)
+    y -= 6
+    y = _draw_request_section(c, x0, x1, y, vacation)
+    y -= 6
+    y = _draw_approval_section(c, x0, x1, y, vacation)
+    y -= 10
 
-    applicant_fields = [
-        ("Nombre", _employee_name(employee)),
-        ("Codigo", getattr(employee, "employee_code", "") or "-"),
-        ("Cargo", employee.position.name if employee.position_id else "-"),
-        ("Departamento", employee.department.name if employee.department_id else "-"),
-        ("Sede", employee.branch.name if employee.branch_id else "-"),
-    ]
-    request_fields = [
-        ("Fecha de creacion", _datetime_label(vacation.created_at)),
-        ("Subtipo", vacation.get_subtype_display() if vacation.subtype else "-"),
-        ("Desde", _date_label(vacation.start_date)),
-        ("Hasta", _date_label(vacation.end_date)),
-        ("Estado actual", vacation.get_status_display()),
-    ]
-    if _is_overtime(vacation):
-        request_fields.extend([
-            ("Hora inicio", _time_label(vacation.start_time)),
-            ("Hora fin", _time_label(vacation.end_time)),
-            ("Total horas", _calculate_hours_label(vacation)),
-        ])
-
-    left_w = (main_w - 12) / 2
-    left_bottom = _draw_info_card(c, x0, y, left_w, "Datos del solicitante", applicant_fields)
-    right_bottom = _draw_info_card(c, x0 + left_w + 12, y, left_w, "Datos de la solicitud", request_fields)
-    y = min(left_bottom, right_bottom) - 14
-
-    y = _draw_reason_card(c, x0, y, main_w, vacation.reason or vacation.description or "Sin descripcion.")
-    y -= 14
-    y = _draw_approval_flow(c, x0, y, main_w, vacation)
-    y -= 14
-
-    signatures_h = 26 + signature_block_height(92) + 16
-    if y - signatures_h < 55:
+    signatures_h = 20 + signature_block_height(58) + 14
+    if y - signatures_h < 60:
         c.showPage()
         y = page_h - 40
-    y = _draw_signatures_section(c, x0, y, main_w, vacation)
+    y = _draw_signatures_section(c, x0, x1, y, vacation)
 
-    c.setFillColor(MUTED_COLOR)
-    c.setFont("Helvetica", 7)
-    c.drawCentredString(page_w / 2, 28, "Documento generado automaticamente para control interno de Recursos Humanos.")
+    c.setFillColor(MUTED)
+    c.setFont(FONT, 7.2)
+    c.drawCentredString(page_w / 2, 26, f"Documento oficial · {COMPANY_NAME} · Válido con firmas digitales registradas.")
 
     c.save()
     buffer.seek(0)
