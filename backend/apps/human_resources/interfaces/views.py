@@ -176,6 +176,7 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
                 request.user,
                 role,
                 request.data.get("comment", ""),
+                request.FILES.get("signature_override"),
             )
         except BusinessRuleViolation as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
@@ -403,7 +404,7 @@ class VacationRequestPdfView(APIView):
         queryset = VacationRequest.objects.select_related(
             "employee", "employee__department", "employee__position", "employee__branch",
             "admin_decided_by", "hr_decided_by",
-        ).prefetch_related("approval_steps")
+        ).prefetch_related("approval_steps__user__employee_profile")
         vacation = get_object_or_404(queryset, pk=pk)
         pdf_buffer = render_request_pdf(vacation)
         return FileResponse(

@@ -523,14 +523,24 @@ export async function createMyVacationRequest(payload: Omit<VacationRequestPaylo
   throw new Error(res.message);
 }
 
-export async function approveVacationRequest(id: string, comment = ''): Promise<VacationRequest> {
-  const res = await api.post<VacationRequest>(`${REQUESTS_PATH}${id}/approve/`, { comment });
+function buildDecisionBody(comment: string, signatureFile?: File | null): FormData | { comment: string } {
+  if (signatureFile) {
+    const formData = new FormData();
+    formData.append('comment', comment);
+    formData.append('signature_override', signatureFile);
+    return formData;
+  }
+  return { comment };
+}
+
+export async function approveVacationRequest(id: string, comment = '', signatureFile?: File | null): Promise<VacationRequest> {
+  const res = await api.post<VacationRequest>(`${REQUESTS_PATH}${id}/approve/`, buildDecisionBody(comment, signatureFile));
   if (res.data) return res.data;
   throw new Error(res.message);
 }
 
-export async function rejectVacationRequest(id: string, comment = ''): Promise<VacationRequest> {
-  const res = await api.post<VacationRequest>(`${REQUESTS_PATH}${id}/reject/`, { comment });
+export async function rejectVacationRequest(id: string, comment = '', signatureFile?: File | null): Promise<VacationRequest> {
+  const res = await api.post<VacationRequest>(`${REQUESTS_PATH}${id}/reject/`, buildDecisionBody(comment, signatureFile));
   if (res.data) return res.data;
   throw new Error(res.message);
 }

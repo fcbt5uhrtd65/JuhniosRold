@@ -202,6 +202,7 @@ export interface Employee {
   city: string;
   residence_department: string;
   photo: string;
+  signature: string | null;
   nationality: string;
   gender: Gender;
   marital_status: MaritalStatus;
@@ -311,6 +312,7 @@ export interface EmployeePayload {
   city?: string;
   residence_department?: string;
   photo?: File | string | null;
+  signature?: File | string | null;
   nationality?: string;
   gender?: Gender;
   marital_status?: MaritalStatus;
@@ -718,6 +720,56 @@ export async function exportEmployeeProfilePdf(id: string, employeeCode?: string
   const link = document.createElement('a');
   link.href = url;
   link.download = `perfil-${employeeCode || id}.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+export async function exportEmployeeCertificatePdf(id: string, employeeCode?: string): Promise<void> {
+  const token = getAccessToken();
+  if (!token) {
+    throw new Error('Tu sesion expiro. Inicia sesion de nuevo.');
+  }
+
+  const response = await fetch(`${API_BASE_URL}${EMPLOYEES_PATH}${id}/export-certificate-pdf/`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok) {
+    throw new Error('No se pudo generar el certificado laboral.');
+  }
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `certificado-laboral-${employeeCode || id}.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+export async function exportMyEmployeeCertificatePdf(employeeCode?: string): Promise<void> {
+  const token = getAccessToken();
+  if (!token) {
+    throw new Error('Tu sesion expiro. Inicia sesion de nuevo.');
+  }
+
+  const response = await fetch(`${API_BASE_URL}${EMPLOYEES_PATH}me/certificate-pdf/`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok) {
+    throw new Error('No se pudo generar tu certificado laboral.');
+  }
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `certificado-laboral-${employeeCode || 'mio'}.pdf`;
   document.body.appendChild(link);
   link.click();
   link.remove();

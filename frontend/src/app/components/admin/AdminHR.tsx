@@ -37,6 +37,7 @@ import {
 
 import { SearchBar } from './SearchBar';
 import { Pagination } from './Pagination';
+import { SignaturePad } from './SignaturePad';
 import { Badge, type BadgeColor, Card, Table, Th, Td, Modal, EmptyState, LoadingState, inputCls, selectCls, ActionsMenu, actionsCellCls } from './AdminUI';
 import { ComboWithOtherInput } from './ComboWithOtherInput';
 import { useToast } from '../../contexts/ToastContext';
@@ -56,6 +57,7 @@ import {
   createBranch,
   deleteBranch,
   exportEmployeeProfilePdf,
+  exportEmployeeCertificatePdf,
   exportBranchesPdf,
   getBranches,
   getDepartments,
@@ -1145,6 +1147,7 @@ export function AdminHR() {
   const [exportingBranchesPdf, setExportingBranchesPdf] = useState(false);
   const [deletingEmployeeId, setDeletingEmployeeId] = useState<string | null>(null);
   const [exportingProfileId, setExportingProfileId] = useState<string | null>(null);
+  const [exportingCertificateId, setExportingCertificateId] = useState<string | null>(null);
   const [deletingBranchId, setDeletingBranchId] = useState<string | null>(null);
   const [vacationActionId, setVacationActionId] = useState<string | null>(null);
   const [showEmployeeModal, setShowEmployeeModal] = useState(false);
@@ -1155,6 +1158,9 @@ export function AdminHR() {
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectingRequest, setRejectingRequest] = useState<VacationRequest | null>(null);
   const [rejectReason, setRejectReason] = useState('');
+  const [showApproveModal, setShowApproveModal] = useState(false);
+  const [approvingRequest, setApprovingRequest] = useState<VacationRequest | null>(null);
+  const [decisionSignatureFile, setDecisionSignatureFile] = useState<File | null>(null);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [viewingEmployee, setViewingEmployee] = useState<Employee | null>(null);
   const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
@@ -1772,6 +1778,19 @@ export function AdminHR() {
     }
   };
 
+  const handleEmployeeCertificatePdfExport = async (employee: Employee) => {
+    setExportingCertificateId(employee.id);
+    try {
+      await exportEmployeeCertificatePdf(employee.id, employee.employee_code);
+      toast.success('Certificado laboral generado');
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo generar el certificado laboral');
+    } finally {
+      setExportingCertificateId(null);
+    }
+  };
+
   const handleBranchesPdfExport = async () => {
     setExportingBranchesPdf(true);
     try {
@@ -1836,30 +1855,45 @@ export function AdminHR() {
     }
   };
 
-  const handleVacationAction = async (request: VacationRequest, action: 'approve' | 'reject') => {
+  const handleVacationAction = (request: VacationRequest, action: 'approve' | 'reject') => {
+    setDecisionSignatureFile(null);
     if (action === 'reject') {
       setRejectingRequest(request);
       setRejectReason('');
       setShowRejectModal(true);
       return;
     }
-    setVacationActionId(request.id);
-    try {
-      await approveVacationRequest(request.id);
-      toast.success('Solicitud aprobada');
-      await loadData();
-    } catch (error) {
-      console.error(error);
-      toast.error('No se pudo procesar la solicitud');
-    } finally {
-      setVacationActionId(null);
-    }
+    setApprovingRequest(request);
+    setShowApproveModal(true);
   };
 
   const closeRejectModal = () => {
     setShowRejectModal(false);
     setRejectingRequest(null);
     setRejectReason('');
+    setDecisionSignatureFile(null);
+  };
+
+  const closeApproveModal = () => {
+    setShowApproveModal(false);
+    setApprovingRequest(null);
+    setDecisionSignatureFile(null);
+  };
+
+  const confirmApproveVacation = async () => {
+    if (!approvingRequest) return;
+    setVacationActionId(approvingRequest.id);
+    try {
+      await approveVacationRequest(approvingRequest.id, '', decisionSignatureFile);
+      toast.success('Solicitud aprobada');
+      await loadData();
+      closeApproveModal();
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo procesar la solicitud');
+    } finally {
+      setVacationActionId(null);
+    }
   };
 
   const confirmRejectVacation = async () => {
@@ -1870,7 +1904,7 @@ export function AdminHR() {
     }
     setVacationActionId(rejectingRequest.id);
     try {
-      await rejectVacationRequest(rejectingRequest.id, rejectReason.trim());
+      await rejectVacationRequest(rejectingRequest.id, rejectReason.trim(), decisionSignatureFile);
       toast.info('Solicitud rechazada');
       await loadData();
       closeRejectModal();
@@ -2757,6 +2791,12 @@ export function AdminHR() {
                                   disabled: exportingProfileId === employee.id,
                                 },
                                 {
+                                  label: exportingCertificateId === employee.id ? 'Generando...' : 'Certificado laboral',
+                                  icon: exportingCertificateId === employee.id ? Loader2 : BadgeCheck,
+                                  onClick: () => void handleEmployeeCertificatePdfExport(employee),
+                                  disabled: exportingCertificateId === employee.id,
+                                },
+                                {
                                   label: 'Eliminar empleado',
                                   icon: Trash2,
                                   onClick: () => handleDeleteEmployee(employee),
@@ -3233,6 +3273,13 @@ export function AdminHR() {
         <div className="space-y-4">
           <p className="text-xs text-gray-500">Indica el motivo del rechazo. Este comentario quedará registrado en la solicitud.</p>
           <TextareaInput label="Motivo del rechazo" value={rejectReason} onChange={setRejectReason} />
+          <div className="pt-2 border-t border-gray-100">
+            <SignaturePad
+              label="Tu firma para este rechazo"
+              helperText="Se usará tu firma guardada por defecto. Si quieres firmar distinto solo para esta solicitud, dibuja o sube una firma aquí."
+              onChange={setDecisionSignatureFile}
+            />
+          </div>
           <div className="flex justify-end gap-2">
             <button onClick={closeRejectModal} className="px-4 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
               Cancelar
@@ -3243,6 +3290,31 @@ export function AdminHR() {
               className="px-4 py-2 bg-red-500 rounded-lg text-xs font-semibold text-white hover:bg-red-600 transition-colors disabled:opacity-40"
             >
               Rechazar solicitud
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal title="Aprobar solicitud" open={showApproveModal && Boolean(approvingRequest)} onClose={closeApproveModal}>
+        <div className="space-y-4">
+          <p className="text-xs text-gray-500">
+            Vas a aprobar la solicitud {approvingRequest?.request_number || ''}. Esta acción quedará registrada en el historial.
+          </p>
+          <SignaturePad
+            label="Tu firma para esta aprobación"
+            helperText="Se usará tu firma guardada por defecto. Si quieres firmar distinto solo para esta solicitud, dibuja o sube una firma aquí."
+            onChange={setDecisionSignatureFile}
+          />
+          <div className="flex justify-end gap-2">
+            <button onClick={closeApproveModal} className="px-4 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+              Cancelar
+            </button>
+            <button
+              onClick={confirmApproveVacation}
+              disabled={approvingRequest ? vacationActionId === approvingRequest.id : false}
+              className="px-4 py-2 bg-emerald-600 rounded-lg text-xs font-semibold text-white hover:bg-emerald-700 transition-colors disabled:opacity-40"
+            >
+              Aprobar solicitud
             </button>
           </div>
         </div>

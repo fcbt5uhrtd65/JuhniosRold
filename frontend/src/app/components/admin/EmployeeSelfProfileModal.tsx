@@ -16,6 +16,7 @@ import {
 import { getRoleLabel } from '../../utils/permissions';
 import { Badge, type BadgeColor, Card, EmptyState, LoadingState } from './AdminUI';
 import { TextInput, SelectInput, TextareaInput } from './AdminHR';
+import { SignaturePad } from './SignaturePad';
 import { ComboWithOtherInput } from './ComboWithOtherInput';
 import { LocationPicker } from '../ui/LocationPicker';
 import { EMPTY_LOCATION, type LocationValue } from '../../services/geography.types';
@@ -227,6 +228,8 @@ export function EmployeeSelfProfileModal({ open, onClose }: { open: boolean; onC
   const [documentType, setDocumentType] = useState<EmployeeDocumentType>('ID_COPY');
   const [documentName, setDocumentName] = useState('Cédula de Ciudadanía');
   const [documentFile, setDocumentFile] = useState<File | null>(null);
+  const [signatureFile, setSignatureFile] = useState<File | null>(null);
+  const [savingSignature, setSavingSignature] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -278,6 +281,25 @@ export function EmployeeSelfProfileModal({ open, onClose }: { open: boolean; onC
       toast.error('No se pudo actualizar tu perfil');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSignatureSave = async () => {
+    if (!signatureFile) {
+      toast.error('Dibuja o sube una firma primero');
+      return;
+    }
+    setSavingSignature(true);
+    try {
+      const updated = await updateMyEmployeeProfile({ signature: signatureFile });
+      setEmployee(updated);
+      setSignatureFile(null);
+      toast.success('Firma guardada');
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo guardar tu firma');
+    } finally {
+      setSavingSignature(false);
     }
   };
 
@@ -571,6 +593,22 @@ export function EmployeeSelfProfileModal({ open, onClose }: { open: boolean; onC
                   </div>
                   <div className="p-4 border border-amber-200 bg-amber-50 rounded-xl text-xs text-amber-800">
                     Tu rol dentro del sistema solo puede ser modificado por RRHH o un administrador.
+                  </div>
+
+                  <div className="pt-2 border-t border-gray-100">
+                    <p className="text-sm font-semibold text-gray-900 mb-1">Mi firma digital</p>
+                    <p className="text-xs text-gray-500 mb-3">
+                      Esta firma se usará automáticamente cuando apruebes o rechaces solicitudes, y en los certificados que emitas.
+                    </p>
+                    <SignaturePad currentSignatureUrl={employee.signature} onChange={setSignatureFile} />
+                    <button
+                      type="button"
+                      onClick={handleSignatureSave}
+                      disabled={!signatureFile || savingSignature}
+                      className="mt-3 px-4 py-2 bg-[#2a4038] text-white rounded-lg text-xs font-semibold hover:bg-[#3d5c4e] disabled:opacity-40 transition-colors"
+                    >
+                      {savingSignature ? 'Guardando firma...' : 'Guardar firma'}
+                    </button>
                   </div>
                 </div>
               )}

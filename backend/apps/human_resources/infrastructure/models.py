@@ -186,6 +186,12 @@ class VacationRequestApprovalStep(BaseModel):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
     acted_at = models.DateTimeField(null=True, blank=True)
     comment = models.TextField(blank=True)
+    signature = models.FileField(
+        upload_to="hr/requests/signatures/",
+        null=True,
+        blank=True,
+        validators=[FileExtensionValidator(allowed_extensions=("png", "jpg", "jpeg"))],
+    )
 
     class Meta(BaseModel.Meta):
         ordering = ("sequence", "created_at")

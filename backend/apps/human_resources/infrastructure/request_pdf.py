@@ -9,6 +9,8 @@ from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
 
+from shared.infrastructure.signature_pdf import draw_signature_block, resolve_signature_file
+
 COMPANY_NAME = "PRODUCTOS JUHNIOS ROLD SAS"
 LOGO_PATH = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "finance", "infrastructure", "assets", "logo.jpeg")
@@ -304,6 +306,49 @@ def _draw_approval_flow(c, x, y, w, vacation):
     return y - h
 
 
+def _signing_steps(vacation):
+    """Pasos con una decision definitiva (aprobado/rechazado) que deben llevar firma,
+    en orden: RRHH primero, Administrador/Final despues."""
+    decided_statuses = {"APPROVED", "REJECTED"}
+    steps = [
+        step
+        for step in vacation.approval_steps.all()
+        if step.step in ("HR", "FINAL") and step.status in decided_statuses and step.user_id and step.acted_at
+    ]
+    order = {"HR": 0, "FINAL": 1}
+    steps.sort(key=lambda step: order.get(step.step, 2))
+    return steps[:2]
+
+
+def _draw_signatures_section(c, x, y, w, vacation):
+    steps = _signing_steps(vacation)
+    if not steps:
+        return y
+
+    block_h = 90
+    _round_rect(c, x, y - block_h, w, block_h, fill_color=WHITE, stroke_color=LINE_COLOR, radius=8)
+    _section_label(c, x + 14, y - 16, "Firmas")
+
+    count = len(steps)
+    col_w = (w - 28) / count
+    for index, step in enumerate(steps):
+        col_x = x + 14 + index * col_w
+        employee = getattr(step.user, "employee_profile", None)
+        signer_name = _employee_name(employee) if employee else _safe(getattr(step.user, "email", None))
+        signature_file = resolve_signature_file(step=step, employee=employee)
+        draw_signature_block(
+            c,
+            col_x,
+            y - 26,
+            col_w,
+            signature_file=signature_file,
+            signer_name=signer_name,
+            role_label=f"{step.get_step_display()} · {step.get_status_display()}",
+            decided_at=step.acted_at,
+        )
+    return y - block_h
+
+
 def render_request_pdf(vacation):
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=letter)
@@ -350,6 +395,12 @@ def render_request_pdf(vacation):
     y = _draw_reason_card(c, x0, y, main_w, vacation.reason or vacation.description or "Sin descripcion.")
     y -= 14
     y = _draw_approval_flow(c, x0, y, main_w, vacation)
+    y -= 14
+
+    if y < 120:
+        c.showPage()
+        y = page_h - 40
+    y = _draw_signatures_section(c, x0, y, main_w, vacation)
 
     c.setFillColor(MUTED_COLOR)
     c.setFont("Helvetica", 7)

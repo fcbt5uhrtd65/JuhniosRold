@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  BadgeCheck,
   Briefcase,
   CalendarClock,
   CheckCircle2,
@@ -8,6 +9,7 @@ import {
   FileCheck2,
   FileText,
   HeartPulse,
+  Loader2,
   Paperclip,
   Plane,
   Save,
@@ -17,7 +19,7 @@ import {
 } from 'lucide-react';
 import { useAdmin } from '../../contexts/AdminContext';
 import { useToast } from '../../contexts/ToastContext';
-import { getEmployees, type Employee } from '../../services/employees.service';
+import { getEmployees, exportMyEmployeeCertificatePdf, type Employee } from '../../services/employees.service';
 import {
   createMyVacationRequest,
   getMyVacationRequests,
@@ -190,6 +192,7 @@ export function AdminEmployeePortal() {
   const [requestsPageSize, setRequestsPageSize] = useState(5);
   const [expandedRequestId, setExpandedRequestId] = useState<string | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<VacationRequest | null>(null);
+  const [downloadingCertificate, setDownloadingCertificate] = useState(false);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -301,6 +304,19 @@ export function AdminEmployeePortal() {
     }
   };
 
+  const handleDownloadCertificate = async () => {
+    setDownloadingCertificate(true);
+    try {
+      await exportMyEmployeeCertificatePdf(employeeProfile?.employee_code);
+      toast.success('Certificado laboral generado');
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo generar tu certificado laboral');
+    } finally {
+      setDownloadingCertificate(false);
+    }
+  };
+
   if (isLoading) {
     return <LoadingState label="Cargando tu portal interno..." />;
   }
@@ -327,6 +343,15 @@ export function AdminEmployeePortal() {
           <h2 className="text-lg font-semibold text-gray-900">Portal interno</h2>
           <p className="text-xs text-gray-500 mt-0.5">Solicitudes personales de vacaciones y novedades laborales.</p>
         </div>
+        <button
+          type="button"
+          onClick={handleDownloadCertificate}
+          disabled={downloadingCertificate}
+          className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white rounded-xl text-xs font-semibold hover:bg-[#3d5c4e] disabled:opacity-50 transition-colors"
+        >
+          {downloadingCertificate ? <Loader2 size={14} className="animate-spin" /> : <BadgeCheck size={14} />}
+          {downloadingCertificate ? 'Generando certificado...' : 'Descargar certificado laboral'}
+        </button>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">

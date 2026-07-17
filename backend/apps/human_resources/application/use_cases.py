@@ -82,7 +82,7 @@ class ResolveVacationRequestByRole:
         VacationRequest.Status.FINALIZED,
     }
 
-    def execute(self, vacation, decision, reviewer, role, comment=""):
+    def execute(self, vacation, decision, reviewer, role, comment="", signature_override=None):
         if role not in ("ADMIN", "HR"):
             raise BusinessRuleViolation("Rol no autorizado para resolver solicitudes.")
 
@@ -137,6 +137,7 @@ class ResolveVacationRequestByRole:
                     "user": reviewer,
                     "acted_at": now,
                     "comment": comment,
+                    **({"signature": signature_override} if signature_override else {}),
                 },
             )
             VacationRequestHistory.objects.create(
@@ -181,6 +182,7 @@ class ResolveVacationRequestByRole:
                 "user": reviewer,
                 "acted_at": now,
                 "comment": comment,
+                **({"signature": signature_override} if signature_override else {}),
             },
         )
         history_comment = f"[{role}] {comment}".strip()

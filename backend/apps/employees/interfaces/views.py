@@ -39,6 +39,7 @@ from ..infrastructure.serializers import (
 )
 from ..infrastructure.employee_pdf import render_employees_pdf
 from ..infrastructure.employee_profile_pdf import render_employee_profile_pdf
+from ..infrastructure.employee_certificate_pdf import get_default_hr_signer, render_employee_certificate_pdf
 from ..infrastructure.branch_pdf import render_branches_pdf
 from ..infrastructure.catalog_pdf import render_departments_pdf, render_positions_pdf
 
@@ -162,10 +163,10 @@ class EmployeeViewSet(SoftDeleteModelViewSet):
     ordering_fields = ("hire_date", "first_name", "last_name")
 
     def get_permissions(self):
-        if self.action == "me":
+        if self.action in {"me", "my_certificate_pdf"}:
             return (IsAuthenticated(),)
         self.required_component_action = (
-            "view" if self.action in {"list", "retrieve", "export_pdf", "export_profile_pdf"} else "edit"
+            "view" if self.action in {"list", "retrieve", "export_pdf", "export_profile_pdf", "export_certificate_pdf"} else "edit"
         )
         return super().get_permissions()
 
@@ -228,6 +229,50 @@ class EmployeeViewSet(SoftDeleteModelViewSet):
             pdf_buffer,
             as_attachment=True,
             filename=f"perfil-{safe_code}.pdf",
+            content_type="application/pdf",
+        )
+
+    @action(detail=True, methods=("get",), url_path="export-certificate-pdf")
+    def export_certificate_pdf(self, request, pk=None):
+        employee = self.get_object()
+        issued_by = getattr(request.user, "employee_profile", None) or get_default_hr_signer()
+        try:
+            pdf_buffer = render_employee_certificate_pdf(employee, issued_by=issued_by)
+        except Exception:
+            logger.exception("Fallo al generar el certificado laboral para el empleado %s", employee.id)
+            return Response(
+                {"detail": "No se pudo generar el certificado laboral. Revisa los datos del empleado."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        safe_code = (employee.employee_code or str(employee.id)).replace(" ", "-")
+        return FileResponse(
+            pdf_buffer,
+            as_attachment=True,
+            filename=f"certificado-laboral-{safe_code}.pdf",
+            content_type="application/pdf",
+        )
+
+    @action(detail=False, methods=("get",), url_path="me/certificate-pdf")
+    def my_certificate_pdf(self, request):
+        try:
+            employee = Employee.objects.select_related("department", "position", "branch").get(user=request.user)
+        except Employee.DoesNotExist:
+            raise NotFound("Tu usuario no tiene un perfil de empleado asociado.")
+
+        issued_by = get_default_hr_signer()
+        try:
+            pdf_buffer = render_employee_certificate_pdf(employee, issued_by=issued_by)
+        except Exception:
+            logger.exception("Fallo al generar tu certificado laboral (empleado %s)", employee.id)
+            return Response(
+                {"detail": "No se pudo generar tu certificado laboral."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        safe_code = (employee.employee_code or str(employee.id)).replace(" ", "-")
+        return FileResponse(
+            pdf_buffer,
+            as_attachment=True,
+            filename=f"certificado-laboral-{safe_code}.pdf",
             content_type="application/pdf",
         )
 
