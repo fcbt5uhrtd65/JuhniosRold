@@ -44,22 +44,32 @@ def resolve_signature_image(signature_file):
         return None
 
 
-def draw_signature_block(c, x, y, w, *, signature_file, signer_name, role_label, decided_at=None, height=70):
+def signature_block_height(image_h=90):
+    """Altura total que ocupa draw_signature_block (imagen + linea + 3 renglones de texto)."""
+    return image_h + 4 + 13 + 11 + 11 + 6
+
+
+def draw_signature_block(c, x, y, w, *, signature_file, signer_name, role_label, decided_at=None, image_h=90):
     """Dibuja un bloque de firma: imagen (si hay), linea, nombre, rol y fecha.
 
     (x, y) es la esquina superior izquierda del bloque; w es el ancho disponible.
-    Devuelve el nuevo y (por debajo del bloque dibujado).
+    Devuelve el nuevo y (por debajo del bloque dibujado). Usa signature_block_height()
+    con el mismo image_h para reservar el espacio correcto antes de llamar a esta funcion.
     """
     image = resolve_signature_image(signature_file)
-    image_h = 46
     image_y = y - 4
 
     if image is not None:
         try:
             iw, ih = image.getSize()
-            draw_w = min(w * 0.6, image_h * (iw / ih) if ih else w * 0.6)
+            max_w = w * 0.82
+            draw_w = min(max_w, image_h * (iw / ih) if ih else max_w)
+            draw_h = draw_w * (ih / iw) if iw else image_h
+            if draw_h > image_h:
+                draw_h = image_h
+                draw_w = draw_h * (iw / ih) if ih else max_w
             draw_x = x + (w - draw_w) / 2
-            c.drawImage(image, draw_x, image_y - image_h, width=draw_w, height=image_h, preserveAspectRatio=True, mask="auto")
+            c.drawImage(image, draw_x, image_y - draw_h, width=draw_w, height=draw_h, preserveAspectRatio=True, mask="auto")
         except Exception:
             image = None
 

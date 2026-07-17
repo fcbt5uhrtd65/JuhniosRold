@@ -9,7 +9,7 @@ from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
 
-from shared.infrastructure.signature_pdf import draw_signature_block, resolve_signature_file
+from shared.infrastructure.signature_pdf import draw_signature_block, resolve_signature_file, signature_block_height
 
 COMPANY_NAME = "PRODUCTOS JUHNIOS ROLD SAS"
 LOGO_PATH = os.path.abspath(
@@ -325,7 +325,8 @@ def _draw_signatures_section(c, x, y, w, vacation):
     if not steps:
         return y
 
-    block_h = 90
+    image_h = 92
+    block_h = 26 + signature_block_height(image_h) + 16
     _round_rect(c, x, y - block_h, w, block_h, fill_color=WHITE, stroke_color=LINE_COLOR, radius=8)
     _section_label(c, x + 14, y - 16, "Firmas")
 
@@ -345,6 +346,7 @@ def _draw_signatures_section(c, x, y, w, vacation):
             signer_name=signer_name,
             role_label=f"{step.get_step_display()} · {step.get_status_display()}",
             decided_at=step.acted_at,
+            image_h=image_h,
         )
     return y - block_h
 
@@ -397,14 +399,15 @@ def render_request_pdf(vacation):
     y = _draw_approval_flow(c, x0, y, main_w, vacation)
     y -= 14
 
-    if y < 120:
+    signatures_h = 26 + signature_block_height(92) + 16
+    if y - signatures_h < 55:
         c.showPage()
         y = page_h - 40
     y = _draw_signatures_section(c, x0, y, main_w, vacation)
 
     c.setFillColor(MUTED_COLOR)
     c.setFont("Helvetica", 7)
-    c.drawCentredString(page_w / 2, 30, "Documento generado automaticamente para control interno de Recursos Humanos.")
+    c.drawCentredString(page_w / 2, 28, "Documento generado automaticamente para control interno de Recursos Humanos.")
 
     c.save()
     buffer.seek(0)

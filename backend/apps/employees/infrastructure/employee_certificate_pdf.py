@@ -8,7 +8,7 @@ from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
 
-from shared.infrastructure.signature_pdf import draw_signature_block
+from shared.infrastructure.signature_pdf import draw_signature_block, signature_block_height
 
 from .models import Employee
 
@@ -101,11 +101,22 @@ def _draw_logo(c, x, y, size=48):
     return size
 
 
-def _draw_letterhead(c, x0, x1, y):
+def _draw_page_frame(c, x0, x1, page_h, top_y, bottom_y):
+    c.setStrokeColor(GOLD)
+    c.setLineWidth(1.2)
+    c.rect(x0 - 14, bottom_y - 14, (x1 - x0) + 28, (top_y - bottom_y) + 28, stroke=1, fill=0)
+    c.setStrokeColor(LINE)
+    c.setLineWidth(0.5)
+    c.rect(x0 - 10, bottom_y - 10, (x1 - x0) + 20, (top_y - bottom_y) + 20, stroke=1, fill=0)
+
+
+def _draw_letterhead(c, x0, x1, y, certificate_number):
     logo_size = _draw_logo(c, x0, y, 48)
     text_x = x0 + logo_size + (12 if logo_size else 0)
     _text(c, text_x, y - 16, COMPANY_NAME, size=13.5, bold=True)
     _text(c, text_x, y - 30, "Recursos Humanos · Gestión del Talento Humano", size=8.5, color=MUTED)
+    _text(c, x1, y - 16, "CERTIFICADO No.", size=7.5, bold=True, color=MUTED, align="right")
+    _text(c, x1, y - 28, certificate_number, size=10.5, bold=True, color=BRAND, align="right")
     c.setStrokeColor(GOLD)
     c.setLineWidth(1.4)
     c.line(x0, y - 44, x1, y - 44)
@@ -114,7 +125,12 @@ def _draw_letterhead(c, x0, x1, y):
 
 def _draw_title(c, x0, x1, y):
     _text(c, (x0 + x1) / 2, y, "CERTIFICADO LABORAL", size=17, bold=True, color=BRAND, align="center")
-    return y - 22
+    label_w = stringWidth("CERTIFICADO LABORAL", "Helvetica-Bold", 17)
+    c.setStrokeColor(GOLD)
+    c.setLineWidth(1)
+    mid_x = (x0 + x1) / 2
+    c.line(mid_x - label_w / 2, y - 8, mid_x + label_w / 2, y - 8)
+    return y - 24
 
 
 def _draw_field_row(c, x, y, w, label, value):
@@ -144,20 +160,30 @@ def _draw_summary_grid(c, x0, y, w, employee):
     return y - h
 
 
+def _certificate_number(employee: Employee) -> str:
+    today = timezone.localdate()
+    code = (employee.employee_code or str(employee.id)[:8]).replace(" ", "")
+    return f"CL-{today:%Y%m}-{code}"
+
+
 def render_employee_certificate_pdf(employee: Employee, issued_by: Employee | None = None, include_salary: bool = True):
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=letter)
     c.setTitle(f"Certificado laboral - {_name(employee)}")
 
     page_w, page_h = letter
-    x0, x1 = 56, page_w - 56
+    x0, x1 = 62, page_w - 62
     main_w = x1 - x0
-    y = page_h - 48
+    top_y = page_h - 56
+    bottom_y = 60
+    y = page_h - 62
 
-    y = _draw_letterhead(c, x0, x1, y)
+    _draw_page_frame(c, x0, x1, page_h, top_y, bottom_y)
+
+    y = _draw_letterhead(c, x0, x1, y, _certificate_number(employee))
     y -= 10
     y = _draw_title(c, x0, x1, y)
-    y -= 26
+    y -= 22
 
     today = timezone.localdate()
     intro = (
@@ -199,26 +225,36 @@ def render_employee_certificate_pdf(employee: Employee, issued_by: Employee | No
     y -= 26
 
     _text(c, x0, y, f"Expedido en Colombia, {_date(today)}.", size=9.5, color=TEXT)
-    y -= 60
 
     signer_name = _name(issued_by) if issued_by else "Recursos Humanos"
     role_label = issued_by.position.name if issued_by and issued_by.position_id else "Recursos Humanos"
     signature_file = getattr(issued_by, "signature", None) if issued_by else None
-    signature_w = 220
+    signature_w = 240
+    image_h = 92
+    signature_h = signature_block_height(image_h)
+
+    # La firma se ancla a una posicion fija cerca del pie de pagina, en vez de
+    # seguir el flujo del texto, para que siempre quede dentro del marco decorativo.
+    footer_y = bottom_y - 6
+    signature_top = footer_y + 22 + signature_h
+    if signature_top > y - 26:
+        signature_top = y - 26
+
     draw_signature_block(
         c,
-        x0,
-        y,
+        x0 + (main_w - signature_w) / 2,
+        signature_top,
         signature_w,
         signature_file=signature_file,
         signer_name=signer_name,
         role_label=role_label,
         decided_at=timezone.now(),
+        image_h=image_h,
     )
 
     c.setFillColor(MUTED)
     c.setFont("Helvetica", 7)
-    c.drawCentredString(page_w / 2, 30, "Documento generado digitalmente por el sistema de gestión de Recursos Humanos.")
+    c.drawCentredString(page_w / 2, footer_y, "Documento generado digitalmente por el sistema de gestión de Recursos Humanos.")
 
     c.save()
     buffer.seek(0)
