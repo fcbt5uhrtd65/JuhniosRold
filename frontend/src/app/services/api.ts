@@ -124,6 +124,13 @@ function extractMessage(payload: unknown, status: number): string {
     if (typeof asRecord.detail === 'string' && asRecord.detail.trim()) {
       return asRecord.detail;
     }
+
+    // Errores de validación de DRF: { campo: ["mensaje", ...], non_field_errors: [...] }.
+    // Sin esto, cualquier 400 de un serializer cae al mensaje genérico "Error 400".
+    const fieldErrors = extractErrors(payload);
+    if (fieldErrors && fieldErrors.length > 0) {
+      return fieldErrors.join(' · ');
+    }
   }
 
   if (status >= 500) {

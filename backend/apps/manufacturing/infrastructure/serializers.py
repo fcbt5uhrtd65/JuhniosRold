@@ -77,6 +77,13 @@ class BatchSerializer(serializers.ModelSerializer):
         )
         read_only_fields = ("created_by",)
 
+    def validate_production_order(self, value):
+        if Batch.objects.filter(production_order=value).exclude(pk=getattr(self.instance, "pk", None)).exists():
+            raise serializers.ValidationError(
+                "Esta orden de producción ya tiene un lote creado. Selecciona otra orden o abre el lote existente."
+            )
+        return value
+
 
 # ── Inventario de materias primas ────────────────────────────────────────────
 
