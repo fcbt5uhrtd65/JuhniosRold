@@ -6,6 +6,7 @@ import { AdminDashboard } from './AdminDashboard';
 import { AdminProducts } from './AdminProducts';
 import { AdminInventory } from './AdminInventory';
 import { AdminInventarioProduccion } from './AdminInventarioProduccion';
+import { AdminManufacturing } from './AdminManufacturing';
 import { AdminOrders } from './AdminOrders';
 import { AdminCustomers } from './AdminCustomers';
 import { AdminPayments } from './AdminPayments';
@@ -68,6 +69,8 @@ export function Admin() {
         return <AdminInventory initialSearch={inventorySearch} />;
       case 'inventory-production':
         return <AdminInventarioProduccion />;
+      case 'manufacturing':
+        return <AdminManufacturing />;
       case 'orders':
         return <AdminOrders />;
       case 'customers':

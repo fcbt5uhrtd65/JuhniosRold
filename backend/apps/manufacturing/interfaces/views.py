@@ -580,6 +580,7 @@ class BatchReleaseViewSet(ManufacturingBaseViewSet):
                 warehouse_location=request.data.get("warehouse_location"),
                 condition=request.data.get("condition", BatchRelease.Condition.CONDITIONAL),
                 observations=request.data.get("observations", ""),
+                quality_signature=request.FILES.get("quality_signature"),
             )
         except BusinessRuleViolation as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)

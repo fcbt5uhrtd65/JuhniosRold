@@ -817,8 +817,21 @@ export async function releaseBatch(input: {
   warehouse_location?: string | null;
   condition: 'RELEASED' | 'CONDITIONAL' | 'REJECTED';
   observations?: string;
+  quality_signature?: File | null;
 }): Promise<BatchReleaseRecord> {
-  const { data } = await api.post<BatchReleaseRecord>(`${BASE}/batch-releases/release/`, input);
+  const { quality_signature, ...rest } = input;
+  const body: FormData | typeof rest = quality_signature
+    ? (() => {
+        const formData = new FormData();
+        Object.entries(rest).forEach(([key, value]) => {
+          if (value === null || value === undefined) return;
+          formData.append(key, String(value));
+        });
+        formData.append('quality_signature', quality_signature);
+        return formData;
+      })()
+    : rest;
+  const { data } = await api.post<BatchReleaseRecord>(`${BASE}/batch-releases/release/`, body);
   return data as BatchReleaseRecord;
 }
 

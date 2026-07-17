@@ -21,6 +21,7 @@ import {
   Puzzle,
   Gift,
   Truck,
+  FlaskConical,
 } from 'lucide-react';
 
 interface AdminLayoutProps {
@@ -40,6 +41,7 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
     { id: 'flipbook-catalogs', label: 'Catálogos', icon: BookOpen, roles: ['ADMIN'] },
     { id: 'inventory', label: 'Stock Rápido', icon: Warehouse, roles: ['ADMIN', 'SELLER'] },
     { id: 'inventory-production', label: 'Inventario', icon: Boxes, roles: ['ADMIN', 'SELLER'] },
+    { id: 'manufacturing', label: 'Producción', icon: FlaskConical, roles: ['ADMIN'] },
     { id: 'orders', label: 'Pedidos', icon: ShoppingCart, roles: ['ADMIN', 'SELLER', 'DISTRIBUTOR', 'PEDIDOS'] },
     { id: 'customers', label: 'Clientes', icon: Users, roles: ['ADMIN', 'SELLER'] },
     { id: 'referrals', label: 'Referidos', icon: Gift, roles: ['ADMIN'] },

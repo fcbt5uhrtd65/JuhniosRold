@@ -190,7 +190,7 @@ class ReleaseBatch:
     fases) — pero si existe, debe estar en estado conforme."""
 
     @transaction.atomic
-    def execute(self, batch: Batch, *, actor, released_quantity, retained_quantity, rejected_quantity, unit=None, warehouse_location=None, condition, observations=""):
+    def execute(self, batch: Batch, *, actor, released_quantity, retained_quantity, rejected_quantity, unit=None, warehouse_location=None, condition, observations="", quality_signature=None):
         errors = []
 
         certificate = getattr(batch, "analysis_certificate", None)
@@ -234,6 +234,7 @@ class ReleaseBatch:
                 "condition": condition,
                 "released_by_quality": actor,
                 "observations": observations,
+                **({"quality_signature": quality_signature} if quality_signature else {}),
             },
         )
         ChangeBatchStatus().execute(batch, Batch.Status.RELEASED, actor, reason="Lote liberado")
