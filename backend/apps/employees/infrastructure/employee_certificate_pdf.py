@@ -61,19 +61,16 @@ def _signer_document_label(issued_by):
 
 # ── Encabezado membretado ──────────────────────────────────────────────────────
 def _draw_header(c, page_w, page_h, x0, x1):
-    """Membrete oficial (franja superior) + datos de la empresa alineados a la derecha.
+    """Membrete oficial (franja superior); el nombre de la empresa ya queda comunicado
+    por el membrete, así que aquí solo se ubica el subtítulo de área.
     Retorna la coordenada y donde termina el encabezado."""
     y = draw_letterhead_header(c, page_w, page_h, x0, x1)
 
-    c.setFillColor(TEXT)
-    c.setFont(FONT_BOLD, 11.5)
-    c.drawRightString(x1, y, COMPANY_NAME)
-    y -= 13
     c.setFont(FONT, 8.5)
     c.setFillColor(MUTED)
     c.drawRightString(x1, y, "Gestión de Talento Humano  ·  Recursos Humanos")
 
-    return y - 22
+    return y - 26
 
 
 # ── Título del documento ───────────────────────────────────────────────────────

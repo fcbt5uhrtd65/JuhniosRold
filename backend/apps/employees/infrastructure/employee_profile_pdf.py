@@ -9,7 +9,6 @@ from reportlab.pdfgen import canvas
 
 from shared.infrastructure.pdf_letterhead import draw_letterhead_footer, draw_letterhead_header
 
-COMPANY_NAME = "PRODUCTOS JUHNIOS ROLD SAS"
 TEXT = HexColor("#111827")
 MUTED = HexColor("#6b7280")
 LINE = HexColor("#e5e7eb")
@@ -213,7 +212,6 @@ def _hours(value):
 def _draw_header(c, page_w, page_h, x0, x1, employee):
     y = draw_letterhead_header(c, page_w, page_h, x0, x1)
 
-    _text(c, x0, y, COMPANY_NAME, size=13.5, bold=True, color=TEXT)
     _text(c, x1, y, "Perfil de empleado", size=12, bold=True, align="right", color=TEXT)
     y -= 16
     _text(c, x1, y, f"Generado: {timezone.now():%d/%m/%Y %H:%M}", size=8.5, align="right", color=MUTED)
