@@ -9,7 +9,6 @@ import {
   FileCheck2,
   FileText,
   HeartPulse,
-  Loader2,
   Paperclip,
   Plane,
   Save,
@@ -27,9 +26,10 @@ import {
   type VacationRequestStatus,
   type VacationRequestType,
 } from '../../services/human-resources.service';
-import { Card, KpiCard, Badge, type BadgeColor, LoadingState, EmptyState, inputCls, selectCls } from './AdminUI';
+import { Card, KpiCard, Badge, type BadgeColor, LoadingState, EmptyState, Modal, inputCls, selectCls } from './AdminUI';
 import { Pagination } from './Pagination';
 import { SearchBar } from './SearchBar';
+import { SignaturePad } from './SignaturePad';
 
 const REQUESTS_PAGE_SIZE_OPTIONS = [5, 10, 20, 50];
 const REASON_TRUNCATE_LENGTH = 90;
@@ -193,6 +193,8 @@ export function AdminEmployeePortal() {
   const [expandedRequestId, setExpandedRequestId] = useState<string | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<VacationRequest | null>(null);
   const [downloadingCertificate, setDownloadingCertificate] = useState(false);
+  const [showCertificateModal, setShowCertificateModal] = useState(false);
+  const [certificateSignatureFile, setCertificateSignatureFile] = useState<File | null>(null);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -304,11 +306,22 @@ export function AdminEmployeePortal() {
     }
   };
 
+  const openCertificateModal = () => {
+    setCertificateSignatureFile(null);
+    setShowCertificateModal(true);
+  };
+
+  const closeCertificateModal = () => {
+    setShowCertificateModal(false);
+    setCertificateSignatureFile(null);
+  };
+
   const handleDownloadCertificate = async () => {
     setDownloadingCertificate(true);
     try {
-      await exportMyEmployeeCertificatePdf(employeeProfile?.employee_code);
+      await exportMyEmployeeCertificatePdf(employeeProfile?.employee_code, certificateSignatureFile);
       toast.success('Certificado laboral generado');
+      closeCertificateModal();
     } catch (error) {
       console.error(error);
       toast.error(error instanceof Error ? error.message : 'No se pudo generar tu certificado laboral');
@@ -345,12 +358,11 @@ export function AdminEmployeePortal() {
         </div>
         <button
           type="button"
-          onClick={handleDownloadCertificate}
-          disabled={downloadingCertificate}
-          className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white rounded-xl text-xs font-semibold hover:bg-[#3d5c4e] disabled:opacity-50 transition-colors"
+          onClick={openCertificateModal}
+          className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white rounded-xl text-xs font-semibold hover:bg-[#3d5c4e] transition-colors"
         >
-          {downloadingCertificate ? <Loader2 size={14} className="animate-spin" /> : <BadgeCheck size={14} />}
-          {downloadingCertificate ? 'Generando certificado...' : 'Descargar certificado laboral'}
+          <BadgeCheck size={14} />
+          Descargar certificado laboral
         </button>
       </div>
 
@@ -789,6 +801,31 @@ export function AdminEmployeePortal() {
           </div>
         </div>
       )}
+
+      <Modal title="Certificado laboral" open={showCertificateModal} onClose={closeCertificateModal}>
+        <div className="space-y-4">
+          <p className="text-xs text-gray-500">
+            Antes de generar tu certificado laboral, dibuja o sube tu firma. Se usará únicamente en este documento.
+          </p>
+          <SignaturePad
+            label="Tu firma"
+            helperText="Dibuja o sube tu firma para este certificado."
+            onChange={setCertificateSignatureFile}
+          />
+          <div className="flex justify-end gap-2">
+            <button onClick={closeCertificateModal} className="px-4 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+              Cancelar
+            </button>
+            <button
+              onClick={handleDownloadCertificate}
+              disabled={!certificateSignatureFile || downloadingCertificate}
+              className="px-4 py-2 bg-[#2a4038] rounded-lg text-xs font-semibold text-white hover:bg-[#3d5c4e] transition-colors disabled:opacity-40"
+            >
+              {downloadingCertificate ? 'Generando...' : 'Firmar y generar certificado'}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

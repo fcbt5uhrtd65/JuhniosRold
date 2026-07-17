@@ -309,10 +309,6 @@ function SBar({ value, onChange, placeholder }: { value: string; onChange: (v: s
   return <div className="relative"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" /><input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder ?? 'Buscar...'} className="pl-9 pr-3 py-2.5 text-sm border border-gray-200 rounded-xl w-full bg-white focus:outline-none focus:ring-2 focus:ring-[#2a4038]/20 focus:border-[#2a4038] transition-all" /></div>;
 }
 
-function DrawerFooter({ onClose }: { onClose: () => void }) {
-  return <div className="flex gap-3 mt-8 pt-5 border-t border-gray-100"><button onClick={onClose} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancelar</button><button className="flex-1 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold hover:bg-[#3d5c4e] flex items-center justify-center gap-2"><Save size={14} /> Guardar</button></div>;
-}
-
 /* ═══════════════════════════════════════════════════════
    PANEL — Dashboard KPIs
 ═══════════════════════════════════════════════════════ */
@@ -1199,15 +1195,71 @@ function ModuloCompras() {
 /* ═══════════════════════════════════════════════════════
    MÓDULO EXISTENCIAS
 ═══════════════════════════════════════════════════════ */
+const AJUSTE_MOTIVOS = ['Conteo físico', 'Merma por derrame', 'Merma por proceso', 'Sobrante encontrado', 'Deterioro detectado', 'Error de registro', 'Otro'] as const;
+
 function ModuloExistencias() {
-  const { data, loading } = useInventoryWorkspace();
+  const toast = useToast();
+  const { data, loading, reload } = useInventoryWorkspace();
   const [tab, setTab] = useState<TabExistencias>('por-bodega');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [filterBodega, setFilterBodega] = useState('');
   const [filterTipo, setFilterTipo] = useState('');
   const [search, setSearch] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [ajusteForm, setAjusteForm] = useState({
+    variant: '',
+    location: '',
+    systemQuantity: '',
+    physicalQuantity: '',
+    motivo: AJUSTE_MOTIVOS[0] as string,
+    descripcion: '',
+    responsable: '',
+    aprobadoPor: '',
+  });
 
   const variantCost = useMemo(() => new Map((data?.variants ?? []).map(variant => [variant.id, variant.cost])), [data]);
+
+  const handleAjusteVariantChange = (variantId: string) => {
+    const stock = (data?.stocks ?? []).find(s => s.variant === variantId && (!ajusteForm.location || s.location === ajusteForm.location));
+    setAjusteForm(f => ({ ...f, variant: variantId, systemQuantity: stock ? String(numeric(stock.quantity)) : f.systemQuantity }));
+  };
+
+  const handleCreateAjuste = async () => {
+    const physical = Number(ajusteForm.physicalQuantity);
+    if (!ajusteForm.variant || !ajusteForm.location || ajusteForm.physicalQuantity === '' || Number.isNaN(physical)) {
+      toast.warning('Artículo, bodega y cantidad física contada son obligatorios.');
+      return;
+    }
+    if (!ajusteForm.descripcion.trim() || !ajusteForm.responsable.trim() || !ajusteForm.aprobadoPor.trim()) {
+      toast.warning('Descripción, responsable del conteo y aprobado por son obligatorios.');
+      return;
+    }
+    const systemQty = Number(ajusteForm.systemQuantity || 0);
+    const difference = physical - systemQty;
+    if (difference === 0) {
+      toast.warning('La cantidad física coincide con el sistema: no hay diferencia que ajustar.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await createInventoryMovement({
+        variant: ajusteForm.variant,
+        location: ajusteForm.location,
+        movement_type: difference > 0 ? 'ADJUSTMENT_IN' : 'ADJUSTMENT_OUT',
+        quantity: Math.abs(difference),
+        reason: ajusteForm.motivo,
+        reference: `Responsable: ${ajusteForm.responsable} · Aprobado por: ${ajusteForm.aprobadoPor} · ${ajusteForm.descripcion}`,
+      });
+      toast.success('Ajuste registrado');
+      setAjusteForm({ variant: '', location: '', systemQuantity: '', physicalQuantity: '', motivo: AJUSTE_MOTIVOS[0], descripcion: '', responsable: '', aprobadoPor: '' });
+      setDrawerOpen(false);
+      await reload();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No fue posible registrar el ajuste');
+    } finally {
+      setSaving(false);
+    }
+  };
   const filteredStocks = useMemo(() => (data?.stocks ?? []).filter(s => {
     const location = data?.locations.find(l => l.id === s.location);
     const variant = variantName(data, s.variant).toLowerCase();
@@ -1357,19 +1409,20 @@ function ModuloExistencias() {
               <p className="text-xs text-amber-700">Todo ajuste queda registrado en auditoría. Requiere motivo obligatorio y aprobación de supervisor.</p>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <Field label="Fecha" required><input className={inp} type="date" defaultValue="2025-06-19" /></Field>
-              <Field label="Tipo" required><select className={sel}><option>Ajuste Positivo (+)</option><option>Ajuste Negativo (-)</option></select></Field>
-              <div className="col-span-2"><Field label="Artículo" required><select className={sel}><option value="">Seleccionar artículo...</option>{ARTICULOS.map(a => <option key={a.id}>{a.nombre}</option>)}</select></Field></div>
-              <Field label="Bodega" required><select className={sel}><option value="">Seleccionar...</option>{BODEGAS.map(b => <option key={b.id}>{b.nombre}</option>)}</select></Field>
-              <Field label="Lote"><input className={inp} placeholder="Número de lote" /></Field>
-              <Field label="Cantidad en sistema"><input className={inp + ' bg-gray-50'} readOnly placeholder="Se carga al seleccionar" /></Field>
-              <Field label="Cantidad física contada" required><input className={inp} type="number" placeholder="0" /></Field>
-              <div className="col-span-2"><Field label="Motivo" required><select className={sel}><option>Conteo físico</option><option>Merma por derrame</option><option>Merma por proceso</option><option>Sobrante encontrado</option><option>Deterioro detectado</option><option>Error de registro</option><option>Otro</option></select></Field></div>
-              <div className="col-span-2"><Field label="Descripción detallada" required><textarea className={inp + ' resize-none h-16'} placeholder="Descripción completa del motivo del ajuste..." /></Field></div>
-              <Field label="Responsable del conteo" required><input className={inp} placeholder="Nombre" /></Field>
-              <Field label="Aprobado por" required><input className={inp} placeholder="Supervisor o jefe de bodega" /></Field>
+              <Field label="Fecha"><input className={inp + ' bg-gray-50'} type="date" value={currentDateInput()} readOnly /></Field>
+              <Field label="Bodega" required><select className={sel} value={ajusteForm.location} onChange={e => setAjusteForm(f => ({ ...f, location: e.target.value }))}><option value="">Seleccionar...</option>{(data?.locations ?? []).map(l => <option key={l.id} value={l.id}>{locationName(data, l.id)}</option>)}</select></Field>
+              <div className="col-span-2"><Field label="Artículo" required><select className={sel} value={ajusteForm.variant} onChange={e => handleAjusteVariantChange(e.target.value)}><option value="">Seleccionar artículo...</option>{(data?.variants ?? []).map(v => <option key={v.id} value={v.id}>{variantName(data, v.id)}</option>)}</select></Field></div>
+              <Field label="Cantidad en sistema"><input className={inp + ' bg-gray-50'} readOnly value={ajusteForm.systemQuantity} placeholder="Se carga al seleccionar" /></Field>
+              <Field label="Cantidad física contada" required><input className={inp} type="number" placeholder="0" value={ajusteForm.physicalQuantity} onChange={e => setAjusteForm(f => ({ ...f, physicalQuantity: e.target.value }))} /></Field>
+              <div className="col-span-2"><Field label="Motivo" required><select className={sel} value={ajusteForm.motivo} onChange={e => setAjusteForm(f => ({ ...f, motivo: e.target.value }))}>{AJUSTE_MOTIVOS.map(m => <option key={m}>{m}</option>)}</select></Field></div>
+              <div className="col-span-2"><Field label="Descripción detallada" required><textarea className={inp + ' resize-none h-16'} placeholder="Descripción completa del motivo del ajuste..." value={ajusteForm.descripcion} onChange={e => setAjusteForm(f => ({ ...f, descripcion: e.target.value }))} /></Field></div>
+              <Field label="Responsable del conteo" required><input className={inp} placeholder="Nombre" value={ajusteForm.responsable} onChange={e => setAjusteForm(f => ({ ...f, responsable: e.target.value }))} /></Field>
+              <Field label="Aprobado por" required><input className={inp} placeholder="Supervisor o jefe de bodega" value={ajusteForm.aprobadoPor} onChange={e => setAjusteForm(f => ({ ...f, aprobadoPor: e.target.value }))} /></Field>
             </div>
-            <DrawerFooter onClose={() => setDrawerOpen(false)} />
+            <div className="flex gap-3 mt-8 pt-5 border-t border-gray-100">
+              <button onClick={() => setDrawerOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancelar</button>
+              <button onClick={handleCreateAjuste} disabled={saving} className="flex-1 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold hover:bg-[#3d5c4e] flex items-center justify-center gap-2 disabled:opacity-50">{saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Guardar</button>
+            </div>
           </Drawer>
         </>
       )}
@@ -1391,6 +1444,16 @@ function ModuloMovimientos() {
   const [search, setSearch] = useState('');
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ movementType: 'ENTRY' as MovementType, variant: '', location: '', quantity: '', reason: '', reference: '' });
+  const [trasladoSaving, setTrasladoSaving] = useState(false);
+  const [trasladoForm, setTrasladoForm] = useState({
+    variant: '',
+    sourceLocation: '',
+    targetLocation: '',
+    quantity: '',
+    solicitadoPor: '',
+    responsableDestino: '',
+    motivo: '',
+  });
 
   const tiposMovimiento: MovementType[] = ['ENTRY', 'EXIT', 'LOSS', 'ADJUSTMENT_IN', 'ADJUSTMENT_OUT'];
   const movColor = (tipo: string): 'green' | 'red' | 'blue' | 'yellow' | 'gray' => {
@@ -1430,6 +1493,50 @@ function ModuloMovimientos() {
       toast.error(error instanceof Error ? error.message : 'No fue posible registrar el movimiento');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleCreateTraslado = async () => {
+    const { variant, sourceLocation, targetLocation, quantity, solicitadoPor, responsableDestino } = trasladoForm;
+    if (!variant || !sourceLocation || !targetLocation || !Number(quantity)) {
+      toast.warning('Artículo, bodega origen, bodega destino y cantidad son obligatorios.');
+      return;
+    }
+    if (sourceLocation === targetLocation) {
+      toast.warning('La bodega de origen y destino deben ser diferentes.');
+      return;
+    }
+    if (!solicitadoPor.trim() || !responsableDestino.trim()) {
+      toast.warning('Solicitado por y responsable destino son obligatorios.');
+      return;
+    }
+    setTrasladoSaving(true);
+    try {
+      const reference = `Traslado · Solicitado por: ${solicitadoPor} · Recibe: ${responsableDestino}${trasladoForm.motivo ? ` · ${trasladoForm.motivo}` : ''}`;
+      await createInventoryMovement({
+        variant,
+        location: sourceLocation,
+        movement_type: 'EXIT',
+        quantity: Number(quantity),
+        reason: trasladoForm.motivo || 'Traslado entre bodegas',
+        reference,
+      });
+      await createInventoryMovement({
+        variant,
+        location: targetLocation,
+        movement_type: 'ENTRY',
+        quantity: Number(quantity),
+        reason: trasladoForm.motivo || 'Traslado entre bodegas',
+        reference,
+      });
+      toast.success('Traslado registrado');
+      setTrasladoForm({ variant: '', sourceLocation: '', targetLocation: '', quantity: '', solicitadoPor: '', responsableDestino: '', motivo: '' });
+      setTrasladoDrawer(false);
+      await reload();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No fue posible registrar el traslado');
+    } finally {
+      setTrasladoSaving(false);
     }
   };
 
@@ -1523,18 +1630,19 @@ function ModuloMovimientos() {
               <p className="text-xs text-blue-700">El traslado genera dos movimientos: <strong>Salida</strong> de bodega origen y <strong>Entrada</strong> en bodega destino. Debe ser confirmado por el responsable de la bodega destino.</p>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <Field label="Número traslado" required><input className={inp} placeholder="TRF-2025-010" /></Field>
-              <Field label="Fecha" required><input className={inp} type="date" defaultValue="2025-06-19" /></Field>
-              <Field label="Bodega origen" required><select className={sel}><option value="">Seleccionar...</option>{BODEGAS.map(b => <option key={b.id}>{b.nombre}</option>)}</select></Field>
-              <Field label="Bodega destino" required><select className={sel}><option value="">Seleccionar...</option>{BODEGAS.map(b => <option key={b.id}>{b.nombre}</option>)}</select></Field>
-              <div className="col-span-2"><Field label="Artículo" required><select className={sel}><option value="">Seleccionar artículo...</option>{ARTICULOS.map(a => <option key={a.id}>{a.nombre}</option>)}</select></Field></div>
-              <Field label="Lote" required><input className={inp} placeholder="Número de lote" /></Field>
-              <Field label="Cantidad a trasladar" required><input className={inp} type="number" placeholder="0" /></Field>
-              <Field label="Solicitado por" required><input className={inp} placeholder="Nombre del solicitante" /></Field>
-              <Field label="Responsable destino" required><input className={inp} placeholder="Quien recibirá en destino" /></Field>
-              <div className="col-span-2"><Field label="Motivo del traslado"><textarea className={inp + ' resize-none h-14'} placeholder="Razón del traslado..." /></Field></div>
+              <Field label="Fecha"><input className={inp + ' bg-gray-50'} type="date" value={currentDateInput()} readOnly /></Field>
+              <div className="col-span-2"><Field label="Artículo" required><select className={sel} value={trasladoForm.variant} onChange={e => setTrasladoForm(f => ({ ...f, variant: e.target.value }))}><option value="">Seleccionar artículo...</option>{(data?.variants ?? []).map(v => <option key={v.id} value={v.id}>{variantName(data, v.id)}</option>)}</select></Field></div>
+              <Field label="Bodega origen" required><select className={sel} value={trasladoForm.sourceLocation} onChange={e => setTrasladoForm(f => ({ ...f, sourceLocation: e.target.value }))}><option value="">Seleccionar...</option>{(data?.locations ?? []).map(l => <option key={l.id} value={l.id}>{locationName(data, l.id)}</option>)}</select></Field>
+              <Field label="Bodega destino" required><select className={sel} value={trasladoForm.targetLocation} onChange={e => setTrasladoForm(f => ({ ...f, targetLocation: e.target.value }))}><option value="">Seleccionar...</option>{(data?.locations ?? []).map(l => <option key={l.id} value={l.id}>{locationName(data, l.id)}</option>)}</select></Field>
+              <Field label="Cantidad a trasladar" required><input className={inp} type="number" placeholder="0" value={trasladoForm.quantity} onChange={e => setTrasladoForm(f => ({ ...f, quantity: e.target.value }))} /></Field>
+              <Field label="Solicitado por" required><input className={inp} placeholder="Nombre del solicitante" value={trasladoForm.solicitadoPor} onChange={e => setTrasladoForm(f => ({ ...f, solicitadoPor: e.target.value }))} /></Field>
+              <Field label="Responsable destino" required><input className={inp} placeholder="Quien recibirá en destino" value={trasladoForm.responsableDestino} onChange={e => setTrasladoForm(f => ({ ...f, responsableDestino: e.target.value }))} /></Field>
+              <div className="col-span-2"><Field label="Motivo del traslado"><textarea className={inp + ' resize-none h-14'} placeholder="Razón del traslado..." value={trasladoForm.motivo} onChange={e => setTrasladoForm(f => ({ ...f, motivo: e.target.value }))} /></Field></div>
             </div>
-            <DrawerFooter onClose={() => setTrasladoDrawer(false)} />
+            <div className="flex gap-3 mt-8 pt-5 border-t border-gray-100">
+              <button onClick={() => setTrasladoDrawer(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancelar</button>
+              <button onClick={handleCreateTraslado} disabled={trasladoSaving} className="flex-1 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold hover:bg-[#3d5c4e] flex items-center justify-center gap-2 disabled:opacity-50">{trasladoSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Guardar</button>
+            </div>
           </Drawer>
         </>
       )}

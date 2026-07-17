@@ -300,47 +300,45 @@ def _approval_steps_data(vacation):
     return result
 
 
-def _draw_approval_narrative(c, x0, x1, y, vacation):
+def _draw_approval_narrative(c, x0, x1, y, vacation, compact=False):
     """Flujo de aprobación narrado como texto corrido, sin cuadros ni marcadores graficos.
     Cada paso queda claramente separado del siguiente, con su etiqueta de estado en la
     primera línea y los datos de trazabilidad (responsable, fecha, detalle) en líneas
-    propias con sangría, para una lectura ordenada de arriba hacia abajo."""
+    propias con sangría, para una lectura ordenada de arriba hacia abajo.
+
+    ``compact`` reduce tamaños/espaciados cuando hay varios pasos, para garantizar
+    que la constancia siempre quepa en una sola página."""
     w = x1 - x0
     _text(c, x0, y, "Trazabilidad del proceso de aprobación", size=10.5, bold=True, color=TEXT)
-    y -= 22
+    y -= 20 if compact else 22
 
     steps = _approval_steps_data(vacation)
     if not steps:
         _text(c, x0, y, "Aún no se han registrado pasos de aprobación para esta solicitud.", size=9, color=MUTED)
         return y - 14
 
+    label_size = 9 if compact else 9.5
+    detail_size = 8.2 if compact else 8.6
+    row_gap = 13 if compact else 15
+    detail_leading = 10.5 if compact else 11.5
+    block_gap = 12 if compact else 20
     indent = 12
+
     for index, step in enumerate(steps, start=1):
         status_color = _status_color(step["status"])
         # Etapa + estado en una linea (estado con color de estado, resto en texto normal)
-        c.setFont(FONT_BOLD, 9.5)
+        c.setFont(FONT_BOLD, label_size)
         c.setFillColor(TEXT)
         c.drawString(x0, y, f"{index}. {step['label']}:")
-        label_w = stringWidth(f"{index}. {step['label']}: ", FONT_BOLD, 9.5)
-        c.setFont(FONT_BOLD, 9.5)
+        label_w = stringWidth(f"{index}. {step['label']}: ", FONT_BOLD, label_size)
+        c.setFont(FONT_BOLD, label_size)
         c.setFillColor(status_color)
         c.drawString(x0 + label_w, y, step["status"])
-        y -= 15
+        y -= row_gap
 
-        c.setFont(FONT_BOLD, 8)
-        c.setFillColor(MUTED)
-        c.drawString(x0 + indent, y, "RESPONSABLE")
-        c.drawString(x0 + indent + 90, y, "FECHA")
-        y -= 11
-
-        c.setFont(FONT, 8.6)
-        c.setFillColor(TEXT)
-        c.drawString(x0 + indent, y, _fit_text(step["actor"], 85, FONT, 8.6))
-        c.drawString(x0 + indent + 90, y, step["date"] or "Sin fecha")
-        y -= 15
-
-        y = _draw_wrapped_text(c, x0 + indent, y, step["detail"], w - indent, size=8.6, leading=11.5, color=MUTED)
-        y -= 20
+        detail_text = f"Responsable: {step['actor']}  ·  Fecha: {step['date'] or 'sin fecha'}  ·  {step['detail']}"
+        y = _draw_wrapped_text(c, x0 + indent, y, detail_text, w - indent, size=detail_size, leading=detail_leading, color=MUTED)
+        y -= block_gap
 
     return y - 4
 
@@ -391,29 +389,42 @@ def _draw_signatures_section(c, x0, x1, y, vacation):
     return y - 40
 
 
-def render_request_pdf(vacation):
-    buffer = io.BytesIO()
-    c = canvas.Canvas(buffer, pagesize=letter)
-    c.setTitle(f"Solicitud {vacation.request_number or vacation.id}")
-
-    page_w, page_h = letter
-    x0, x1 = 64, page_w - 64
-    cx = (x0 + x1) / 2
+def _render_request_page(c, page_w, page_h, x0, x1, cx, vacation, employee, compact):
+    """Dibuja el documento completo en el canvas dado y devuelve la coordenada y final
+    (antes de las firmas), para poder medir si cupo en una sola página."""
     footer_h = draw_letterhead_footer(c, page_w, x0, x1)
     bottom_limit = footer_h + 26
-
-    employee = vacation.employee
 
     y = _draw_letterhead(c, page_w, page_h, x0, x1)
     y = _draw_title(c, x0, x1, cx, y, vacation, vacation.request_number or str(vacation.id))
     y = _draw_body(c, x0, x1, y, vacation, employee)
-    y = _draw_approval_narrative(c, x0, x1, y, vacation)
+    y = _draw_approval_narrative(c, x0, x1, y, vacation, compact=compact)
     y -= 8
 
-    if y - 100 < bottom_limit:
-        c.showPage()
-        draw_letterhead_footer(c, page_w, x0, x1)
-        y = draw_letterhead_header(c, page_w, page_h, x0, x1)
+    signatures_height = 130
+    fits_one_page = (y - signatures_height) >= bottom_limit
+    return y, bottom_limit, fits_one_page
+
+
+def render_request_pdf(vacation):
+    page_w, page_h = letter
+    x0, x1 = 64, page_w - 64
+    cx = (x0 + x1) / 2
+    employee = vacation.employee
+
+    # Pasada de medición: se dibuja en un lienzo descartable para saber si el
+    # contenido (con espaciado normal) cabe en una sola página. Si no cabe, se
+    # usa espaciado compacto en la trazabilidad para garantizar una sola página.
+    probe_buffer = io.BytesIO()
+    probe_canvas = canvas.Canvas(probe_buffer, pagesize=letter)
+    _, _, fits_normal = _render_request_page(probe_canvas, page_w, page_h, x0, x1, cx, vacation, employee, compact=False)
+    compact = not fits_normal
+
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=letter)
+    c.setTitle(f"Solicitud {vacation.request_number or vacation.id}")
+
+    y, bottom_limit, _ = _render_request_page(c, page_w, page_h, x0, x1, cx, vacation, employee, compact=compact)
 
     _draw_signatures_section(c, x0, x1, y, vacation)
 

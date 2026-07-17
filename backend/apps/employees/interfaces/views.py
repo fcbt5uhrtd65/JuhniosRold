@@ -258,27 +258,28 @@ class EmployeeViewSet(SoftDeleteModelViewSet):
             content_type="application/pdf",
         )
 
-    @action(detail=False, methods=("get",), url_path="me/certificate-pdf")
+    @action(detail=False, methods=("get", "post"), url_path="me/certificate-pdf")
     def my_certificate_pdf(self, request):
         try:
             employee = Employee.objects.select_related("department", "position", "branch").get(user=request.user)
         except Employee.DoesNotExist:
             raise NotFound("Tu usuario no tiene un perfil de empleado asociado.")
 
+        signature_file = request.FILES.get("signature")
         issued_by = get_default_hr_signer()
-        if not issued_by or not issued_by.signature:
+        if not signature_file and not (issued_by and issued_by.signature):
             return Response(
                 {
                     "detail": (
                         "Aún no hay una firma digital registrada en Recursos Humanos. "
-                        "Solicita a un administrador o a RRHH que guarde su firma en su perfil "
-                        "para poder emitir tu certificado laboral firmado."
+                        "Dibuja o sube una firma para generar tu certificado, o solicita a un "
+                        "administrador/RRHH que guarde su firma en su perfil."
                     )
                 },
                 status=status.HTTP_409_CONFLICT,
             )
         try:
-            pdf_buffer = render_employee_certificate_pdf(employee, issued_by=issued_by)
+            pdf_buffer = render_employee_certificate_pdf(employee, issued_by=issued_by, signature_file=signature_file)
         except Exception:
             logger.exception("Fallo al generar tu certificado laboral (empleado %s)", employee.id)
             return Response(

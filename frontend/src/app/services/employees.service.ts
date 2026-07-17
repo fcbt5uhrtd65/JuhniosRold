@@ -757,14 +757,19 @@ export async function exportEmployeeCertificatePdf(id: string, employeeCode?: st
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
-export async function exportMyEmployeeCertificatePdf(employeeCode?: string): Promise<void> {
+export async function exportMyEmployeeCertificatePdf(employeeCode?: string, signatureFile?: File | null): Promise<void> {
   const token = getAccessToken();
   if (!token) {
     throw new Error('Tu sesion expiro. Inicia sesion de nuevo.');
   }
 
+  const formData = new FormData();
+  if (signatureFile) formData.append('signature', signatureFile);
+
   const response = await fetch(`${API_BASE_URL}${EMPLOYEES_PATH}me/certificate-pdf/`, {
+    method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
+    body: formData,
   });
 
   if (!response.ok) {

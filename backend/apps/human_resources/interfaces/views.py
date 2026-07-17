@@ -30,6 +30,7 @@ from ..infrastructure.models import (
     VacationRequestAttachment,
     VacationRequestHistory,
 )
+from ..infrastructure.request_list_pdf import render_request_list_pdf
 from ..infrastructure.request_pdf import render_request_pdf
 from ..infrastructure.serializers import (
     AttendanceSerializer,
@@ -272,6 +273,49 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
                     "by_branch": [{"label": key, "value": value} for key, value in sorted(by_branch.items())],
                 },
             }
+        )
+
+    @action(detail=False, methods=("get",), url_path="export-list-pdf")
+    def export_list_pdf(self, request):
+        """Listado descargable de solicitudes (vacaciones, permisos, horas extras,
+        licencias, incapacidades) con resumen por tipo y trazabilidad de quién
+        resolvió cada una. Admite los mismos filtros que el listado (request_type,
+        status, employee__department, employee__branch) más un rango de fechas."""
+        queryset = self.filter_queryset(self.get_queryset())
+
+        start_from = request.query_params.get("start_date_from")
+        start_to = request.query_params.get("start_date_to")
+        if start_from:
+            queryset = queryset.filter(start_date__gte=start_from)
+        if start_to:
+            queryset = queryset.filter(end_date__lte=start_to)
+
+        queryset = queryset.order_by("employee__first_name", "employee__last_name", "-start_date")
+
+        filters_applied = []
+        request_type = request.query_params.get("request_type")
+        if request_type:
+            filters_applied.append(("Tipo", dict(VacationRequest.RequestType.choices).get(request_type, request_type)))
+        status_param = request.query_params.get("status")
+        if status_param:
+            filters_applied.append(("Estado", dict(VacationRequest.Status.choices).get(status_param, status_param)))
+        if start_from:
+            filters_applied.append(("Desde", start_from))
+        if start_to:
+            filters_applied.append(("Hasta", start_to))
+        department = request.query_params.get("employee__department")
+        if department:
+            filters_applied.append(("Área", department))
+        branch = request.query_params.get("employee__branch")
+        if branch:
+            filters_applied.append(("Sede", branch))
+
+        pdf_buffer = render_request_list_pdf(queryset, filters_applied=filters_applied)
+        return FileResponse(
+            pdf_buffer,
+            as_attachment=True,
+            filename=f"solicitudes-rrhh-{timezone.localdate():%Y%m%d}.pdf",
+            content_type="application/pdf",
         )
 
 
