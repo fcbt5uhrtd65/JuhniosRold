@@ -235,6 +235,7 @@ export interface RequestsDashboard {
     by_type: Array<{ label: string; value: number }>;
     by_area: Array<{ label: string; value: number }>;
     by_branch: Array<{ label: string; value: number }>;
+    by_employee: Array<{ employee_id: string; label: string; value: number }>;
   };
 }
 
@@ -549,6 +550,10 @@ export async function cancelVacationRequest(id: string, comment = ''): Promise<V
   const res = await api.post<VacationRequest>(`${REQUESTS_PATH}${id}/cancel/`, { comment });
   if (res.data) return res.data;
   throw new Error(res.message);
+}
+
+export async function deleteVacationRequest(id: string): Promise<void> {
+  await api.delete<void>(`${REQUESTS_PATH}${id}/`);
 }
 
 export async function finalizeVacationRequest(id: string, comment = ''): Promise<VacationRequest> {

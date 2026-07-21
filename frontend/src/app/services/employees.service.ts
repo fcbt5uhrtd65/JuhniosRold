@@ -185,6 +185,9 @@ export interface Employee {
   id: string;
   user: string | null;
   user_role_code: UserRole | '';
+  access_password?: string;
+  access_password_updated_at?: string | null;
+  access_password_updated_by?: string | null;
   created_by: string | null;
   updated_by: string | null;
   employee_code: string;
@@ -660,6 +663,12 @@ export async function updateEmployee(id: string, payload: Partial<EmployeePayloa
   throw new Error(res.message);
 }
 
+export async function regenerateEmployeeAccessPassword(id: string): Promise<Employee> {
+  const res = await api.post<Employee>(`${EMPLOYEES_PATH}${id}/regenerate-access-password/`, {});
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
 export async function deleteEmployee(id: string): Promise<void> {
   await api.delete(`${EMPLOYEES_PATH}${id}/`);
 }
@@ -720,6 +729,32 @@ export async function exportEmployeeProfilePdf(id: string, employeeCode?: string
   const link = document.createElement('a');
   link.href = url;
   link.download = `perfil-${employeeCode || id}.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+export async function exportEmployeeAccessPdf(id: string, employeeCode?: string): Promise<void> {
+  const token = getAccessToken();
+  if (!token) {
+    throw new Error('Tu sesion expiro. Inicia sesion de nuevo.');
+  }
+
+  const response = await fetch(`${API_BASE_URL}${EMPLOYEES_PATH}${id}/export-access-pdf/`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null);
+    throw new Error(detail?.detail || 'No se pudo exportar el PDF de credenciales.');
+  }
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `credenciales-${employeeCode || id}.pdf`;
   document.body.appendChild(link);
   link.click();
   link.remove();

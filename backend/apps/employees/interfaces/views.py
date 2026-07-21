@@ -2,6 +2,8 @@ import logging
 
 from apps.identity.interfaces.permissions import HasComponentAccess
 from django.http import FileResponse
+from django.utils import timezone
+from django.utils.crypto import get_random_string
 from shared.interfaces.viewsets import SoftDeleteModelViewSet
 from django.db.models import Count
 from rest_framework import status
@@ -39,6 +41,7 @@ from ..infrastructure.serializers import (
 )
 from ..infrastructure.employee_pdf import render_employees_pdf
 from ..infrastructure.employee_profile_pdf import render_employee_profile_pdf
+from ..infrastructure.employee_access_pdf import render_employee_access_pdf
 from ..infrastructure.employee_certificate_pdf import get_default_hr_signer, render_employee_certificate_pdf
 from ..infrastructure.branch_pdf import render_branches_pdf
 from ..infrastructure.catalog_pdf import render_departments_pdf, render_positions_pdf
@@ -150,8 +153,10 @@ class EmployeeViewSet(SoftDeleteModelViewSet):
             "position",
             "manager",
             "branch",
+            "user",
             "created_by",
             "updated_by",
+            "access_password_updated_by",
         )
         .prefetch_related("contracts", "working_days")
     )
@@ -166,9 +171,19 @@ class EmployeeViewSet(SoftDeleteModelViewSet):
         if self.action in {"me", "my_certificate_pdf"}:
             return (IsAuthenticated(),)
         self.required_component_action = (
-            "view" if self.action in {"list", "retrieve", "export_pdf", "export_profile_pdf", "export_certificate_pdf"} else "edit"
+            "view" if self.action in {"list", "retrieve", "export_pdf", "export_profile_pdf", "export_certificate_pdf", "export_access_pdf"} else "edit"
         )
         return super().get_permissions()
+
+    def _can_manage_access_passwords(self, request):
+        role_code = getattr(request.user, "role_code", "")
+        return bool(getattr(request.user, "has_full_access", False) or role_code in {"ADMIN", "RRHH"})
+
+    @staticmethod
+    def _generate_access_password():
+        digits = get_random_string(4, allowed_chars="0123456789")
+        letters = get_random_string(4, allowed_chars="ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
+        return f"JR-{digits}-{letters}"
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user, updated_by=self.request.user)
@@ -229,6 +244,56 @@ class EmployeeViewSet(SoftDeleteModelViewSet):
             pdf_buffer,
             as_attachment=True,
             filename=f"perfil-{safe_code}.pdf",
+            content_type="application/pdf",
+        )
+
+    @action(detail=True, methods=("post",), url_path="regenerate-access-password")
+    def regenerate_access_password(self, request, pk=None):
+        if not self._can_manage_access_passwords(request):
+            return Response({"detail": "Solo Admin y RRHH pueden regenerar claves de empleados."}, status=status.HTTP_403_FORBIDDEN)
+
+        employee = self.get_object()
+        if not employee.user_id:
+            return Response(
+                {"detail": "Este empleado aun no tiene un usuario del sistema asignado."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        password = self._generate_access_password()
+        employee.user.set_password(password)
+        employee.user.save(update_fields=("password",))
+        employee.access_password = password
+        employee.access_password_updated_at = timezone.now()
+        employee.access_password_updated_by = request.user
+        employee.save(update_fields=("access_password", "access_password_updated_at", "access_password_updated_by", "updated_at"))
+
+        serializer = self.get_serializer(employee)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=("get",), url_path="export-access-pdf")
+    def export_access_pdf(self, request, pk=None):
+        if not self._can_manage_access_passwords(request):
+            return Response({"detail": "Solo Admin y RRHH pueden descargar credenciales."}, status=status.HTTP_403_FORBIDDEN)
+
+        employee = self.get_object()
+        if not employee.user_id or not employee.access_password:
+            return Response(
+                {"detail": "Este empleado no tiene credenciales completas para generar el PDF."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        try:
+            pdf_buffer = render_employee_access_pdf(employee, issued_by=request.user)
+        except Exception:
+            logger.exception("Fallo al generar el PDF de credenciales para el empleado %s", employee.id)
+            return Response(
+                {"detail": "No se pudo generar el PDF de credenciales."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        safe_code = (employee.employee_code or str(employee.id)).replace(" ", "-")
+        return FileResponse(
+            pdf_buffer,
+            as_attachment=True,
+            filename=f"credenciales-{safe_code}.pdf",
             content_type="application/pdf",
         )
 

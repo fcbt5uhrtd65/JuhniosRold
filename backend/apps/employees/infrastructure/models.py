@@ -185,6 +185,15 @@ class Employee(BaseModel):
         blank=True,
         related_name="updated_employee_profiles",
     )
+    access_password = models.CharField(max_length=128, blank=True)
+    access_password_updated_at = models.DateTimeField(null=True, blank=True)
+    access_password_updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="updated_employee_access_passwords",
+    )
     employee_code = models.CharField(max_length=30, unique=True, blank=True)
     profile_status = models.CharField(
         max_length=20,

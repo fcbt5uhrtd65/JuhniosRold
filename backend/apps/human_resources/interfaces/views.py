@@ -1,6 +1,5 @@
-from collections import defaultdict
-
-from django.db.models import Sum
+from django.db.models import Count, Sum
+from django.db.models.functions import TruncMonth
 from django.http import FileResponse
 from django.shortcuts import get_object_or_404
 from rest_framework import status
@@ -89,6 +88,17 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
             return (IsAuthenticated(),)
         self.required_component_action = "view" if self.action in {"list", "retrieve", "dashboard"} else "edit"
         return super().get_permissions()
+
+    def destroy(self, request, *args, **kwargs):
+        # Borrar solicitudes queda reservado al Administrador: RRHH puede gestionar
+        # (crear/aprobar/rechazar) pero no eliminar del historial, para no perder
+        # trazabilidad por error operativo del día a día.
+        if not getattr(request.user, "has_full_access", False):
+            return Response(
+                {"detail": "Solo un Administrador puede eliminar solicitudes."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return super().destroy(request, *args, **kwargs)
 
     def _ensure_approval_flow(self, vacation, requester=None):
         manager_user = getattr(getattr(vacation.employee, "manager", None), "user", None)
@@ -243,15 +253,38 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
         expired = queryset.filter(due_date__lt=today).exclude(
             status__in=(VacationRequest.Status.APPROVED, VacationRequest.Status.REJECTED)
         )
-        by_month = defaultdict(int)
-        by_type = defaultdict(int)
-        by_area = defaultdict(int)
-        by_branch = defaultdict(int)
-        for item in queryset:
-            by_month[item.created_at.strftime("%Y-%m")] += 1
-            by_type[item.request_type] += 1
-            by_area[item.employee.department.name if item.employee.department_id else "Sin área"] += 1
-            by_branch[item.employee.branch.name if item.employee.branch_id else "Sin sede"] += 1
+
+        # Agregación hecha en SQL (values().annotate(Count(...))) en vez de iterar el
+        # queryset completo en Python — escala con el volumen de solicitudes históricas.
+        by_month_qs = (
+            queryset.annotate(month=TruncMonth("created_at"))
+            .values("month")
+            .annotate(value=Count("id"))
+            .order_by("month")
+        )
+        by_type_qs = queryset.values("request_type").annotate(value=Count("id")).order_by("request_type")
+        by_area_qs = (
+            queryset.values("employee__department__name")
+            .annotate(value=Count("id"))
+            .order_by("-value")
+        )
+        by_branch_qs = (
+            queryset.values("employee__branch__name")
+            .annotate(value=Count("id"))
+            .order_by("-value")
+        )
+        by_employee_qs = (
+            queryset.values(
+                "employee__id",
+                "employee__first_name",
+                "employee__last_name",
+                "employee__employee_code",
+            )
+            .annotate(value=Count("id"))
+            .order_by("-value")[:20]
+        )
+
+        request_type_labels = dict(VacationRequest.RequestType.choices)
 
         return Response(
             {
@@ -267,10 +300,33 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
                     status__in=(VacationRequest.Status.PENDING, VacationRequest.Status.IN_REVIEW),
                 ).aggregate(total=Sum("days_count"))["total"] or 0,
                 "charts": {
-                    "by_month": [{"label": key, "value": value} for key, value in sorted(by_month.items())],
-                    "by_type": [{"label": key, "value": value} for key, value in sorted(by_type.items())],
-                    "by_area": [{"label": key, "value": value} for key, value in sorted(by_area.items())],
-                    "by_branch": [{"label": key, "value": value} for key, value in sorted(by_branch.items())],
+                    "by_month": [
+                        {"label": row["month"].strftime("%Y-%m"), "value": row["value"]}
+                        for row in by_month_qs if row["month"]
+                    ],
+                    "by_type": [
+                        {"label": request_type_labels.get(row["request_type"], row["request_type"]), "value": row["value"]}
+                        for row in by_type_qs
+                    ],
+                    "by_area": [
+                        {"label": row["employee__department__name"] or "Sin área", "value": row["value"]}
+                        for row in by_area_qs
+                    ],
+                    "by_branch": [
+                        {"label": row["employee__branch__name"] or "Sin sede", "value": row["value"]}
+                        for row in by_branch_qs
+                    ],
+                    "by_employee": [
+                        {
+                            "employee_id": str(row["employee__id"]),
+                            "label": (
+                                f"{row['employee__first_name']} {row['employee__last_name']}".strip()
+                                or row["employee__employee_code"]
+                            ),
+                            "value": row["value"],
+                        }
+                        for row in by_employee_qs
+                    ],
                 },
             }
         )

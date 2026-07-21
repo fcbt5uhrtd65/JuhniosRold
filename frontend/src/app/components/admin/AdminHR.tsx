@@ -10,6 +10,7 @@ import {
   Cake,
   Check,
   Clock3,
+  Copy,
   Download,
   Edit2,
   FileDown,
@@ -27,6 +28,8 @@ import {
   Save,
   ShieldCheck,
   Eye,
+  EyeOff,
+  RefreshCcw,
   Trash2,
   UserPlus,
   Users,
@@ -44,6 +47,7 @@ import { CalendarChip, CalendarMoreChip, CalendarMonthNav, MonthCalendar, toDate
 import { Badge, type BadgeColor, Card, Table, Th, Td, Modal, EmptyState, LoadingState, inputCls, selectCls, ActionsMenu, actionsCellCls } from './AdminUI';
 import { ComboWithOtherInput } from './ComboWithOtherInput';
 import { useToast } from '../../contexts/ToastContext';
+import { useAdmin } from '../../contexts/AdminContext';
 import { ApiError } from '../../services/api';
 import { getRoleLabel } from '../../utils/permissions';
 import {
@@ -59,6 +63,7 @@ import {
   deleteEmployee,
   createBranch,
   deleteBranch,
+  exportEmployeeAccessPdf,
   exportEmployeeProfilePdf,
   exportEmployeeCertificatePdf,
   exportBranchesPdf,
@@ -71,6 +76,7 @@ import {
   getPositions,
   getWorkDays,
   createEmployee,
+  regenerateEmployeeAccessPassword,
   updateBranch,
   updateEmployee,
   type Branch,
@@ -93,6 +99,7 @@ import {
   createEmployeeDocument,
   updateEmployeeDocument,
   deleteEmployeeDocument,
+  deleteVacationRequest,
   getEmployeeDocuments,
   getHRNotifications,
   getRequestsDashboard,
@@ -290,6 +297,47 @@ interface BranchFormState {
 }
 
 const INTERNAL_EMPLOYEE_ROLES: UserRole[] = ['ADMIN', 'RRHH', 'EMPLEADO', 'PEDIDOS', 'SELLER', 'DISTRIBUTOR'];
+const ACCESS_EMAIL_DOMAIN = 'juhniosrold.com';
+
+function randomFrom(chars: string, length: number): string {
+  const bytes = new Uint32Array(length);
+  window.crypto.getRandomValues(bytes);
+  return Array.from(bytes, (value) => chars[value % chars.length]).join('');
+}
+
+function generateAccessPassword(): string {
+  return `JR-${randomFrom('0123456789', 4)}-${randomFrom('ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz', 4)}`;
+}
+
+function normalizeAccessPart(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '.')
+    .replace(/^\.+|\.+$/g, '');
+}
+
+function generateAccessEmail(firstName: string, lastName: string, employees: Employee[], editingEmployeeId?: string): string {
+  const first = normalizeAccessPart(firstName).split('.')[0] || 'empleado';
+  const last = normalizeAccessPart(lastName).split('.')[0] || 'juhnios';
+  const base = `${first}.${last}`;
+  const used = new Set(
+    employees
+      .filter((employee) => employee.id !== editingEmployeeId)
+      .flatMap((employee) => [employee.email, employee.user ? employee.email : ''])
+      .map((email) => email.toLowerCase())
+      .filter(Boolean),
+  );
+
+  let candidate = `${base}@${ACCESS_EMAIL_DOMAIN}`;
+  let suffix = 2;
+  while (used.has(candidate)) {
+    candidate = `${base}${suffix}@${ACCESS_EMAIL_DOMAIN}`;
+    suffix += 1;
+  }
+  return candidate;
+}
 
 const EMPTY_EMPLOYEE_FORM: EmployeeFormState = {
   user: '',
@@ -1125,6 +1173,9 @@ function ResultsCount({ count, label }: { count: number; label: string }) {
 
 export function AdminHR() {
   const toast = useToast();
+  const { currentUser } = useAdmin();
+  const isAdmin = currentUser?.rol === 'ADMIN';
+  const canManageAccessCredentials = currentUser?.rol === 'ADMIN' || currentUser?.rol === 'RRHH';
   const [activeTab, setActiveTab] = useState<HRTab>('employees');
   const [employeeModalTab, setEmployeeModalTab] = useState<EmployeeModalTab>('personal');
   const [searchQuery, setSearchQuery] = useState('');
@@ -1151,6 +1202,14 @@ export function AdminHR() {
   const [employeePageSize, setEmployeePageSize] = useState(DEFAULT_PAGE_SIZE);
   const [vacationPage, setVacationPage] = useState(1);
   const [vacationPageSize, setVacationPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [vacationSearch, setVacationSearch] = useState('');
+  const [vacationFilterDepartment, setVacationFilterDepartment] = useState<string>('all');
+  const [vacationFilterBranch, setVacationFilterBranch] = useState<string>('all');
+  const [vacationFilterStatus, setVacationFilterStatus] = useState<string>('all');
+  const [vacationFilterEmployee, setVacationFilterEmployee] = useState<string>('all');
+  const [vacationTotal, setVacationTotal] = useState(0);
+  const [vacationLoading, setVacationLoading] = useState(false);
+  const [deletingVacationId, setDeletingVacationId] = useState<string | null>(null);
   const [employeeSort, setEmployeeSort] = useState<'name' | 'department' | 'status' | 'profile'>('name');
   const [isLoading, setIsLoading] = useState(true);
   const [savingEmployee, setSavingEmployee] = useState(false);
@@ -1161,6 +1220,9 @@ export function AdminHR() {
   const [deletingEmployeeId, setDeletingEmployeeId] = useState<string | null>(null);
   const [exportingProfileId, setExportingProfileId] = useState<string | null>(null);
   const [exportingCertificateId, setExportingCertificateId] = useState<string | null>(null);
+  const [exportingAccessId, setExportingAccessId] = useState<string | null>(null);
+  const [regeneratingAccessId, setRegeneratingAccessId] = useState<string | null>(null);
+  const [showAccessPassword, setShowAccessPassword] = useState(false);
   const [showCertificateModal, setShowCertificateModal] = useState(false);
   const [certificateEmployee, setCertificateEmployee] = useState<Employee | null>(null);
   const [certificateSignatureFile, setCertificateSignatureFile] = useState<File | null>(null);
@@ -1224,15 +1286,14 @@ export function AdminHR() {
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [departmentsRes, positionsRes, branchesRes, workDaysRes, employeesRes, vacationsRes, notificationsRes, dashboardRes] = await Promise.allSettled([
+      const [departmentsRes, positionsRes, branchesRes, workDaysRes, employeesRes, vacationsRes, notificationsRes] = await Promise.allSettled([
         getDepartments({ limit: 200 }),
         getPositions({ limit: 300 }),
         getBranches({ limit: 200 }),
         getWorkDays({ limit: 20 }),
         getEmployees({ limit: 200 }),
-        getVacationRequests({ limit: 200 }),
+        getVacationRequests({ limit: 500 }),
         getHRNotifications({ limit: 200, status: 'UNREAD' }),
-        getRequestsDashboard(),
       ]);
 
       if (departmentsRes.status === 'fulfilled') setDepartments(departmentsRes.value.data);
@@ -1242,7 +1303,6 @@ export function AdminHR() {
       if (employeesRes.status === 'fulfilled') setEmployees(employeesRes.value.data);
       if (vacationsRes.status === 'fulfilled') setVacationRequests(vacationsRes.value.data);
       if (notificationsRes.status === 'fulfilled') setNotifications(notificationsRes.value.data);
-      if (dashboardRes.status === 'fulfilled') setRequestsDashboard(dashboardRes.value);
     } catch (error) {
       console.error(error);
       toast.error('No se pudo cargar la información de RRHH');
@@ -1251,9 +1311,30 @@ export function AdminHR() {
     }
   }, [toast]);
 
+  const loadRequestsDashboard = useCallback(async () => {
+    try {
+      const dashboard = await getRequestsDashboard({
+        search: vacationSearch.trim() || undefined,
+        department: vacationFilterDepartment === 'all' ? undefined : vacationFilterDepartment,
+        branch: vacationFilterBranch === 'all' ? undefined : vacationFilterBranch,
+        status: vacationFilterStatus === 'all' ? undefined : (vacationFilterStatus as VacationRequestStatus),
+        employee: vacationFilterEmployee === 'all' ? undefined : vacationFilterEmployee,
+      });
+      setRequestsDashboard(dashboard);
+    } catch (error) {
+      console.error(error);
+    }
+  }, [vacationSearch, vacationFilterDepartment, vacationFilterBranch, vacationFilterStatus, vacationFilterEmployee]);
+
   useEffect(() => {
     void loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    if (activeTab !== 'vacations') return;
+    const handle = setTimeout(() => { void loadRequestsDashboard(); }, vacationSearch ? 350 : 0);
+    return () => clearTimeout(handle);
+  }, [activeTab, loadRequestsDashboard, vacationSearch]);
 
   useEffect(() => {
     setBranchPage(1);
@@ -1401,32 +1482,44 @@ export function AdminHR() {
     return () => URL.revokeObjectURL(objectUrl);
   }, [employeeForm.photo]);
 
-  const filteredVacationRequests = useMemo(() => {
-    const query = searchQuery.toLowerCase().trim();
-    return vacationRequests.filter((request) => {
-      const employee = employeeById.get(request.employee);
-      const matchesSearch =
-        !query ||
-        employee?.first_name.toLowerCase().includes(query) ||
-        employee?.last_name.toLowerCase().includes(query) ||
-        employee?.employee_code.toLowerCase().includes(query) ||
-        request.reason.toLowerCase().includes(query);
-      const matchesDepartment = filterDepartment === 'all' || employee?.department === filterDepartment;
-      const matchesStatus = filterStatus === 'all' || request.status === filterStatus;
-      return matchesSearch && matchesDepartment && matchesStatus;
-    });
-  }, [employeeById, filterDepartment, filterStatus, searchQuery, vacationRequests]);
+  const [vacationRows, setVacationRows] = useState<VacationRequest[]>([]);
 
-  const vacationTotalPages = Math.max(1, Math.ceil(filteredVacationRequests.length / vacationPageSize));
+  const vacationTotalPages = Math.max(1, Math.ceil(vacationTotal / vacationPageSize));
 
-  const paginatedVacationRequests = useMemo(() => {
-    const start = (vacationPage - 1) * vacationPageSize;
-    return filteredVacationRequests.slice(start, start + vacationPageSize);
-  }, [vacationPage, vacationPageSize, filteredVacationRequests]);
+  const loadVacationRows = useCallback(async () => {
+    setVacationLoading(true);
+    try {
+      const res = await getVacationRequests({
+        page: vacationPage,
+        limit: vacationPageSize,
+        search: vacationSearch.trim() || undefined,
+        department: vacationFilterDepartment === 'all' ? undefined : vacationFilterDepartment,
+        branch: vacationFilterBranch === 'all' ? undefined : vacationFilterBranch,
+        status: vacationFilterStatus === 'all' ? undefined : (vacationFilterStatus as VacationRequestStatus),
+        employee: vacationFilterEmployee === 'all' ? undefined : vacationFilterEmployee,
+      });
+      setVacationRows(res.data);
+      setVacationTotal(res.total);
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo cargar el listado de solicitudes');
+    } finally {
+      setVacationLoading(false);
+    }
+  }, [vacationPage, vacationPageSize, vacationSearch, vacationFilterDepartment, vacationFilterBranch, vacationFilterStatus, vacationFilterEmployee, toast]);
+
+  useEffect(() => {
+    if (activeTab !== 'vacations') return;
+    const handle = setTimeout(() => { void loadVacationRows(); }, vacationSearch ? 350 : 0);
+    return () => clearTimeout(handle);
+  }, [activeTab, loadVacationRows, vacationSearch]);
 
   useEffect(() => {
     setVacationPage(1);
-  }, [searchQuery, filterDepartment, filterStatus, vacationPageSize]);
+  }, [vacationSearch, vacationFilterDepartment, vacationFilterBranch, vacationFilterStatus, vacationFilterEmployee, vacationPageSize]);
+
+  const paginatedVacationRequests = vacationRows;
+  const filteredVacationRequestsCount = vacationTotal;
 
   const REQUEST_TYPE_CALENDAR_COLOR: Record<VacationRequestType, CalendarChipColor> = {
     VACATION: 'green',
@@ -1537,6 +1630,7 @@ export function AdminHR() {
     setSalaryHistory([]);
     setPositionHistory([]);
     setEmployeeModalTab('personal');
+    setShowAccessPassword(false);
     setShowEmployeeModal(true);
   };
 
@@ -1553,6 +1647,7 @@ export function AdminHR() {
     });
     setDocumentForm(EMPTY_DOCUMENT_FORM);
     setEmployeeModalTab('personal');
+    setShowAccessPassword(false);
     setShowEmployeeModal(true);
     void loadEmployeeExtras(employee.id);
   };
@@ -1691,6 +1786,7 @@ export function AdminHR() {
     setEmployeeLocation(EMPTY_LOCATION);
     setDocumentForm(EMPTY_DOCUMENT_FORM);
     setEditingDocumentId(null);
+    setShowAccessPassword(false);
   };
 
   const resetBranchModal = () => {
@@ -1861,6 +1957,65 @@ export function AdminHR() {
     }
   };
 
+  const handleGenerateAccessCredentials = () => {
+    if (!canManageAccessCredentials) return;
+    const email = employeeForm.user_email.trim()
+      || generateAccessEmail(employeeForm.first_name, employeeForm.last_name, employees, editingEmployee?.id);
+    const password = generateAccessPassword();
+    setEmployeeForm((current) => ({
+      ...current,
+      user_role: current.user_role || 'EMPLEADO',
+      user_email: email,
+      user_email_confirm: email,
+      user_password: password,
+      user_password_confirm: password,
+    }));
+    setShowAccessPassword(true);
+    toast.success('Credenciales generadas');
+  };
+
+  const handleCopyAccessPassword = async (password: string) => {
+    if (!password) return;
+    try {
+      await navigator.clipboard.writeText(password);
+      toast.success('Clave copiada');
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo copiar la clave');
+    }
+  };
+
+  const handleRegenerateAccessPassword = async () => {
+    if (!editingEmployee || !canManageAccessCredentials) return;
+    setRegeneratingAccessId(editingEmployee.id);
+    try {
+      const updated = await regenerateEmployeeAccessPassword(editingEmployee.id);
+      setEditingEmployee(updated);
+      setEmployeeForm(mapEmployeeToForm(updated));
+      setShowAccessPassword(true);
+      await loadData();
+      toast.success('Clave regenerada');
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo regenerar la clave');
+    } finally {
+      setRegeneratingAccessId(null);
+    }
+  };
+
+  const handleEmployeeAccessPdfExport = async (employee: Employee) => {
+    setExportingAccessId(employee.id);
+    try {
+      await exportEmployeeAccessPdf(employee.id, employee.employee_code);
+      toast.success('PDF de credenciales generado');
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo exportar el PDF de credenciales');
+    } finally {
+      setExportingAccessId(null);
+    }
+  };
+
   const openCertificateModal = (employee: Employee) => {
     setCertificateEmployee(employee);
     setCertificateSignatureFile(null);
@@ -1964,6 +2119,23 @@ export function AdminHR() {
     setShowApproveModal(true);
   };
 
+  const handleDeleteVacationRequest = async (request: VacationRequest) => {
+    const employee = employeeById.get(request.employee);
+    const label = employee ? getEmployeeName(employee) : request.employee;
+    if (!window.confirm(`¿Eliminar la solicitud de ${label} (${getRequestTypeLabel(request.request_type)})? Esta acción no se puede deshacer.`)) return;
+    setDeletingVacationId(request.id);
+    try {
+      await deleteVacationRequest(request.id);
+      toast.info('Solicitud eliminada');
+      await Promise.all([loadVacationRows(), loadRequestsDashboard(), loadData()]);
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo eliminar la solicitud');
+    } finally {
+      setDeletingVacationId(null);
+    }
+  };
+
   const closeRejectModal = () => {
     setShowRejectModal(false);
     setRejectingRequest(null);
@@ -1983,7 +2155,7 @@ export function AdminHR() {
     try {
       await approveVacationRequest(approvingRequest.id, '', decisionSignatureFile);
       toast.success('Solicitud aprobada');
-      await loadData();
+      await Promise.all([loadVacationRows(), loadRequestsDashboard(), loadData()]);
       closeApproveModal();
     } catch (error) {
       console.error(error);
@@ -2003,7 +2175,7 @@ export function AdminHR() {
     try {
       await rejectVacationRequest(rejectingRequest.id, rejectReason.trim(), decisionSignatureFile);
       toast.info('Solicitud rechazada');
-      await loadData();
+      await Promise.all([loadVacationRows(), loadRequestsDashboard(), loadData()]);
       closeRejectModal();
     } catch (error) {
       console.error(error);
@@ -2393,20 +2565,105 @@ export function AdminHR() {
     </div>
   );
 
-  const renderAccessTab = () => (
-    <div className="space-y-4">
-      <div className="grid sm:grid-cols-2 gap-4">
-        <SelectInput label="Rol dentro del sistema" value={employeeForm.user_role} onChange={(value) => setFormField('user_role', value as UserRole | '')} options={INTERNAL_EMPLOYEE_ROLES.map((role) => ({ value: role, label: getRoleLabel(role) }))} emptyLabel="Sin acceso al sistema" />
-        <TextInput label="Correo" type="email" value={employeeForm.user_email} onChange={(value) => setFormField('user_email', value)} />
-        <TextInput label="Confirmar correo" type="email" value={employeeForm.user_email_confirm} onChange={(value) => setFormField('user_email_confirm', value)} />
-        <TextInput label="Contraseña" type="password" value={employeeForm.user_password} onChange={(value) => setFormField('user_password', value)} placeholder={editingEmployee?.user ? 'Dejar vacío para conservar' : 'Mínimo 8 caracteres'} />
-        <TextInput label="Confirmar contraseña" type="password" value={employeeForm.user_password_confirm} onChange={(value) => setFormField('user_password_confirm', value)} />
+  const renderAccessTab = () => {
+    const visibleAccessPassword = employeeForm.user_password || editingEmployee?.access_password || '';
+    const hasSavedCredentials = Boolean(editingEmployee?.user && editingEmployee?.access_password);
+
+    return (
+      <div className="space-y-4">
+        {!canManageAccessCredentials && (
+          <div className="p-4 border border-gray-200 bg-gray-50 rounded-xl text-xs text-gray-600">
+            Solo Admin y RRHH pueden ver o generar credenciales de acceso.
+          </div>
+        )}
+
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 p-4 border border-[#d9e5df] bg-[#f5faf7] rounded-xl">
+          <div>
+            <div className="text-sm font-semibold text-gray-900">Credenciales empresariales</div>
+            <div className="text-xs text-gray-500 mt-1">Usuario tipo correo corporativo, clave visible para Admin/RRHH y PDF de entrega.</div>
+          </div>
+          <button
+            type="button"
+            onClick={handleGenerateAccessCredentials}
+            disabled={!canManageAccessCredentials}
+            className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-[#2a4038] text-white text-xs font-semibold hover:bg-[#3d5c4e] disabled:opacity-50"
+          >
+            <KeyRound size={14} />
+            Generar credenciales
+          </button>
+        </div>
+
+        <div className="grid sm:grid-cols-2 gap-4">
+          <SelectInput label="Rol dentro del sistema" value={employeeForm.user_role} onChange={(value) => setFormField('user_role', value as UserRole | '')} options={INTERNAL_EMPLOYEE_ROLES.map((role) => ({ value: role, label: getRoleLabel(role) }))} emptyLabel="Sin acceso al sistema" disabled={!canManageAccessCredentials} />
+          <TextInput label="Usuario / correo" type="email" value={employeeForm.user_email} onChange={(value) => {
+            const email = value.trim().toLowerCase();
+            setEmployeeForm((current) => ({ ...current, user_email: email, user_email_confirm: email }));
+          }} disabled={!canManageAccessCredentials} />
+          <label className="block sm:col-span-2">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Clave</span>
+            <div className="flex gap-2">
+              <input
+                type={showAccessPassword ? 'text' : 'password'}
+                value={visibleAccessPassword}
+                onChange={(event) => {
+                  const password = event.target.value;
+                  setEmployeeForm((current) => ({ ...current, user_password: password, user_password_confirm: password }));
+                }}
+                className={inputCls}
+                placeholder={editingEmployee?.user ? 'Conserva la clave actual si queda vacía' : 'Genera una clave segura'}
+                disabled={!canManageAccessCredentials}
+              />
+              <button
+                type="button"
+                onClick={() => setShowAccessPassword((current) => !current)}
+                disabled={!visibleAccessPassword}
+                className="h-10 w-10 shrink-0 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 inline-flex items-center justify-center"
+                title={showAccessPassword ? 'Ocultar clave' : 'Ver clave'}
+              >
+                {showAccessPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleCopyAccessPassword(visibleAccessPassword)}
+                disabled={!visibleAccessPassword}
+                className="h-10 w-10 shrink-0 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 inline-flex items-center justify-center"
+                title="Copiar clave"
+              >
+                <Copy size={16} />
+              </button>
+            </div>
+          </label>
+        </div>
+
+        {editingEmployee && (
+          <div className="flex flex-col sm:flex-row gap-2">
+            <button
+              type="button"
+              onClick={() => void handleRegenerateAccessPassword()}
+              disabled={!canManageAccessCredentials || !editingEmployee.user || regeneratingAccessId === editingEmployee.id}
+              className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              {regeneratingAccessId === editingEmployee.id ? <Loader2 size={14} className="animate-spin" /> : <RefreshCcw size={14} />}
+              Regenerar clave
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleEmployeeAccessPdfExport(editingEmployee)}
+              disabled={!hasSavedCredentials || exportingAccessId === editingEmployee.id}
+              className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              {exportingAccessId === editingEmployee.id ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
+              Descargar PDF de credenciales
+            </button>
+          </div>
+        )}
+
+        <div className="p-4 border border-amber-200 bg-amber-50 rounded-xl text-xs text-amber-800">
+          Guarda el empleado despues de generar credenciales nuevas. El PDF se habilita cuando el empleado ya tiene usuario y clave guardados.
+        </div>
       </div>
-      <div className="p-4 border border-amber-200 bg-amber-50 rounded-xl text-xs text-amber-800">
-        Si asignas un rol por primera vez, correo y contraseña deben coincidir. En edición, dejar contraseña vacía conserva la actual.
-      </div>
-    </div>
-  );
+    );
+  };
 
   const renderHistoryTab = () => (
     <div className="space-y-5">
@@ -2729,7 +2986,7 @@ export function AdminHR() {
         </div>
 
         <div className="flex-1 min-w-0 space-y-4 px-4 sm:px-6 md:px-8 lg:px-0 pt-4 lg:pt-0">
-          {activeTab !== 'calendar' && (
+          {activeTab !== 'calendar' && activeTab !== 'vacations' && (
             <SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Buscar por nombre, apellido, cédula, cargo, área, sede o correo..." className="w-full" />
           )}
           {activeTab === 'employees' ? (
@@ -2792,15 +3049,48 @@ export function AdminHR() {
                 )}
               </div>
             </div>
-          ) : (
-            <div className="flex flex-col sm:flex-row gap-3">
-              {activeTab === 'vacations' && (
-                <select value={filterDepartment} onChange={(event) => setFilterDepartment(event.target.value)} className={selectCls}>
-                  <option value="all">Todos los departamentos</option>
+          ) : activeTab === 'vacations' ? (
+            <div className="space-y-3 rounded-xl border border-gray-100 bg-white p-3 shadow-sm">
+              <SearchBar value={vacationSearch} onChange={setVacationSearch} placeholder="Buscar por empleado, código, motivo o N° de solicitud..." className="w-full" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5">
+                <select value={vacationFilterEmployee} onChange={(event) => setVacationFilterEmployee(event.target.value)} className={`${selectCls} w-full`}>
+                  <option value="all">Todos los empleados</option>
+                  {employees.map((employee) => <option key={employee.id} value={employee.id}>{getEmployeeName(employee)}</option>)}
+                </select>
+                <select value={vacationFilterDepartment} onChange={(event) => setVacationFilterDepartment(event.target.value)} className={`${selectCls} w-full`}>
+                  <option value="all">Todas las áreas</option>
                   {departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
                 </select>
+                <select value={vacationFilterBranch} onChange={(event) => setVacationFilterBranch(event.target.value)} className={`${selectCls} w-full`}>
+                  <option value="all">Todas las sedes</option>
+                  {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+                </select>
+                <select value={vacationFilterStatus} onChange={(event) => setVacationFilterStatus(event.target.value)} className={`${selectCls} w-full`}>
+                  {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              </div>
+              {(vacationSearch || vacationFilterEmployee !== 'all' || vacationFilterDepartment !== 'all' || vacationFilterBranch !== 'all' || vacationFilterStatus !== 'all') && (
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setVacationSearch('');
+                      setVacationFilterEmployee('all');
+                      setVacationFilterDepartment('all');
+                      setVacationFilterBranch('all');
+                      setVacationFilterStatus('all');
+                    }}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-800"
+                  >
+                    <X size={12} />
+                    Limpiar filtros
+                  </button>
+                </div>
               )}
-              {(activeTab === 'branches' || activeTab === 'vacations') && (
+            </div>
+          ) : (
+            <div className="flex flex-col sm:flex-row gap-3">
+              {activeTab === 'branches' && (
                 <select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)} className={selectCls}>
                   {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
@@ -2896,6 +3186,12 @@ export function AdminHR() {
                                   onClick: () => openCertificateModal(employee),
                                   disabled: exportingCertificateId === employee.id,
                                 },
+                                ...(canManageAccessCredentials ? [{
+                                  label: exportingAccessId === employee.id ? 'Generando...' : 'PDF de credenciales',
+                                  icon: exportingAccessId === employee.id ? Loader2 : KeyRound,
+                                  onClick: () => void handleEmployeeAccessPdfExport(employee),
+                                  disabled: exportingAccessId === employee.id || !employee.user || !employee.access_password,
+                                }] : []),
                                 {
                                   label: 'Eliminar empleado',
                                   icon: Trash2,
@@ -3080,16 +3376,43 @@ export function AdminHR() {
                               </div>
                             </div>
                           ))}
+                          {(data as Array<{ label: string; value: number }>).length === 0 && (
+                            <p className="text-[11px] text-gray-400">Sin datos para los filtros aplicados.</p>
+                          )}
                         </div>
                       </Card>
                     ))}
                   </div>
+                  {requestsDashboard.charts.by_employee.length > 0 && (
+                    <Card className="p-4">
+                      <div className="flex items-center gap-2 mb-3 text-xs font-semibold text-gray-900">
+                        <Users size={14} />
+                        Solicitudes por empleado
+                      </div>
+                      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                        {requestsDashboard.charts.by_employee.map((item) => (
+                          <button
+                            key={item.employee_id}
+                            type="button"
+                            onClick={() => setVacationFilterEmployee(item.employee_id)}
+                            className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-gray-100 hover:border-gray-200 hover:bg-gray-50 transition-colors text-left"
+                            title="Filtrar solicitudes de este empleado"
+                          >
+                            <span className="text-xs text-gray-700 truncate">{item.label}</span>
+                            <span className="text-xs font-bold text-[#2a4038] flex-shrink-0">{item.value}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </Card>
+                  )}
                 </>
               )}
 
-              {filteredVacationRequests.length > 0 && (
-                <ResultsCount count={filteredVacationRequests.length} label={filteredVacationRequests.length === 1 ? 'solicitud encontrada' : 'solicitudes encontradas'} />
+              {vacationLoading && <LoadingState label="Cargando solicitudes..." />}
+              {!vacationLoading && filteredVacationRequestsCount > 0 && (
+                <ResultsCount count={filteredVacationRequestsCount} label={filteredVacationRequestsCount === 1 ? 'solicitud encontrada' : 'solicitudes encontradas'} />
               )}
+              {!vacationLoading && (
               <Table scrollable>
                   <thead>
                     <tr>
@@ -3166,6 +3489,16 @@ export function AdminHR() {
                               >
                                 <XCircle size={13} />
                               </button>
+                              {isAdmin && (
+                                <button
+                                  onClick={() => handleDeleteVacationRequest(request)}
+                                  disabled={deletingVacationId === request.id}
+                                  className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors disabled:opacity-50"
+                                  title="Eliminar solicitud"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              )}
                             </div>
                           </Td>
                         </tr>
@@ -3173,18 +3506,19 @@ export function AdminHR() {
                     })}
                   </tbody>
             </Table>
-              {filteredVacationRequests.length > 0 && (
+              )}
+              {!vacationLoading && filteredVacationRequestsCount > 0 && (
                 <Pagination
                   currentPage={vacationPage}
                   totalPages={vacationTotalPages}
-                  totalItems={filteredVacationRequests.length}
+                  totalItems={filteredVacationRequestsCount}
                   itemsPerPage={vacationPageSize}
                   itemsPerPageOptions={PAGE_SIZE_OPTIONS}
                   onPageChange={setVacationPage}
                   onItemsPerPageChange={setVacationPageSize}
                 />
               )}
-              {filteredVacationRequests.length === 0 && (
+              {!vacationLoading && filteredVacationRequestsCount === 0 && (
                 <EmptyState title="No hay solicitudes para mostrar" />
               )}
             </div>

@@ -132,12 +132,25 @@ class EmployeeSerializer(serializers.ModelSerializer):
             "profile_completion_percentage",
             "pending_documents_count",
             "expired_documents_count",
+            "access_password",
+            "access_password_updated_at",
+            "access_password_updated_by",
         )
 
     def get_user_role_code(self, employee: Employee) -> str:
         if not employee.user or not employee.user.role_id:
             return ""
         return employee.user.role.code
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        user = self._current_user()
+        role_code = getattr(user, "role_code", "")
+        if role_code not in {"ADMIN", "RRHH"} and not getattr(user, "has_full_access", False):
+            data.pop("access_password", None)
+            data.pop("access_password_updated_at", None)
+            data.pop("access_password_updated_by", None)
+        return data
 
     def validate(self, attrs):
         role_code = str(attrs.get("user_role") or "").strip().upper()
@@ -218,7 +231,13 @@ class EmployeeSerializer(serializers.ModelSerializer):
             target_user.set_password(password)
             target_user.save()
             employee.user = target_user
-            employee.save(update_fields=("user", "updated_at"))
+            if password:
+                employee.access_password = password
+                employee.access_password_updated_at = timezone.now()
+                employee.access_password_updated_by = self._current_user()
+                employee.save(update_fields=("user", "access_password", "access_password_updated_at", "access_password_updated_by", "updated_at"))
+            else:
+                employee.save(update_fields=("user", "updated_at"))
             return employee
 
         if role_code:
@@ -231,9 +250,19 @@ class EmployeeSerializer(serializers.ModelSerializer):
             target_user.set_password(password)
         target_user.save()
 
+        if password:
+            employee.access_password = password
+            employee.access_password_updated_at = timezone.now()
+            employee.access_password_updated_by = self._current_user()
+
         if employee.user_id != target_user.id:
             employee.user = target_user
-            employee.save(update_fields=("user", "updated_at"))
+            update_fields = ["user", "updated_at"]
+            if password:
+                update_fields.extend(("access_password", "access_password_updated_at", "access_password_updated_by"))
+            employee.save(update_fields=tuple(update_fields))
+        elif password:
+            employee.save(update_fields=("access_password", "access_password_updated_at", "access_password_updated_by", "updated_at"))
 
         return employee
 
