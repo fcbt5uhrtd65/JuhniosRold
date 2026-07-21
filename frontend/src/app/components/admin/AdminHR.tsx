@@ -22,6 +22,7 @@ import {
   Landmark,
   Loader2,
   MapPin,
+  Network,
   Paperclip,
   Plus,
   Search,
@@ -44,6 +45,7 @@ import { SearchBar } from './SearchBar';
 import { Pagination } from './Pagination';
 import { SignaturePad } from './SignaturePad';
 import { CalendarChip, CalendarMoreChip, CalendarMonthNav, MonthCalendar, toDateKey, type CalendarChipColor } from './HRCalendar';
+import { OrgChart, buildOrgForest } from './OrgChart';
 import { Badge, type BadgeColor, Card, Table, Th, Td, Modal, EmptyState, LoadingState, inputCls, selectCls, ActionsMenu, actionsCellCls } from './AdminUI';
 import { ComboWithOtherInput } from './ComboWithOtherInput';
 import { useToast } from '../../contexts/ToastContext';
@@ -130,7 +132,7 @@ function toBranchDecimalString(value: number | string): string {
   return Number(value).toFixed(6);
 }
 
-type HRTab = 'employees' | 'branches' | 'catalog' | 'vacations' | 'calendar';
+type HRTab = 'employees' | 'branches' | 'catalog' | 'vacations' | 'calendar' | 'orgchart';
 type HRCalendarView = 'requests' | 'birthdays';
 type EmployeeDataQualityFilter =
   | 'all'
@@ -1210,6 +1212,7 @@ export function AdminHR() {
   const [vacationTotal, setVacationTotal] = useState(0);
   const [vacationLoading, setVacationLoading] = useState(false);
   const [deletingVacationId, setDeletingVacationId] = useState<string | null>(null);
+  const [orgChartSearch, setOrgChartSearch] = useState('');
   const [employeeSort, setEmployeeSort] = useState<'name' | 'department' | 'status' | 'profile'>('name');
   const [isLoading, setIsLoading] = useState(true);
   const [savingEmployee, setSavingEmployee] = useState(false);
@@ -1344,6 +1347,7 @@ export function AdminHR() {
   const positionById = useMemo(() => new Map(positions.map((position) => [position.id, position])), [positions]);
   const branchById = useMemo(() => new Map(branches.map((branch) => [branch.id, branch])), [branches]);
   const employeeById = useMemo(() => new Map(employees.map((employee) => [employee.id, employee])), [employees]);
+  const orgForest = useMemo(() => buildOrgForest(employees), [employees]);
 
   const positionsForSelectedDepartment = useMemo(
     () => positions.filter((position) => position.department === employeeForm.department),
@@ -2961,6 +2965,7 @@ export function AdminHR() {
                 { id: 'catalog', label: 'Catálogos', icon: Briefcase, desc: 'Áreas, cargos y horarios' },
                 { id: 'vacations', label: 'Solicitudes', icon: CalendarClock, desc: 'Vacaciones y permisos' },
                 { id: 'calendar', label: 'Calendario', icon: CalendarDays, desc: 'Novedades y cumpleaños' },
+                { id: 'orgchart', label: 'Organigrama', icon: Network, desc: 'Jerarquía de la empresa' },
               ] as const).map((item) => {
                 const Icon = item.icon;
                 const active = activeTab === item.id;
@@ -2986,7 +2991,7 @@ export function AdminHR() {
         </div>
 
         <div className="flex-1 min-w-0 space-y-4 px-4 sm:px-6 md:px-8 lg:px-0 pt-4 lg:pt-0">
-          {activeTab !== 'calendar' && activeTab !== 'vacations' && (
+          {activeTab !== 'calendar' && activeTab !== 'vacations' && activeTab !== 'orgchart' && (
             <SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Buscar por nombre, apellido, cédula, cargo, área, sede o correo..." className="w-full" />
           )}
           {activeTab === 'employees' ? (
@@ -3651,6 +3656,29 @@ export function AdminHR() {
                   </Card>
                 </>
               )}
+            </div>
+          )}
+
+          {activeTab === 'orgchart' && (
+            <div className="space-y-4">
+              <Card className="p-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2"><Network size={15} className="text-gray-400" /> Organigrama</h3>
+                    <p className="text-xs text-gray-500 mt-0.5">Jerarquía de jefe inmediato → equipo, según los empleados activos.</p>
+                  </div>
+                  <div className="w-full sm:w-64">
+                    <SearchBar value={orgChartSearch} onChange={setOrgChartSearch} placeholder="Buscar empleado en el árbol..." />
+                  </div>
+                </div>
+                <OrgChart
+                  roots={orgForest.roots}
+                  unassigned={orgForest.unassigned}
+                  positionById={positionById}
+                  departmentById={departmentById}
+                  searchQuery={orgChartSearch}
+                />
+              </Card>
             </div>
           )}
         </>

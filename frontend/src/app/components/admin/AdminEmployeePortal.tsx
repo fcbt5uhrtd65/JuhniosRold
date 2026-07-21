@@ -359,7 +359,7 @@ export function AdminEmployeePortal() {
         <button
           type="button"
           onClick={openCertificateModal}
-          className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white rounded-xl text-xs font-semibold hover:bg-[#3d5c4e] transition-colors"
+          className="flex items-center justify-center gap-2 px-4 py-3 sm:py-2.5 bg-[#2a4038] text-white rounded-xl text-xs font-semibold hover:bg-[#3d5c4e] transition-colors w-full md:w-auto"
         >
           <BadgeCheck size={14} />
           Descargar certificado laboral
@@ -576,11 +576,11 @@ export function AdminEmployeePortal() {
               </label>
             </div>
 
-            <div className="flex items-center justify-between gap-3 pt-2 border-t border-gray-100">
+            <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pt-2 border-t border-gray-100">
               <button
                 type="button"
                 onClick={() => toast.info('Borrador guardado localmente (próximamente se sincronizará con tu cuenta).')}
-                className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+                className="flex items-center justify-center gap-2 px-4 py-3 sm:py-2.5 border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
               >
                 <Save size={14} />
                 Guardar borrador
@@ -588,7 +588,7 @@ export function AdminEmployeePortal() {
               <button
                 type="submit"
                 disabled={saving}
-                className="flex items-center gap-2 px-5 py-2.5 bg-[#2a4038] text-white rounded-xl text-xs font-semibold hover:bg-[#3d5c4e] transition-colors disabled:opacity-50"
+                className="flex items-center justify-center gap-2 px-5 py-3.5 sm:py-2.5 bg-[#2a4038] text-white rounded-xl text-sm sm:text-xs font-semibold hover:bg-[#3d5c4e] transition-colors disabled:opacity-50"
               >
                 <Send size={14} />
                 {saving ? 'Enviando...' : 'Enviar solicitud'}
@@ -627,7 +627,6 @@ export function AdminEmployeePortal() {
                       ? `Desde ${form.start_time || '—'}`
                       : `${form.start_time || '—'} a ${form.end_time || '—'}`,
                 ],
-                ['Motivo', form.reason.trim() || '—'],
                 ['Documento', form.support_document ? form.support_document.name : '—'],
               ].map(([label, value]) => (
                 <div key={label} className="flex items-start justify-between gap-4">
@@ -635,6 +634,10 @@ export function AdminEmployeePortal() {
                   <dd className="text-gray-900 font-medium text-right truncate max-w-[60%]" title={value}>{value}</dd>
                 </div>
               ))}
+              <div>
+                <dt className="text-gray-400 mb-1">Motivo</dt>
+                <dd className="text-gray-900 font-medium whitespace-pre-wrap break-words">{form.reason.trim() || '—'}</dd>
+              </div>
             </dl>
           </Card>
 
