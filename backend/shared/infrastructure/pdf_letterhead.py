@@ -5,6 +5,7 @@ import io
 import os
 
 from reportlab.lib.utils import ImageReader
+from reportlab.pdfbase.pdfmetrics import stringWidth
 
 _ASSETS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "assets"))
 HEADER_IMAGE_PATH = os.path.join(_ASSETS_DIR, "letterhead_header.png")
@@ -128,11 +129,18 @@ def draw_signature_line_block(c, x0, line_y, w, signer_name, role_label, signatu
     c.setLineWidth(0.8)
     c.line(x0, line_y, x0 + w, line_y)
 
-    c.setFont(font_bold, 10)
+    name_size = 10
+    name_text = signer_name.upper()
+    while name_size > 7 and stringWidth(name_text, font_bold, name_size) > w:
+        name_size -= 0.5
+    c.setFont(font_bold, name_size)
     c.setFillColor(navy)
-    c.drawCentredString(x0 + w / 2, line_y - 13, signer_name.upper())
+    c.drawCentredString(x0 + w / 2, line_y - 13, name_text)
 
-    c.setFont(font_regular, 8.3)
+    role_size = 8.3
+    while role_size > 6 and stringWidth(role_label, font_regular, role_size) > w:
+        role_size -= 0.3
+    c.setFont(font_regular, role_size)
     c.setFillColor(muted)
     c.drawCentredString(x0 + w / 2, line_y - 25, role_label)
 

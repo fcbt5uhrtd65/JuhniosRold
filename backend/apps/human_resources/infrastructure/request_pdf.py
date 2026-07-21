@@ -344,15 +344,18 @@ def _draw_approval_narrative(c, x0, x1, y, vacation, compact=False):
 
 
 def _signing_steps(vacation):
+    """Todos los pasos con una decisión efectivamente registrada (Jefe inmediato,
+    RRHH y/o Administrador), para que el PDF muestre la firma de cada uno de los
+    que participaron — no solo de quienes decidieron el resultado final."""
     decided_statuses = {"APPROVED", "REJECTED"}
     steps = [
         step
         for step in vacation.approval_steps.all()
-        if step.step in ("HR", "FINAL") and step.status in decided_statuses and step.user_id and step.acted_at
+        if step.step in ("MANAGER", "HR", "FINAL") and step.status in decided_statuses and step.user_id and step.acted_at
     ]
-    order = {"HR": 0, "FINAL": 1}
-    steps.sort(key=lambda step: order.get(step.step, 2))
-    return steps[:2]
+    order = {"MANAGER": 0, "HR": 1, "FINAL": 2}
+    steps.sort(key=lambda step: order.get(step.step, 3))
+    return steps[:3]
 
 
 def _draw_signatures_section(c, x0, x1, y, vacation):
@@ -367,7 +370,7 @@ def _draw_signatures_section(c, x0, x1, y, vacation):
         return y - 14
 
     count = len(steps)
-    gap = 30
+    gap = 20 if count >= 3 else 30
     col_w = (w - gap * (count - 1)) / count
     for index, step in enumerate(steps):
         col_x = x0 + index * (col_w + gap)
@@ -380,7 +383,7 @@ def _draw_signatures_section(c, x0, x1, y, vacation):
             y,
             col_w,
             signer_name,
-            f"{step.get_step_display()} · {step.get_status_display()} · {_datetime_label(step.acted_at)}",
+            f"{step.get_step_display()} · {step.get_status_display()}",
             signature_file,
             font=(FONT, FONT_BOLD),
             navy=TEXT,
