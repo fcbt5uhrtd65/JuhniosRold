@@ -4,7 +4,9 @@ from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from apps.audit.application.services import AuditService
 from apps.identity.interfaces.permissions import HasComponentAccess
+from apps.notifications.infrastructure.models import StaffNotification
 from shared.domain.exceptions import BusinessRuleViolation
 from shared.interfaces.viewsets import SoftDeleteModelViewSet
 
@@ -32,6 +34,7 @@ from ..application.use_cases import (
 from ..infrastructure.models import (
     AnalysisCertificate,
     AnalysisTestResult,
+    Area,
     Batch,
     BatchExport,
     BatchLotMarking,
@@ -55,6 +58,7 @@ from ..infrastructure.models import (
     PackagingControl,
     ProductionControl,
     ProductionControlMaterial,
+    ProductionLine,
     ProductSpecification,
     ProductSpecificationTest,
     RawMaterialBatch,
@@ -67,7 +71,9 @@ from ..infrastructure.models import (
 from ..infrastructure.serializers import (
     AnalysisCertificateSerializer,
     AnalysisTestResultSerializer,
+    AreaSerializer,
     BatchExportSerializer,
+    ManufacturingNotificationSerializer,
     BatchLotMarkingSerializer,
     BatchReleaseSerializer,
     BatchSerializer,
@@ -90,6 +96,7 @@ from ..infrastructure.serializers import (
     PackagingControlSerializer,
     ProductionControlMaterialSerializer,
     ProductionControlSerializer,
+    ProductionLineSerializer,
     ProductSpecificationSerializer,
     ProductSpecificationTestSerializer,
     RawMaterialBatchSerializer,
@@ -111,6 +118,29 @@ class ManufacturingBaseViewSet(SoftDeleteModelViewSet):
     def get_permissions(self):
         self.required_component_action = "view" if self.action in {"list", "retrieve"} else "edit"
         return super().get_permissions()
+
+    def _audit(self, action, instance):
+        request = self.request
+        AuditService.record(
+            actor=request.user,
+            module="manufacturing",
+            action=action,
+            ip_address=request.META.get("REMOTE_ADDR"),
+            resource_type=instance.__class__.__name__,
+            resource_id=instance.pk,
+        )
+
+    def perform_create(self, serializer):
+        super().perform_create(serializer)
+        self._audit("create", serializer.instance)
+
+    def perform_update(self, serializer):
+        super().perform_update(serializer)
+        self._audit("update", serializer.instance)
+
+    def perform_destroy(self, instance):
+        super().perform_destroy(instance)
+        self._audit("delete", instance)
 
     def _export_single_document(self, request, *, batch, document_code, render_fn, render_arg, filename_prefix):
         """Genera un documento individual, lo registra en BatchExport y lo
@@ -148,6 +178,7 @@ class BatchViewSet(ManufacturingBaseViewSet):
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+        self._audit("create", serializer.instance)
 
     @action(detail=False, methods=("post",), url_path="create-with-order")
     def create_with_order(self, request):
@@ -179,14 +210,20 @@ class BatchViewSet(ManufacturingBaseViewSet):
             except Employee.DoesNotExist:
                 return None
 
+        def _resolve(model, field_name):
+            value_id = request.data.get(field_name)
+            if not value_id:
+                return None
+            return model.objects.filter(pk=value_id).first()
+
         try:
             batch = CreateBatchWithOrder().execute(
                 formula=formula,
                 planned_quantity=planned_quantity,
                 actor=request.user,
                 batch_code=request.data.get("batch_code", ""),
-                area=request.data.get("area", ""),
-                production_line=request.data.get("production_line", ""),
+                area=_resolve(Area, "area"),
+                production_line=_resolve(ProductionLine, "production_line"),
                 production_manager=_resolve_employee("production_manager"),
                 quality_manager=_resolve_employee("quality_manager"),
                 scheduled_at=request.data.get("scheduled_at") or None,
@@ -194,6 +231,7 @@ class BatchViewSet(ManufacturingBaseViewSet):
             )
         except BusinessRuleViolation as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        self._audit("create", batch)
         return Response(self.get_serializer(batch).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=("post",), url_path="change-status")
@@ -222,6 +260,7 @@ class BatchViewSet(ManufacturingBaseViewSet):
             batch = StartBatch().execute(batch, request.user)
         except BusinessRuleViolation as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        self._audit("start", batch)
         return Response(self.get_serializer(batch).data)
 
     @action(detail=False, methods=("get",), url_path="pending")
@@ -296,6 +335,7 @@ class ItemStockMovementViewSet(ManufacturingBaseViewSet):
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+        self._audit("create", serializer.instance)
 
 
 # ── Dispensación ──────────────────────────────────────────────────────────────
@@ -320,6 +360,7 @@ class DispensingOrderViewSet(ManufacturingBaseViewSet):
             return Response({"detail": "Bodega no encontrada."}, status=status.HTTP_400_BAD_REQUEST)
         except BusinessRuleViolation as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        self._audit("close", order)
         return Response(self.get_serializer(order).data)
 
     @action(detail=True, methods=("get",), url_path="export")
@@ -353,6 +394,7 @@ class DispensingLineViewSet(ManufacturingBaseViewSet):
             )
         except BusinessRuleViolation as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        self._audit("weigh", line)
         return Response(self.get_serializer(line).data)
 
     @action(detail=True, methods=("post",), url_path="verify")
@@ -362,6 +404,7 @@ class DispensingLineViewSet(ManufacturingBaseViewSet):
             line = VerifyDispensingLine().execute(line, actor=getattr(request.user, "employee_profile", None))
         except BusinessRuleViolation as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        self._audit("verify", line)
         return Response(self.get_serializer(line).data)
 
 
@@ -373,6 +416,7 @@ class RawMaterialIdentificationPrintViewSet(ManufacturingBaseViewSet):
 
     def perform_create(self, serializer):
         serializer.save(printed_by=self.request.user)
+        self._audit("create", serializer.instance)
 
 
 # ── Instrucciones de fabricación ─────────────────────────────────────────────
@@ -403,12 +447,14 @@ class LineClearanceViewSet(ManufacturingBaseViewSet):
             clearance = ApproveLineClearance().execute(clearance, actor=getattr(request.user, "employee_profile", None), approve=True)
         except BusinessRuleViolation as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        self._audit("approve", clearance)
         return Response(self.get_serializer(clearance).data)
 
     @action(detail=True, methods=("post",), url_path="reject")
     def reject(self, request, pk=None):
         clearance = self.get_object()
         clearance = ApproveLineClearance().execute(clearance, actor=getattr(request.user, "employee_profile", None), approve=False)
+        self._audit("reject", clearance)
         return Response(self.get_serializer(clearance).data)
 
     @action(detail=True, methods=("get",), url_path="export")
@@ -638,6 +684,7 @@ class DocumentAttachmentViewSet(ManufacturingBaseViewSet):
 
     def perform_create(self, serializer):
         serializer.save(uploaded_by=self.request.user)
+        self._audit("create", serializer.instance)
 
 
 # ── Liberación ────────────────────────────────────────────────────────────────
@@ -670,6 +717,7 @@ class BatchReleaseViewSet(ManufacturingBaseViewSet):
             )
         except BusinessRuleViolation as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        self._audit("release", release)
         return Response(self.get_serializer(release).data)
 
     @action(detail=True, methods=("get",), url_path="export")
@@ -690,3 +738,45 @@ class BatchExportViewSet(ManufacturingBaseViewSet):
     serializer_class = BatchExportSerializer
     filterset_fields = ("batch", "kind")
     http_method_names = ("get", "post", "head", "options")
+
+
+# ── Notificaciones de personal ────────────────────────────────────────────────
+
+class ManufacturingNotificationViewSet(ManufacturingBaseViewSet):
+    """Espejo de HRNotificationViewSet sobre el mismo StaffNotification
+    (apps.notifications), filtrado a las notificaciones originadas en
+    manufacturing en vez de duplicar el mecanismo de notificación interna."""
+
+    queryset = StaffNotification.objects.filter(module="manufacturing").select_related(
+        "employee", "batch", "created_by"
+    )
+    serializer_class = ManufacturingNotificationSerializer
+    filterset_fields = ("employee", "batch", "notification_type", "status")
+    search_fields = ("title", "message", "employee__employee_code")
+
+    def perform_create(self, serializer):
+        serializer.save(module="manufacturing", created_by=self.request.user)
+        self._audit("create", serializer.instance)
+
+    @action(detail=True, methods=("post",), url_path="mark-read")
+    def mark_read(self, request, pk=None):
+        notification = self.get_object()
+        notification.status = StaffNotification.Status.READ
+        notification.save(update_fields=("status", "updated_at"))
+        return Response(self.get_serializer(notification).data)
+
+
+# ── Catálogo de áreas y líneas de producción ──────────────────────────────────
+
+class AreaViewSet(ManufacturingBaseViewSet):
+    queryset = Area.objects.all()
+    serializer_class = AreaSerializer
+    filterset_fields = ("is_active",)
+    search_fields = ("code", "name")
+
+
+class ProductionLineViewSet(ManufacturingBaseViewSet):
+    queryset = ProductionLine.objects.select_related("area")
+    serializer_class = ProductionLineSerializer
+    filterset_fields = ("is_active", "area")
+    search_fields = ("code", "name")

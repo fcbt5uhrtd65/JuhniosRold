@@ -3,7 +3,6 @@ from django.contrib import admin
 from .models import (
     Attendance,
     EmployeeDocument,
-    HRNotification,
     Payroll,
     PayrollItem,
     PerformanceReview,
@@ -110,11 +109,3 @@ class EmployeeDocumentAdmin(admin.ModelAdmin):
     list_filter = ("document_type", "status", "expires_at")
     search_fields = ("name", "document_type", "employee__employee_code", "employee__first_name", "observations")
     list_select_related = ("employee", "uploaded_by")
-
-
-@admin.register(HRNotification)
-class HRNotificationAdmin(admin.ModelAdmin):
-    list_display = ("title", "employee", "notification_type", "status", "due_date", "created_at")
-    list_filter = ("notification_type", "status", "due_date")
-    search_fields = ("title", "message", "employee__employee_code", "employee__first_name")
-    list_select_related = ("employee", "document", "created_by")

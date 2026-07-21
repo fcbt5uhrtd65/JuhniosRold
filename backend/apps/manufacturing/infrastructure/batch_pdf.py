@@ -209,8 +209,8 @@ def render_line_clearance_pdf(clearance):
     y = _field_row(c, x0, x1 - x0, y, [
         ("Fase", clearance.get_phase_display()),
         ("Estado", clearance.get_status_display()),
-        ("Área", clearance.area or "-"),
-        ("Línea", clearance.production_line or "-"),
+        ("Área", clearance.area.name if clearance.area else "-"),
+        ("Línea", clearance.production_line.name if clearance.production_line else "-"),
         ("Producto anterior", clearance.previous_product or "-"),
         ("Lote anterior", clearance.previous_batch_code or "-"),
         ("Fecha de liberación", _datetime(clearance.cleared_at)),
@@ -472,8 +472,8 @@ def render_full_batch_dossier_pdf(batch, *, include_attachments=True, include_ph
         ("Fórmula", order.formula.name if order.formula_id else "-"),
         ("Responsable de producción", _employee_name(batch.production_manager)),
         ("Responsable de calidad", _employee_name(batch.quality_manager)),
-        ("Área", batch.area or "-"),
-        ("Línea", batch.production_line or "-"),
+        ("Área", batch.area.name if batch.area else "-"),
+        ("Línea", batch.production_line.name if batch.production_line else "-"),
         ("Fecha programada", _date(batch.scheduled_at)),
         ("Fecha real de inicio", _datetime(batch.actual_start_at)),
         ("Fecha real de terminación", _datetime(batch.actual_end_at)),
@@ -540,7 +540,7 @@ def render_full_batch_dossier_pdf(batch, *, include_attachments=True, include_ph
         for clearance in clearances:
             _text(c, x0, y, f"{clearance.get_phase_display()} — {clearance.get_status_display()}", size=8.6, bold=True, color=_status_color(clearance.get_status_display()))
             y -= 10
-            _text(c, x0, y, f"Área: {clearance.area or '-'}  ·  Fecha: {_datetime(clearance.cleared_at)}  ·  Realizado por: {_employee_name(clearance.performed_by)}", size=7.6, color=MUTED)
+            _text(c, x0, y, f"Área: {clearance.area.name if clearance.area else '-'}  ·  Fecha: {_datetime(clearance.cleared_at)}  ·  Realizado por: {_employee_name(clearance.performed_by)}", size=7.6, color=MUTED)
             y -= 16
             if y < 100:
                 _document_footer(c, page_w, x0, x1, "-", 5)
@@ -570,8 +570,8 @@ def render_full_batch_dossier_pdf(batch, *, include_attachments=True, include_ph
         c.showPage()
         y = _document_header(c, page_w, page_h, x0, x1, "7. Identificación de línea", batch, "MFG-LID", "1.0")
         y = _field_row(c, x0, x1 - x0, y, [
-            ("Área", line_identification.area or "-"),
-            ("Línea", line_identification.production_line or "-"),
+            ("Área", line_identification.area.name if line_identification.area else "-"),
+            ("Línea", line_identification.production_line.name if line_identification.production_line else "-"),
             ("Colocada", _datetime(line_identification.placed_at)),
             ("Colocada por", _employee_name(line_identification.placed_by)),
         ])

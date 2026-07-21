@@ -1,8 +1,11 @@
 from rest_framework import serializers
 
+from apps.notifications.infrastructure.models import StaffNotification
+
 from .models import (
     AnalysisCertificate,
     AnalysisTestResult,
+    Area,
     Batch,
     BatchExport,
     BatchLotMarking,
@@ -27,6 +30,7 @@ from .models import (
     PackagingControl,
     ProductionControl,
     ProductionControlMaterial,
+    ProductionLine,
     ProductSpecification,
     ProductSpecificationTest,
     RawMaterialBatch,
@@ -36,6 +40,28 @@ from .models import (
     WeightVolumeControl,
     WeightVolumeSample,
 )
+
+
+# ── Notificaciones de personal ────────────────────────────────────────────────
+
+class ManufacturingNotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StaffNotification
+        fields = "__all__"
+
+
+# ── Catálogo de áreas y líneas de producción ──────────────────────────────────
+
+class AreaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Area
+        fields = "__all__"
+
+
+class ProductionLineSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProductionLine
+        fields = "__all__"
 
 
 # ── Lote / expediente ────────────────────────────────────────────────────────
@@ -52,6 +78,8 @@ class BatchSerializer(serializers.ModelSerializer):
     production_order_number = serializers.CharField(source="production_order.number", read_only=True)
     batch_code = serializers.CharField(source="production_order.batch_code", read_only=True)
     is_terminal = serializers.BooleanField(read_only=True)
+    area_name = serializers.CharField(source="area.name", read_only=True, default=None)
+    production_line_name = serializers.CharField(source="production_line.name", read_only=True, default=None)
 
     class Meta:
         model = Batch
@@ -62,7 +90,9 @@ class BatchSerializer(serializers.ModelSerializer):
             "batch_code",
             "status",
             "area",
+            "area_name",
             "production_line",
+            "production_line_name",
             "production_manager",
             "quality_manager",
             "scheduled_at",
@@ -165,6 +195,8 @@ class LineClearanceCriterionSerializer(serializers.ModelSerializer):
 
 class LineClearanceSerializer(serializers.ModelSerializer):
     criteria = LineClearanceCriterionSerializer(many=True, read_only=True)
+    area_name = serializers.CharField(source="area.name", read_only=True, default=None)
+    production_line_name = serializers.CharField(source="production_line.name", read_only=True, default=None)
 
     class Meta:
         model = LineClearance
@@ -180,6 +212,9 @@ class CleaningRecordSerializer(serializers.ModelSerializer):
 
 
 class LineIdentificationSerializer(serializers.ModelSerializer):
+    area_name = serializers.CharField(source="area.name", read_only=True, default=None)
+    production_line_name = serializers.CharField(source="production_line.name", read_only=True, default=None)
+
     class Meta:
         model = LineIdentification
         fields = "__all__"
@@ -223,6 +258,7 @@ class FillingControlSerializer(serializers.ModelSerializer):
     log_entries = FillingLogEntrySerializer(many=True, read_only=True)
     yield_percentage = serializers.FloatField(read_only=True)
     difference = serializers.DecimalField(max_digits=14, decimal_places=3, read_only=True)
+    production_line_name = serializers.CharField(source="production_line.name", read_only=True, default=None)
 
     class Meta:
         model = FillingControl

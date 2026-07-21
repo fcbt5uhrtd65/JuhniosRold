@@ -39,6 +39,37 @@ class ResultStatus(models.TextChoices):
     NOT_APPLICABLE = "NOT_APPLICABLE", "No aplica"
 
 
+class Area(BaseModel):
+    code = models.CharField(max_length=30, unique=True)
+    name = models.CharField(max_length=120)
+    is_active = models.BooleanField(default=True)
+
+    class Meta(BaseModel.Meta):
+        ordering = ("name",)
+
+    def __str__(self):
+        return self.name
+
+
+class ProductionLine(BaseModel):
+    area = models.ForeignKey(
+        Area,
+        on_delete=models.PROTECT,
+        related_name="production_lines",
+        null=True,
+        blank=True,
+    )
+    code = models.CharField(max_length=30, unique=True)
+    name = models.CharField(max_length=120)
+    is_active = models.BooleanField(default=True)
+
+    class Meta(BaseModel.Meta):
+        ordering = ("name",)
+
+    def __str__(self):
+        return self.name
+
+
 class Batch(BaseModel):
     """Expediente de fabricación de un lote. Se apoya en apps.inventory.ProductionOrder
     (orden de producción ya existente: fórmula, cantidad planificada, numeración OP-xxxx)
@@ -73,11 +104,20 @@ class Batch(BaseModel):
     )
     status = models.CharField(max_length=30, choices=Status.choices, default=Status.DRAFT)
 
-    # Área / línea: se referencian como texto libre porque el sistema todavía no
-    # tiene un catálogo de áreas/líneas de producción (pendiente de confirmación
-    # si debe modelarse como catálogo propio en una fase posterior).
-    area = models.CharField(max_length=120, blank=True)
-    production_line = models.CharField(max_length=120, blank=True)
+    area = models.ForeignKey(
+        Area,
+        on_delete=models.PROTECT,
+        related_name="batches",
+        null=True,
+        blank=True,
+    )
+    production_line = models.ForeignKey(
+        ProductionLine,
+        on_delete=models.PROTECT,
+        related_name="batches",
+        null=True,
+        blank=True,
+    )
 
     production_manager = models.ForeignKey(
         "employees.Employee",
@@ -441,8 +481,12 @@ class LineClearance(BaseModel):
 
     batch = models.ForeignKey(Batch, on_delete=models.CASCADE, related_name="line_clearances")
     phase = models.CharField(max_length=20, choices=Phase.choices)
-    area = models.CharField(max_length=120, blank=True)
-    production_line = models.CharField(max_length=120, blank=True)
+    area = models.ForeignKey(
+        Area, on_delete=models.PROTECT, related_name="line_clearances", null=True, blank=True
+    )
+    production_line = models.ForeignKey(
+        ProductionLine, on_delete=models.PROTECT, related_name="line_clearances", null=True, blank=True
+    )
     cleared_at = models.DateTimeField(null=True, blank=True)
     previous_product = models.CharField(max_length=180, blank=True)
     previous_batch_code = models.CharField(max_length=60, blank=True)
@@ -531,8 +575,12 @@ class CleaningRecord(BaseModel):
 
 class LineIdentification(BaseModel):
     batch = models.OneToOneField(Batch, on_delete=models.CASCADE, related_name="line_identification")
-    area = models.CharField(max_length=120, blank=True)
-    production_line = models.CharField(max_length=120, blank=True)
+    area = models.ForeignKey(
+        Area, on_delete=models.PROTECT, related_name="line_identifications", null=True, blank=True
+    )
+    production_line = models.ForeignKey(
+        ProductionLine, on_delete=models.PROTECT, related_name="line_identifications", null=True, blank=True
+    )
     placed_at = models.DateTimeField(null=True, blank=True)
     placed_by = models.ForeignKey(
         "employees.Employee", on_delete=models.SET_NULL, null=True, blank=True, related_name="line_identifications_placed"
@@ -603,7 +651,9 @@ class ProductionControlMaterial(BaseModel):
 
 class FillingControl(BaseModel):
     batch = models.OneToOneField(Batch, on_delete=models.CASCADE, related_name="filling_control")
-    production_line = models.CharField(max_length=120, blank=True)
+    production_line = models.ForeignKey(
+        ProductionLine, on_delete=models.PROTECT, related_name="filling_controls", null=True, blank=True
+    )
     equipment = models.CharField(max_length=120, blank=True)
     source_tank = models.CharField(max_length=120, blank=True)
     started_at = models.DateTimeField(null=True, blank=True)

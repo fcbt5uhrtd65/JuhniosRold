@@ -1,7 +1,8 @@
+from apps.notifications.infrastructure.models import StaffNotification
+
 from .infrastructure.models import (
     Attendance,
     EmployeeDocument,
-    HRNotification,
     Payroll,
     PayrollItem,
     PerformanceReview,
@@ -18,7 +19,7 @@ __all__ = (
     "PayrollItem",
     "PerformanceReview",
     "EmployeeDocument",
-    "HRNotification",
+    "StaffNotification",
     "VacationRequestAttachment",
     "VacationRequestApprovalStep",
     "VacationRequestHistory",
