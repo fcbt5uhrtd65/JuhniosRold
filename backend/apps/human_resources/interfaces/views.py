@@ -96,6 +96,15 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
         self.required_component_action = "view" if self.action in {"list", "retrieve", "dashboard"} else "edit"
         return super().get_permissions()
 
+    def _self_service_queryset(self):
+        return VacationRequest.objects.select_related(
+            "employee",
+            "employee__department",
+            "employee__position",
+            "employee__branch",
+            "reviewed_by",
+        )
+
     def destroy(self, request, *args, **kwargs):
         # Borrar solicitudes queda reservado al Administrador: RRHH puede gestionar
         # (crear/aprobar/rechazar) pero no eliminar del historial, para no perder
@@ -192,7 +201,7 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
             )
             return Response(self.get_serializer(vacation).data, status=status.HTTP_201_CREATED)
 
-        queryset = self.get_queryset().filter(employee=employee).order_by("-created_at")
+        queryset = self._self_service_queryset().filter(employee=employee).order_by("-created_at")
         page = self.paginate_queryset(queryset)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
@@ -211,7 +220,7 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        queryset = self.get_queryset().filter(employee__manager=employee).order_by("-created_at")
+        queryset = self._self_service_queryset().filter(employee__manager=employee).order_by("-created_at")
         page = self.paginate_queryset(queryset)
         if page is not None:
             serializer = self.get_serializer(page, many=True)

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from django.db import OperationalError, ProgrammingError
+from django.db import DatabaseError
 from rest_framework import serializers
 
 from apps.notifications.infrastructure.models import StaffNotification
@@ -77,9 +77,9 @@ class OvertimeShiftSerializer(serializers.ModelSerializer):
 
 class VacationRequestSerializer(serializers.ModelSerializer):
     employee = serializers.PrimaryKeyRelatedField(read_only=True)
-    attachments = VacationRequestAttachmentSerializer(many=True, read_only=True)
-    approval_steps = VacationRequestApprovalStepSerializer(many=True, read_only=True)
-    history = VacationRequestHistorySerializer(many=True, read_only=True)
+    attachments = serializers.SerializerMethodField()
+    approval_steps = serializers.SerializerMethodField()
+    history = serializers.SerializerMethodField()
     overtime_shifts = serializers.SerializerMethodField()
 
     class Meta:
@@ -134,12 +134,24 @@ class VacationRequestSerializer(serializers.ModelSerializer):
 
         return attrs
 
-    def get_overtime_shifts(self, obj):
+    def _serialize_related(self, obj, related_name, serializer_class):
         try:
-            shifts = obj.overtime_shifts.all()
-            return OvertimeShiftSerializer(shifts, many=True, context=self.context).data
-        except (OperationalError, ProgrammingError):
+            related = getattr(obj, related_name).all()
+            return serializer_class(related, many=True, context=self.context).data
+        except DatabaseError:
             return []
+
+    def get_attachments(self, obj):
+        return self._serialize_related(obj, "attachments", VacationRequestAttachmentSerializer)
+
+    def get_approval_steps(self, obj):
+        return self._serialize_related(obj, "approval_steps", VacationRequestApprovalStepSerializer)
+
+    def get_history(self, obj):
+        return self._serialize_related(obj, "history", VacationRequestHistorySerializer)
+
+    def get_overtime_shifts(self, obj):
+        return self._serialize_related(obj, "overtime_shifts", OvertimeShiftSerializer)
 
     def validate_support_document(self, file):
         if not file:
