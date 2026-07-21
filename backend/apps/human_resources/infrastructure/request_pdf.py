@@ -76,6 +76,43 @@ def _calculate_hours_label(vacation):
     return "-"
 
 
+def _overtime_shift_parts(vacation):
+    shifts = list(getattr(vacation, "overtime_shifts").all())
+    if not shifts:
+        return []
+
+    parts = [(" Los turnos registrados fueron:", False)]
+    for index, shift in enumerate(shifts):
+        separator = " " if index == 0 else "; "
+        parts.append((separator, False))
+        parts.append((
+            f"{_date_label(shift.date)} de {_time_label(shift.start_time)} a {_time_label(shift.end_time)} "
+            f"({_calculate_shift_hours_label(shift)})",
+            True,
+        ))
+    parts += [
+        (", para un total de", False),
+        (f" {_calculate_hours_label(vacation)}.", True),
+    ]
+    return parts
+
+
+def _calculate_shift_hours_label(shift):
+    if shift.hours_count not in (None, ""):
+        value = float(shift.hours_count)
+        hours = int(value)
+        minutes = round((value - hours) * 60)
+        return f"{hours} h {minutes} min" if minutes else f"{hours} h"
+    if shift.start_time and shift.end_time:
+        start = datetime.combine(shift.date, shift.start_time)
+        end = datetime.combine(shift.date, shift.end_time)
+        if end > start:
+            minutes = int((end - start).total_seconds() // 60)
+            hours, remainder = divmod(minutes, 60)
+            return f"{hours} h {remainder} min" if remainder else f"{hours} h"
+    return "-"
+
+
 def _is_overtime(vacation):
     return getattr(vacation, "request_type", "") == "OVERTIME"
 
@@ -251,7 +288,7 @@ def _draw_body(c, x0, x1, y, vacation, employee):
         (f" {_date_label(vacation.end_date)}.", True),
     ]
     if _is_overtime(vacation):
-        period_parts += [
+        period_parts += _overtime_shift_parts(vacation) or [
             (" El horario registrado va de", False),
             (f" {_time_label(vacation.start_time)} ", True),
             ("a", False),

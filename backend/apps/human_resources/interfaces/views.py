@@ -580,7 +580,7 @@ class VacationRequestPdfView(APIView):
         queryset = VacationRequest.objects.select_related(
             "employee", "employee__department", "employee__position", "employee__branch",
             "admin_decided_by", "hr_decided_by",
-        ).prefetch_related("approval_steps__user__employee_profile")
+        ).prefetch_related("approval_steps__user__employee_profile", "overtime_shifts")
         vacation = get_object_or_404(queryset, pk=pk)
         pdf_buffer = render_request_pdf(vacation)
         return FileResponse(
