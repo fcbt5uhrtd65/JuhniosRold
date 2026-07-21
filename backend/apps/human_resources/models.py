@@ -2,6 +2,7 @@ from .infrastructure.models import (
     Attendance,
     EmployeeDocument,
     HRNotification,
+    OvertimeShift,
     Payroll,
     PayrollItem,
     PerformanceReview,
@@ -14,6 +15,7 @@ from .infrastructure.models import (
 __all__ = (
     "Attendance",
     "VacationRequest",
+    "OvertimeShift",
     "Payroll",
     "PayrollItem",
     "PerformanceReview",

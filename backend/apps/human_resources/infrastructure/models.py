@@ -172,6 +172,34 @@ class VacationRequestAttachment(BaseModel):
     uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
 
 
+class OvertimeShift(BaseModel):
+    """Turno individual de horas extra dentro de una misma solicitud (request_type=OVERTIME).
+
+    Permite pedir varios días con horarios distintos (ej. lunes 2h, miércoles 3h,
+    viernes 1h) en un solo trámite, en vez de una solicitud por cada día — la
+    solicitud padre resume el rango de fechas y el total de horas de todos sus turnos."""
+
+    request = models.ForeignKey(VacationRequest, on_delete=models.CASCADE, related_name="overtime_shifts")
+    date = models.DateField()
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+    hours_count = models.DecimalField(max_digits=6, decimal_places=2, editable=False)
+    notes = models.CharField(max_length=180, blank=True)
+
+    class Meta(BaseModel.Meta):
+        ordering = ("date", "start_time")
+
+    def save(self, *args, **kwargs):
+        start_minutes = self.start_time.hour * 60 + self.start_time.minute
+        end_minutes = self.end_time.hour * 60 + self.end_time.minute
+        total_minutes = max(end_minutes - start_minutes, 0)
+        self.hours_count = (Decimal(total_minutes) / Decimal(60)).quantize(Decimal("0.01"))
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.date} {self.start_time}-{self.end_time}"
+
+
 class VacationRequestApprovalStep(BaseModel):
     class Step(models.TextChoices):
         REQUESTER = "REQUESTER", "Solicitante"

@@ -6,6 +6,7 @@ from .models import (
     Attendance,
     EmployeeDocument,
     HRNotification,
+    OvertimeShift,
     Payroll,
     PayrollItem,
     PerformanceReview,
@@ -58,11 +59,26 @@ class VacationRequestHistorySerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
+class OvertimeShiftSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OvertimeShift
+        fields = "__all__"
+        read_only_fields = ("request", "hours_count")
+
+    def validate(self, attrs):
+        start_time = attrs.get("start_time")
+        end_time = attrs.get("end_time")
+        if start_time and end_time and end_time <= start_time:
+            raise serializers.ValidationError({"end_time": ["La hora final debe ser posterior a la hora inicial."]})
+        return attrs
+
+
 class VacationRequestSerializer(serializers.ModelSerializer):
     employee = serializers.PrimaryKeyRelatedField(read_only=True)
     attachments = VacationRequestAttachmentSerializer(many=True, read_only=True)
     approval_steps = VacationRequestApprovalStepSerializer(many=True, read_only=True)
     history = VacationRequestHistorySerializer(many=True, read_only=True)
+    overtime_shifts = OvertimeShiftSerializer(many=True, read_only=True)
 
     class Meta:
         model = VacationRequest
@@ -76,6 +92,7 @@ class VacationRequestSerializer(serializers.ModelSerializer):
             "attachments",
             "approval_steps",
             "history",
+            "overtime_shifts",
             "admin_decision",
             "admin_decided_by",
             "admin_decided_at",

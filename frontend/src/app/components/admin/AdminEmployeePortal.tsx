@@ -12,8 +12,10 @@ import {
   HeartPulse,
   Paperclip,
   Plane,
+  Plus,
   Save,
   Send,
+  Trash2,
   Users,
   UserRound,
   X,
@@ -24,10 +26,12 @@ import { useToast } from '../../contexts/ToastContext';
 import { getEmployees, exportMyEmployeeCertificatePdf, type Employee } from '../../services/employees.service';
 import {
   approveVacationRequest,
+  createMyOvertimeRequest,
   createMyVacationRequest,
   getMyVacationRequests,
   getTeamVacationRequests,
   rejectVacationRequest,
+  type OvertimeShiftInput,
   type VacationRequest,
   type VacationRequestStatus,
   type VacationRequestType,
@@ -166,6 +170,11 @@ function getRequestScheduleLabel(request: VacationRequest): string {
       ? formatDate(request.start_date)
       : `${formatDate(request.start_date)} - ${formatDate(request.end_date)}`;
 
+  if (request.request_type === 'OVERTIME' && request.overtime_shifts?.length) {
+    const count = request.overtime_shifts.length;
+    return `${dateLabel} · ${count} turno${count === 1 ? '' : 's'} · ${Number(request.hours_count ?? 0).toFixed(1)} h`;
+  }
+
   if (request.is_full_day) {
     return `${dateLabel} · Jornada completa`;
   }
@@ -193,6 +202,8 @@ export function AdminEmployeePortal() {
   const [employeeProfile, setEmployeeProfile] = useState<Employee | null>(null);
   const [requests, setRequests] = useState<VacationRequest[]>([]);
   const [form, setForm] = useState<VacationFormState>(EMPTY_FORM);
+  const [overtimeShifts, setOvertimeShifts] = useState<Array<OvertimeShiftInput & { localId: string }>>([]);
+  const [shiftDraft, setShiftDraft] = useState({ date: '', start_time: '', end_time: '' });
   const [requestsQuery, setRequestsQuery] = useState('');
   const [requestsPage, setRequestsPage] = useState(1);
   const [requestsPageSize, setRequestsPageSize] = useState(5);
@@ -278,8 +289,75 @@ export function AdminEmployeePortal() {
     setRequestsPage(1);
   }, [requestsQuery, requestsPageSize]);
 
+  const overtimeTotalHours = useMemo(() => {
+    return overtimeShifts.reduce((total, shift) => {
+      const [startH, startM] = shift.start_time.split(':').map(Number);
+      const [endH, endM] = shift.end_time.split(':').map(Number);
+      const minutes = (endH * 60 + endM) - (startH * 60 + startM);
+      return total + (minutes > 0 ? minutes / 60 : 0);
+    }, 0);
+  }, [overtimeShifts]);
+
+  const handleAddShift = () => {
+    if (!shiftDraft.date || !shiftDraft.start_time || !shiftDraft.end_time) {
+      toast.error('Indica fecha, hora de inicio y hora final del turno');
+      return;
+    }
+    if (shiftDraft.end_time <= shiftDraft.start_time) {
+      toast.error('La hora final debe ser posterior a la hora inicial');
+      return;
+    }
+    setOvertimeShifts((current) => [
+      ...current,
+      { localId: `${Date.now()}-${Math.random()}`, date: shiftDraft.date, start_time: shiftDraft.start_time, end_time: shiftDraft.end_time },
+    ]);
+    setShiftDraft({ date: shiftDraft.date, start_time: '', end_time: '' });
+  };
+
+  const handleRemoveShift = (localId: string) => {
+    setOvertimeShifts((current) => current.filter((shift) => shift.localId !== localId));
+  };
+
+  const handleSubmitOvertime = async () => {
+    if (!employeeProfile) {
+      toast.error('Tu usuario no tiene un perfil de empleado asociado');
+      return;
+    }
+    if (overtimeShifts.length === 0) {
+      toast.error('Agrega al menos un turno de horas extra');
+      return;
+    }
+    if (form.support_document && !isAllowedSupportDocument(form.support_document)) {
+      toast.error('El soporte debe ser PDF o una imagen PNG/JPG');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await createMyOvertimeRequest({
+        shifts: overtimeShifts.map(({ localId: _localId, ...shift }) => shift),
+        reason: form.reason,
+        support_document: form.support_document,
+      });
+      toast.success('Solicitud de horas extra enviada a RRHH');
+      setForm(EMPTY_FORM);
+      setOvertimeShifts([]);
+      setShiftDraft({ date: '', start_time: '', end_time: '' });
+      await loadData();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo crear la solicitud');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (form.request_type === 'OVERTIME') {
+      await handleSubmitOvertime();
+      return;
+    }
     if (!employeeProfile) {
       toast.error('Tu usuario no tiene un perfil de empleado asociado');
       return;
@@ -538,115 +616,195 @@ export function AdminEmployeePortal() {
               </div>
             </div>
 
-            <div>
-              <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Duración</label>
-              <select
-                value={form.period_mode}
-                onChange={(event) => setForm({ ...form, period_mode: event.target.value as RequestPeriodMode })}
-                className={selectCls}
-              >
-                <option value="SINGLE_DAY">Un solo día</option>
-                <option value="DATE_RANGE">Varios días</option>
-              </select>
-            </div>
-
-            {form.period_mode === 'SINGLE_DAY' ? (
+            {form.request_type === 'OVERTIME' ? (
               <div>
-                <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Fecha</label>
-                <input
-                  type="date"
-                  required
-                  value={form.single_date}
-                  onChange={(event) => setForm({ ...form, single_date: event.target.value })}
-                  className={inputCls}
-                />
-              </div>
-            ) : (
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Fecha inicio</label>
-                  <input
-                    type="date"
-                    required
-                    value={form.start_date}
-                    onChange={(event) => setForm({ ...form, start_date: event.target.value })}
-                    className={inputCls}
-                  />
-                </div>
-                <div>
-                  <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Fecha fin</label>
-                  <input
-                    type="date"
-                    required
-                    value={form.end_date}
-                    onChange={(event) => setForm({ ...form, end_date: event.target.value })}
-                    className={inputCls}
-                  />
-                </div>
-              </div>
-            )}
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">
+                  Turnos de horas extra
+                </label>
+                <p className="text-[11px] text-gray-400 mb-2">
+                  Agrega cada día con su horario. Se envían todos juntos en una sola solicitud.
+                </p>
 
-            <div>
-              <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Cobertura del horario</label>
-              <div className="grid gap-3 sm:grid-cols-3">
-                {[
-                  { value: 'FULL_DAY', label: 'Jornada completa' },
-                  { value: 'FROM_TIME', label: 'Desde una hora' },
-                  { value: 'TIME_RANGE', label: 'Rango de horas' },
-                ].map((option) => (
-                  <label
-                    key={option.value}
-                    className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs cursor-pointer transition-colors ${
-                      form.time_mode === option.value
-                        ? 'border-[#2a4038] bg-[#2a4038]/5 text-gray-900'
-                        : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="time_mode"
-                      value={option.value}
-                      checked={form.time_mode === option.value}
-                      onChange={(event) => setForm({ ...form, time_mode: event.target.value as RequestTimeMode })}
-                      className="accent-[#2a4038]"
-                    />
-                    {option.label}
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            {form.time_mode !== 'FULL_DAY' && (
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Hora inicio</label>
-                  <input
-                    type="time"
-                    required
-                    value={form.start_time}
-                    onChange={(event) => setForm({ ...form, start_time: event.target.value })}
-                    className={inputCls}
-                  />
-                  <p className="mt-1 text-[11px] text-gray-400">
-                    {form.time_mode === 'FROM_TIME'
-                      ? 'Se usará desde esta hora hasta el final del día.'
-                      : 'Se repetirá este rango en todos los días del periodo.'}
-                  </p>
-                </div>
-
-                {form.time_mode === 'TIME_RANGE' && (
+                <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto] gap-2 items-end mb-3">
                   <div>
-                    <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Hora fin</label>
+                    <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1 block">Fecha</label>
                     <input
-                      type="time"
-                      required
-                      value={form.end_time}
-                      onChange={(event) => setForm({ ...form, end_time: event.target.value })}
+                      type="date"
+                      value={shiftDraft.date}
+                      onChange={(event) => setShiftDraft({ ...shiftDraft, date: event.target.value })}
                       className={inputCls}
                     />
                   </div>
+                  <div>
+                    <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1 block">Desde</label>
+                    <input
+                      type="time"
+                      value={shiftDraft.start_time}
+                      onChange={(event) => setShiftDraft({ ...shiftDraft, start_time: event.target.value })}
+                      className={inputCls}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1 block">Hasta</label>
+                    <input
+                      type="time"
+                      value={shiftDraft.end_time}
+                      onChange={(event) => setShiftDraft({ ...shiftDraft, end_time: event.target.value })}
+                      className={inputCls}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddShift}
+                    className="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-[#2a4038] text-white rounded-xl text-xs font-semibold hover:bg-[#3d5c4e] transition-colors"
+                  >
+                    <Plus size={14} />
+                    Agregar
+                  </button>
+                </div>
+
+                {overtimeShifts.length === 0 ? (
+                  <p className="text-xs text-gray-400 border border-dashed border-gray-200 rounded-xl p-3 text-center">
+                    Aún no has agregado ningún turno.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {overtimeShifts.map((shift) => (
+                      <div key={shift.localId} className="flex items-center justify-between gap-2 rounded-xl border border-gray-100 px-3 py-2">
+                        <div className="text-xs text-gray-700">
+                          <span className="font-medium">{formatDate(shift.date)}</span>
+                          <span className="text-gray-400"> · {formatTime(shift.start_time)} – {formatTime(shift.end_time)}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveShift(shift.localId)}
+                          className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors flex-shrink-0"
+                          aria-label="Quitar turno"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    ))}
+                    <div className="flex items-center justify-between pt-2 border-t border-gray-100 text-xs">
+                      <span className="text-gray-500">Total de horas extra</span>
+                      <span className="font-semibold text-gray-900">{overtimeTotalHours.toFixed(1)} h</span>
+                    </div>
+                  </div>
                 )}
               </div>
+            ) : (
+              <>
+                <div>
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Duración</label>
+                  <select
+                    value={form.period_mode}
+                    onChange={(event) => setForm({ ...form, period_mode: event.target.value as RequestPeriodMode })}
+                    className={selectCls}
+                  >
+                    <option value="SINGLE_DAY">Un solo día</option>
+                    <option value="DATE_RANGE">Varios días</option>
+                  </select>
+                </div>
+
+                {form.period_mode === 'SINGLE_DAY' ? (
+                  <div>
+                    <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Fecha</label>
+                    <input
+                      type="date"
+                      required
+                      value={form.single_date}
+                      onChange={(event) => setForm({ ...form, single_date: event.target.value })}
+                      className={inputCls}
+                    />
+                  </div>
+                ) : (
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Fecha inicio</label>
+                      <input
+                        type="date"
+                        required
+                        value={form.start_date}
+                        onChange={(event) => setForm({ ...form, start_date: event.target.value })}
+                        className={inputCls}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Fecha fin</label>
+                      <input
+                        type="date"
+                        required
+                        value={form.end_date}
+                        onChange={(event) => setForm({ ...form, end_date: event.target.value })}
+                        className={inputCls}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Cobertura del horario</label>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    {[
+                      { value: 'FULL_DAY', label: 'Jornada completa' },
+                      { value: 'FROM_TIME', label: 'Desde una hora' },
+                      { value: 'TIME_RANGE', label: 'Rango de horas' },
+                    ].map((option) => (
+                      <label
+                        key={option.value}
+                        className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs cursor-pointer transition-colors ${
+                          form.time_mode === option.value
+                            ? 'border-[#2a4038] bg-[#2a4038]/5 text-gray-900'
+                            : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="time_mode"
+                          value={option.value}
+                          checked={form.time_mode === option.value}
+                          onChange={(event) => setForm({ ...form, time_mode: event.target.value as RequestTimeMode })}
+                          className="accent-[#2a4038]"
+                        />
+                        {option.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {form.time_mode !== 'FULL_DAY' && (
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Hora inicio</label>
+                      <input
+                        type="time"
+                        required
+                        value={form.start_time}
+                        onChange={(event) => setForm({ ...form, start_time: event.target.value })}
+                        className={inputCls}
+                      />
+                      <p className="mt-1 text-[11px] text-gray-400">
+                        {form.time_mode === 'FROM_TIME'
+                          ? 'Se usará desde esta hora hasta el final del día.'
+                          : 'Se repetirá este rango en todos los días del periodo.'}
+                      </p>
+                    </div>
+
+                    {form.time_mode === 'TIME_RANGE' && (
+                      <div>
+                        <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Hora fin</label>
+                        <input
+                          type="time"
+                          required
+                          value={form.end_time}
+                          onChange={(event) => setForm({ ...form, end_time: event.target.value })}
+                          className={inputCls}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
             )}
 
             <div>
@@ -724,34 +882,42 @@ export function AdminEmployeePortal() {
           <Card className="p-6">
             <h3 className="text-sm font-semibold text-gray-900 mb-4">Resumen de la solicitud</h3>
             <dl className="space-y-3 text-xs">
-              {[
-                ['Tipo', REQUEST_TYPE_LABELS[form.request_type]],
-                [
-                  'Fecha',
-                  form.period_mode === 'SINGLE_DAY'
-                    ? form.single_date ? formatDate(form.single_date) : '—'
-                    : form.start_date && form.end_date
-                      ? `${formatDate(form.start_date)} – ${formatDate(form.end_date)}`
-                      : '—',
-                ],
-                [
-                  'Duración',
-                  form.period_mode === 'SINGLE_DAY'
-                    ? '1 día'
-                    : form.start_date && form.end_date
-                      ? `${getDayCount(form.start_date, form.end_date)} días`
-                      : '—',
-                ],
-                [
-                  'Cobertura',
-                  form.time_mode === 'FULL_DAY'
-                    ? 'Jornada completa'
-                    : form.time_mode === 'FROM_TIME'
-                      ? `Desde ${form.start_time || '—'}`
-                      : `${form.start_time || '—'} a ${form.end_time || '—'}`,
-                ],
-                ['Documento', form.support_document ? form.support_document.name : '—'],
-              ].map(([label, value]) => (
+              {(form.request_type === 'OVERTIME'
+                ? [
+                    ['Tipo', REQUEST_TYPE_LABELS[form.request_type]],
+                    ['Turnos agregados', overtimeShifts.length ? `${overtimeShifts.length}` : '—'],
+                    ['Total de horas', overtimeShifts.length ? `${overtimeTotalHours.toFixed(1)} h` : '—'],
+                    ['Documento', form.support_document ? form.support_document.name : '—'],
+                  ]
+                : [
+                    ['Tipo', REQUEST_TYPE_LABELS[form.request_type]],
+                    [
+                      'Fecha',
+                      form.period_mode === 'SINGLE_DAY'
+                        ? form.single_date ? formatDate(form.single_date) : '—'
+                        : form.start_date && form.end_date
+                          ? `${formatDate(form.start_date)} – ${formatDate(form.end_date)}`
+                          : '—',
+                    ],
+                    [
+                      'Duración',
+                      form.period_mode === 'SINGLE_DAY'
+                        ? '1 día'
+                        : form.start_date && form.end_date
+                          ? `${getDayCount(form.start_date, form.end_date)} días`
+                          : '—',
+                    ],
+                    [
+                      'Cobertura',
+                      form.time_mode === 'FULL_DAY'
+                        ? 'Jornada completa'
+                        : form.time_mode === 'FROM_TIME'
+                          ? `Desde ${form.start_time || '—'}`
+                          : `${form.start_time || '—'} a ${form.end_time || '—'}`,
+                    ],
+                    ['Documento', form.support_document ? form.support_document.name : '—'],
+                  ]
+              ).map(([label, value]) => (
                 <div key={label} className="flex items-start justify-between gap-4">
                   <dt className="text-gray-400 flex-shrink-0">{label}</dt>
                   <dd className="text-gray-900 font-medium text-right truncate max-w-[60%]" title={value}>{value}</dd>
@@ -891,6 +1057,21 @@ export function AdminEmployeePortal() {
                   <dd className="text-gray-900 font-medium text-right">{formatDate(selectedRequest.created_at)}</dd>
                 </div>
               </dl>
+
+              {selectedRequest.request_type === 'OVERTIME' && selectedRequest.overtime_shifts?.length > 0 && (
+                <div className="pt-2 border-t border-gray-100">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Turnos</p>
+                  <div className="space-y-1.5">
+                    {selectedRequest.overtime_shifts.map((shift) => (
+                      <div key={shift.id} className="flex items-center justify-between gap-3 text-xs">
+                        <span className="text-gray-700">{formatDate(shift.date)}</span>
+                        <span className="text-gray-500">{formatTime(shift.start_time)} – {formatTime(shift.end_time)}</span>
+                        <span className="font-semibold text-gray-900 flex-shrink-0">{Number(shift.hours_count).toFixed(1)} h</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="pt-2 border-t border-gray-100">
                 <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Documentos adjuntos</p>

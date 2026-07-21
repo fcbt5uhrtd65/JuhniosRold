@@ -1,10 +1,20 @@
+from datetime import datetime
+from decimal import Decimal
+
 from django.db import transaction
 from django.utils import timezone
 
 from shared.domain.exceptions import BusinessRuleViolation
 
 from ..domain.entities import PayrollCalculation
-from ..infrastructure.models import Attendance, Payroll, VacationRequest, VacationRequestApprovalStep, VacationRequestHistory
+from ..infrastructure.models import (
+    Attendance,
+    OvertimeShift,
+    Payroll,
+    VacationRequest,
+    VacationRequestApprovalStep,
+    VacationRequestHistory,
+)
 
 
 class RegisterCheckIn:
@@ -26,6 +36,78 @@ class RegisterCheckOut:
         attendance.check_out = timezone.now()
         attendance.save(update_fields=("check_out", "updated_at"))
         return attendance
+
+
+class CreateOvertimeRequestWithShifts:
+    """Crea una solicitud de horas extra a partir de varios turnos (fecha + horario
+    cada uno), en vez de exigir una solicitud separada por cada día distinto.
+
+    La solicitud padre resume el rango de fechas (mínima a máxima) y el total de
+    horas de todos sus turnos, para que todo lo que ya depende de esos campos
+    (dashboard, PDF, flujo de aprobación) siga funcionando sin cambios."""
+
+    @transaction.atomic
+    def execute(self, employee, shifts_data, reason="", description="", observations="", support_document=None):
+        if not shifts_data:
+            raise BusinessRuleViolation("Debes indicar al menos un turno de horas extra.")
+
+        parsed_shifts = []
+        for shift in shifts_data:
+            try:
+                shift_date = shift["date"]
+                start_time = shift["start_time"]
+                end_time = shift["end_time"]
+            except KeyError as exc:
+                raise BusinessRuleViolation(f"Falta el campo {exc} en un turno.") from exc
+
+            if isinstance(shift_date, str):
+                shift_date = datetime.strptime(shift_date, "%Y-%m-%d").date()
+            if isinstance(start_time, str):
+                start_time = datetime.strptime(start_time, "%H:%M").time()
+            if isinstance(end_time, str):
+                end_time = datetime.strptime(end_time, "%H:%M").time()
+
+            if end_time <= start_time:
+                raise BusinessRuleViolation(f"La hora final debe ser posterior a la hora inicial ({shift_date}).")
+
+            parsed_shifts.append({
+                "date": shift_date,
+                "start_time": start_time,
+                "end_time": end_time,
+                "notes": shift.get("notes", ""),
+            })
+
+        dates = [s["date"] for s in parsed_shifts]
+        total_minutes = sum(
+            (s["end_time"].hour * 60 + s["end_time"].minute) - (s["start_time"].hour * 60 + s["start_time"].minute)
+            for s in parsed_shifts
+        )
+        total_hours = (Decimal(total_minutes) / Decimal(60)).quantize(Decimal("0.01"))
+
+        vacation = VacationRequest.objects.create(
+            employee=employee,
+            request_type=VacationRequest.RequestType.OVERTIME,
+            start_date=min(dates),
+            end_date=max(dates),
+            is_full_day=False,
+            hours_count=total_hours,
+            days_count=len(parsed_shifts),
+            reason=reason,
+            description=description,
+            observations=observations,
+            support_document=support_document,
+        )
+
+        OvertimeShift.objects.bulk_create([
+            OvertimeShift(request=vacation, date=s["date"], start_time=s["start_time"], end_time=s["end_time"], notes=s["notes"])
+            for s in parsed_shifts
+        ])
+        # bulk_create no dispara save() por instancia (donde se calcula hours_count),
+        # así que se recalcula aquí para dejar cada turno con su total correcto.
+        for shift in vacation.overtime_shifts.all():
+            shift.save(update_fields=("hours_count", "updated_at"))
+
+        return vacation
 
 
 class ResolveVacationRequest:

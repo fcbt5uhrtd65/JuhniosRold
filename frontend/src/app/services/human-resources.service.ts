@@ -184,6 +184,28 @@ export interface VacationRequestHistory {
   deleted_at: string | null;
 }
 
+/** Turno individual dentro de una solicitud de horas extra (request_type=OVERTIME)
+ * con varios días/horarios distintos en un solo trámite. */
+export interface OvertimeShift {
+  id: string;
+  request: string;
+  date: string;
+  start_time: string;
+  end_time: string;
+  hours_count: string;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface OvertimeShiftInput {
+  date: string;
+  start_time: string;
+  end_time: string;
+  notes?: string;
+}
+
 export interface VacationRequest {
   id: string;
   employee: string;
@@ -216,6 +238,7 @@ export interface VacationRequest {
   attachments: VacationRequestAttachment[];
   approval_steps: VacationRequestApprovalStep[];
   history: VacationRequestHistory[];
+  overtime_shifts: OvertimeShift[];
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -520,6 +543,27 @@ export async function getMyVacationRequests(params?: { page?: number; limit?: nu
 
 export async function createMyVacationRequest(payload: Omit<VacationRequestPayload, 'employee'>): Promise<VacationRequest> {
   const res = await api.post<VacationRequest>(`${VACATIONS_PATH}me/`, buildVacationRequestBody(payload));
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
+/** Crea UNA sola solicitud de horas extra a partir de varios turnos (fecha + horario
+ * cada uno), en vez de tener que enviar una solicitud por cada día distinto. */
+export async function createMyOvertimeRequest(payload: {
+  shifts: OvertimeShiftInput[];
+  reason?: string;
+  description?: string;
+  observations?: string;
+  support_document?: File | null;
+}): Promise<VacationRequest> {
+  const formData = new FormData();
+  formData.append('overtime_shifts', JSON.stringify(payload.shifts));
+  if (payload.reason) formData.append('reason', payload.reason);
+  if (payload.description) formData.append('description', payload.description);
+  if (payload.observations) formData.append('observations', payload.observations);
+  if (payload.support_document instanceof Blob) formData.append('support_document', payload.support_document);
+
+  const res = await api.post<VacationRequest>(`${VACATIONS_PATH}me/`, formData);
   if (res.data) return res.data;
   throw new Error(res.message);
 }

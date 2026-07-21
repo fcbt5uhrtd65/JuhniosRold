@@ -1,3 +1,5 @@
+import json
+
 from django.db.models import Count, Sum
 from django.db.models.functions import TruncMonth
 from django.http import FileResponse
@@ -17,7 +19,12 @@ from apps.identity.interfaces.permissions import HasComponentAccess
 
 from shared.domain.exceptions import BusinessRuleViolation
 
-from ..application.use_cases import RegisterCheckIn, RegisterCheckOut, ResolveVacationRequestByRole
+from ..application.use_cases import (
+    CreateOvertimeRequestWithShifts,
+    RegisterCheckIn,
+    RegisterCheckOut,
+    ResolveVacationRequestByRole,
+)
 from ..infrastructure.models import (
     Attendance,
     EmployeeDocument,
@@ -144,6 +151,34 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
             )
 
         if request.method == "POST":
+            raw_shifts = request.data.get("overtime_shifts")
+            if raw_shifts:
+                if isinstance(raw_shifts, str):
+                    try:
+                        raw_shifts = json.loads(raw_shifts)
+                    except ValueError:
+                        return Response({"detail": "overtime_shifts debe ser una lista JSON válida."}, status=status.HTTP_400_BAD_REQUEST)
+                try:
+                    vacation = CreateOvertimeRequestWithShifts().execute(
+                        employee,
+                        raw_shifts,
+                        reason=request.data.get("reason", ""),
+                        description=request.data.get("description", ""),
+                        observations=request.data.get("observations", ""),
+                        support_document=request.FILES.get("support_document"),
+                    )
+                except BusinessRuleViolation as exc:
+                    return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+                self._ensure_approval_flow(vacation, request.user)
+                VacationRequestHistory.objects.create(
+                    request=vacation,
+                    action=VacationRequestHistory.Action.CREATED,
+                    user=request.user,
+                    new_status=vacation.status,
+                    comment="Solicitud de horas extra creada por empleado (múltiples turnos)",
+                )
+                return Response(self.get_serializer(vacation).data, status=status.HTTP_201_CREATED)
+
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             vacation = serializer.save(employee=employee)
