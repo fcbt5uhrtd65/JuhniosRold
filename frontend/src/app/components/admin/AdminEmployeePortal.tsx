@@ -3,6 +3,7 @@ import {
   BadgeCheck,
   Briefcase,
   CalendarClock,
+  Check,
   CheckCircle2,
   ChevronRight,
   Clock3,
@@ -13,15 +14,20 @@ import {
   Plane,
   Save,
   Send,
+  Users,
   UserRound,
   X,
+  XCircle,
 } from 'lucide-react';
 import { useAdmin } from '../../contexts/AdminContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getEmployees, exportMyEmployeeCertificatePdf, type Employee } from '../../services/employees.service';
 import {
+  approveVacationRequest,
   createMyVacationRequest,
   getMyVacationRequests,
+  getTeamVacationRequests,
+  rejectVacationRequest,
   type VacationRequest,
   type VacationRequestStatus,
   type VacationRequestType,
@@ -195,22 +201,34 @@ export function AdminEmployeePortal() {
   const [downloadingCertificate, setDownloadingCertificate] = useState(false);
   const [showCertificateModal, setShowCertificateModal] = useState(false);
   const [certificateSignatureFile, setCertificateSignatureFile] = useState<File | null>(null);
+  const [allEmployees, setAllEmployees] = useState<Employee[]>([]);
+  const [teamRequests, setTeamRequests] = useState<VacationRequest[]>([]);
+  const [teamActionId, setTeamActionId] = useState<string | null>(null);
+  const [teamDecisionRequest, setTeamDecisionRequest] = useState<{ request: VacationRequest; decision: 'approve' | 'reject' } | null>(null);
+  const [teamDecisionComment, setTeamDecisionComment] = useState('');
+  const [teamDecisionSignature, setTeamDecisionSignature] = useState<File | null>(null);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [employeesRes, requestsRes] = await Promise.allSettled([
+      const [employeesRes, requestsRes, teamRequestsRes] = await Promise.allSettled([
         getEmployees({ limit: 200 }),
         getMyVacationRequests({ limit: 200 }),
+        getTeamVacationRequests({ limit: 200 }),
       ]);
 
       if (employeesRes.status === 'fulfilled') {
+        setAllEmployees(employeesRes.value.data);
         const found = employeesRes.value.data.find((employee) => employee.user === currentUser?.id) ?? null;
         setEmployeeProfile(found);
       }
 
       if (requestsRes.status === 'fulfilled') {
         setRequests(requestsRes.value.data);
+      }
+
+      if (teamRequestsRes.status === 'fulfilled') {
+        setTeamRequests(teamRequestsRes.value.data);
       }
     } catch (error) {
       console.error(error);
@@ -243,6 +261,13 @@ export function AdminEmployeePortal() {
   }, [requests, requestsQuery]);
 
   const requestsTotalPages = Math.max(1, Math.ceil(filteredRequests.length / requestsPageSize));
+
+  const employeeById = useMemo(() => new Map(allEmployees.map((employee) => [employee.id, employee])), [allEmployees]);
+
+  const pendingTeamRequests = useMemo(
+    () => teamRequests.filter((request) => ['PENDING', 'IN_REVIEW', 'PENDING_HR', 'PENDING_ADMIN'].includes(request.status)),
+    [teamRequests],
+  );
 
   const paginatedRequests = useMemo(() => {
     const start = (requestsPage - 1) * requestsPageSize;
@@ -330,6 +355,44 @@ export function AdminEmployeePortal() {
     }
   };
 
+  const openTeamDecisionModal = (request: VacationRequest, decision: 'approve' | 'reject') => {
+    setTeamDecisionComment('');
+    setTeamDecisionSignature(null);
+    setTeamDecisionRequest({ request, decision });
+  };
+
+  const closeTeamDecisionModal = () => {
+    setTeamDecisionRequest(null);
+    setTeamDecisionComment('');
+    setTeamDecisionSignature(null);
+  };
+
+  const confirmTeamDecision = async () => {
+    if (!teamDecisionRequest) return;
+    const { request, decision } = teamDecisionRequest;
+    if (decision === 'reject' && !teamDecisionComment.trim()) {
+      toast.error('Debes indicar el motivo del rechazo');
+      return;
+    }
+    setTeamActionId(request.id);
+    try {
+      if (decision === 'approve') {
+        await approveVacationRequest(request.id, teamDecisionComment.trim(), teamDecisionSignature);
+        toast.success('Registraste tu aprobación como jefe inmediato');
+      } else {
+        await rejectVacationRequest(request.id, teamDecisionComment.trim(), teamDecisionSignature);
+        toast.info('Registraste tu rechazo como jefe inmediato');
+      }
+      closeTeamDecisionModal();
+      await loadData();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo registrar tu decisión');
+    } finally {
+      setTeamActionId(null);
+    }
+  };
+
   if (isLoading) {
     return <LoadingState label="Cargando tu portal interno..." />;
   }
@@ -371,6 +434,66 @@ export function AdminEmployeePortal() {
         <KpiCard label="Pendientes" value={String(stats.pending)} icon={Clock3} color="text-amber-600 bg-amber-50" />
         <KpiCard label="Aprobadas" value={String(stats.approved)} icon={CheckCircle2} color="text-emerald-600 bg-emerald-50" />
       </div>
+
+      {teamRequests.length > 0 && (
+        <Card className="p-6 mb-6">
+          <div className="flex items-center justify-between gap-3 mb-1">
+            <div className="flex items-center gap-2">
+              <Users size={15} className="text-gray-400" />
+              <h3 className="text-sm font-semibold text-gray-900">Mi equipo a cargo</h3>
+            </div>
+            {pendingTeamRequests.length > 0 && (
+              <Badge label={`${pendingTeamRequests.length} pendiente${pendingTeamRequests.length === 1 ? '' : 's'}`} color="yellow" />
+            )}
+          </div>
+          <p className="text-xs text-gray-500 mb-4">
+            Como jefe inmediato puedes firmar tu visto bueno o rechazo. La decisión final siempre queda a cargo del Administrador.
+          </p>
+
+          {pendingTeamRequests.length === 0 ? (
+            <p className="text-xs text-gray-400">No hay solicitudes pendientes de tu equipo.</p>
+          ) : (
+            <div className="space-y-2.5">
+              {pendingTeamRequests.map((request) => {
+                const requester = employeeById.get(request.employee);
+                const Icon = REQUEST_TYPE_ICONS[request.request_type];
+                return (
+                  <div key={request.id} className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-gray-100 p-3">
+                    <div className="w-9 h-9 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center flex-shrink-0">
+                      <Icon size={15} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-900 truncate">{requester ? getEmployeeName(requester) : request.employee}</p>
+                      <p className="text-xs text-gray-400 truncate">{getRequestTypeLabel(request.request_type)} · {getRequestScheduleLabel(request)}</p>
+                    </div>
+                    <Badge label={getStatusLabel(request.status)} color={getStatusColor(request.status)} />
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => openTeamDecisionModal(request, 'approve')}
+                        disabled={teamActionId === request.id}
+                        className="p-2 rounded-lg border border-gray-200 text-gray-400 hover:bg-emerald-50 hover:text-emerald-600 transition-colors disabled:opacity-40"
+                        title="Firmar aprobación"
+                      >
+                        <Check size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openTeamDecisionModal(request, 'reject')}
+                        disabled={teamActionId === request.id}
+                        className="p-2 rounded-lg border border-gray-200 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors disabled:opacity-40"
+                        title="Firmar rechazo"
+                      >
+                        <XCircle size={14} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+      )}
 
       <div className="grid xl:grid-cols-[1.2fr_0.8fr] gap-6 items-start">
         <Card className="p-6">
@@ -828,6 +951,59 @@ export function AdminEmployeePortal() {
             </button>
           </div>
         </div>
+      </Modal>
+
+      <Modal
+        title={teamDecisionRequest?.decision === 'reject' ? 'Firmar rechazo' : 'Firmar aprobación'}
+        open={Boolean(teamDecisionRequest)}
+        onClose={closeTeamDecisionModal}
+      >
+        {teamDecisionRequest && (
+          <div className="space-y-4">
+            <p className="text-xs text-gray-500">
+              {(() => {
+                const requester = employeeById.get(teamDecisionRequest.request.employee);
+                return `Solicitud de ${requester ? getEmployeeName(requester) : teamDecisionRequest.request.employee} · ${getRequestTypeLabel(teamDecisionRequest.request.request_type)}.`;
+              })()}
+              {' '}Tu firma queda registrada como jefe inmediato; el Administrador conserva la decisión final.
+            </p>
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">
+                Comentario {teamDecisionRequest.decision === 'reject' && '(obligatorio)'}
+              </label>
+              <textarea
+                value={teamDecisionComment}
+                onChange={(event) => setTeamDecisionComment(event.target.value)}
+                rows={3}
+                className={inputCls + ' resize-none'}
+                placeholder={teamDecisionRequest.decision === 'reject' ? 'Indica el motivo del rechazo' : 'Comentario opcional'}
+              />
+            </div>
+            <SignaturePad
+              label="Tu firma"
+              helperText="Dibuja o sube tu firma para esta decisión."
+              onChange={setTeamDecisionSignature}
+            />
+            <div className="flex justify-end gap-2">
+              <button onClick={closeTeamDecisionModal} className="px-4 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+                Cancelar
+              </button>
+              <button
+                onClick={() => void confirmTeamDecision()}
+                disabled={!teamDecisionSignature || teamActionId === teamDecisionRequest.request.id}
+                className={`px-4 py-2 rounded-lg text-xs font-semibold text-white transition-colors disabled:opacity-40 ${
+                  teamDecisionRequest.decision === 'reject' ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700'
+                }`}
+              >
+                {teamActionId === teamDecisionRequest.request.id
+                  ? 'Guardando...'
+                  : teamDecisionRequest.decision === 'reject'
+                    ? 'Firmar y rechazar'
+                    : 'Firmar y aprobar'}
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );

@@ -524,6 +524,19 @@ export async function createMyVacationRequest(payload: Omit<VacationRequestPaylo
   throw new Error(res.message);
 }
 
+/** Solicitudes de los empleados que reportan directamente al usuario autenticado
+ * (su equipo a cargo como jefe inmediato). */
+export async function getTeamVacationRequests(params?: { page?: number; limit?: number }): Promise<{
+  data: VacationRequest[];
+  total: number;
+  next: string | null;
+  previous: string | null;
+}> {
+  const query = buildQuery({ page: params?.page, page_size: params?.limit });
+  const res = await api.get<VacationRequest[] | PaginatedResponse<VacationRequest>>(`${VACATIONS_PATH}team/${query}`);
+  return normalizeListResponse(res.data);
+}
+
 function buildDecisionBody(comment: string, signatureFile?: File | null): FormData | { comment: string } {
   if (signatureFile) {
     const formData = new FormData();

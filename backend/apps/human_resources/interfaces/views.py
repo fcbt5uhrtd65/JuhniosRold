@@ -84,7 +84,7 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
     ordering_fields = ("created_at", "start_date", "end_date", "status", "request_type")
 
     def get_permissions(self):
-        if self.action == "me":
+        if self.action in {"me", "team", "approve", "reject"}:
             return (IsAuthenticated(),)
         self.required_component_action = "view" if self.action in {"list", "retrieve", "dashboard"} else "edit"
         return super().get_permissions()
@@ -165,24 +165,52 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
 
+    @action(detail=False, methods=("get",), permission_classes=(IsAuthenticated,), url_path="team")
+    def team(self, request):
+        """Solicitudes de los empleados que reportan directamente al usuario
+        autenticado (su equipo a cargo como jefe inmediato)."""
+        employee = getattr(request.user, "employee_profile", None)
+        if not employee:
+            return Response(
+                {"detail": "Tu usuario no tiene un perfil de empleado asociado."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        queryset = self.get_queryset().filter(employee__manager=employee).order_by("-created_at")
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
     @staticmethod
-    def _resolver_role(user):
+    def _resolver_role(user, vacation=None):
         if getattr(user, "has_full_access", False):
             return "ADMIN"
         if getattr(user, "role_code", None) == "RRHH":
             return "HR"
+        if vacation is not None:
+            requester_employee = vacation.employee
+            manager = getattr(requester_employee, "manager", None)
+            if manager is not None and getattr(manager, "user_id", None) == user.id:
+                return "MANAGER"
         return None
 
     def _resolve(self, request, decision):
-        role = self._resolver_role(request.user)
+        # get_permissions ya deja pasar cualquier usuario autenticado en approve/reject
+        # (para permitir al jefe inmediato); la autorización real se valida aquí, por
+        # objeto, ya que depende de la solicitud puntual (¿es su subordinado directo?).
+        vacation = get_object_or_404(self.get_queryset(), pk=self.kwargs.get("pk"))
+        role = self._resolver_role(request.user, vacation)
         if role is None:
             return Response(
-                {"detail": "Solo Administrador o Recursos Humanos pueden resolver solicitudes."},
+                {"detail": "No tienes permiso para resolver esta solicitud."},
                 status=status.HTTP_403_FORBIDDEN,
             )
         try:
             vacation = ResolveVacationRequestByRole().execute(
-                self.get_object(),
+                vacation,
                 decision,
                 request.user,
                 role,

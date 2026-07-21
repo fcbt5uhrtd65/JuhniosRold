@@ -67,9 +67,12 @@ class ResolveVacationRequest:
 
 
 class ResolveVacationRequestByRole:
-    """Flujo de dos responsables: Administrador y Recursos Humanos.
+    """Flujo de responsables: Jefe inmediato (opinión), Administrador y Recursos Humanos.
 
-    - Un rechazo de cualquiera de los dos resuelve la solicitud como rechazada.
+    - El Jefe inmediato solo deja registrada su firma/decisión en el paso MANAGER
+      (trazabilidad), a modo de recomendación — nunca mueve el status de la solicitud
+      ni decide el resultado final. El Administrador siempre tiene la última palabra.
+    - Un rechazo de Admin o RRHH resuelve la solicitud como rechazada.
     - El Administrador tiene poder de aprobación unilateral (override).
     - RRHH aprobando primero deja la solicitud pendiente por el Administrador.
     - Solo queda "Aprobada" cuando el Administrador aprueba (con o sin RRHH previo).
@@ -82,9 +85,49 @@ class ResolveVacationRequestByRole:
         VacationRequest.Status.FINALIZED,
     }
 
+    def _resolve_manager_step(self, vacation, decision, reviewer, comment, signature_override):
+        """El jefe inmediato registra su firma/decisión en el paso MANAGER como
+        recomendación de trazabilidad. No modifica vacation.status: el resultado
+        final de la solicitud sigue dependiendo únicamente de RRHH/Administrador."""
+        if vacation.status in self.TERMINAL_STATUSES:
+            raise BusinessRuleViolation("La solicitud ya fue resuelta.")
+        if decision == VacationRequest.Status.REJECTED and not comment.strip():
+            raise BusinessRuleViolation("Debes indicar el motivo del rechazo.")
+
+        step, _ = VacationRequestApprovalStep.objects.get_or_create(
+            request=vacation,
+            step=VacationRequestApprovalStep.Step.MANAGER,
+            defaults={"sequence": 2},
+        )
+        if step.status in self.TERMINAL_STATUSES:
+            raise BusinessRuleViolation("Ya registraste tu decisión sobre esta solicitud.")
+
+        step.status = decision
+        step.user = reviewer
+        step.acted_at = timezone.now()
+        step.comment = comment
+        if signature_override:
+            step.signature = signature_override
+        step.save(update_fields=["status", "user", "acted_at", "comment", "signature", "updated_at"])
+
+        VacationRequestHistory.objects.create(
+            request=vacation,
+            action=VacationRequestHistory.Action.APPROVED
+            if decision == VacationRequest.Status.APPROVED
+            else VacationRequestHistory.Action.REJECTED,
+            user=reviewer,
+            old_status=vacation.status,
+            new_status=vacation.status,
+            comment=f"[Jefe inmediato] {comment}".strip(),
+        )
+        return vacation
+
     def execute(self, vacation, decision, reviewer, role, comment="", signature_override=None):
-        if role not in ("ADMIN", "HR"):
+        if role not in ("ADMIN", "HR", "MANAGER"):
             raise BusinessRuleViolation("Rol no autorizado para resolver solicitudes.")
+
+        if role == "MANAGER":
+            return self._resolve_manager_step(vacation, decision, reviewer, comment, signature_override)
 
         already_decided_by_role = (
             vacation.admin_decision if role == "ADMIN" else vacation.hr_decision
