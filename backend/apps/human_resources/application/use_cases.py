@@ -60,20 +60,26 @@ class CreateOvertimeRequestWithShifts:
             except KeyError as exc:
                 raise BusinessRuleViolation(f"Falta el campo {exc} en un turno.") from exc
 
-            if isinstance(shift_date, str):
-                shift_date = datetime.strptime(shift_date, "%Y-%m-%d").date()
-            if isinstance(start_time, str):
-                start_time = datetime.strptime(start_time, "%H:%M").time()
-            if isinstance(end_time, str):
-                end_time = datetime.strptime(end_time, "%H:%M").time()
+            try:
+                if isinstance(shift_date, str):
+                    shift_date = datetime.strptime(shift_date, "%Y-%m-%d").date()
+                if isinstance(start_time, str):
+                    start_time = datetime.strptime(start_time[:5], "%H:%M").time()
+                if isinstance(end_time, str):
+                    end_time = datetime.strptime(end_time[:5], "%H:%M").time()
+            except (TypeError, ValueError) as exc:
+                raise BusinessRuleViolation("Cada turno debe tener fecha YYYY-MM-DD y horas HH:MM validas.") from exc
 
             if end_time <= start_time:
                 raise BusinessRuleViolation(f"La hora final debe ser posterior a la hora inicial ({shift_date}).")
 
+            shift_minutes = (end_time.hour * 60 + end_time.minute) - (start_time.hour * 60 + start_time.minute)
+            shift_hours = (Decimal(shift_minutes) / Decimal(60)).quantize(Decimal("0.01"))
             parsed_shifts.append({
                 "date": shift_date,
                 "start_time": start_time,
                 "end_time": end_time,
+                "hours_count": shift_hours,
                 "notes": shift.get("notes", ""),
             })
 
@@ -99,14 +105,16 @@ class CreateOvertimeRequestWithShifts:
         )
 
         OvertimeShift.objects.bulk_create([
-            OvertimeShift(request=vacation, date=s["date"], start_time=s["start_time"], end_time=s["end_time"], notes=s["notes"])
+            OvertimeShift(
+                request=vacation,
+                date=s["date"],
+                start_time=s["start_time"],
+                end_time=s["end_time"],
+                hours_count=s["hours_count"],
+                notes=s["notes"],
+            )
             for s in parsed_shifts
         ])
-        # bulk_create no dispara save() por instancia (donde se calcula hours_count),
-        # así que se recalcula aquí para dejar cada turno con su total correcto.
-        for shift in vacation.overtime_shifts.all():
-            shift.save(update_fields=("hours_count", "updated_at"))
-
         return vacation
 
 
