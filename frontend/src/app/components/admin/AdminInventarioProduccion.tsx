@@ -51,7 +51,7 @@ import { useToast } from '../../contexts/ToastContext';
 /* ═══════════════════════════════════════════════════════
    TYPES
 ═══════════════════════════════════════════════════════ */
-type Modulo = 'panel' | 'maestros' | 'compras' | 'existencias' | 'movimientos' | 'produccion' | 'conversion' | 'reportes' | 'auditoria';
+type Modulo = 'panel' | 'maestros' | 'compras' | 'existencias' | 'movimientos' | 'conversion' | 'reportes' | 'auditoria';
 type TabMaestros = 'articulos' | 'bodegas' | 'grupos' | 'tipos' | 'proveedores' | 'unidades';
 type TabExistencias = 'por-bodega' | 'por-lote' | 'valorizado' | 'ajustes';
 type TabMovimientos = 'todos' | 'traslados';
@@ -1653,7 +1653,7 @@ function ModuloMovimientos() {
 /* ═══════════════════════════════════════════════════════
    MÓDULO PRODUCCIÓN
 ═══════════════════════════════════════════════════════ */
-function ModuloProduccion() {
+export function AdminProductionPlanning() {
   const toast = useToast();
   const { data, loading, reload } = useInventoryWorkspace();
   const [tab, setTab] = useState<TabProduccion>('ordenes');
@@ -2244,10 +2244,6 @@ export function AdminInventarioProduccion() {
       ],
     },
     {
-      group: 'Producción',
-      items: [{ id: 'produccion', label: 'Producción', icon: Factory, desc: 'OP, fórmulas, dispensación' }],
-    },
-    {
       group: 'Compras',
       items: [{ id: 'compras', label: 'Órdenes de Compra', icon: ShoppingCart, desc: 'OC y recepción de mercancía' }],
     },
@@ -2269,7 +2265,7 @@ export function AdminInventarioProduccion() {
       {/* Sidebar del módulo */}
       <div className="w-56 flex-shrink-0 bg-gray-50 border-r border-gray-100 overflow-y-auto">
         <div className="px-4 pt-5 pb-3">
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400 mb-0.5">Inventario & Producción</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400 mb-0.5">Inventario</p>
           <p className="text-[11px] text-gray-500">Juhnios Rold S.A.S.</p>
         </div>
         <nav className="px-2 pb-6 space-y-4">
@@ -2306,7 +2302,6 @@ export function AdminInventarioProduccion() {
         {modulo === 'compras' && <ModuloCompras />}
         {modulo === 'existencias' && <ModuloExistencias />}
         {modulo === 'movimientos' && <ModuloMovimientos />}
-        {modulo === 'produccion' && <ModuloProduccion />}
         {modulo === 'conversion' && <ModuloConversion />}
         {modulo === 'reportes' && <ModuloReportes />}
         {modulo === 'auditoria' && <ModuloAuditoria />}

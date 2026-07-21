@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   ClipboardCheck,
   Droplets,
+  Factory,
   FileDown,
   FileText,
   FlaskConical,
@@ -36,6 +37,7 @@ import {
   selectCls,
 } from './AdminUI';
 import { SignaturePad } from './SignaturePad';
+import { AdminProductionPlanning } from './AdminInventarioProduccion';
 import {
   approveLineClearance,
   changeBatchStatus,
@@ -110,6 +112,13 @@ type BatchTab =
   | 'release'
   | 'history';
 
+type ManufacturingSection = 'planning' | 'batches';
+
+const MANUFACTURING_SECTIONS: Array<{ id: ManufacturingSection; label: string; icon: typeof FileText }> = [
+  { id: 'planning', label: 'Planificación', icon: Factory },
+  { id: 'batches', label: 'Expedientes de lote', icon: Package },
+];
+
 const BATCH_TABS: Array<{ id: BatchTab; label: string; icon: typeof FileText }> = [
   { id: 'general', label: 'Información general', icon: FileText },
   { id: 'dispensing', label: 'Dispensación', icon: Scale },
@@ -175,6 +184,7 @@ function getEmployeeName(employee: Employee | undefined): string {
 export function AdminManufacturing() {
   const toast = useToast();
   const [isLoading, setIsLoading] = useState(true);
+  const [activeSection, setActiveSection] = useState<ManufacturingSection>('planning');
   const [batches, setBatches] = useState<BatchRecord[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [productionOrders, setProductionOrders] = useState<ProductionOrderRecord[]>([]);
@@ -254,11 +264,17 @@ export function AdminManufacturing() {
     <div>
       <PageHeader
         title="Producción y manufactura"
-        subtitle="Expediente completo de fabricación de lotes: dispensación, calidad, llenado, acondicionamiento y liberación."
-        onNew={() => setShowNewBatchModal(true)}
+        subtitle="Planificación, fórmulas, órdenes y expediente completo de fabricación de lotes."
+        onNew={activeSection === 'batches' ? () => setShowNewBatchModal(true) : undefined}
         newLabel="Nuevo lote"
       />
 
+      <TabBar tabs={MANUFACTURING_SECTIONS} value={activeSection} onChange={setActiveSection} />
+
+      {activeSection === 'planning' && <AdminProductionPlanning />}
+
+      {activeSection === 'batches' && (
+        <>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <KpiCard label="Lotes totales" value={String(stats.total)} icon={Package} color="text-gray-600 bg-gray-100" />
         <KpiCard label="En proceso" value={String(stats.active)} icon={Loader2} color="text-amber-600 bg-amber-50" />
@@ -311,6 +327,8 @@ export function AdminManufacturing() {
             </Card>
           ))}
         </div>
+      )}
+        </>
       )}
 
       <NewBatchModal
