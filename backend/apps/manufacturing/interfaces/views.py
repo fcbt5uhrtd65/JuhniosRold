@@ -21,6 +21,7 @@ from ..application.use_cases import (
     ApproveLineClearance,
     ChangeBatchStatus,
     CloseDispensingOrder,
+    CreateBatchWithOrder,
     LoadCertificateTestsFromSpecification,
     LoadMicrobiologySpecificationFromMaster,
     ReleaseBatch,
@@ -147,6 +148,53 @@ class BatchViewSet(ManufacturingBaseViewSet):
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+
+    @action(detail=False, methods=("post",), url_path="create-with-order")
+    def create_with_order(self, request):
+        """Punto de entrada único para iniciar un lote: crea la orden de
+        producción (inventory.ProductionOrder) y el expediente de lote
+        (manufacturing.Batch) en una sola operación, evitando el flujo anterior
+        de crear la orden en Inventario y luego el lote por separado en Producción."""
+        from apps.employees.infrastructure.models import Employee
+        from apps.inventory.infrastructure.models import Formula
+
+        formula_id = request.data.get("formula")
+        if not formula_id:
+            return Response({"detail": "Debes seleccionar una fórmula."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            formula = Formula.objects.get(pk=formula_id)
+        except Formula.DoesNotExist:
+            return Response({"detail": "La fórmula seleccionada no existe."}, status=status.HTTP_400_BAD_REQUEST)
+
+        planned_quantity = request.data.get("planned_quantity")
+        if not planned_quantity:
+            return Response({"detail": "Debes indicar la cantidad planificada."}, status=status.HTTP_400_BAD_REQUEST)
+
+        def _resolve_employee(field_name):
+            employee_id = request.data.get(field_name)
+            if not employee_id:
+                return None
+            try:
+                return Employee.objects.get(pk=employee_id)
+            except Employee.DoesNotExist:
+                return None
+
+        try:
+            batch = CreateBatchWithOrder().execute(
+                formula=formula,
+                planned_quantity=planned_quantity,
+                actor=request.user,
+                batch_code=request.data.get("batch_code", ""),
+                area=request.data.get("area", ""),
+                production_line=request.data.get("production_line", ""),
+                production_manager=_resolve_employee("production_manager"),
+                quality_manager=_resolve_employee("quality_manager"),
+                scheduled_at=request.data.get("scheduled_at") or None,
+                notes=request.data.get("notes", ""),
+            )
+        except BusinessRuleViolation as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(self.get_serializer(batch).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=("post",), url_path="change-status")
     def change_status(self, request, pk=None):

@@ -31,6 +31,19 @@ class ChangeBatchStatus:
     de estado sin reabrir explícitamente.
     """
 
+    # Batch.status (GMP, 17 valores) gobierna la UI unificada de producción;
+    # ProductionOrder.status (PENDING/IN_PROGRESS/CLOSED/VOIDED) es un detalle
+    # interno de inventory que se mantiene sincronizado automáticamente para no
+    # exponer dos estados independientes al usuario.
+    _ORDER_STATUS_MAP = {
+        Batch.Status.DRAFT: "PENDING",
+        Batch.Status.SCHEDULED: "PENDING",
+        Batch.Status.RELEASED: "CLOSED",
+        Batch.Status.CLOSED: "CLOSED",
+        Batch.Status.REJECTED: "VOIDED",
+        Batch.Status.CANCELLED: "VOIDED",
+    }
+
     def execute(self, batch: Batch, new_status: str, actor, reason: str = "", observation: str = "", evidence=None):
         if batch.is_terminal:
             raise BusinessRuleViolation("El lote ya se encuentra en un estado terminal y no puede modificarse.")
@@ -50,6 +63,13 @@ class ChangeBatchStatus:
             observation=observation,
             evidence=evidence,
         )
+
+        production_order = batch.production_order
+        order_status = self._ORDER_STATUS_MAP.get(new_status, "IN_PROGRESS")
+        if production_order.status != order_status:
+            production_order.status = order_status
+            production_order.save(update_fields=("status", "updated_at"))
+
         return batch
 
 
@@ -60,6 +80,62 @@ class StartBatch:
         batch.actual_start_at = timezone.now()
         batch.save(update_fields=("actual_start_at", "updated_at"))
         return ChangeBatchStatus().execute(batch, Batch.Status.PENDING_DISPENSING, actor, reason="Inicio de lote")
+
+
+class CreateBatchWithOrder:
+    """Punto de entrada único para iniciar un lote: crea la ProductionOrder
+    (inventory) y el Batch (manufacturing) en una sola transacción, en vez de
+    exigir que el usuario primero cree la orden en Inventario y luego, por
+    separado, el lote en Producción. Sustituye el flujo anterior de 2 pantallas."""
+
+    @transaction.atomic
+    def execute(
+        self,
+        *,
+        formula,
+        planned_quantity,
+        actor,
+        batch_code: str = "",
+        area: str = "",
+        production_line: str = "",
+        production_manager=None,
+        quality_manager=None,
+        scheduled_at=None,
+        notes: str = "",
+    ):
+        from apps.inventory.infrastructure.models import ProductionOrder
+
+        if planned_quantity <= 0:
+            raise BusinessRuleViolation("La cantidad planificada debe ser mayor que cero.")
+
+        production_order = ProductionOrder.objects.create(
+            formula=formula,
+            output_item=formula.output_item,
+            planned_quantity=planned_quantity,
+            batch_code=batch_code,
+            notes=notes,
+        )
+
+        batch = Batch.objects.create(
+            production_order=production_order,
+            area=area,
+            production_line=production_line,
+            production_manager=production_manager,
+            quality_manager=quality_manager,
+            scheduled_at=scheduled_at,
+            notes=notes,
+            created_by=actor,
+        )
+
+        BatchStatusHistory.objects.create(
+            batch=batch,
+            previous_status="",
+            new_status=Batch.Status.DRAFT,
+            changed_by=actor,
+            reason="Creación del lote",
+        )
+
+        return batch
 
 
 class RegisterItemStockMovement:

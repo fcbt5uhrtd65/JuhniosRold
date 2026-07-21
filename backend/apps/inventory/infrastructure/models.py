@@ -138,6 +138,17 @@ class Item(BaseModel):
         null=True,
         blank=True,
     )
+    # Enlace opcional al producto/variante del catálogo comercial, para que las
+    # órdenes de producción de producto terminado (Formula.output_item) puedan
+    # mostrar el producto, código y presentación reales de catálogo cuando el
+    # Item represente un producto terminado ya publicado en catalog.ProductVariant.
+    product_variant = models.ForeignKey(
+        "catalog.ProductVariant",
+        on_delete=models.SET_NULL,
+        related_name="inventory_items",
+        null=True,
+        blank=True,
+    )
     cost = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     tax_rate = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     minimum_quantity = models.DecimalField(max_digits=14, decimal_places=3, default=0)
