@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from django.db import OperationalError, ProgrammingError
 from rest_framework import serializers
 
 from apps.notifications.infrastructure.models import StaffNotification
@@ -79,7 +80,7 @@ class VacationRequestSerializer(serializers.ModelSerializer):
     attachments = VacationRequestAttachmentSerializer(many=True, read_only=True)
     approval_steps = VacationRequestApprovalStepSerializer(many=True, read_only=True)
     history = VacationRequestHistorySerializer(many=True, read_only=True)
-    overtime_shifts = OvertimeShiftSerializer(many=True, read_only=True)
+    overtime_shifts = serializers.SerializerMethodField()
 
     class Meta:
         model = VacationRequest
@@ -132,6 +133,13 @@ class VacationRequestSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(errors)
 
         return attrs
+
+    def get_overtime_shifts(self, obj):
+        try:
+            shifts = obj.overtime_shifts.all()
+            return OvertimeShiftSerializer(shifts, many=True, context=self.context).data
+        except (OperationalError, ProgrammingError):
+            return []
 
     def validate_support_document(self, file):
         if not file:
