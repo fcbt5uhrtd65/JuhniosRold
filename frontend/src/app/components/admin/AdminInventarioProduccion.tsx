@@ -30,6 +30,7 @@ import {
   createPurchaseOrder,
   createStockConversion,
   getInventoryWorkspace,
+  getProductionPlanningWorkspace,
   numeric,
   type InventoryMovementRecord,
   type InventoryWorkspace,
@@ -202,6 +203,27 @@ function useInventoryWorkspace() {
       setData(await getInventoryWorkspace());
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'No fue posible cargar inventario y producción');
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => { load(); }, [load]);
+
+  return { data, loading, reload: load };
+}
+
+function useProductionPlanningWorkspace() {
+  const toast = useToast();
+  const [data, setData] = useState<InventoryWorkspace | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setData(await getProductionPlanningWorkspace());
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No fue posible cargar planificación de producción');
     } finally {
       setLoading(false);
     }
@@ -1655,7 +1677,7 @@ function ModuloMovimientos() {
 ═══════════════════════════════════════════════════════ */
 export function AdminProductionPlanning() {
   const toast = useToast();
-  const { data, loading, reload } = useInventoryWorkspace();
+  const { data, loading, reload } = useProductionPlanningWorkspace();
   const [tab, setTab] = useState<TabProduccion>('ordenes');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [cierreOP, setCierreOP] = useState<ProductionOrderRecord | null>(null);

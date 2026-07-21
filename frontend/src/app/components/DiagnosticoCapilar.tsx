@@ -159,19 +159,10 @@ export function DiagnosticoCapilar() {
     }
   ];
 
-  const handleAnswer = (value: string) => {
-    setAnswers({ ...answers, [currentQuestion]: value });
-  };
-
-  const handleNextQuestion = async () => {
-    if (!answers[currentQuestion]) return;
-    if (currentQuestion < questions.length - 1) {
-      setCurrentQuestion(currentQuestion + 1);
-      return;
-    }
+  const finishQuiz = async (nextAnswers: Record<number, string>) => {
     setIsLoadingResult(true);
     try {
-      const result = await buildRecommendation(answers[0], answers[1]);
+      const result = await buildRecommendation(nextAnswers[0], nextAnswers[1]);
       setRecommendation(result);
       setShowResults(true);
     } catch (error) {
@@ -183,6 +174,26 @@ export function DiagnosticoCapilar() {
     } finally {
       setIsLoadingResult(false);
     }
+  };
+
+  const handleAnswer = (value: string) => {
+    if (isLoadingResult) return;
+    const nextAnswers = { ...answers, [currentQuestion]: value };
+    setAnswers(nextAnswers);
+
+    if (currentQuestion < questions.length - 1) {
+      window.setTimeout(() => {
+        setCurrentQuestion(question => Math.min(question + 1, questions.length - 1));
+      }, 160);
+      return;
+    }
+
+    void finishQuiz(nextAnswers);
+  };
+
+  const handlePreviousQuestion = () => {
+    if (currentQuestion === 0 || isLoadingResult) return;
+    setCurrentQuestion(question => Math.max(question - 1, 0));
   };
 
   const handleAddAllToCart = async () => {
@@ -402,7 +413,7 @@ export function DiagnosticoCapilar() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-[#F4F1EA]/95 p-4"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/25 p-3 backdrop-blur-md sm:p-5"
             onClick={() => { setIsModalOpen(false); resetQuiz(); }}
           >
             <motion.div
@@ -411,12 +422,12 @@ export function DiagnosticoCapilar() {
               exit={{ opacity: 0, scale: 0.98 }}
               transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
               onClick={e => e.stopPropagation()}
-              className="relative flex max-h-[92vh] w-full max-w-[980px] flex-col overflow-hidden rounded-[2rem] border border-stone-200/70 bg-[#FBFAF7] shadow-[0_30px_120px_rgba(45,58,31,0.18)]"
+              className="relative flex max-h-[94dvh] w-full max-w-3xl flex-col overflow-hidden rounded-[1.75rem] border border-white/70 bg-[#FBFAF7] shadow-[0_24px_80px_rgba(45,58,31,0.18)]"
             >
               {/* Cerrar */}
               <button
                 onClick={() => { setIsModalOpen(false); resetQuiz(); }}
-                className="absolute right-6 top-6 z-20 p-2 text-[#5A673F] transition-opacity hover:opacity-50"
+                className="absolute right-4 top-4 z-20 rounded-full p-2 text-[#5A673F] transition hover:bg-stone-100 sm:right-5 sm:top-5"
               >
                 <X className="w-5 h-5" strokeWidth={1} />
               </button>
@@ -430,27 +441,27 @@ export function DiagnosticoCapilar() {
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
                       transition={{ duration: 0.2 }}
-                      className="flex min-h-[680px] flex-col"
+                      className="flex min-h-[min(620px,94dvh)] flex-col"
                     >
-                      <div className="flex items-center justify-between border-b border-stone-200/70 px-8 py-6 sm:px-10">
-                        <div className="flex items-center gap-4">
-                          <div className="flex h-12 w-12 items-center justify-center rounded-full border border-stone-200 bg-white text-[#667246] shadow-sm">
-                            <Leaf className="h-5 w-5" strokeWidth={1.5} />
+                      <div className="flex items-center justify-between border-b border-stone-200/60 px-5 py-4 sm:px-7">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-stone-200 bg-white text-[#667246] shadow-sm">
+                              <Leaf className="h-4 w-4" strokeWidth={1.5} />
                           </div>
                           <div>
-                            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#5A673F]">Diagnóstico capilar</p>
-                            <p className="mt-1 text-sm text-stone-500">Conócenos para recomendarte lo mejor</p>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#5A673F]">Diagnóstico capilar</p>
+                            <p className="mt-0.5 text-xs text-stone-500">Elige y avanza al instante</p>
                           </div>
                         </div>
                       </div>
 
-                      <div className="flex-1 px-8 py-8 sm:px-10">
-                        <div className="mb-8">
+                      <div className="flex-1 px-5 py-5 sm:px-7 sm:py-7">
+                        <div className="mb-6">
                           <div className="mb-3 flex justify-between text-[11px] font-semibold uppercase tracking-[0.12em] text-[#5A673F]">
                             <span>Pregunta {currentQuestion + 1} de {questions.length}</span>
                             <span>{Math.round(progress)}%</span>
                           </div>
-                          <div className="h-2 overflow-hidden rounded-full bg-stone-200/80">
+                          <div className="h-1.5 overflow-hidden rounded-full bg-stone-200/80">
                             <motion.div
                               initial={{ width: 0 }}
                               animate={{ width: `${progress}%` }}
@@ -470,14 +481,14 @@ export function DiagnosticoCapilar() {
                             transition={{ duration: 0.2 }}
                           >
                             <h3
-                              className="mb-2 text-3xl font-light leading-tight text-stone-950 sm:text-4xl md:text-[2.65rem]"
+                              className="mb-2 text-2xl font-light leading-tight text-stone-950 sm:text-3xl md:text-4xl"
                               style={{ fontFamily: "'Playfair Display', serif" }}
                             >
                               {questions[currentQuestion].question}
                             </h3>
-                            <p className="mb-7 text-sm text-stone-500">Selecciona la opción que mejor se adapte a ti.</p>
+                            <p className="mb-5 text-sm text-stone-500">Toca una opción para continuar.</p>
 
-                            <div className="space-y-3">
+                            <div className="grid gap-3 sm:grid-cols-2">
                               {questions[currentQuestion].options.map((option, idx) => {
                                 const OptionIcon = option.icon;
                                 const selected = answers[currentQuestion] === option.value;
@@ -489,20 +500,21 @@ export function DiagnosticoCapilar() {
                                     animate={{ opacity: 1, x: 0 }}
                                     transition={{ delay: idx * 0.05, duration: 0.2 }}
                                     onClick={() => handleAnswer(option.value)}
-                                    className={`flex w-full items-center gap-5 rounded-2xl border bg-white px-5 py-4 text-left shadow-sm transition-all ${
+                                    disabled={isLoadingResult}
+                                    className={`group flex w-full items-center gap-3 rounded-2xl border bg-white/90 px-4 py-4 text-left shadow-sm transition-all disabled:cursor-wait ${
                                       selected
-                                        ? 'border-[#667246] ring-2 ring-[#667246]/15'
-                                        : 'border-stone-200 hover:border-[#667246]/60 hover:shadow-md'
+                                        ? 'border-[#667246] bg-[#F7FAF0] ring-2 ring-[#667246]/10'
+                                        : 'border-stone-200 hover:-translate-y-0.5 hover:border-[#667246]/50 hover:shadow-md'
                                     }`}
                                   >
-                                    <span className={`flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full ${selected ? 'bg-[#EEF3DF] text-[#4D5E2E]' : 'bg-[#F4F1EA] text-[#7D7A61]'}`}>
-                                      <OptionIcon className="h-6 w-6" strokeWidth={1.4} />
+                                    <span className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full ${selected ? 'bg-[#E9F1DA] text-[#4D5E2E]' : 'bg-[#F4F1EA] text-[#7D7A61]'}`}>
+                                      <OptionIcon className="h-5 w-5" strokeWidth={1.4} />
                                     </span>
                                     <span className="min-w-0 flex-1">
-                                      <span className="block text-base font-semibold text-stone-950">{option.label}</span>
-                                      <span className="mt-1 block text-sm leading-relaxed text-stone-500">{option.description}</span>
+                                      <span className="block text-sm font-semibold text-stone-950">{option.label}</span>
+                                      <span className="mt-1 block text-xs leading-relaxed text-stone-500">{option.description}</span>
                                     </span>
-                                    <ArrowRight className="h-5 w-5 flex-shrink-0 text-stone-700" strokeWidth={1.5} />
+                                    <ArrowRight className={`h-4 w-4 flex-shrink-0 transition ${selected ? 'text-[#4D5E2E]' : 'text-stone-300 group-hover:text-[#667246]'}`} strokeWidth={1.5} />
                                   </motion.button>
                                 );
                               })}
@@ -511,26 +523,17 @@ export function DiagnosticoCapilar() {
                         </AnimatePresence>
                       </div>
 
-                      <div className="flex items-center justify-between gap-4 border-t border-stone-200/70 bg-white/70 px-8 py-5 backdrop-blur sm:px-10">
-                        <div className="flex items-center gap-3 text-sm text-stone-500">
-                          <span className="flex h-10 w-10 items-center justify-center rounded-full border border-stone-200 bg-white text-[#667246]">
-                            <Leaf className="h-4 w-4" strokeWidth={1.5} />
-                          </span>
-                          <span>Responde 3 preguntas y recibe tu recomendación personalizada</span>
-                        </div>
-                        <motion.button
-                          whileHover={answers[currentQuestion] && !isLoadingResult ? { scale: 1.02 } : undefined}
-                          whileTap={answers[currentQuestion] && !isLoadingResult ? { scale: 0.98 } : undefined}
-                          onClick={() => void handleNextQuestion()}
-                          disabled={!answers[currentQuestion] || isLoadingResult}
-                          className="flex min-w-[170px] items-center justify-center gap-3 rounded-full px-7 py-4 text-sm font-semibold text-white transition-all disabled:cursor-not-allowed disabled:opacity-40"
-                          style={{ backgroundColor: OLIVE }}
+                      <div className="flex items-center justify-between gap-4 border-t border-stone-200/60 bg-white/60 px-5 py-4 text-xs text-stone-500 backdrop-blur sm:px-7">
+                        <button
+                          onClick={handlePreviousQuestion}
+                          disabled={currentQuestion === 0 || isLoadingResult}
+                          className="font-semibold text-[#5A673F] transition disabled:opacity-0"
                         >
-                          {isLoadingResult
-                            ? 'Buscando...'
-                            : currentQuestion === questions.length - 1 ? 'Ver resultado' : 'Siguiente'}
-                          <ArrowRight className="h-4 w-4" strokeWidth={1.7} />
-                        </motion.button>
+                          Atrás
+                        </button>
+                        <span className="text-right">
+                          {isLoadingResult ? 'Preparando tu recomendación...' : 'Elige una respuesta para avanzar.'}
+                        </span>
                       </div>
                     </motion.div>
                   ) : recommendation ? (

@@ -283,6 +283,33 @@ export async function getInventoryWorkspace(): Promise<InventoryWorkspace> {
   };
 }
 
+export async function getProductionPlanningWorkspace(): Promise<InventoryWorkspace> {
+  const [units, items, formulas, productionOrders] = await Promise.all([
+    getPage<UnitRef>(`${BASE}/units/`),
+    getPage<InventoryItem>(`${BASE}/items/`),
+    getPage<FormulaRecord>(`${BASE}/formulas/`),
+    getPage<ProductionOrderRecord>(`${BASE}/production-orders/`),
+  ]);
+
+  return {
+    warehouses: [],
+    locations: [],
+    units,
+    itemGroups: [],
+    itemTypes: [],
+    suppliers: [],
+    items,
+    stocks: [],
+    movements: [],
+    purchaseOrders: [],
+    formulas,
+    productionOrders,
+    conversions: [],
+    variants: [],
+    productNameByVariantId: new Map(),
+  };
+}
+
 export function numeric(value: string | number | null | undefined): number {
   return toNumber(value);
 }

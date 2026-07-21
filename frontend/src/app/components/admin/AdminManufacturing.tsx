@@ -184,7 +184,7 @@ function getEmployeeName(employee: Employee | undefined): string {
 export function AdminManufacturing() {
   const toast = useToast();
   const [isLoading, setIsLoading] = useState(true);
-  const [activeSection, setActiveSection] = useState<ManufacturingSection>('planning');
+  const [activeSection, setActiveSection] = useState<ManufacturingSection>('batches');
   const [batches, setBatches] = useState<BatchRecord[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [productionOrders, setProductionOrders] = useState<ProductionOrderRecord[]>([]);
