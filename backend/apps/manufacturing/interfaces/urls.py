@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     AnalysisCertificateViewSet,
     AnalysisTestResultViewSet,
+    AreaViewSet,
     BatchExportViewSet,
     BatchLotMarkingViewSet,
     BatchReleaseViewSet,
@@ -20,12 +21,14 @@ from .views import (
     LineClearanceCriterionViewSet,
     LineClearanceViewSet,
     LineIdentificationViewSet,
+    ManufacturingNotificationViewSet,
     ManufacturingStepExecutionViewSet,
     ManufacturingStepViewSet,
     MicrobiologyAnalysisViewSet,
     PackagingControlViewSet,
     ProductionControlMaterialViewSet,
     ProductionControlViewSet,
+    ProductionLineViewSet,
     ProductSpecificationTestViewSet,
     ProductSpecificationViewSet,
     RawMaterialBatchViewSet,
@@ -37,6 +40,8 @@ from .views import (
 )
 
 router = DefaultRouter()
+router.register("areas", AreaViewSet)
+router.register("production-lines", ProductionLineViewSet)
 router.register("batches", BatchViewSet)
 router.register("raw-material-batches", RawMaterialBatchViewSet)
 router.register("item-stocks", ItemStockViewSet)
@@ -70,6 +75,7 @@ router.register("document-checklist-items", DocumentChecklistItemViewSet)
 router.register("document-attachments", DocumentAttachmentViewSet)
 router.register("batch-releases", BatchReleaseViewSet)
 router.register("batch-exports", BatchExportViewSet)
+router.register("notifications", ManufacturingNotificationViewSet, basename="manufacturing-notifications")
 
 urlpatterns = [
     *router.urls,

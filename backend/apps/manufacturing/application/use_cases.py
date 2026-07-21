@@ -1,6 +1,7 @@
 from django.db import transaction
 from django.utils import timezone
 
+from apps.notifications.infrastructure.models import StaffNotification
 from shared.domain.exceptions import BusinessRuleViolation
 
 from ..infrastructure.models import (
@@ -19,6 +20,17 @@ from ..infrastructure.models import (
     ProductSpecification,
     ResultStatus,
 )
+
+
+def _notify(batch, notification_type, title, message, employee=None):
+    StaffNotification.objects.create(
+        module="manufacturing",
+        batch=batch,
+        employee=employee,
+        notification_type=notification_type,
+        title=title,
+        message=message,
+    )
 
 
 class ChangeBatchStatus:
@@ -70,6 +82,14 @@ class ChangeBatchStatus:
             production_order.status = order_status
             production_order.save(update_fields=("status", "updated_at"))
 
+        if new_status == Batch.Status.REJECTED:
+            _notify(
+                batch,
+                StaffNotification.NotificationType.BATCH_REJECTED,
+                "Lote rechazado",
+                f"El lote {batch} fue rechazado. Motivo: {reason or 'no especificado'}.",
+                employee=batch.quality_manager,
+            )
         return batch
 
 
@@ -96,8 +116,8 @@ class CreateBatchWithOrder:
         planned_quantity,
         actor,
         batch_code: str = "",
-        area: str = "",
-        production_line: str = "",
+        area=None,
+        production_line=None,
         production_manager=None,
         quality_manager=None,
         scheduled_at=None,
@@ -201,6 +221,15 @@ class WeighDispensingLine:
         line.weighed_at = timezone.now()
         line.status = DispensingLine.Status.WEIGHED
         line.save()
+
+        if not line.is_within_tolerance:
+            _notify(
+                line.order.batch,
+                StaffNotification.NotificationType.RAW_MATERIAL_OUT_OF_TOLERANCE,
+                "Materia prima fuera de tolerancia",
+                f"La pesada de {line.item} se desvía {line.deviation_percentage:.2f}% de lo esperado en el lote {line.order.batch}.",
+                employee=line.order.batch.quality_manager,
+            )
         return line
 
 
@@ -260,6 +289,15 @@ class ApproveLineClearance:
         clearance.status = LineClearance.Status.APPROVED if approve else LineClearance.Status.REJECTED
         clearance.verified_by = actor
         clearance.save(update_fields=("status", "verified_by", "updated_at"))
+
+        if not approve:
+            _notify(
+                clearance.batch,
+                StaffNotification.NotificationType.LINE_CLEARANCE_REJECTED,
+                "Despeje de línea no conforme",
+                f"El despeje de {clearance.get_phase_display()} del lote {clearance.batch} no fue aprobado.",
+                employee=clearance.batch.quality_manager,
+            )
         return clearance
 
 
@@ -378,4 +416,11 @@ class ReleaseBatch:
             },
         )
         ChangeBatchStatus().execute(batch, Batch.Status.RELEASED, actor, reason="Lote liberado")
+        _notify(
+            batch,
+            StaffNotification.NotificationType.BATCH_RELEASED,
+            "Lote liberado",
+            f"El lote {batch} fue liberado con condición {release.get_condition_display()}.",
+            employee=batch.production_manager,
+        )
         return release

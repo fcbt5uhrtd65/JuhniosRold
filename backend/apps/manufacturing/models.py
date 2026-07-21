@@ -1,6 +1,7 @@
 from .infrastructure.models import (
     AnalysisCertificate,
     AnalysisTestResult,
+    Area,
     Batch,
     BatchExport,
     BatchLotMarking,
@@ -25,6 +26,7 @@ from .infrastructure.models import (
     PackagingControl,
     ProductionControl,
     ProductionControlMaterial,
+    ProductionLine,
     ProductSpecification,
     ProductSpecificationTest,
     RawMaterialBatch,
@@ -39,6 +41,7 @@ from .infrastructure.models import (
 __all__ = (
     "AnalysisCertificate",
     "AnalysisTestResult",
+    "Area",
     "Batch",
     "BatchExport",
     "BatchLotMarking",
@@ -63,6 +66,7 @@ __all__ = (
     "PackagingControl",
     "ProductionControl",
     "ProductionControlMaterial",
+    "ProductionLine",
     "ProductSpecification",
     "ProductSpecificationTest",
     "RawMaterialBatch",

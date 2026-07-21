@@ -2,10 +2,11 @@ from pathlib import Path
 
 from rest_framework import serializers
 
+from apps.notifications.infrastructure.models import StaffNotification
+
 from .models import (
     Attendance,
     EmployeeDocument,
-    HRNotification,
     OvertimeShift,
     Payroll,
     PayrollItem,
@@ -217,5 +218,5 @@ class EmployeeSelfServiceDocumentSerializer(serializers.ModelSerializer):
 
 class HRNotificationSerializer(serializers.ModelSerializer):
     class Meta:
-        model = HRNotification
+        model = StaffNotification
         fields = "__all__"

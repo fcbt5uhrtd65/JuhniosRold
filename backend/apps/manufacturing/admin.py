@@ -2,6 +2,7 @@ from django.contrib import admin
 
 from .models import (
     AnalysisCertificate,
+    Area,
     Batch,
     BatchRelease,
     BatchStatusHistory,
@@ -9,9 +10,25 @@ from .models import (
     DocumentChecklistItem,
     ItemStock,
     LineClearance,
+    ProductionLine,
     ProductSpecification,
     RawMaterialBatch,
 )
+
+
+@admin.register(Area)
+class AreaAdmin(admin.ModelAdmin):
+    list_display = ("code", "name", "is_active")
+    list_filter = ("is_active",)
+    search_fields = ("code", "name")
+
+
+@admin.register(ProductionLine)
+class ProductionLineAdmin(admin.ModelAdmin):
+    list_display = ("code", "name", "area", "is_active")
+    list_filter = ("is_active", "area")
+    search_fields = ("code", "name")
+    list_select_related = ("area",)
 
 
 @admin.register(Batch)

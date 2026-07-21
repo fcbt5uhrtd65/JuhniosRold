@@ -16,6 +16,7 @@ from shared.interfaces.viewsets import SoftDeleteModelViewSet
 
 from apps.employees.infrastructure.models import Employee
 from apps.identity.interfaces.permissions import HasComponentAccess
+from apps.notifications.infrastructure.models import StaffNotification
 
 from shared.domain.exceptions import BusinessRuleViolation
 
@@ -28,7 +29,6 @@ from ..application.use_cases import (
 from ..infrastructure.models import (
     Attendance,
     EmployeeDocument,
-    HRNotification,
     Payroll,
     PerformanceReview,
     VacationRequest,
@@ -516,15 +516,16 @@ class EmployeeDocumentViewSet(SoftDeleteModelViewSet):
     def _create_document_alert(self, document):
         if document.status != EmployeeDocument.Status.EXPIRED:
             return
-        HRNotification.objects.update_or_create(
+        StaffNotification.objects.update_or_create(
             document=document,
-            notification_type=HRNotification.NotificationType.DOCUMENT_EXPIRED,
+            notification_type=StaffNotification.NotificationType.DOCUMENT_EXPIRED,
             defaults={
+                "module": "human_resources",
                 "employee": document.employee,
                 "title": "Documento vencido",
                 "message": f"{document.get_document_type_display()} de {document.employee} está vencido.",
                 "due_date": document.expires_at or timezone.localdate(),
-                "status": HRNotification.Status.UNREAD,
+                "status": StaffNotification.Status.UNREAD,
                 "created_by": self.request.user,
             },
         )
@@ -539,7 +540,7 @@ class EmployeeDocumentViewSet(SoftDeleteModelViewSet):
 
 
 class HRNotificationViewSet(SoftDeleteModelViewSet):
-    queryset = HRNotification.objects.select_related("employee", "document", "created_by")
+    queryset = StaffNotification.objects.filter(module="human_resources").select_related("employee", "document", "created_by")
     serializer_class = HRNotificationSerializer
     permission_classes = (HasComponentAccess,)
     required_component = "human_resources.management"
@@ -550,10 +551,13 @@ class HRNotificationViewSet(SoftDeleteModelViewSet):
         self.required_component_action = "view" if self.action in {"list", "retrieve"} else "edit"
         return super().get_permissions()
 
+    def perform_create(self, serializer):
+        serializer.save(module="human_resources")
+
     @action(detail=True, methods=("post",), url_path="mark-read")
     def mark_read(self, request, pk=None):
         notification = self.get_object()
-        notification.status = HRNotification.Status.READ
+        notification.status = StaffNotification.Status.READ
         notification.save(update_fields=("status", "updated_at"))
         return Response(self.get_serializer(notification).data)
 
