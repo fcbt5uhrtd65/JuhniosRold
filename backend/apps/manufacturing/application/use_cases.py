@@ -1,3 +1,6 @@
+import hashlib
+
+from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
 from django.utils import timezone
 
@@ -22,9 +25,84 @@ from ..infrastructure.models import (
     MicrobiologyAnalysis,
     ProductSpecification,
     ResultStatus,
+    Signature,
     WeightVolumeControl,
     WeightVolumeSample,
 )
+
+# Campo que representa el "estado del documento" en cada modelo firmable —
+# usado por SignDocument para congelar document_status_at_signing y para
+# bloquear edición de la firma una vez el documento queda aprobado/cerrado.
+# Estados considerados "aprobados" (bloquean nueva firma sin reemplazo explícito).
+SIGNABLE_STATUS_FIELD = {
+    "rawmaterialidentificationprint": None,
+    "manufacturingstepexecution": "status",
+    "cleaningrecord": "result",
+    "lineidentification": None,
+    "productioncontrol": None,
+    "fillingcontrol": None,
+    "weightvolumecontrol": "overall_result",
+    "sealintegritycontrol": "overall_result",
+    "packagingcontrol": "label_result",
+    "batchlotmarking": "result",
+    "analysiscertificate": "concept",
+    "microbiologyanalysis": "overall_result",
+}
+LOCKED_STATUS_VALUES = {"APPROVED", "COMPLETED", "YES"}
+
+
+class SignDocument:
+    """Firma electrónica genérica (dibujada o cargada) para cualquier modelo
+    de manufacturing con GenericRelation(Signature). Congela IP, hash de
+    integridad del archivo, tipo de firma y el estado del documento en el
+    momento de firmar. No permite reemplazar una firma existente del mismo
+    rol sin un motivo explícito, y conserva la anterior enlazada vía
+    replaced_by para auditoría."""
+
+    @transaction.atomic
+    def execute(self, instance, *, actor, image, signature_type, role=Signature.Role.RESPONSIBLE,
+                full_name="", role_title="", ip_address=None, observation="", replace_reason=""):
+        model_name = instance._meta.model_name
+        status_field = SIGNABLE_STATUS_FIELD.get(model_name)
+        current_status = getattr(instance, status_field, "") if status_field else ""
+
+        if current_status in LOCKED_STATUS_VALUES:
+            raise BusinessRuleViolation(
+                "No se puede firmar: el documento ya está aprobado y no admite ediciones."
+            )
+
+        existing = instance.signatures.filter(role=role).order_by("-created_at").first()
+        if existing and not replace_reason:
+            raise BusinessRuleViolation(
+                "Ya existe una firma de este rol para el documento. Indica un motivo para reemplazarla."
+            )
+
+        image.seek(0)
+        digest = hashlib.sha256(image.read()).hexdigest()
+        image.seek(0)
+
+        content_type = ContentType.objects.get_for_model(instance)
+        signature = Signature.objects.create(
+            content_type=content_type,
+            object_id=instance.pk,
+            image=image,
+            owner=actor,
+            full_name=full_name,
+            role_title=role_title,
+            role=role,
+            signature_type=signature_type,
+            ip_address=ip_address,
+            integrity_hash=digest,
+            document_status_at_signing=str(current_status),
+            observation=observation,
+            replaced_reason=replace_reason,
+        )
+
+        if existing and replace_reason:
+            existing.replaced_by = signature
+            existing.save(update_fields=("replaced_by", "updated_at"))
+
+        return signature
 
 
 def _notify(batch, notification_type, title, message, employee=None):

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Eraser, FileUp, PenLine } from 'lucide-react';
 
-type SignatureMode = 'draw' | 'upload';
+export type SignatureMode = 'draw' | 'upload';
 
 function getMediaUrl(url: string): string {
   try {
@@ -29,7 +29,7 @@ export function SignaturePad({
   helperText = 'Sube una imagen (PNG/JPG) o dibújala directamente.',
 }: {
   currentSignatureUrl?: string | null;
-  onChange: (file: File | null) => void;
+  onChange: (file: File | null, mode?: SignatureMode) => void;
   label?: string;
   helperText?: string;
 }) {
@@ -58,7 +58,7 @@ export function SignaturePad({
     if (!canvas) return;
     canvas.toBlob((blob) => {
       if (!blob) return;
-      onChange(new File([blob], 'firma.png', { type: 'image/png' }));
+      onChange(new File([blob], 'firma.png', { type: 'image/png' }), 'draw');
     }, 'image/png');
   };
 
@@ -107,7 +107,7 @@ export function SignaturePad({
       return;
     }
     setUploadPreview(URL.createObjectURL(file));
-    onChange(file);
+    onChange(file, 'upload');
   };
 
   const switchMode = (nextMode: SignatureMode) => {

@@ -37,6 +37,7 @@ import {
   selectCls,
 } from './AdminUI';
 import { SignaturePad } from './SignaturePad';
+import { SignatureBlock } from './SignatureBlock';
 import { AdminProductionPlanning } from './AdminProductionPlanning';
 import {
   approveLineClearance,
@@ -1056,14 +1057,20 @@ function ManufacturingTab({ batch, employeeById }: { batch: BatchRecord; employe
         ) : (
           <div className="space-y-2">
             {cleanings.map((record) => (
-              <div key={record.id} className="flex items-center justify-between gap-3 border border-gray-100 rounded-lg p-3">
-                <div>
-                  <p className="text-xs font-semibold text-gray-900">{record.record_type === 'AREA' ? record.area : record.equipment}</p>
-                  <p className="text-[11px] text-gray-400">Sanitizante: {record.sanitizer || '-'} · {formatDateTime(record.cleaned_at)}</p>
+              <div key={record.id} className="border border-gray-100 rounded-lg p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-900">{record.record_type === 'AREA' ? record.area : record.equipment}</p>
+                    <p className="text-[11px] text-gray-400">Sanitizante: {record.sanitizer || '-'} · {formatDateTime(record.cleaned_at)}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {record.is_expired && <Badge label="Vencida" color="red" />}
+                    {record.result && <Badge label={record.result} color={record.result === 'APPROVED' ? 'green' : 'red'} />}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  {record.is_expired && <Badge label="Vencida" color="red" />}
-                  {record.result && <Badge label={record.result} color={record.result === 'APPROVED' ? 'green' : 'red'} />}
+                <div className="grid sm:grid-cols-2 gap-2 mt-2 pt-2 border-t border-gray-50">
+                  <SignatureBlock resourcePath="cleaning-records" resourceId={record.id} role="RESPONSIBLE" label="Realizado por" />
+                  <SignatureBlock resourcePath="cleaning-records" resourceId={record.id} role="VERIFIER" label="Verificado por" />
                 </div>
               </div>
             ))}
@@ -1079,12 +1086,15 @@ function ManufacturingTab({ batch, employeeById }: { batch: BatchRecord; employe
           )}
         </div>
         {lineIdentification ? (
-          <div className="grid sm:grid-cols-2 gap-4">
-            <SectionField label="Área" value={lineIdentification.area_name || 'Sin asignar'} />
-            <SectionField label="Línea" value={lineIdentification.production_line_name || 'Sin asignar'} />
-            <SectionField label="Colocada" value={formatDateTime(lineIdentification.placed_at)} />
-            <SectionField label="Retirada" value={formatDateTime(lineIdentification.removed_at)} />
-          </div>
+          <>
+            <div className="grid sm:grid-cols-2 gap-4 mb-3">
+              <SectionField label="Área" value={lineIdentification.area_name || 'Sin asignar'} />
+              <SectionField label="Línea" value={lineIdentification.production_line_name || 'Sin asignar'} />
+              <SectionField label="Colocada" value={formatDateTime(lineIdentification.placed_at)} />
+              <SectionField label="Retirada" value={formatDateTime(lineIdentification.removed_at)} />
+            </div>
+            <SignatureBlock resourcePath="line-identifications" resourceId={lineIdentification.id} role="RESPONSIBLE" label="Colocada por" />
+          </>
         ) : (
           <EmptyState title="Sin identificación de línea registrada" />
         )}
@@ -1113,7 +1123,11 @@ function ManufacturingTab({ batch, employeeById }: { batch: BatchRecord; employe
                     )}
                   </div>
                 </div>
-                <p className="text-[11px] text-gray-400">{execution.step_detail.instruction}</p>
+                <p className="text-[11px] text-gray-400 mb-2">{execution.step_detail.instruction}</p>
+                <div className="grid sm:grid-cols-2 gap-2">
+                  <SignatureBlock resourcePath="manufacturing-step-executions" resourceId={execution.id} role="RESPONSIBLE" label="Realizado por" />
+                  <SignatureBlock resourcePath="manufacturing-step-executions" resourceId={execution.id} role="VERIFIER" label="Verificado por" />
+                </div>
               </div>
             ))}
           </div>
@@ -1154,6 +1168,12 @@ function ManufacturingTab({ batch, employeeById }: { batch: BatchRecord; employe
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+        {productionControl && (
+          <div className="grid sm:grid-cols-2 gap-2 mt-4 pt-3 border-t border-gray-100">
+            <SignatureBlock resourcePath="production-controls" resourceId={productionControl.id} role="RESPONSIBLE" label="Entregado por" />
+            <SignatureBlock resourcePath="production-controls" resourceId={productionControl.id} role="VERIFIER" label="Recibido por" />
           </div>
         )}
       </Card>
@@ -1587,6 +1607,10 @@ function BulkQualityTab({ batch }: { batch: BatchRecord }) {
                 </table>
               </div>
             )}
+            <div className="grid sm:grid-cols-2 gap-2 mt-4 pt-3 border-t border-gray-100">
+              <SignatureBlock resourcePath="analysis-certificates" resourceId={certificate.id} role="RESPONSIBLE" label="Analizado por" />
+              <SignatureBlock resourcePath="analysis-certificates" resourceId={certificate.id} role="VERIFIER" label="Verificado por" />
+            </div>
           </>
         )}
       </Card>
@@ -1601,12 +1625,15 @@ function BulkQualityTab({ batch }: { batch: BatchRecord }) {
         {!microbiology ? (
           <EmptyState title="Sin análisis microbiológico registrado" />
         ) : (
-          <div className="grid sm:grid-cols-2 gap-4">
-            <SectionField label="Laboratorio" value={microbiology.laboratory || '-'} />
-            <SectionField label="N.º informe" value={microbiology.report_number || '-'} />
-            <SectionField label="Resultado general" value={microbiology.overall_result} />
-            <SectionField label="Fecha de aprobación" value={formatDate(microbiology.approved_at)} />
-          </div>
+          <>
+            <div className="grid sm:grid-cols-2 gap-4 mb-3">
+              <SectionField label="Laboratorio" value={microbiology.laboratory || '-'} />
+              <SectionField label="N.º informe" value={microbiology.report_number || '-'} />
+              <SectionField label="Resultado general" value={microbiology.overall_result} />
+              <SectionField label="Fecha de aprobación" value={formatDate(microbiology.approved_at)} />
+            </div>
+            <SignatureBlock resourcePath="microbiology-analyses" resourceId={microbiology.id} role="RESPONSIBLE" label="Aprobado por" />
+          </>
         )}
       </Card>
 
@@ -1861,6 +1888,10 @@ function FillingTab({ batch }: { batch: BatchRecord }) {
           ))
         )}
       </div>
+      <div className="grid sm:grid-cols-2 gap-2 mt-4 pt-3 border-t border-gray-100">
+        <SignatureBlock resourcePath="filling-controls" resourceId={control.id} role="RESPONSIBLE" label="Responsable" />
+        <SignatureBlock resourcePath="filling-controls" resourceId={control.id} role="VERIFIER" label="Verificador" />
+      </div>
     </Card>
   );
 }
@@ -1967,15 +1998,25 @@ function PackagingTab({ batch }: { batch: BatchRecord }) {
                 <p className="text-xs text-gray-400">Sin registros de loteado.</p>
               ) : (
                 control.lot_markings.map((marking) => (
-                  <div key={marking.id} className="flex items-center justify-between border border-gray-100 rounded-lg p-3">
-                    <div>
-                      <p className="text-xs font-semibold text-gray-900">{marking.stage === 'INITIAL' ? 'Loteado inicial' : 'Loteado final'}</p>
-                      <p className="text-[11px] text-gray-400">{marking.printed_batch_code || '-'}</p>
+                  <div key={marking.id} className="border border-gray-100 rounded-lg p-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-semibold text-gray-900">{marking.stage === 'INITIAL' ? 'Loteado inicial' : 'Loteado final'}</p>
+                        <p className="text-[11px] text-gray-400">{marking.printed_batch_code || '-'}</p>
+                      </div>
+                      {marking.result && <Badge label={marking.result} color={marking.result === 'YES' ? 'green' : marking.result === 'NO' ? 'red' : 'gray'} />}
                     </div>
-                    {marking.result && <Badge label={marking.result} color={marking.result === 'YES' ? 'green' : marking.result === 'NO' ? 'red' : 'gray'} />}
+                    <div className="grid sm:grid-cols-2 gap-2 mt-2 pt-2 border-t border-gray-50">
+                      <SignatureBlock resourcePath="batch-lot-markings" resourceId={marking.id} role="RESPONSIBLE" label="Realizado por" />
+                      <SignatureBlock resourcePath="batch-lot-markings" resourceId={marking.id} role="VERIFIER" label="Verificado por" />
+                    </div>
                   </div>
                 ))
               )}
+            </div>
+            <div className="grid sm:grid-cols-2 gap-2 mt-4 pt-3 border-t border-gray-100">
+              <SignatureBlock resourcePath="packaging-controls" resourceId={control.id} role="RESPONSIBLE" label="Responsable" />
+              <SignatureBlock resourcePath="packaging-controls" resourceId={control.id} role="VERIFIER" label="Verificador" />
             </div>
           </>
         )}
@@ -1992,6 +2033,8 @@ function PackagingTab({ batch }: { batch: BatchRecord }) {
               <Badge label={seal.overall_result} color={seal.overall_result === 'APPROVED' ? 'green' : seal.overall_result === 'REJECTED' ? 'red' : 'yellow'} />
               <SectionField label="Presión (bar)" value={seal.pressure_bar ?? '-'} />
               <SectionField label="Tiempo (s)" value={String(seal.time_seconds ?? '-')} />
+              <SignatureBlock resourcePath="seal-integrity-controls" resourceId={seal.id} role="RESPONSIBLE" label="Realizado por" />
+              <SignatureBlock resourcePath="seal-integrity-controls" resourceId={seal.id} role="VERIFIER" label="Verificado por" />
             </div>
           )}
         </Card>
@@ -2046,6 +2089,8 @@ function PackagingTab({ batch }: { batch: BatchRecord }) {
               >
                 {savingSample ? 'Registrando...' : 'Registrar muestra'}
               </SecondaryButton>
+              <SignatureBlock resourcePath="weight-volume-controls" resourceId={weight.id} role="RESPONSIBLE" label="Realizado por" />
+              <SignatureBlock resourcePath="weight-volume-controls" resourceId={weight.id} role="VERIFIER" label="Verificado por" />
             </div>
           )}
         </Card>

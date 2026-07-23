@@ -31,6 +31,7 @@ from ..application.use_cases import (
     LoadMicrobiologySpecificationFromMaster,
     RecordWeightVolumeSample,
     ReleaseBatch,
+    SignDocument,
     StartBatch,
     VerifyDispensingLine,
     WeighDispensingLine,
@@ -69,6 +70,7 @@ from ..infrastructure.models import (
     RawMaterialIdentificationPrint,
     SealIntegrityControl,
     SealIntegritySample,
+    Signature,
     WeightVolumeControl,
     WeightVolumeSample,
 )
@@ -107,6 +109,7 @@ from ..infrastructure.serializers import (
     RawMaterialIdentificationPrintSerializer,
     SealIntegrityControlSerializer,
     SealIntegritySampleSerializer,
+    SignatureSerializer,
     WeightVolumeControlSerializer,
     WeightVolumeSampleSerializer,
 )
@@ -145,6 +148,48 @@ class ManufacturingBaseViewSet(SoftDeleteModelViewSet):
     def perform_destroy(self, instance):
         super().perform_destroy(instance)
         self._audit("delete", instance)
+
+    @action(detail=True, methods=("post",), url_path="sign")
+    def sign(self, request, pk=None):
+        """Firma electrónica genérica (dibujar o cargar) para los recursos de
+        manufacturing que declaran signatures = GenericRelation(Signature)."""
+        instance = self.get_object()
+        if not hasattr(instance, "signatures"):
+            return Response({"detail": "Este recurso no admite firma electrónica."}, status=status.HTTP_400_BAD_REQUEST)
+        image = request.FILES.get("image")
+        if not image:
+            return Response({"detail": "Debes adjuntar la imagen de la firma."}, status=status.HTTP_400_BAD_REQUEST)
+        signature_type = request.data.get("signature_type")
+        if signature_type not in Signature.SignatureType.values:
+            return Response({"detail": "Tipo de firma no válido."}, status=status.HTTP_400_BAD_REQUEST)
+        role = request.data.get("role", Signature.Role.RESPONSIBLE)
+        if role not in Signature.Role.values:
+            return Response({"detail": "Rol de firma no válido."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            signature = SignDocument().execute(
+                instance,
+                actor=request.user,
+                image=image,
+                signature_type=signature_type,
+                role=role,
+                full_name=request.data.get("full_name", ""),
+                role_title=request.data.get("role_title", ""),
+                ip_address=request.META.get("REMOTE_ADDR"),
+                observation=request.data.get("observation", ""),
+                replace_reason=request.data.get("replace_reason", ""),
+            )
+        except BusinessRuleViolation as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        self._audit("sign", instance)
+        return Response(SignatureSerializer(signature).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=("get",), url_path="signatures")
+    def signatures(self, request, pk=None):
+        instance = self.get_object()
+        if not hasattr(instance, "signatures"):
+            return Response([])
+        return Response(SignatureSerializer(instance.signatures.all(), many=True).data)
 
     def _export_single_document(self, request, *, batch, document_code, render_fn, render_arg, filename_prefix):
         """Genera un documento individual, lo registra en BatchExport y lo

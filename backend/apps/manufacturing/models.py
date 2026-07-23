@@ -34,6 +34,7 @@ from .infrastructure.models import (
     ResultStatus,
     SealIntegrityControl,
     SealIntegritySample,
+    Signature,
     WeightVolumeControl,
     WeightVolumeSample,
 )
@@ -74,6 +75,7 @@ __all__ = (
     "ResultStatus",
     "SealIntegrityControl",
     "SealIntegritySample",
+    "Signature",
     "WeightVolumeControl",
     "WeightVolumeSample",
 )

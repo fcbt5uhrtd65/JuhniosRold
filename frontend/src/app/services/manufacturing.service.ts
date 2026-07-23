@@ -1282,3 +1282,55 @@ export async function createProductionLine(input: {
   const { data } = await api.post<ProductionLineRecord>(`${BASE}/production-lines/`, input);
   return data as ProductionLineRecord;
 }
+
+// ── Firma electrónica genérica ────────────────────────────────────────────────
+// Reutilizable contra cualquiera de los 12 recursos que admiten firma:
+// raw-material-identification-prints, manufacturing-step-executions,
+// cleaning-records, line-identifications, production-controls, filling-controls,
+// weight-volume-controls, seal-integrity-controls, packaging-controls,
+// batch-lot-markings, analysis-certificates, microbiology-analyses.
+
+export interface SignatureRecord {
+  id: UUID;
+  content_type_model: string;
+  image: string | null;
+  owner: UUID;
+  full_name: string;
+  role_title: string;
+  role: 'RESPONSIBLE' | 'VERIFIER';
+  signature_type: 'DRAWN' | 'UPLOADED';
+  ip_address: string | null;
+  integrity_hash: string;
+  document_status_at_signing: string;
+  observation: string;
+  replaced_reason: string;
+  replaced_by: UUID | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function signDocument(resourcePath: string, id: string, input: {
+  image: File;
+  signature_type: 'DRAWN' | 'UPLOADED';
+  role?: 'RESPONSIBLE' | 'VERIFIER';
+  full_name?: string;
+  role_title?: string;
+  observation?: string;
+  replace_reason?: string;
+}): Promise<SignatureRecord> {
+  const formData = new FormData();
+  formData.append('image', input.image);
+  formData.append('signature_type', input.signature_type);
+  if (input.role) formData.append('role', input.role);
+  if (input.full_name) formData.append('full_name', input.full_name);
+  if (input.role_title) formData.append('role_title', input.role_title);
+  if (input.observation) formData.append('observation', input.observation);
+  if (input.replace_reason) formData.append('replace_reason', input.replace_reason);
+  const { data } = await api.post<SignatureRecord>(`${BASE}/${resourcePath}/${id}/sign/`, formData);
+  return data as SignatureRecord;
+}
+
+export async function getSignatures(resourcePath: string, id: string): Promise<SignatureRecord[]> {
+  const { data } = await api.get<SignatureRecord[]>(`${BASE}/${resourcePath}/${id}/signatures/`);
+  return data ?? [];
+}
