@@ -95,8 +95,10 @@ export interface BatchRecord {
   production_order_number: string;
   batch_code: string;
   status: BatchStatus;
-  area: string;
-  production_line: string;
+  area: UUID | null;
+  area_name: string | null;
+  production_line: UUID | null;
+  production_line_name: string | null;
   production_manager: UUID | null;
   quality_manager: UUID | null;
   scheduled_at: string | null;
@@ -106,6 +108,25 @@ export interface BatchRecord {
   created_by: UUID | null;
   is_terminal: boolean;
   status_history: BatchStatusHistoryRecord[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AreaRecord {
+  id: UUID;
+  code: string;
+  name: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProductionLineRecord {
+  id: UUID;
+  area: UUID | null;
+  code: string;
+  name: string;
+  is_active: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -189,8 +210,10 @@ export interface LineClearanceRecord {
   id: UUID;
   batch: UUID;
   phase: 'DISPENSING' | 'MANUFACTURING' | 'FILLING' | 'PACKAGING';
-  area: string;
-  production_line: string;
+  area: UUID | null;
+  area_name: string | null;
+  production_line: UUID | null;
+  production_line_name: string | null;
   cleared_at: string | null;
   previous_product: string;
   previous_batch_code: string;
@@ -226,8 +249,10 @@ export interface CleaningRecordRecord {
 export interface LineIdentificationRecord {
   id: UUID;
   batch: UUID;
-  area: string;
-  production_line: string;
+  area: UUID | null;
+  area_name: string | null;
+  production_line: UUID | null;
+  production_line_name: string | null;
   placed_at: string | null;
   placed_by: UUID | null;
   removed_at: string | null;
@@ -328,7 +353,8 @@ export interface FillingLogEntryRecord {
 export interface FillingControlRecord {
   id: UUID;
   batch: UUID;
-  production_line: string;
+  production_line: UUID | null;
+  production_line_name: string | null;
   equipment: string;
   source_tank: string;
   started_at: string | null;
@@ -589,14 +615,29 @@ export async function getBatch(id: string): Promise<BatchRecord> {
 
 export async function createBatch(input: {
   production_order: string;
-  area?: string;
-  production_line?: string;
+  area?: string | null;
+  production_line?: string | null;
   production_manager?: string | null;
   quality_manager?: string | null;
   scheduled_at?: string | null;
   notes?: string;
 }): Promise<BatchRecord> {
   const { data } = await api.post<BatchRecord>(`${BASE}/batches/`, input);
+  return data as BatchRecord;
+}
+
+export async function createBatchWithOrder(input: {
+  formula: string;
+  planned_quantity: number;
+  batch_code?: string;
+  area?: string | null;
+  production_line?: string | null;
+  production_manager?: string | null;
+  quality_manager?: string | null;
+  scheduled_at?: string | null;
+  notes?: string;
+}): Promise<BatchRecord> {
+  const { data } = await api.post<BatchRecord>(`${BASE}/batches/create-with-order/`, input);
   return data as BatchRecord;
 }
 
@@ -919,8 +960,8 @@ export async function loadMicrobiologyFromSpecification(microbiologyId: string):
 export async function createLineClearance(input: {
   batch: string;
   phase: 'DISPENSING' | 'MANUFACTURING' | 'FILLING' | 'PACKAGING';
-  area?: string;
-  production_line?: string;
+  area?: string | null;
+  production_line?: string | null;
   previous_product?: string;
   previous_batch_code?: string;
   performed_by?: string | null;
@@ -965,8 +1006,8 @@ export async function createCleaningRecord(input: {
 
 export async function createLineIdentification(input: {
   batch: string;
-  area?: string;
-  production_line?: string;
+  area?: string | null;
+  production_line?: string | null;
   placed_at?: string | null;
   placed_by?: string | null;
 }): Promise<LineIdentificationRecord> {
@@ -997,7 +1038,7 @@ export async function createProductionControlMaterial(input: {
 
 export async function createFillingControl(input: {
   batch: string;
-  production_line?: string;
+  production_line?: string | null;
   equipment?: string;
   source_tank?: string;
   started_at?: string | null;
@@ -1185,4 +1226,29 @@ export async function updateDocumentChecklistItem(
 ): Promise<DocumentChecklistItemRecord> {
   const { data } = await api.patch<DocumentChecklistItemRecord>(`${BASE}/document-checklist-items/${id}/`, input);
   return data as DocumentChecklistItemRecord;
+}
+
+// ── Catálogo de áreas y líneas de producción ─────────────────────────────────
+
+export async function getAreas(): Promise<AreaRecord[]> {
+  return getPage<AreaRecord>(`${BASE}/areas/`);
+}
+
+export async function createArea(input: { code: string; name: string; is_active?: boolean }): Promise<AreaRecord> {
+  const { data } = await api.post<AreaRecord>(`${BASE}/areas/`, input);
+  return data as AreaRecord;
+}
+
+export async function getProductionLines(): Promise<ProductionLineRecord[]> {
+  return getPage<ProductionLineRecord>(`${BASE}/production-lines/`);
+}
+
+export async function createProductionLine(input: {
+  code: string;
+  name: string;
+  area?: string | null;
+  is_active?: boolean;
+}): Promise<ProductionLineRecord> {
+  const { data } = await api.post<ProductionLineRecord>(`${BASE}/production-lines/`, input);
+  return data as ProductionLineRecord;
 }

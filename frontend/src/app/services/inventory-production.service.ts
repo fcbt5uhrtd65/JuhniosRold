@@ -369,6 +369,10 @@ export async function getProductionOrders(): Promise<ProductionOrderRecord[]> {
   return getPage<ProductionOrderRecord>(`${BASE}/production-orders/`);
 }
 
+export async function getFormulas(): Promise<FormulaRecord[]> {
+  return getPage<FormulaRecord>(`${BASE}/formulas/`);
+}
+
 export async function createProductionOrder(input: {
   formula: string;
   output_item: string;
