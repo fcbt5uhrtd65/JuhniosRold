@@ -173,6 +173,53 @@ def _draw_signature_block(c, x0, y_anchor, w, signer_name, role_label, signature
     _text(c, x0, y_anchor - 19, role_label, size=7, color=MUTED)
 
 
+def _draw_generic_signature_image(c, x, y, max_w, max_h, image_field):
+    if not image_field:
+        return 0
+    try:
+        if not image_field.storage.exists(image_field.name):
+            return 0
+        with image_field.open("rb") as fobj:
+            image = ImageReader(io.BytesIO(fobj.read()))
+        iw, ih = image.getSize()
+        draw_w = max_w
+        draw_h = draw_w * (ih / iw) if iw else max_h
+        if draw_h > max_h:
+            draw_h = max_h
+            draw_w = draw_h * (iw / ih) if ih else max_w
+        c.drawImage(image, x, y, width=draw_w, height=draw_h, preserveAspectRatio=True, mask="auto")
+        return draw_h
+    except Exception:
+        return 0
+
+
+def _draw_signatures(c, x0, y, w, instance):
+    """Dibuja las firmas vigentes (responsable/verificador) del modelo
+    genérico Signature asociadas a `instance` vía GenericRelation, en el
+    mismo formato visual que _draw_signature_block. No aplica a los modelos
+    que ya tienen su propio FileField de firma (esos usan _draw_signature_block)."""
+    signatures = list(instance.signatures.all()) if hasattr(instance, "signatures") else []
+    replaced_ids = {sig.replaced_by_id for sig in signatures if sig.replaced_by_id}
+    current = [sig for sig in signatures if sig.id not in replaced_ids]
+
+    responsible = next((sig for sig in current if sig.role == "RESPONSIBLE"), None)
+    verifier = next((sig for sig in current if sig.role == "VERIFIER"), None)
+    col_w = min(w, 200)
+
+    def _draw_one(x, sig, role_label):
+        if sig is None:
+            _text(c, x, y - 9, "SIN FIRMA", size=8, bold=True, color=MUTED)
+            _text(c, x, y - 19, role_label, size=7, color=MUTED)
+            return
+        _draw_generic_signature_image(c, x, y + 8, min(col_w, 160), 46, sig.image)
+        _text(c, x, y - 9, _safe(sig.full_name).upper(), size=8, bold=True, color=NAVY)
+        _text(c, x, y - 19, f"{role_label} · {_datetime(sig.created_at)}", size=6.6, color=MUTED)
+
+    _draw_one(x0, responsible, "Responsable")
+    _draw_one(x0 + col_w + 40, verifier, "Verificador")
+    return y - 30
+
+
 def _field_row(c, x0, w, y, pairs, col_count=2):
     col_w = w / col_count
     for index, (label, value) in enumerate(pairs):
@@ -429,6 +476,489 @@ def render_document_checklist_pdf(batch):
             y = page_h - 60
 
     _document_footer(c, page_w, x0, x1, "-", 1, f"{percentage}%")
+    c.save()
+    buffer.seek(0)
+    return buffer
+
+
+def render_raw_material_identification_pdf(dispensing_line):
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=letter)
+    page_w, page_h = letter
+    x0, x1 = 50, page_w - 50
+    batch = dispensing_line.order.batch
+    c.setTitle(f"Identificación de materia prima - {batch}")
+
+    y = _document_header(c, page_w, page_h, x0, x1, "Identificación de materia prima dispensada", batch, "MFG-RMID", "1.0")
+    raw_batch = dispensing_line.raw_material_batch
+    y = _field_row(c, x0, x1 - x0, y, [
+        ("Código de materia prima", dispensing_line.item.code if dispensing_line.item_id else "-"),
+        ("Nombre de materia prima", dispensing_line.item.name if dispensing_line.item_id else "-"),
+        ("Lote de materia prima", raw_batch.supplier_batch_code if raw_batch else "-"),
+        ("Número de análisis", raw_batch.analysis_number if raw_batch else "-"),
+        ("Fecha de vencimiento", _date(raw_batch.expires_at) if raw_batch else "-"),
+        ("Estado de calidad", raw_batch.get_quality_status_display() if raw_batch else "-"),
+        ("Tara", str(dispensing_line.tare) if dispensing_line.tare is not None else "-"),
+        ("Peso bruto", str(dispensing_line.gross_weight) if dispensing_line.gross_weight is not None else "-"),
+        ("Peso neto", str(dispensing_line.net_weight) if dispensing_line.net_weight is not None else "-"),
+        ("Recipiente", dispensing_line.container or "-"),
+        ("Pesado por", _employee_name(dispensing_line.weighed_by)),
+        ("Verificado por", _employee_name(dispensing_line.verified_by)),
+        ("Fecha y hora de pesada", _datetime(dispensing_line.weighed_at)),
+    ], col_count=3)
+    y -= 10
+
+    prints = list(dispensing_line.identification_prints.order_by("-printed_at"))
+    if prints:
+        y = _section_title(c, x0, x1, y, "Historial de impresión")
+        for entry in prints:
+            label = "Reimpresión" if entry.is_reprint else "Impresión original"
+            _text(c, x0, y, f"{label} · {_datetime(entry.printed_at)} · {entry.printed_by}", size=7.8)
+            y -= 10
+            if entry.is_reprint and entry.reprint_reason:
+                _text(c, x0 + 12, y, _fit(f"Motivo: {entry.reprint_reason}", x1 - x0 - 12, size=7.2), size=7.2, color=MUTED)
+                y -= 10
+            y -= 4
+
+    _document_footer(c, page_w, x0, x1, "-", 1, dispensing_line.get_status_display())
+    c.save()
+    buffer.seek(0)
+    return buffer
+
+
+def render_line_identification_pdf(line_identification):
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=letter)
+    page_w, page_h = letter
+    x0, x1 = 50, page_w - 50
+    batch = line_identification.batch
+    c.setTitle(f"Identificación de línea - {batch}")
+
+    order = batch.production_order
+    y = _document_header(c, page_w, page_h, x0, x1, "Identificación de línea", batch, "MFG-LID", "1.0")
+    y = _field_row(c, x0, x1 - x0, y, [
+        ("Producto", order.output_item.name if order.output_item_id else "-"),
+        ("Cantidad", str(order.planned_quantity)),
+        ("Lote", order.batch_code or "-"),
+        ("Orden de producción", order.number),
+        ("Área", line_identification.area.name if line_identification.area else "-"),
+        ("Línea", line_identification.production_line.name if line_identification.production_line else "-"),
+        ("Colocada", _datetime(line_identification.placed_at)),
+        ("Colocada por", _employee_name(line_identification.placed_by)),
+        ("Retirada", _datetime(line_identification.removed_at)),
+        ("Retirada por", _employee_name(line_identification.removed_by)),
+    ])
+    y -= 14
+    y = _draw_signatures(c, x0, y, x1 - x0, line_identification)
+    _document_footer(c, page_w, x0, x1, _employee_name(line_identification.placed_by), 1)
+    c.save()
+    buffer.seek(0)
+    return buffer
+
+
+def render_cleaning_record_pdf(record):
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=letter)
+    page_w, page_h = letter
+    x0, x1 = 50, page_w - 50
+    batch = record.batch
+    c.setTitle(f"Área y equipo limpio - {batch}")
+
+    y = _document_header(c, page_w, page_h, x0, x1, "Área y equipo limpio", batch, "MFG-CLEAN", "1.0")
+    y = _field_row(c, x0, x1 - x0, y, [
+        ("Tipo", record.get_record_type_display()),
+        ("Área", record.area or "-"),
+        ("Equipo", record.equipment or "-"),
+        ("Código del equipo", record.equipment_code or "-"),
+        ("Fecha y hora de limpieza", _datetime(record.cleaned_at)),
+        ("Producto anterior", record.previous_product or "-"),
+        ("Lote anterior", record.previous_batch_code or "-"),
+        ("Método de limpieza", record.cleaning_method or "-"),
+        ("Sanitizante", record.sanitizer or "-"),
+        ("Concentración", record.sanitizer_concentration or "-"),
+        ("Lote del sanitizante", record.sanitizer_batch or "-"),
+        ("Vencimiento del sanitizante", _date(record.sanitizer_expires_at)),
+        ("Resultado", record.get_result_display() if record.result else "-"),
+        ("Vigencia de la limpieza", _datetime(record.valid_until)),
+        ("Vencida", "Sí" if record.is_expired else "No"),
+    ], col_count=3)
+    y -= 10
+    if record.observations:
+        y = _section_title(c, x0, x1, y, "Observaciones")
+        _text(c, x0, y, _fit(record.observations, x1 - x0, size=8.4), size=8.4)
+        y -= 24
+    y = _draw_signatures(c, x0, y, x1 - x0, record)
+    _document_footer(c, page_w, x0, x1, _employee_name(record.performed_by), 1, record.get_result_display() if record.result else "-")
+    c.save()
+    buffer.seek(0)
+    return buffer
+
+
+def render_manufacturing_steps_pdf(batch):
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=letter)
+    page_w, page_h = letter
+    x0, x1 = 50, page_w - 50
+    c.setTitle(f"Instrucciones de fabricación - {batch}")
+
+    y = _document_header(c, page_w, page_h, x0, x1, "Instrucciones de fabricación", batch, "MFG-STEP", "1.0")
+
+    for execution in batch.step_executions.select_related("step").order_by("step__sequence"):
+        step = execution.step
+        status_color = _status_color(execution.get_status_display())
+        _text(c, x0, y, f"Paso {step.sequence}. {step.phase or '-'}", size=9, bold=True)
+        _text(c, x1, y, execution.get_status_display(), size=8, bold=True, color=status_color, align="right")
+        y -= 11
+        _text(c, x0, y, _fit(step.instruction, x1 - x0, size=7.8), size=7.8, color=MUTED)
+        y -= 12
+        y = _field_row(c, x0, x1 - x0, y, [
+            ("Equipo", step.required_equipment or "-"),
+            ("Temp. objetivo/real", f"{step.target_temperature or '-'} / {execution.actual_temperature or '-'}"),
+            ("Tiempo objetivo/real (min)", f"{step.target_time_minutes or '-'} / {execution.actual_time_minutes or '-'}"),
+            ("pH objetivo/real", f"{step.target_ph or '-'} / {execution.actual_ph or '-'}"),
+            ("Velocidad agitación", execution.actual_agitation_speed or step.target_agitation_speed or "-"),
+            ("Presión", execution.actual_pressure or step.target_pressure or "-"),
+            ("Realizado por", _employee_name(execution.performed_by)),
+            ("Verificado por", _employee_name(execution.verified_by)),
+            ("Inicio", _datetime(execution.started_at)),
+            ("Fin", _datetime(execution.finished_at)),
+        ], col_count=2)
+        if execution.deviation:
+            _text(c, x0, y, _fit(f"Desviación: {execution.deviation}", x1 - x0, size=7.6), size=7.6, color=DANGER)
+            y -= 12
+        y = _draw_signatures(c, x0, y, x1 - x0, execution)
+        y -= 16
+        if y < 130:
+            _document_footer(c, page_w, x0, x1, "-", 1)
+            c.showPage()
+            y = page_h - 60
+
+    _document_footer(c, page_w, x0, x1, "-", 1)
+    c.save()
+    buffer.seek(0)
+    return buffer
+
+
+def render_production_control_pdf(control):
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=letter)
+    page_w, page_h = letter
+    x0, x1 = 50, page_w - 50
+    batch = control.batch
+    c.setTitle(f"Control de producción - {batch}")
+
+    y = _document_header(c, page_w, page_h, x0, x1, "Control de producción", batch, "MFG-PROD", "1.0")
+    y = _field_row(c, x0, x1 - x0, y, [
+        ("Tamaño del lote", str(control.lot_size or "-")),
+        ("Unidad", control.unit.abbreviation if control.unit_id else "-"),
+    ])
+    y -= 10
+    y = _section_title(c, x0, x1, y, "Materiales de acondicionamiento")
+
+    headers = ["Material", "Solicit.", "Entreg.", "Devuelto", "Adicional", "Buenas", "Malas proc.", "Malas fáb.", "Dif."]
+    widths = [130, 45, 45, 50, 50, 45, 55, 55, 45]
+    cx = x0
+    for header, width in zip(headers, widths):
+        _text(c, cx, y, header, size=6.6, bold=True, color=MUTED)
+        cx += width
+    y -= 10
+    c.setStrokeColor(LINE)
+    c.line(x0, y + 4, x1, y + 4)
+
+    for material in control.materials.all():
+        diff = material.reconciliation_difference
+        row = [
+            _fit(material.item.name, widths[0] - 6, size=7.2),
+            str(material.requested_quantity),
+            str(material.delivered_quantity),
+            str(material.returned_quantity),
+            str(material.additional_quantity),
+            str(material.good_units),
+            str(material.process_rejects),
+            str(material.factory_rejects),
+            str(diff),
+        ]
+        cx = x0
+        for index, (value, width) in enumerate(zip(row, widths)):
+            color = (WARNING if diff != 0 else TEXT) if index == len(row) - 1 else TEXT
+            _text(c, cx, y, value, size=7.2, color=color)
+            cx += width
+        y -= 11
+        if y < 130:
+            _document_footer(c, page_w, x0, x1, "-", 1)
+            c.showPage()
+            y = page_h - 60
+
+    y -= 14
+    y = _draw_signatures(c, x0, y, x1 - x0, control)
+    _document_footer(c, page_w, x0, x1, "-", 1)
+    c.save()
+    buffer.seek(0)
+    return buffer
+
+
+def render_filling_control_pdf(control):
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=letter)
+    page_w, page_h = letter
+    x0, x1 = 50, page_w - 50
+    batch = control.batch
+    c.setTitle(f"Control de llenado - {batch}")
+
+    y = _document_header(c, page_w, page_h, x0, x1, "Control de llenado", batch, "MFG-FILL", "1.0")
+    y = _field_row(c, x0, x1 - x0, y, [
+        ("Línea", control.production_line.name if control.production_line else "-"),
+        ("Equipo", control.equipment or "-"),
+        ("Tanque de origen", control.source_tank or "-"),
+        ("Inicio", _datetime(control.started_at)),
+        ("Fin", _datetime(control.finished_at)),
+        ("Responsable", _employee_name(control.responsible)),
+        ("Verificador", _employee_name(control.verifier)),
+        ("Cantidad programada", str(control.planned_quantity or "-")),
+        ("Cantidad producida", str(control.produced_quantity)),
+        ("Cantidad rechazada", str(control.rejected_quantity)),
+        ("Cantidad recuperada", str(control.recovered_quantity)),
+        ("Rendimiento", f"{control.yield_percentage:.1f}%" if control.yield_percentage is not None else "-"),
+    ], col_count=3)
+    y -= 10
+
+    participants = list(control.participants.all())
+    if participants:
+        y = _section_title(c, x0, x1, y, "Personal participante")
+        for participant in participants:
+            _text(c, x0, y, _fit(f"{participant.activity or participant.role} — {_employee_name(participant.employee)}", x1 - x0, size=7.8), size=7.8)
+            y -= 10
+            _text(c, x0, y, f"Ingreso: {_datetime(participant.check_in)}  ·  Salida: {_datetime(participant.check_out)}", size=7, color=MUTED)
+            y -= 14
+            if y < 130:
+                _document_footer(c, page_w, x0, x1, "-", 1)
+                c.showPage()
+                y = page_h - 60
+
+    log_entries = list(control.log_entries.all())
+    if log_entries:
+        y = _section_title(c, x0, x1, y, "Registros periódicos")
+        for entry in log_entries:
+            _text(c, x0, y, f"{_datetime(entry.recorded_at)} — Producidas: {entry.units_produced}  Rechazadas: {entry.units_rejected}", size=7.6)
+            y -= 12
+            if y < 130:
+                _document_footer(c, page_w, x0, x1, "-", 1)
+                c.showPage()
+                y = page_h - 60
+
+    y -= 10
+    y = _draw_signatures(c, x0, y, x1 - x0, control)
+    _document_footer(c, page_w, x0, x1, _employee_name(control.responsible), 1)
+    c.save()
+    buffer.seek(0)
+    return buffer
+
+
+def render_weight_volume_control_pdf(control):
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=letter)
+    page_w, page_h = letter
+    x0, x1 = 50, page_w - 50
+    batch = control.batch
+    c.setTitle(f"Control de peso o volumen - {batch}")
+
+    y = _document_header(c, page_w, page_h, x0, x1, "Control de peso o volumen", batch, "MFG-WV", "1.0")
+    y = _field_row(c, x0, x1 - x0, y, [
+        ("Tara", str(control.tare or "-")),
+        ("Límite inferior", str(control.lower_limit or "-")),
+        ("Límite superior", str(control.upper_limit or "-")),
+        ("Unidad", control.unit.abbreviation if control.unit_id else "-"),
+        ("Resultado general", control.get_overall_result_display()),
+        ("Autorizó reanudación", _employee_name(control.resumed_authorized_by) if control.resumed_authorized_by_id else "-"),
+    ])
+    y -= 10
+    y = _section_title(c, x0, x1, y, "Muestras")
+
+    samples = list(control.samples.all())
+    net_values = [float(sample.net_weight) for sample in samples if sample.net_weight is not None]
+    if net_values:
+        average = sum(net_values) / len(net_values)
+        minimum, maximum = min(net_values), max(net_values)
+        out_of_spec = sum(1 for sample in samples if sample.result == "NO")
+        pct_out_of_spec = round((out_of_spec / len(samples)) * 100) if samples else 0
+        y = _field_row(c, x0, x1 - x0, y, [
+            ("Promedio", f"{average:.3f}"),
+            ("Mínimo", f"{minimum:.3f}"),
+            ("Máximo", f"{maximum:.3f}"),
+            ("% fuera de especificación", f"{pct_out_of_spec}%"),
+        ])
+        y -= 10
+
+    for sample in samples:
+        result_color = _status_color(sample.get_result_display())
+        _text(c, x0, y, f"Muestra {sample.sample_number}", size=7.8, bold=True)
+        _text(c, x0 + 90, y, f"Bruto: {sample.gross_weight or '-'}  Tara: {sample.tare or '-'}  Neto: {sample.net_weight if sample.net_weight is not None else '-'}", size=7.4, color=MUTED)
+        _text(c, x1, y, sample.get_result_display(), size=7.6, bold=True, color=result_color, align="right")
+        y -= 11
+        if sample.adjustment_made:
+            _text(c, x0 + 12, y, _fit(f"Ajuste: {sample.adjustment_made}", x1 - x0 - 12, size=7), size=7, color=MUTED)
+            y -= 10
+        if y < 130:
+            _document_footer(c, page_w, x0, x1, "-", 1, control.get_overall_result_display())
+            c.showPage()
+            y = page_h - 60
+
+    y -= 14
+    y = _draw_signatures(c, x0, y, x1 - x0, control)
+    _document_footer(c, page_w, x0, x1, "-", 1, control.get_overall_result_display())
+    c.save()
+    buffer.seek(0)
+    return buffer
+
+
+def render_seal_integrity_control_pdf(control):
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=letter)
+    page_w, page_h = letter
+    x0, x1 = 50, page_w - 50
+    batch = control.batch
+    c.setTitle(f"Control de hermeticidad - {batch}")
+
+    y = _document_header(c, page_w, page_h, x0, x1, "Control de hermeticidad", batch, "MFG-SEAL", "1.0")
+    y = _field_row(c, x0, x1 - x0, y, [
+        ("Equipo", control.equipment or "-"),
+        ("Código del equipo", control.equipment_code or "-"),
+        ("Fecha y hora", _datetime(control.tested_at)),
+        ("Presión (bar)", str(control.pressure_bar or "-")),
+        ("Tiempo (s)", str(control.time_seconds or "-")),
+        ("Resultado general", control.get_overall_result_display()),
+    ])
+    y -= 10
+    y = _section_title(c, x0, x1, y, "Muestras")
+
+    for sample in control.samples.all():
+        result_color = _status_color(sample.get_result_display())
+        _text(c, x0, y, f"Muestra {sample.sample_number}", size=7.8, bold=True)
+        _text(c, x1, y, sample.get_result_display(), size=7.8, bold=True, color=result_color, align="right")
+        y -= 10
+        if sample.observation:
+            _text(c, x0 + 12, y, _fit(sample.observation, x1 - x0 - 12, size=7.2), size=7.2, color=MUTED)
+            y -= 10
+        y -= 4
+        if y < 130:
+            _document_footer(c, page_w, x0, x1, "-", 1, control.get_overall_result_display())
+            c.showPage()
+            y = page_h - 60
+
+    if control.observations:
+        y = _section_title(c, x0, x1, y, "Observaciones")
+        _text(c, x0, y, _fit(control.observations, x1 - x0, size=8.4), size=8.4)
+        y -= 24
+
+    y = _draw_signatures(c, x0, y, x1 - x0, control)
+    _document_footer(c, page_w, x0, x1, "-", 1, control.get_overall_result_display())
+    c.save()
+    buffer.seek(0)
+    return buffer
+
+
+def render_packaging_control_pdf(control):
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=letter)
+    page_w, page_h = letter
+    x0, x1 = 50, page_w - 50
+    batch = control.batch
+    c.setTitle(f"Control de acondicionamiento - {batch}")
+
+    y = _document_header(c, page_w, page_h, x0, x1, "Control de acondicionamiento", batch, "MFG-PKG", "1.0")
+    y = _section_title(c, x0, x1, y, "Etiqueta testigo")
+    y = _field_row(c, x0, x1 - x0, y, [
+        ("Código de etiqueta", control.label_code or "-"),
+        ("Versión del arte", control.artwork_version or "-"),
+        ("Lote del material", control.label_material_batch or "-"),
+        ("Resultado", control.get_label_result_display() if control.label_result else "-"),
+        ("Realizado por", _employee_name(control.label_performed_by)),
+        ("Verificado por", _employee_name(control.label_verified_by)),
+    ])
+    y -= 10
+
+    y = _section_title(c, x0, x1, y, "Loteado")
+    for marking in control.lot_markings.all():
+        stage_label = "Loteado inicial" if marking.stage == "INITIAL" else "Loteado final"
+        result_color = _status_color(marking.get_result_display()) if marking.result else MUTED
+        _text(c, x0, y, stage_label, size=8.2, bold=True)
+        _text(c, x0 + 150, y, marking.printed_batch_code or "-", size=7.8, color=MUTED)
+        _text(c, x1, y, marking.get_result_display() if marking.result else "-", size=7.8, bold=True, color=result_color, align="right")
+        y -= 10
+        _text(c, x0, y, f"Fabricación: {_date(marking.manufacture_date)}  ·  Vence: {_date(marking.expiry_date)}  ·  Legible: {'Sí' if marking.is_legible else 'No' if marking.is_legible is False else '-'}  ·  Ubicación correcta: {'Sí' if marking.is_correctly_placed else 'No' if marking.is_correctly_placed is False else '-'}", size=7, color=MUTED)
+        y -= 16
+        if y < 130:
+            _document_footer(c, page_w, x0, x1, "-", 1)
+            c.showPage()
+            y = page_h - 60
+
+    y = _section_title(c, x0, x1, y, "Conciliación de empaque")
+    y = _field_row(c, x0, x1 - x0, y, [
+        ("Unidades por display", str(control.units_per_display or "-")),
+        ("Displays por caja", str(control.displays_per_box or "-")),
+        ("Unidades por caja", str(control.units_per_box or "-")),
+        ("Cajas completas", str(control.complete_boxes)),
+        ("Displays incompletos", str(control.incomplete_displays)),
+        ("Unidades sueltas", str(control.loose_units)),
+        ("Total conciliado", str(control.total_reconciled)),
+        ("Saldos", str(control.balances)),
+        ("Rechazos", str(control.rejections)),
+    ], col_count=3)
+    if control.rejection_reasons:
+        y -= 10
+        _text(c, x0, y, _fit(f"Motivos de rechazo: {control.rejection_reasons}", x1 - x0, size=7.8), size=7.8, color=MUTED)
+        y -= 20
+
+    y = _draw_signatures(c, x0, y, x1 - x0, control)
+    _document_footer(c, page_w, x0, x1, _employee_name(control.responsible), 1)
+    c.save()
+    buffer.seek(0)
+    return buffer
+
+
+def render_microbiology_analysis_pdf(microbiology):
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=letter)
+    page_w, page_h = letter
+    x0, x1 = 50, page_w - 50
+    batch = microbiology.batch
+    c.setTitle(f"Análisis microbiológico - {batch}")
+
+    y = _document_header(c, page_w, page_h, x0, x1, "Análisis microbiológico", batch, "MFG-MICRO", "1.0")
+    y = _field_row(c, x0, x1 - x0, y, [
+        ("Código de muestra", microbiology.sample_code or "-"),
+        ("Tipo de muestra", microbiology.sample_type or "-"),
+        ("Fecha de toma", _date(microbiology.taken_at)),
+        ("Tomada por", _employee_name(microbiology.taken_by)),
+        ("Fecha de envío", _date(microbiology.sent_at)),
+        ("Laboratorio", microbiology.laboratory or "-"),
+        ("N.º de informe", microbiology.report_number or "-"),
+        ("Resultado general", microbiology.get_overall_result_display()),
+        ("Fecha de aprobación", _date(microbiology.approved_at)),
+        ("Aprobado por", _employee_name(microbiology.approved_by)),
+    ], col_count=2)
+    y -= 10
+
+    if microbiology.results:
+        y = _section_title(c, x0, x1, y, "Resultados")
+        for result in microbiology.results:
+            name = result.get("name", "-") if isinstance(result, dict) else str(result)
+            value = result.get("value", "-") if isinstance(result, dict) else "-"
+            _text(c, x0, y, _fit(f"{name}: {value}", x1 - x0, size=7.8), size=7.8)
+            y -= 11
+            if y < 130:
+                _document_footer(c, page_w, x0, x1, "-", 1, microbiology.get_overall_result_display())
+                c.showPage()
+                y = page_h - 60
+        y -= 10
+
+    if microbiology.observations:
+        y = _section_title(c, x0, x1, y, "Observaciones")
+        _text(c, x0, y, _fit(microbiology.observations, x1 - x0, size=8.4), size=8.4)
+        y -= 24
+
+    y = _draw_signatures(c, x0, y, x1 - x0, microbiology)
+    _document_footer(c, page_w, x0, x1, _employee_name(microbiology.approved_by), 1, microbiology.get_overall_result_display())
     c.save()
     buffer.seek(0)
     return buffer

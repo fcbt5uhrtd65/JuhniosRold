@@ -58,9 +58,19 @@ import {
   createWeightVolumeControl,
   exportAnalysisCertificate,
   exportBatchDossier,
+  exportCleaningRecord,
   exportDispensingOrder,
   exportDocumentChecklist,
+  exportFillingControl,
   exportLineClearance,
+  exportLineIdentification,
+  exportManufacturingSteps,
+  exportMicrobiologyAnalysis,
+  exportPackagingControl,
+  exportProductionControl,
+  exportRawMaterialIdentification,
+  exportSealIntegrityControl,
+  exportWeightVolumeControl,
   exportBatchRelease,
   getAnalysisCertificate,
   getAreas,
@@ -999,6 +1009,44 @@ function ManufacturingTab({ batch, employeeById }: { batch: BatchRecord; employe
     }
   };
 
+  const handleExportCleaning = async (record: CleaningRecordRecord) => {
+    try {
+      await exportCleaningRecord(record.id, batch.batch_code || batch.production_order_number);
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo exportar la limpieza');
+    }
+  };
+
+  const handleExportLineIdentification = async () => {
+    if (!lineIdentification) return;
+    try {
+      await exportLineIdentification(lineIdentification.id, batch.batch_code || batch.production_order_number);
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo exportar la identificación de línea');
+    }
+  };
+
+  const handleExportSteps = async () => {
+    try {
+      await exportManufacturingSteps(batch.id, batch.batch_code || batch.production_order_number);
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo exportar las instrucciones de fabricación');
+    }
+  };
+
+  const handleExportProductionControl = async () => {
+    if (!productionControl) return;
+    try {
+      await exportProductionControl(productionControl.id, batch.batch_code || batch.production_order_number);
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo exportar el control de producción');
+    }
+  };
+
   const handleStepTransition = async (execution: ManufacturingStepExecutionRecord, nextStatus: 'IN_PROGRESS' | 'COMPLETED' | 'DEVIATED') => {
     try {
       await completeManufacturingStep(execution.id, { status: nextStatus });
@@ -1066,6 +1114,9 @@ function ManufacturingTab({ batch, employeeById }: { batch: BatchRecord; employe
                   <div className="flex items-center gap-2">
                     {record.is_expired && <Badge label="Vencida" color="red" />}
                     {record.result && <Badge label={record.result} color={record.result === 'APPROVED' ? 'green' : 'red'} />}
+                    <button onClick={() => void handleExportCleaning(record)} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50 hover:text-gray-700 transition-colors" title="Exportar">
+                      <FileDown size={12} />
+                    </button>
                   </div>
                 </div>
                 <div className="grid sm:grid-cols-2 gap-2 mt-2 pt-2 border-t border-gray-50">
@@ -1081,7 +1132,9 @@ function ManufacturingTab({ batch, employeeById }: { batch: BatchRecord; employe
       <Card className="p-5">
         <div className="flex items-center justify-between mb-3">
           <p className="text-sm font-semibold text-gray-900">Identificación de línea</p>
-          {!lineIdentification && (
+          {lineIdentification ? (
+            <SecondaryButton onClick={() => void handleExportLineIdentification()} icon={<FileDown size={13} />}>Exportar</SecondaryButton>
+          ) : (
             <SecondaryButton onClick={() => setShowLineModal(true)} icon={<Plus size={13} />}>Registrar</SecondaryButton>
           )}
         </div>
@@ -1101,7 +1154,12 @@ function ManufacturingTab({ batch, employeeById }: { batch: BatchRecord; employe
       </Card>
 
       <Card className="p-5">
-        <p className="text-sm font-semibold text-gray-900 mb-3">Instrucciones de fabricación</p>
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-sm font-semibold text-gray-900">Instrucciones de fabricación</p>
+          {steps.length > 0 && (
+            <SecondaryButton onClick={() => void handleExportSteps()} icon={<FileDown size={13} />}>Exportar</SecondaryButton>
+          )}
+        </div>
         {steps.length === 0 ? (
           <EmptyState title="Sin pasos de fabricación ejecutados" description="Los pasos provienen de la fórmula maestra del producto." />
         ) : (
@@ -1135,7 +1193,12 @@ function ManufacturingTab({ batch, employeeById }: { batch: BatchRecord; employe
       </Card>
 
       <Card className="p-5">
-        <p className="text-sm font-semibold text-gray-900 mb-3">Control de producción (materiales de acondicionamiento)</p>
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-sm font-semibold text-gray-900">Control de producción (materiales de acondicionamiento)</p>
+          {productionControl && (
+            <SecondaryButton onClick={() => void handleExportProductionControl()} icon={<FileDown size={13} />}>Exportar</SecondaryButton>
+          )}
+        </div>
         {!productionControl || productionControl.materials.length === 0 ? (
           <EmptyState title="Sin materiales registrados" />
         ) : (
@@ -1529,6 +1592,16 @@ function BulkQualityTab({ batch }: { batch: BatchRecord }) {
     }
   };
 
+  const handleExportMicrobiology = async () => {
+    if (!microbiology) return;
+    try {
+      await exportMicrobiologyAnalysis(microbiology.id, batch.batch_code || batch.production_order_number);
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo exportar el análisis microbiológico');
+    }
+  };
+
   const handleLoadFromSpecification = async () => {
     if (!certificate) return;
     setLoadingFromSpec(true);
@@ -1618,7 +1691,9 @@ function BulkQualityTab({ batch }: { batch: BatchRecord }) {
       <Card className="p-5">
         <div className="flex items-center justify-between mb-3">
           <p className="text-sm font-semibold text-gray-900">Análisis microbiológico</p>
-          {!microbiology && (
+          {microbiology ? (
+            <SecondaryButton onClick={() => void handleExportMicrobiology()} icon={<FileDown size={13} />}>Exportar</SecondaryButton>
+          ) : (
             <SecondaryButton onClick={() => setShowMicrobiologyModal(true)} icon={<Plus size={13} />}>Nuevo análisis</SecondaryButton>
           )}
         </div>
@@ -1866,9 +1941,21 @@ function FillingTab({ batch }: { batch: BatchRecord }) {
     );
   }
 
+  const handleExport = async () => {
+    try {
+      await exportFillingControl(control.id, batch.batch_code || batch.production_order_number);
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo exportar el control de llenado');
+    }
+  };
+
   return (
     <Card className="p-5">
-      <p className="text-sm font-semibold text-gray-900 mb-3">Control de llenado</p>
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-sm font-semibold text-gray-900">Control de llenado</p>
+        <SecondaryButton onClick={() => void handleExport()} icon={<FileDown size={13} />}>Exportar</SecondaryButton>
+      </div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
         <SectionField label="Línea" value={control.production_line_name || '-'} />
         <SectionField label="Programado" value={control.planned_quantity ?? '-'} />
@@ -1968,6 +2055,36 @@ function PackagingTab({ batch }: { batch: BatchRecord }) {
     }
   };
 
+  const handleExportPackaging = async () => {
+    if (!control) return;
+    try {
+      await exportPackagingControl(control.id, batch.batch_code || batch.production_order_number);
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo exportar el control de acondicionamiento');
+    }
+  };
+
+  const handleExportSeal = async () => {
+    if (!seal) return;
+    try {
+      await exportSealIntegrityControl(seal.id, batch.batch_code || batch.production_order_number);
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo exportar el control de hermeticidad');
+    }
+  };
+
+  const handleExportWeight = async () => {
+    if (!weight) return;
+    try {
+      await exportWeightVolumeControl(weight.id, batch.batch_code || batch.production_order_number);
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo exportar el control de peso/volumen');
+    }
+  };
+
   if (loading) return <LoadingState label="Cargando acondicionamiento..." />;
 
   return (
@@ -1975,7 +2092,11 @@ function PackagingTab({ batch }: { batch: BatchRecord }) {
       <Card className="p-5">
         <div className="flex items-center justify-between mb-3">
           <p className="text-sm font-semibold text-gray-900">Control de acondicionamiento</p>
-          {!control && <SecondaryButton onClick={() => setShowPackagingModal(true)} icon={<Plus size={13} />}>Nuevo control</SecondaryButton>}
+          {control ? (
+            <SecondaryButton onClick={() => void handleExportPackaging()} icon={<FileDown size={13} />}>Exportar</SecondaryButton>
+          ) : (
+            <SecondaryButton onClick={() => setShowPackagingModal(true)} icon={<Plus size={13} />}>Nuevo control</SecondaryButton>
+          )}
         </div>
         {!control ? (
           <EmptyState title="Sin control de acondicionamiento registrado" />
@@ -2026,7 +2147,11 @@ function PackagingTab({ batch }: { batch: BatchRecord }) {
         <Card className="p-5">
           <div className="flex items-center justify-between mb-3">
             <p className="text-sm font-semibold text-gray-900">Control de hermeticidad</p>
-            {!seal && <SecondaryButton onClick={() => setShowSealModal(true)} icon={<Plus size={13} />}>Nuevo</SecondaryButton>}
+            {seal ? (
+              <SecondaryButton onClick={() => void handleExportSeal()} icon={<FileDown size={13} />}>Exportar</SecondaryButton>
+            ) : (
+              <SecondaryButton onClick={() => setShowSealModal(true)} icon={<Plus size={13} />}>Nuevo</SecondaryButton>
+            )}
           </div>
           {!seal ? <EmptyState title="Sin registro" /> : (
             <div className="space-y-2">
@@ -2041,7 +2166,11 @@ function PackagingTab({ batch }: { batch: BatchRecord }) {
         <Card className="p-5">
           <div className="flex items-center justify-between mb-3">
             <p className="text-sm font-semibold text-gray-900">Control de peso o volumen</p>
-            {!weight && <SecondaryButton onClick={() => setShowWeightModal(true)} icon={<Plus size={13} />}>Nuevo</SecondaryButton>}
+            {weight ? (
+              <SecondaryButton onClick={() => void handleExportWeight()} icon={<FileDown size={13} />}>Exportar</SecondaryButton>
+            ) : (
+              <SecondaryButton onClick={() => setShowWeightModal(true)} icon={<Plus size={13} />}>Nuevo</SecondaryButton>
+            )}
           </div>
           {!weight ? <EmptyState title="Sin registro" /> : (
             <div className="space-y-3">

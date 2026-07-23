@@ -727,10 +727,18 @@ export async function exportDispensingOrder(id: string, batchCode: string): Prom
   await downloadBlob(`${BASE}/dispensing-orders/${id}/export/`, `orden-dispensacion-${batchCode}.pdf`);
 }
 
+export async function exportRawMaterialIdentification(id: string, batchCode: string): Promise<void> {
+  await downloadBlob(`${BASE}/raw-material-identification-prints/${id}/export/`, `identificacion-mp-${batchCode}.pdf`);
+}
+
 // ── Instrucciones de fabricación ─────────────────────────────────────────────
 
 export async function getManufacturingStepExecutions(batchId: string): Promise<ManufacturingStepExecutionRecord[]> {
   return getPage<ManufacturingStepExecutionRecord>(`${BASE}/manufacturing-step-executions/?batch=${batchId}`);
+}
+
+export async function exportManufacturingSteps(batchId: string, batchCode: string): Promise<void> {
+  await downloadBlob(`${BASE}/manufacturing-step-executions/export/?batch=${batchId}`, `instrucciones-fabricacion-${batchCode}.pdf`);
 }
 
 // ── Despeje de línea y limpieza ──────────────────────────────────────────────
@@ -753,6 +761,10 @@ export async function exportLineClearance(id: string, batchCode: string): Promis
   await downloadBlob(`${BASE}/line-clearances/${id}/export/`, `despeje-linea-${batchCode}.pdf`);
 }
 
+export async function exportCleaningRecord(id: string, batchCode: string): Promise<void> {
+  await downloadBlob(`${BASE}/cleaning-records/${id}/export/`, `limpieza-${batchCode}.pdf`);
+}
+
 export async function getCleaningRecords(batchId: string): Promise<CleaningRecordRecord[]> {
   return getPage<CleaningRecordRecord>(`${BASE}/cleaning-records/?batch=${batchId}`);
 }
@@ -762,11 +774,19 @@ export async function getLineIdentification(batchId: string): Promise<LineIdenti
   return data?.results?.[0] ?? null;
 }
 
+export async function exportLineIdentification(id: string, batchCode: string): Promise<void> {
+  await downloadBlob(`${BASE}/line-identifications/${id}/export/`, `identificacion-linea-${batchCode}.pdf`);
+}
+
 // ── Control de producción ────────────────────────────────────────────────────
 
 export async function getProductionControl(batchId: string): Promise<ProductionControlRecord | null> {
   const { data } = await api.get<PaginatedResponse<ProductionControlRecord>>(`${BASE}/production-controls/?batch=${batchId}`);
   return data?.results?.[0] ?? null;
+}
+
+export async function exportProductionControl(id: string, batchCode: string): Promise<void> {
+  await downloadBlob(`${BASE}/production-controls/${id}/export/`, `control-produccion-${batchCode}.pdf`);
 }
 
 // ── Control de llenado ───────────────────────────────────────────────────────
@@ -776,11 +796,19 @@ export async function getFillingControl(batchId: string): Promise<FillingControl
   return data?.results?.[0] ?? null;
 }
 
+export async function exportFillingControl(id: string, batchCode: string): Promise<void> {
+  await downloadBlob(`${BASE}/filling-controls/${id}/export/`, `control-llenado-${batchCode}.pdf`);
+}
+
 // ── Control de peso o volumen ────────────────────────────────────────────────
 
 export async function getWeightVolumeControl(batchId: string): Promise<WeightVolumeControlRecord | null> {
   const { data } = await api.get<PaginatedResponse<WeightVolumeControlRecord>>(`${BASE}/weight-volume-controls/?batch=${batchId}`);
   return data?.results?.[0] ?? null;
+}
+
+export async function exportWeightVolumeControl(id: string, batchCode: string): Promise<void> {
+  await downloadBlob(`${BASE}/weight-volume-controls/${id}/export/`, `peso-volumen-${batchCode}.pdf`);
 }
 
 // ── Control de hermeticidad ───────────────────────────────────────────────────
@@ -790,11 +818,19 @@ export async function getSealIntegrityControl(batchId: string): Promise<SealInte
   return data?.results?.[0] ?? null;
 }
 
+export async function exportSealIntegrityControl(id: string, batchCode: string): Promise<void> {
+  await downloadBlob(`${BASE}/seal-integrity-controls/${id}/export/`, `hermeticidad-${batchCode}.pdf`);
+}
+
 // ── Control de acondicionamiento ─────────────────────────────────────────────
 
 export async function getPackagingControl(batchId: string): Promise<PackagingControlRecord | null> {
   const { data } = await api.get<PaginatedResponse<PackagingControlRecord>>(`${BASE}/packaging-controls/?batch=${batchId}`);
   return data?.results?.[0] ?? null;
+}
+
+export async function exportPackagingControl(id: string, batchCode: string): Promise<void> {
+  await downloadBlob(`${BASE}/packaging-controls/${id}/export/`, `acondicionamiento-${batchCode}.pdf`);
 }
 
 // ── Certificado de análisis y microbiología ──────────────────────────────────
@@ -811,6 +847,10 @@ export async function exportAnalysisCertificate(id: string, batchCode: string): 
 export async function getMicrobiologyAnalysis(batchId: string): Promise<MicrobiologyAnalysisRecord | null> {
   const { data } = await api.get<PaginatedResponse<MicrobiologyAnalysisRecord>>(`${BASE}/microbiology-analyses/?batch=${batchId}`);
   return data?.results?.[0] ?? null;
+}
+
+export async function exportMicrobiologyAnalysis(id: string, batchCode: string): Promise<void> {
+  await downloadBlob(`${BASE}/microbiology-analyses/${id}/export/`, `microbiologia-${batchCode}.pdf`);
 }
 
 // ── Verificación documental ───────────────────────────────────────────────────
