@@ -40,9 +40,12 @@ import { SignaturePad } from './SignaturePad';
 import { AdminProductionPlanning } from './AdminProductionPlanning';
 import {
   approveLineClearance,
+  authorizeWeightVolumeResume,
   changeBatchStatus,
+  completeManufacturingStep,
   createAnalysisCertificate,
   createBatch,
+  createBatchLotMarking,
   createBatchWithOrder,
   createCleaningRecord,
   createFillingControl,
@@ -77,6 +80,7 @@ import {
   getSealIntegrityControl,
   getWeightVolumeControl,
   loadCertificateTestsFromSpecification,
+  recordWeightVolumeSample,
   rejectLineClearance,
   releaseBatch,
   startBatch,
@@ -98,6 +102,7 @@ import {
   type PackagingControlRecord,
   type ProductionControlRecord,
   type ProductionLineRecord,
+  type ResultStatus,
   type BatchReleaseRecord,
   type SealIntegrityControlRecord,
   type WeightVolumeControlRecord,
@@ -993,6 +998,17 @@ function ManufacturingTab({ batch, employeeById }: { batch: BatchRecord; employe
     }
   };
 
+  const handleStepTransition = async (execution: ManufacturingStepExecutionRecord, nextStatus: 'IN_PROGRESS' | 'COMPLETED' | 'DEVIATED') => {
+    try {
+      await completeManufacturingStep(execution.id, { status: nextStatus });
+      toast.success(nextStatus === 'COMPLETED' ? 'Paso completado' : nextStatus === 'IN_PROGRESS' ? 'Paso iniciado' : 'Paso marcado con desviación');
+      setSteps(await getManufacturingStepExecutions(batch.id));
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo actualizar el paso');
+    }
+  };
+
   if (loading) return <LoadingState label="Cargando fabricación..." />;
 
   return (
@@ -1084,7 +1100,18 @@ function ManufacturingTab({ batch, employeeById }: { batch: BatchRecord; employe
               <div key={execution.id} className="border border-gray-100 rounded-lg p-3">
                 <div className="flex items-center justify-between mb-1">
                   <p className="text-xs font-semibold text-gray-900">Paso {execution.step_detail.sequence}. {execution.step_detail.phase || '-'}</p>
-                  <Badge label={execution.status} color={execution.status === 'COMPLETED' ? 'green' : execution.status === 'DEVIATED' ? 'red' : 'yellow'} />
+                  <div className="flex items-center gap-2">
+                    <Badge label={execution.status} color={execution.status === 'COMPLETED' ? 'green' : execution.status === 'DEVIATED' ? 'red' : 'yellow'} />
+                    {execution.status === 'PENDING' && (
+                      <button onClick={() => void handleStepTransition(execution, 'IN_PROGRESS')} className="text-xs text-blue-600 hover:underline">Iniciar</button>
+                    )}
+                    {(execution.status === 'PENDING' || execution.status === 'IN_PROGRESS') && (
+                      <>
+                        <button onClick={() => void handleStepTransition(execution, 'COMPLETED')} className="text-xs text-emerald-600 hover:underline">Completar</button>
+                        <button onClick={() => void handleStepTransition(execution, 'DEVIATED')} className="text-xs text-red-500 hover:underline">Desviación</button>
+                      </>
+                    )}
+                  </div>
                 </div>
                 <p className="text-[11px] text-gray-400">{execution.step_detail.instruction}</p>
               </div>
@@ -1839,6 +1866,7 @@ function FillingTab({ batch }: { batch: BatchRecord }) {
 }
 
 function PackagingTab({ batch }: { batch: BatchRecord }) {
+  const toast = useToast();
   const [control, setControl] = useState<PackagingControlRecord | null>(null);
   const [seal, setSeal] = useState<SealIntegrityControlRecord | null>(null);
   const [weight, setWeight] = useState<WeightVolumeControlRecord | null>(null);
@@ -1846,6 +1874,10 @@ function PackagingTab({ batch }: { batch: BatchRecord }) {
   const [showPackagingModal, setShowPackagingModal] = useState(false);
   const [showSealModal, setShowSealModal] = useState(false);
   const [showWeightModal, setShowWeightModal] = useState(false);
+  const [showLotMarkingModal, setShowLotMarkingModal] = useState(false);
+  const [sampleForm, setSampleForm] = useState({ sampleNumber: '', grossWeight: '', tare: '' });
+  const [savingSample, setSavingSample] = useState(false);
+  const [authorizing, setAuthorizing] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1867,6 +1899,44 @@ function PackagingTab({ batch }: { batch: BatchRecord }) {
     void load();
   }, [load]);
 
+  const handleRecordSample = async () => {
+    if (!weight || !sampleForm.sampleNumber || !sampleForm.grossWeight || !sampleForm.tare) {
+      toast.warning('Indica número de muestra, peso bruto y tara.');
+      return;
+    }
+    setSavingSample(true);
+    try {
+      await recordWeightVolumeSample(weight.id, {
+        sample_number: Number(sampleForm.sampleNumber),
+        gross_weight: Number(sampleForm.grossWeight),
+        tare: Number(sampleForm.tare),
+      });
+      toast.success('Muestra registrada');
+      setSampleForm({ sampleNumber: '', grossWeight: '', tare: '' });
+      await load();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo registrar la muestra');
+    } finally {
+      setSavingSample(false);
+    }
+  };
+
+  const handleAuthorizeResume = async () => {
+    if (!weight) return;
+    setAuthorizing(true);
+    try {
+      await authorizeWeightVolumeResume(weight.id);
+      toast.success('Reanudación autorizada');
+      await load();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo autorizar la reanudación');
+    } finally {
+      setAuthorizing(false);
+    }
+  };
+
   if (loading) return <LoadingState label="Cargando acondicionamiento..." />;
 
   return (
@@ -1886,7 +1956,12 @@ function PackagingTab({ batch }: { batch: BatchRecord }) {
               <SectionField label="Unidades sueltas" value={String(control.loose_units)} />
               <SectionField label="Total conciliado" value={control.total_reconciled} />
             </div>
-            <p className="text-xs font-semibold text-gray-700 mb-2">Loteado</p>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-semibold text-gray-700">Loteado</p>
+              <button onClick={() => setShowLotMarkingModal(true)} className="text-xs text-[#2a4038] font-semibold hover:underline flex items-center gap-1">
+                <Plus size={12} /> Registrar loteado
+              </button>
+            </div>
             <div className="space-y-2">
               {control.lot_markings.length === 0 ? (
                 <p className="text-xs text-gray-400">Sin registros de loteado.</p>
@@ -1926,11 +2001,51 @@ function PackagingTab({ batch }: { batch: BatchRecord }) {
             {!weight && <SecondaryButton onClick={() => setShowWeightModal(true)} icon={<Plus size={13} />}>Nuevo</SecondaryButton>}
           </div>
           {!weight ? <EmptyState title="Sin registro" /> : (
-            <div className="space-y-2">
+            <div className="space-y-3">
               <Badge label={weight.overall_result} color={weight.overall_result === 'APPROVED' ? 'green' : weight.overall_result === 'REJECTED' ? 'red' : 'yellow'} />
               <SectionField label="Límite inferior" value={weight.lower_limit ?? '-'} />
               <SectionField label="Límite superior" value={weight.upper_limit ?? '-'} />
               <p className="text-xs text-gray-400">{weight.samples.length} muestra(s) registradas</p>
+
+              {weight.overall_result === 'REJECTED' && !weight.resumed_authorized_by && (
+                <div className="bg-red-50 border border-red-100 rounded-lg p-3">
+                  <p className="text-xs font-semibold text-red-700 mb-2">Bloqueado por muestra fuera de especificación</p>
+                  <SecondaryButton onClick={() => void handleAuthorizeResume()} disabled={authorizing}>
+                    {authorizing ? 'Autorizando...' : 'Autorizar reanudación'}
+                  </SecondaryButton>
+                </div>
+              )}
+
+              <div className="grid grid-cols-3 gap-2 pt-2 border-t border-gray-100">
+                <input
+                  type="number"
+                  placeholder="N° muestra"
+                  value={sampleForm.sampleNumber}
+                  onChange={(e) => setSampleForm((f) => ({ ...f, sampleNumber: e.target.value }))}
+                  className={inputCls}
+                />
+                <input
+                  type="number"
+                  placeholder="Peso bruto"
+                  value={sampleForm.grossWeight}
+                  onChange={(e) => setSampleForm((f) => ({ ...f, grossWeight: e.target.value }))}
+                  className={inputCls}
+                />
+                <input
+                  type="number"
+                  placeholder="Tara"
+                  value={sampleForm.tare}
+                  onChange={(e) => setSampleForm((f) => ({ ...f, tare: e.target.value }))}
+                  className={inputCls}
+                />
+              </div>
+              <SecondaryButton
+                onClick={() => void handleRecordSample()}
+                disabled={savingSample || (weight.overall_result === 'REJECTED' && !weight.resumed_authorized_by)}
+                icon={<Plus size={13} />}
+              >
+                {savingSample ? 'Registrando...' : 'Registrar muestra'}
+              </SecondaryButton>
             </div>
           )}
         </Card>
@@ -1963,7 +2078,105 @@ function PackagingTab({ batch }: { batch: BatchRecord }) {
           await load();
         }}
       />
+      {control && (
+        <NewBatchLotMarkingModal
+          open={showLotMarkingModal}
+          packagingControlId={control.id}
+          onClose={() => setShowLotMarkingModal(false)}
+          onCreated={async () => {
+            setShowLotMarkingModal(false);
+            await load();
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+function NewBatchLotMarkingModal({
+  open,
+  packagingControlId,
+  onClose,
+  onCreated,
+}: {
+  open: boolean;
+  packagingControlId: string;
+  onClose: () => void;
+  onCreated: () => Promise<void>;
+}) {
+  const toast = useToast();
+  const [stage, setStage] = useState<'INITIAL' | 'FINAL'>('INITIAL');
+  const [printedBatchCode, setPrintedBatchCode] = useState('');
+  const [isLegible, setIsLegible] = useState(true);
+  const [isCorrectlyPlaced, setIsCorrectlyPlaced] = useState(true);
+  const [result, setResult] = useState<ResultStatus>('YES');
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async () => {
+    setSaving(true);
+    try {
+      await createBatchLotMarking({
+        packaging_control: packagingControlId,
+        stage,
+        printed_batch_code: printedBatchCode,
+        is_legible: isLegible,
+        is_correctly_placed: isCorrectlyPlaced,
+        result,
+      });
+      toast.success(stage === 'INITIAL' ? 'Loteado inicial registrado' : 'Loteado final registrado');
+      setPrintedBatchCode('');
+      await onCreated();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo registrar el loteado');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title="Registrar loteado" open={open} onClose={onClose}>
+      <div className="space-y-4">
+        <label className="block">
+          <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Etapa</span>
+          <select value={stage} onChange={(e) => setStage(e.target.value as 'INITIAL' | 'FINAL')} className={selectCls}>
+            <option value="INITIAL">Loteado inicial</option>
+            <option value="FINAL">Loteado final</option>
+          </select>
+          {stage === 'FINAL' && (
+            <p className="text-[11px] text-amber-600 mt-1">Requiere que el loteado inicial exista y esté aprobado.</p>
+          )}
+        </label>
+        <label className="block">
+          <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Número de lote impreso</span>
+          <input value={printedBatchCode} onChange={(e) => setPrintedBatchCode(e.target.value)} className={inputCls} />
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="flex items-center gap-2 text-xs text-gray-700">
+            <input type="checkbox" checked={isLegible} onChange={(e) => setIsLegible(e.target.checked)} />
+            Legible
+          </label>
+          <label className="flex items-center gap-2 text-xs text-gray-700">
+            <input type="checkbox" checked={isCorrectlyPlaced} onChange={(e) => setIsCorrectlyPlaced(e.target.checked)} />
+            Ubicación correcta
+          </label>
+        </div>
+        <label className="block">
+          <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Resultado</span>
+          <select value={result} onChange={(e) => setResult(e.target.value as ResultStatus)} className={selectCls}>
+            <option value="YES">Cumple</option>
+            <option value="NO">No cumple</option>
+            <option value="NOT_APPLICABLE">No aplica</option>
+          </select>
+        </label>
+        <div className="flex justify-end gap-2">
+          <SecondaryButton onClick={onClose}>Cancelar</SecondaryButton>
+          <PrimaryButton onClick={() => void handleSubmit()} disabled={saving}>
+            {saving ? 'Guardando...' : 'Registrar'}
+          </PrimaryButton>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

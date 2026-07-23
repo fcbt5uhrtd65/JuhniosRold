@@ -12,7 +12,8 @@ interface PaginatedResponse<T> {
 }
 
 async function getPage<T>(path: string): Promise<T[]> {
-  const firstResponse = await api.get<PaginatedResponse<T>>(`${path}?page_size=100`);
+  const sep = path.includes('?') ? '&' : '?';
+  const firstResponse = await api.get<PaginatedResponse<T>>(`${path}${sep}page_size=100`);
   const firstPage = firstResponse.data;
   if (!firstPage) return [];
 
@@ -21,7 +22,7 @@ async function getPage<T>(path: string): Promise<T[]> {
 
   const remainingPages = await Promise.all(
     Array.from({ length: totalPages - 1 }, (_, index) =>
-      api.get<PaginatedResponse<T>>(`${path}?page_size=100&page=${index + 2}`),
+      api.get<PaginatedResponse<T>>(`${path}${sep}page_size=100&page=${index + 2}`),
     ),
   );
 
@@ -1076,6 +1077,35 @@ export async function createFillingParticipant(input: {
 }): Promise<FillingParticipantRecord> {
   const { data } = await api.post<FillingParticipantRecord>(`${BASE}/filling-participants/`, input);
   return data as FillingParticipantRecord;
+}
+
+export async function completeManufacturingStep(id: string, input: {
+  status?: 'IN_PROGRESS' | 'PAUSED' | 'COMPLETED' | 'DEVIATED';
+  actual_quantity?: number | null;
+  actual_temperature?: number | null;
+  actual_time_minutes?: number | null;
+  actual_agitation_speed?: string;
+  actual_ph?: number | null;
+  actual_pressure?: string;
+  deviation?: string;
+} = {}): Promise<ManufacturingStepExecutionRecord> {
+  const { data } = await api.post<ManufacturingStepExecutionRecord>(`${BASE}/manufacturing-step-executions/${id}/complete/`, input);
+  return data as ManufacturingStepExecutionRecord;
+}
+
+export async function recordWeightVolumeSample(controlId: string, input: {
+  sample_number: number;
+  gross_weight: number;
+  tare: number;
+  volume?: number | null;
+}): Promise<WeightVolumeControlRecord> {
+  const { data } = await api.post<WeightVolumeControlRecord>(`${BASE}/weight-volume-controls/${controlId}/record-sample/`, input);
+  return data as WeightVolumeControlRecord;
+}
+
+export async function authorizeWeightVolumeResume(controlId: string): Promise<WeightVolumeControlRecord> {
+  const { data } = await api.post<WeightVolumeControlRecord>(`${BASE}/weight-volume-controls/${controlId}/authorize-resume/`, {});
+  return data as WeightVolumeControlRecord;
 }
 
 export async function createWeightVolumeControl(input: {

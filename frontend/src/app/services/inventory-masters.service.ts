@@ -18,7 +18,8 @@ interface PaginatedResponse<T> {
 }
 
 async function getPage<T>(path: string): Promise<T[]> {
-  const firstResponse = await api.get<PaginatedResponse<T>>(`${path}?page_size=100`);
+  const sep = path.includes('?') ? '&' : '?';
+  const firstResponse = await api.get<PaginatedResponse<T>>(`${path}${sep}page_size=100`);
   const firstPage = firstResponse.data;
   if (!firstPage) {
     return [];
@@ -31,7 +32,7 @@ async function getPage<T>(path: string): Promise<T[]> {
 
   const remainingPages = await Promise.all(
     Array.from({ length: totalPages - 1 }, (_, index) =>
-      api.get<PaginatedResponse<T>>(`${path}?page_size=100&page=${index + 2}`),
+      api.get<PaginatedResponse<T>>(`${path}${sep}page_size=100&page=${index + 2}`),
     ),
   );
 

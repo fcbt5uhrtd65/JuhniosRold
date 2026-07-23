@@ -21,11 +21,15 @@ from ..infrastructure.batch_pdf import (
 
 from ..application.use_cases import (
     ApproveLineClearance,
+    AuthorizeWeightVolumeResume,
     ChangeBatchStatus,
     CloseDispensingOrder,
+    CompleteManufacturingStep,
+    CreateBatchLotMarking,
     CreateBatchWithOrder,
     LoadCertificateTestsFromSpecification,
     LoadMicrobiologySpecificationFromMaster,
+    RecordWeightVolumeSample,
     ReleaseBatch,
     StartBatch,
     VerifyDispensingLine,
@@ -432,6 +436,28 @@ class ManufacturingStepExecutionViewSet(ManufacturingBaseViewSet):
     serializer_class = ManufacturingStepExecutionSerializer
     filterset_fields = ("batch", "step", "status")
 
+    @action(detail=True, methods=("post",), url_path="complete")
+    def complete(self, request, pk=None):
+        execution = self.get_object()
+        actual_fields = (
+            "actual_quantity", "actual_temperature", "actual_time_minutes",
+            "actual_agitation_speed", "actual_ph", "actual_pressure",
+        )
+        actual_data = {field: request.data[field] for field in actual_fields if field in request.data}
+        new_status = request.data.get("status", ManufacturingStepExecution.Status.COMPLETED)
+        try:
+            execution = CompleteManufacturingStep().execute(
+                execution,
+                actor=getattr(request.user, "employee_profile", None),
+                status=new_status,
+                actual_data=actual_data,
+                deviation=request.data.get("deviation", ""),
+            )
+        except BusinessRuleViolation as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        self._audit("complete", execution)
+        return Response(self.get_serializer(execution).data)
+
 
 # ── Despeje de línea y limpieza ──────────────────────────────────────────────
 
@@ -531,6 +557,34 @@ class WeightVolumeControlViewSet(ManufacturingBaseViewSet):
     serializer_class = WeightVolumeControlSerializer
     filterset_fields = ("batch", "overall_result")
 
+    @action(detail=True, methods=("post",), url_path="record-sample")
+    def record_sample(self, request, pk=None):
+        control = self.get_object()
+        try:
+            RecordWeightVolumeSample().execute(
+                control,
+                sample_number=request.data.get("sample_number"),
+                gross_weight=request.data.get("gross_weight"),
+                tare=request.data.get("tare"),
+                volume=request.data.get("volume"),
+                actor=getattr(request.user, "employee_profile", None),
+            )
+        except BusinessRuleViolation as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        control.refresh_from_db()
+        self._audit("record-sample", control)
+        return Response(self.get_serializer(control).data)
+
+    @action(detail=True, methods=("post",), url_path="authorize-resume")
+    def authorize_resume(self, request, pk=None):
+        control = self.get_object()
+        try:
+            control = AuthorizeWeightVolumeResume().execute(control, actor=getattr(request.user, "employee_profile", None))
+        except BusinessRuleViolation as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        self._audit("authorize-resume", control)
+        return Response(self.get_serializer(control).data)
+
 
 class WeightVolumeSampleViewSet(ManufacturingBaseViewSet):
     queryset = WeightVolumeSample.objects.select_related("control", "adjustment_by")
@@ -564,6 +618,31 @@ class BatchLotMarkingViewSet(ManufacturingBaseViewSet):
     queryset = BatchLotMarking.objects.select_related("packaging_control", "performed_by", "verified_by")
     serializer_class = BatchLotMarkingSerializer
     filterset_fields = ("packaging_control", "stage")
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        packaging_control = serializer.validated_data.get("packaging_control")
+        stage = serializer.validated_data.get("stage")
+        if not packaging_control or not stage:
+            return Response({"detail": "Debes indicar el control de acondicionamiento y la etapa."}, status=status.HTTP_400_BAD_REQUEST)
+
+        validated_fields = {
+            key: value
+            for key, value in serializer.validated_data.items()
+            if key not in ("packaging_control", "stage")
+        }
+        try:
+            marking = CreateBatchLotMarking().execute(
+                packaging_control,
+                stage=stage,
+                actor=getattr(request.user, "employee_profile", None),
+                **validated_fields,
+            )
+        except BusinessRuleViolation as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        self._audit("create", marking)
+        return Response(self.get_serializer(marking).data, status=status.HTTP_201_CREATED)
 
 
 # ── Certificado de análisis y microbiología ──────────────────────────────────

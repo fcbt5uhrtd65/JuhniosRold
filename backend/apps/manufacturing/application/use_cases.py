@@ -8,17 +8,22 @@ from ..infrastructure.models import (
     AnalysisCertificate,
     AnalysisTestResult,
     Batch,
+    BatchLotMarking,
     BatchRelease,
     BatchStatusHistory,
+    CleaningRecord,
     DispensingLine,
     DispensingOrder,
     DocumentChecklistItem,
     ItemStock,
     ItemStockMovement,
     LineClearance,
+    ManufacturingStepExecution,
     MicrobiologyAnalysis,
     ProductSpecification,
     ResultStatus,
+    WeightVolumeControl,
+    WeightVolumeSample,
 )
 
 
@@ -278,14 +283,147 @@ class CloseDispensingOrder:
         return order
 
 
+class CompleteManufacturingStep:
+    """Completa un paso de fabricación, respetando el orden de la secuencia:
+    no permite completar un paso si el paso obligatorio inmediatamente
+    anterior sigue pendiente (regla explícita del requerimiento)."""
+
+    def execute(self, execution: ManufacturingStepExecution, *, actor, status, actual_data=None, deviation=""):
+        if status == ManufacturingStepExecution.Status.COMPLETED:
+            previous_pending = (
+                ManufacturingStepExecution.objects.filter(
+                    batch=execution.batch,
+                    step__sequence__lt=execution.step.sequence,
+                    step__is_mandatory=True,
+                )
+                .exclude(status=ManufacturingStepExecution.Status.COMPLETED)
+                .exists()
+            )
+            if previous_pending:
+                raise BusinessRuleViolation(
+                    "No se puede completar este paso: hay un paso obligatorio anterior pendiente."
+                )
+
+        execution.status = status
+        if deviation:
+            execution.deviation = deviation
+        if actual_data:
+            for field, value in actual_data.items():
+                setattr(execution, field, value)
+        if status == ManufacturingStepExecution.Status.IN_PROGRESS and not execution.started_at:
+            execution.started_at = timezone.now()
+        if status == ManufacturingStepExecution.Status.COMPLETED:
+            execution.finished_at = timezone.now()
+            execution.performed_by = execution.performed_by or actor
+        execution.save()
+        return execution
+
+
+class RecordWeightVolumeSample:
+    """Registra una muestra de peso/volumen. Si la muestra queda fuera de
+    especificación, bloquea la continuación del control (overall_result
+    pasa a REJECTED) hasta que un responsable autorice explícitamente la
+    reanudación — la muestra fuera de rango no debe ser solo informativa."""
+
+    @transaction.atomic
+    def execute(self, control: WeightVolumeControl, *, sample_number, gross_weight, tare, volume=None, actor=None):
+        if control.overall_result == WeightVolumeControl.OverallResult.REJECTED and not control.resumed_authorized_by:
+            raise BusinessRuleViolation(
+                "El control de peso/volumen está bloqueado por una muestra fuera de especificación. "
+                "Se requiere autorización para reanudar antes de registrar nuevas muestras."
+            )
+
+        net_weight = gross_weight - tare if gross_weight is not None and tare is not None else None
+        result = ResultStatus.YES
+        if net_weight is not None and control.lower_limit is not None and control.upper_limit is not None:
+            if net_weight < control.lower_limit or net_weight > control.upper_limit:
+                result = ResultStatus.NO
+
+        sample, _ = WeightVolumeSample.objects.update_or_create(
+            control=control,
+            sample_number=sample_number,
+            defaults={
+                "gross_weight": gross_weight,
+                "tare": tare,
+                "volume": volume,
+                "result": result,
+            },
+        )
+
+        if result == ResultStatus.NO:
+            control.overall_result = WeightVolumeControl.OverallResult.REJECTED
+            control.resumed_authorized_by = None
+            control.save(update_fields=("overall_result", "resumed_authorized_by", "updated_at"))
+            _notify(
+                control.batch,
+                StaffNotification.NotificationType.OUT_OF_SPECIFICATION,
+                "Peso/volumen fuera de especificación",
+                f"La muestra {sample_number} del lote {control.batch} está fuera de especificación. Se bloqueó el control hasta autorizar la reanudación.",
+                employee=control.batch.quality_manager,
+            )
+        return sample
+
+
+class AuthorizeWeightVolumeResume:
+    """Autoriza la reanudación de un control de peso/volumen bloqueado por
+    una muestra fuera de especificación."""
+
+    def execute(self, control: WeightVolumeControl, *, actor):
+        if control.overall_result != WeightVolumeControl.OverallResult.REJECTED:
+            raise BusinessRuleViolation("El control no está bloqueado; no requiere autorización de reanudación.")
+        control.resumed_authorized_by = actor
+        control.overall_result = WeightVolumeControl.OverallResult.PENDING
+        control.save(update_fields=("resumed_authorized_by", "overall_result", "updated_at"))
+        return control
+
+
+class CreateBatchLotMarking:
+    """Registra el loteado inicial o final. No permite crear el loteado
+    final si el loteado inicial no existe o no fue aprobado (regla explícita
+    del requerimiento: "no permitir continuar el acondicionamiento si el
+    loteado inicial no está aprobado")."""
+
+    def execute(self, packaging_control, *, stage, actor, **fields):
+        if stage == BatchLotMarking.Stage.FINAL:
+            initial = packaging_control.lot_markings.filter(stage=BatchLotMarking.Stage.INITIAL).first()
+            if initial is None or initial.result != ResultStatus.YES:
+                raise BusinessRuleViolation(
+                    "No se puede registrar el loteado final: el loteado inicial no existe o no está aprobado."
+                )
+
+        marking, _ = BatchLotMarking.objects.update_or_create(
+            packaging_control=packaging_control,
+            stage=stage,
+            defaults=fields,
+        )
+        return marking
+
+
 class ApproveLineClearance:
     """No permite iniciar la fase correspondiente mientras el despeje no esté
-    aprobado (regla explícita del requerimiento)."""
+    aprobado (regla explícita del requerimiento). Tampoco permite aprobar si
+    el lote tiene una limpieza de área/equipo vencida o rechazada — la
+    vigencia de la limpieza (CleaningRecord.is_expired) debe bloquear el uso
+    real, no ser solo informativa."""
 
     def execute(self, clearance: LineClearance, *, actor, approve: bool):
         pending_criteria = clearance.criteria.filter(result=ResultStatus.NO)
         if approve and pending_criteria.exists():
             raise BusinessRuleViolation("No se puede aprobar el despeje: hay criterios que no cumplen.")
+
+        if approve:
+            cleaning_records = clearance.batch.cleaning_records.all()
+            expired = [record for record in cleaning_records if record.is_expired]
+            if expired:
+                raise BusinessRuleViolation(
+                    "No se puede aprobar el despeje: hay una limpieza vencida registrada para este lote. Registra una nueva limpieza."
+                )
+            rejected = cleaning_records.filter(result=CleaningRecord.Result.REJECTED)
+            if rejected.exists():
+                raise BusinessRuleViolation(
+                    "No se puede aprobar el despeje: hay una limpieza de área o equipo rechazada para este lote."
+                )
+
         clearance.status = LineClearance.Status.APPROVED if approve else LineClearance.Status.REJECTED
         clearance.verified_by = actor
         clearance.save(update_fields=("status", "verified_by", "updated_at"))
