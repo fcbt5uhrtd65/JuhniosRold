@@ -162,7 +162,10 @@ export interface DispensingLineRecord {
   sequence: number;
   formula_line: UUID | null;
   item: UUID;
+  item_name: string | null;
+  item_code: string | null;
   raw_material_batch: UUID | null;
+  raw_material_batch_code: string | null;
   theoretical_quantity: string;
   tolerance_percentage: string;
   tare: string | null;
@@ -180,6 +183,15 @@ export interface DispensingLineRecord {
   observations: string;
   deviation_percentage: number | null;
   is_within_tolerance: boolean | null;
+}
+
+export interface RawMaterialIdentificationPrintRecord {
+  id: UUID;
+  dispensing_line: UUID;
+  printed_by: UUID | null;
+  printed_at: string;
+  is_reprint: boolean;
+  reprint_reason: string;
 }
 
 export interface DispensingOrderRecord {
@@ -729,6 +741,19 @@ export async function exportDispensingOrder(id: string, batchCode: string): Prom
 
 export async function exportRawMaterialIdentification(id: string, batchCode: string): Promise<void> {
   await downloadBlob(`${BASE}/raw-material-identification-prints/${id}/export/`, `identificacion-mp-${batchCode}.pdf`);
+}
+
+export async function getRawMaterialIdentificationPrints(dispensingLineId: string): Promise<RawMaterialIdentificationPrintRecord[]> {
+  return getPage<RawMaterialIdentificationPrintRecord>(`${BASE}/raw-material-identification-prints/?dispensing_line=${dispensingLineId}`);
+}
+
+export async function createRawMaterialIdentificationPrint(input: {
+  dispensing_line: string;
+  is_reprint?: boolean;
+  reprint_reason?: string;
+}): Promise<RawMaterialIdentificationPrintRecord> {
+  const { data } = await api.post<RawMaterialIdentificationPrintRecord>(`${BASE}/raw-material-identification-prints/`, input);
+  return data as RawMaterialIdentificationPrintRecord;
 }
 
 // ── Instrucciones de fabricación ─────────────────────────────────────────────

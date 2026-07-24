@@ -400,7 +400,9 @@ class ItemStockMovementViewSet(ManufacturingBaseViewSet):
 # ── Dispensación ──────────────────────────────────────────────────────────────
 
 class DispensingOrderViewSet(ManufacturingBaseViewSet):
-    queryset = DispensingOrder.objects.select_related("batch", "responsible", "verifier").prefetch_related("lines")
+    queryset = DispensingOrder.objects.select_related("batch", "responsible", "verifier").prefetch_related(
+        "lines__item", "lines__raw_material_batch"
+    )
     serializer_class = DispensingOrderSerializer
     filterset_fields = ("batch", "status")
 

@@ -16,6 +16,7 @@ import {
   Package,
   PlayCircle,
   Plus,
+  Printer,
   Scale,
   ShieldCheck,
   Truck,
@@ -54,6 +55,7 @@ import {
   createLineIdentification,
   createMicrobiologyAnalysis,
   createPackagingControl,
+  createRawMaterialIdentificationPrint,
   createSealIntegrityControl,
   createWeightVolumeControl,
   exportAnalysisCertificate,
@@ -87,6 +89,7 @@ import {
   getPackagingControl,
   getProductionControl,
   getProductionLines,
+  getRawMaterialIdentificationPrints,
   getBatchRelease,
   getSealIntegrityControl,
   getWeightVolumeControl,
@@ -102,6 +105,7 @@ import {
   type BatchRecord,
   type BatchStatus,
   type CleaningRecordRecord,
+  type DispensingLineRecord,
   type DispensingOrderRecord,
   type DocumentChecklistItemRecord,
   type DocumentChecklistSummary,
@@ -113,6 +117,7 @@ import {
   type PackagingControlRecord,
   type ProductionControlRecord,
   type ProductionLineRecord,
+  type RawMaterialIdentificationPrintRecord,
   type ResultStatus,
   type BatchReleaseRecord,
   type SealIntegrityControlRecord,
@@ -799,6 +804,7 @@ function DispensingTab({ batch, employeeById }: { batch: BatchRecord; employeeBy
   const [grossWeight, setGrossWeight] = useState('');
   const [tare, setTare] = useState('');
   const [container, setContainer] = useState('');
+  const [identificationLine, setIdentificationLine] = useState<DispensingLineRecord | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -893,7 +899,7 @@ function DispensingTab({ batch, employeeById }: { batch: BatchRecord; employeeBy
             {order.lines.map((line) => (
               <tr key={line.id} className="border-b border-gray-50">
                 <td className="py-2 pr-3">{line.sequence}</td>
-                <td className="py-2 pr-3">{line.item}</td>
+                <td className="py-2 pr-3">{line.item_name || line.item}</td>
                 <td className="py-2 pr-3">{line.theoretical_quantity}</td>
                 <td className="py-2 pr-3">{line.net_weight ?? '-'}</td>
                 <td className={`py-2 pr-3 ${line.is_within_tolerance === false ? 'text-red-600 font-semibold' : ''}`}>
@@ -903,12 +909,23 @@ function DispensingTab({ batch, employeeById }: { batch: BatchRecord; employeeBy
                   <Badge label={line.status} color={line.status === 'VERIFIED' || line.status === 'CLOSED' ? 'green' : 'yellow'} />
                 </td>
                 <td className="py-2 pr-3">
-                  {line.status === 'PENDING' && (
-                    <button onClick={() => setWeighModalLineId(line.id)} className="text-[#2a4038] hover:underline">Pesar</button>
-                  )}
-                  {line.status === 'WEIGHED' && (
-                    <button onClick={() => void handleVerify(line.id)} className="text-[#2a4038] hover:underline">Verificar</button>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {line.status === 'PENDING' && (
+                      <button onClick={() => setWeighModalLineId(line.id)} className="text-[#2a4038] hover:underline">Pesar</button>
+                    )}
+                    {line.status === 'WEIGHED' && (
+                      <button onClick={() => void handleVerify(line.id)} className="text-[#2a4038] hover:underline">Verificar</button>
+                    )}
+                    {line.status !== 'PENDING' && (
+                      <button
+                        onClick={() => setIdentificationLine(line)}
+                        className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700"
+                        title="Identificación de materia prima"
+                      >
+                        <Printer size={13} />
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -936,7 +953,122 @@ function DispensingTab({ batch, employeeById }: { batch: BatchRecord; employeeBy
           </div>
         </div>
       </Modal>
+
+      {identificationLine && (
+        <RawMaterialIdentificationModal
+          line={identificationLine}
+          batch={batch}
+          onClose={() => setIdentificationLine(null)}
+        />
+      )}
     </Card>
+  );
+}
+
+function RawMaterialIdentificationModal({
+  line,
+  batch,
+  onClose,
+}: {
+  line: DispensingLineRecord;
+  batch: BatchRecord;
+  onClose: () => void;
+}) {
+  const toast = useToast();
+  const [prints, setPrints] = useState<RawMaterialIdentificationPrintRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [reprintReason, setReprintReason] = useState('');
+  const [printing, setPrinting] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setPrints(await getRawMaterialIdentificationPrints(line.id));
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo cargar el historial de impresión');
+    } finally {
+      setLoading(false);
+    }
+  }, [line.id, toast]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const hasPrinted = prints.length > 0;
+
+  const handlePrint = async () => {
+    if (hasPrinted && !reprintReason.trim()) {
+      toast.warning('Indica el motivo de la reimpresión.');
+      return;
+    }
+    setPrinting(true);
+    try {
+      const created = await createRawMaterialIdentificationPrint({
+        dispensing_line: line.id,
+        is_reprint: hasPrinted,
+        reprint_reason: hasPrinted ? reprintReason : '',
+      });
+      await exportRawMaterialIdentification(created.id, batch.batch_code || batch.production_order_number);
+      toast.success(hasPrinted ? 'Reimpresión registrada' : 'Identificación impresa');
+      setReprintReason('');
+      await load();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo generar la identificación');
+    } finally {
+      setPrinting(false);
+    }
+  };
+
+  return (
+    <Modal title="Identificación de materia prima dispensada" open onClose={onClose} wide>
+      <div className="space-y-4">
+        <div className="grid sm:grid-cols-2 gap-4">
+          <SectionField label="Materia prima" value={line.item_name || line.item} />
+          <SectionField label="Lote de materia prima" value={line.raw_material_batch_code || '-'} />
+          <SectionField label="Tara" value={line.tare ?? '-'} />
+          <SectionField label="Peso bruto" value={line.gross_weight ?? '-'} />
+          <SectionField label="Peso neto" value={line.net_weight ?? '-'} />
+          <SectionField label="Recipiente" value={line.container || '-'} />
+          <SectionField label="Fecha y hora de pesada" value={formatDateTime(line.weighed_at)} />
+          <SectionField label="Estado" value={line.status} />
+        </div>
+
+        <div className="pt-3 border-t border-gray-100">
+          <p className="text-xs font-semibold text-gray-700 mb-2">Historial de impresión</p>
+          {loading ? (
+            <p className="text-xs text-gray-400">Cargando...</p>
+          ) : prints.length === 0 ? (
+            <p className="text-xs text-gray-400">Aún no se ha impreso esta identificación.</p>
+          ) : (
+            <div className="space-y-1.5">
+              {prints.map((entry) => (
+                <div key={entry.id} className="flex items-center justify-between text-xs border-b border-gray-50 pb-1.5">
+                  <span>{entry.is_reprint ? `Reimpresión — ${entry.reprint_reason || 'sin motivo'}` : 'Impresión original'}</span>
+                  <span className="text-gray-400">{formatDateTime(entry.printed_at)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {hasPrinted && (
+          <label className="block">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Motivo de reimpresión</span>
+            <input value={reprintReason} onChange={(e) => setReprintReason(e.target.value)} className={inputCls} placeholder="Requerido para reimprimir" />
+          </label>
+        )}
+
+        <div className="flex justify-end gap-2 pt-2">
+          <SecondaryButton onClick={onClose}>Cerrar</SecondaryButton>
+          <PrimaryButton onClick={() => void handlePrint()} disabled={printing} icon={<Printer size={14} />}>
+            {printing ? 'Generando...' : hasPrinted ? 'Reimprimir' : 'Imprimir / Descargar PDF'}
+          </PrimaryButton>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

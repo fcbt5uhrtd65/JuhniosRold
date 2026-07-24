@@ -161,6 +161,9 @@ class ItemStockMovementSerializer(serializers.ModelSerializer):
 class DispensingLineSerializer(serializers.ModelSerializer):
     deviation_percentage = serializers.FloatField(read_only=True)
     is_within_tolerance = serializers.BooleanField(read_only=True)
+    item_name = serializers.CharField(source="item.name", read_only=True, default=None)
+    item_code = serializers.CharField(source="item.code", read_only=True, default=None)
+    raw_material_batch_code = serializers.CharField(source="raw_material_batch.supplier_batch_code", read_only=True, default=None)
 
     class Meta:
         model = DispensingLine
