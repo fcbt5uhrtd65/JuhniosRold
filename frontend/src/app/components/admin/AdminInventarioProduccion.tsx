@@ -23,19 +23,14 @@ import {
   type Item as ApiInventoryItem,
 } from '../../services/inventory-masters.service';
 import {
-  closeProductionOrder,
-  createFormula,
   createInventoryMovement,
-  createProductionOrder,
   createPurchaseOrder,
   createStockConversion,
   getInventoryWorkspace,
-  getProductionPlanningWorkspace,
   numeric,
   type InventoryMovementRecord,
   type InventoryWorkspace,
   type MovementType,
-  type ProductionOrderRecord,
   type PurchaseOrderRecord,
   type StockRecord,
 } from '../../services/inventory-production.service';
@@ -56,7 +51,6 @@ type Modulo = 'panel' | 'maestros' | 'compras' | 'existencias' | 'movimientos' |
 type TabMaestros = 'articulos' | 'bodegas' | 'grupos' | 'tipos' | 'proveedores' | 'unidades';
 type TabExistencias = 'por-bodega' | 'por-lote' | 'valorizado' | 'ajustes';
 type TabMovimientos = 'todos' | 'traslados';
-type TabProduccion = 'ordenes' | 'formulas' | 'dispensacion' | 'recepcion-pt' | 'mermas';
 
 interface Bodega { id: string; codigo: string; nombre: string; tipo: string; responsable: string; activa: boolean; }
 interface GrupoArticulo { id: string; codigo: string; nombre: string; tipo: string; articulos: number; }
@@ -67,9 +61,6 @@ interface Unidad { id: string; codigo: string; nombre: string; abreviatura: stri
 interface Stock { id: string; articuloId: string; articulo: string; tipo: string; bodega: string; lote: string; cantidad: number; reservado: number; enProceso: number; costo: number; vencimiento: string; }
 interface Movimiento { id: string; fecha: string; tipo: string; articulo: string; bodega: string; cantidad: number; lote: string; usuario: string; motivo: string; }
 interface Traslado { id: string; numero: string; fecha: string; bOrigen: string; bDestino: string; articulo: string; cantidad: number; lote: string; estado: 'pendiente' | 'confirmado' | 'anulado'; solicitadoPor: string; }
-interface OrdenProduccion { id: string; numero: string; producto: string; formula: string; cantidadPlan: number; cantidadReal: number; estado: 'pendiente' | 'en-proceso' | 'cerrada' | 'anulada'; fechaInicio: string; fechaCierre: string; responsable: string; dispensada: boolean; ptRecibido: boolean; }
-interface Formula { id: string; codigo: string; nombre: string; producto: string; rendimiento: number; unidad: string; lineas: FormulaLinea[]; }
-interface FormulaLinea { id: string; materia: string; cantidad: number; unidad: string; }
 interface AuditoriaLog { id: string; fecha: string; hora: string; usuario: string; modulo: string; accion: string; detalle: string; ip: string; }
 
 /* ═══════════════════════════════════════════════════════
@@ -168,18 +159,6 @@ const TRASLADOS: Traslado[] = [
   { id: '2', numero: 'TRF-2025-009', fecha: '2025-06-18', bOrigen: 'Principal Cosméticos', bDestino: 'Producto en Proceso', articulo: 'Betaína de Coco 30%', cantidad: 9, lote: 'L2024-003', estado: 'pendiente', solicitadoPor: 'Ana González' },
 ];
 
-const ORDENES_PRODUCCION: OrdenProduccion[] = [
-  { id: '1', numero: 'OP-2025-042', producto: 'Shampoo Botánico 400ml', formula: 'FM-SHB-001', cantidadPlan: 500, cantidadReal: 0, estado: 'en-proceso', fechaInicio: '2025-06-18', fechaCierre: '', responsable: 'Ana González', dispensada: true, ptRecibido: false },
-  { id: '2', numero: 'OP-2025-041', producto: 'Mascarilla Regeneradora 250g', formula: 'FM-MAS-003', cantidadPlan: 300, cantidadReal: 298, estado: 'cerrada', fechaInicio: '2025-06-14', fechaCierre: '2025-06-17', responsable: 'Ana González', dispensada: true, ptRecibido: true },
-  { id: '3', numero: 'OP-2025-040', producto: 'Sérum Botánico 60ml', formula: 'FM-SER-002', cantidadPlan: 200, cantidadReal: 197, estado: 'cerrada', fechaInicio: '2025-06-10', fechaCierre: '2025-06-13', responsable: 'Pedro Vásquez', dispensada: true, ptRecibido: true },
-  { id: '4', numero: 'OP-2025-043', producto: 'Aceite Nutritivo 90ml', formula: 'FM-ACE-004', cantidadPlan: 150, cantidadReal: 0, estado: 'pendiente', fechaInicio: '', fechaCierre: '', responsable: 'Ana González', dispensada: false, ptRecibido: false },
-];
-
-const FORMULAS: Formula[] = [
-  { id: '1', codigo: 'FM-SHB-001', nombre: 'Shampoo Botánico Base', producto: 'Shampoo Botánico 400ml', rendimiento: 100, unidad: 'Kg', lineas: [{ id: '1', materia: 'Agua Purificada', cantidad: 60.0, unidad: 'Kg' }, { id: '2', materia: 'Betaína de Coco 30%', cantidad: 18.0, unidad: 'Kg' }, { id: '3', materia: 'Glicerina Vegetal USP', cantidad: 5.0, unidad: 'Kg' }, { id: '4', materia: 'Extracto de Aguacate', cantidad: 2.0, unidad: 'Kg' }, { id: '5', materia: 'Aceite de Argán', cantidad: 1.5, unidad: 'Kg' }, { id: '6', materia: 'Fragancia Coco Tahití', cantidad: 1.0, unidad: 'Kg' }, { id: '7', materia: 'Preservante Optiphen', cantidad: 0.5, unidad: 'Kg' }] },
-];
-
-
 const AUDITORIA: AuditoriaLog[] = [
   { id: '1', fecha: '2025-06-18', hora: '09:14', usuario: 'Carlos Roldán', modulo: 'Compras', accion: 'Cierre OC', detalle: 'OC-2025-089 marcada como cerrada. 50 Kg Glicerina recibida.', ip: '192.168.1.10' },
   { id: '2', fecha: '2025-06-18', hora: '09:45', usuario: 'Ana González', modulo: 'Producción', accion: 'Verificación dispensación', detalle: 'OD-2025-042 verificada. Todas las MPC dentro del rango permitido.', ip: '192.168.1.14' },
@@ -203,27 +182,6 @@ function useInventoryWorkspace() {
       setData(await getInventoryWorkspace());
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'No fue posible cargar inventario y producción');
-    } finally {
-      setLoading(false);
-    }
-  }, [toast]);
-
-  useEffect(() => { load(); }, [load]);
-
-  return { data, loading, reload: load };
-}
-
-function useProductionPlanningWorkspace() {
-  const toast = useToast();
-  const [data, setData] = useState<InventoryWorkspace | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      setData(await getProductionPlanningWorkspace());
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No fue posible cargar planificación de producción');
     } finally {
       setLoading(false);
     }
@@ -1667,307 +1625,6 @@ function ModuloMovimientos() {
             </div>
           </Drawer>
         </>
-      )}
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════
-   MÓDULO PRODUCCIÓN
-═══════════════════════════════════════════════════════ */
-export function AdminProductionPlanning() {
-  const toast = useToast();
-  const { data, loading, reload } = useProductionPlanningWorkspace();
-  const [tab, setTab] = useState<TabProduccion>('ordenes');
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [cierreOP, setCierreOP] = useState<ProductionOrderRecord | null>(null);
-  const [cierreForm, setCierreForm] = useState({ actualQuantity: '', notes: '' });
-  const [closing, setClosing] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [orderForm, setOrderForm] = useState({ formula: '', outputItem: '', plannedQuantity: '', batchCode: '', startedAt: currentDateInput(), responsible: '', notes: '' });
-  const [formulaForm, setFormulaForm] = useState({ code: '', name: '', outputItem: '', yieldQuantity: '', yieldUnit: '', item: '', quantity: '' });
-  const maps = useMemo(() => buildInventoryMaps(data), [data]);
-
-  const tabs = [
-    { id: 'ordenes' as TabProduccion, label: 'Órdenes de Producción' },
-    { id: 'formulas' as TabProduccion, label: 'Fórmulas / Recetas' },
-    { id: 'dispensacion' as TabProduccion, label: 'Dispensación' },
-    { id: 'recepcion-pt' as TabProduccion, label: 'Recepción PT' },
-    { id: 'mermas' as TabProduccion, label: 'Mermas / Sobrantes' },
-  ];
-
-  const estadoApiColor: Record<string, 'yellow' | 'blue' | 'green' | 'red'> = { PENDING: 'yellow', IN_PROGRESS: 'blue', CLOSED: 'green', VOIDED: 'red' };
-  const estadoApiLabel: Record<string, string> = { PENDING: 'Pendiente', IN_PROGRESS: 'En Proceso', CLOSED: 'Cerrada', VOIDED: 'Anulada' };
-
-  const handleCreateOrder = async () => {
-    if (!orderForm.formula || !orderForm.outputItem || !Number(orderForm.plannedQuantity)) {
-      toast.warning('Fórmula, producto y cantidad planificada son obligatorios.');
-      return;
-    }
-    setSaving(true);
-    try {
-      await createProductionOrder({
-        formula: orderForm.formula,
-        output_item: orderForm.outputItem,
-        planned_quantity: Number(orderForm.plannedQuantity),
-        batch_code: orderForm.batchCode,
-        started_at: orderForm.startedAt || null,
-        responsible: orderForm.responsible,
-        notes: orderForm.notes,
-      });
-      toast.success('Orden de producción creada');
-      setOrderForm({ formula: '', outputItem: '', plannedQuantity: '', batchCode: '', startedAt: currentDateInput(), responsible: '', notes: '' });
-      setDrawerOpen(false);
-      await reload();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No fue posible crear la OP');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleCloseOrder = async () => {
-    if (!cierreOP || !Number(cierreForm.actualQuantity)) {
-      toast.warning('Indica la cantidad real producida.');
-      return;
-    }
-    setClosing(true);
-    try {
-      await closeProductionOrder({
-        id: cierreOP.id,
-        actual_quantity: Number(cierreForm.actualQuantity),
-        closed_at: currentDateInput(),
-        notes: cierreForm.notes,
-      });
-      toast.success('Orden de producción cerrada');
-      setCierreOP(null);
-      await reload();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No fue posible cerrar la OP');
-    } finally {
-      setClosing(false);
-    }
-  };
-
-  const handleCreateFormula = async () => {
-    if (!formulaForm.code || !formulaForm.name || !formulaForm.outputItem || !formulaForm.yieldUnit || !Number(formulaForm.yieldQuantity) || !formulaForm.item || !Number(formulaForm.quantity)) {
-      toast.warning('Completa la fórmula y al menos un ingrediente.');
-      return;
-    }
-    setSaving(true);
-    try {
-      await createFormula({
-        code: formulaForm.code,
-        name: formulaForm.name,
-        output_item: formulaForm.outputItem,
-        yield_quantity: Number(formulaForm.yieldQuantity),
-        yield_unit: formulaForm.yieldUnit,
-        lines: [{ item: formulaForm.item, quantity: Number(formulaForm.quantity) }],
-      });
-      toast.success('Fórmula creada');
-      setFormulaForm({ code: '', name: '', outputItem: '', yieldQuantity: '', yieldUnit: '', item: '', quantity: '' });
-      setDrawerOpen(false);
-      await reload();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No fue posible crear la fórmula');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div>
-      <div className="flex gap-1 mb-6 bg-gray-100 rounded-xl p-1 flex-wrap">
-        {tabs.map(t => <button key={t.id} onClick={() => setTab(t.id)} className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${tab === t.id ? 'bg-white text-[#2a4038] shadow-sm font-semibold' : 'text-gray-500 hover:text-gray-700'}`}>{t.label}</button>)}
-      </div>
-
-      {/* ÓRDENES */}
-      {tab === 'ordenes' && (
-        <>
-          <Hdr title="Órdenes de Producción" subtitle="Planificación y control del proceso productivo" onNew={() => setDrawerOpen(true)} newLabel="Nueva Orden" />
-          <div className="grid grid-cols-4 gap-4 mb-5">
-            {[
-              { label: 'Pendientes', value: (data?.productionOrders ?? []).filter(o => o.status === 'PENDING').length, color: 'bg-amber-50 text-amber-600 border-amber-100' },
-              { label: 'En Proceso', value: (data?.productionOrders ?? []).filter(o => o.status === 'IN_PROGRESS').length, color: 'bg-blue-50 text-blue-600 border-blue-100' },
-              { label: 'Cerradas (mes)', value: (data?.productionOrders ?? []).filter(o => o.status === 'CLOSED').length, color: 'bg-emerald-50 text-emerald-600 border-emerald-100' },
-              { label: 'Sin Recepción PT', value: (data?.productionOrders ?? []).filter(o => o.is_dispensed && !o.is_output_received && o.status !== 'PENDING').length, color: 'bg-red-50 text-red-600 border-red-100' },
-            ].map(s => <div key={s.label} className={`border rounded-2xl p-4 ${s.color}`}><p className="text-3xl font-bold">{s.value}</p><p className="text-xs font-medium mt-0.5">{s.label}</p></div>)}
-          </div>
-          <Tbl>
-            <thead><tr><Th>Número</Th><Th>Producto</Th><Th>Plan</Th><Th>Real</Th><Th>Estado</Th><Th>Dispensada</Th><Th>PT Recibido</Th><Th>Responsable</Th><Th>Acciones</Th></tr></thead>
-            <tbody>
-              {loading && <LoadingRow colSpan={9} />}
-              {!loading && (data?.productionOrders ?? []).map(op => (
-                <tr key={op.id} className="hover:bg-gray-50/50">
-                  <Td><span className="font-mono text-xs font-semibold text-[#2a4038]">{op.number}</span></Td>
-                  <Td className="font-medium text-gray-900">{itemName(data, op.output_item)}</Td>
-                  <Td className="font-bold">{numeric(op.planned_quantity).toLocaleString()}</Td>
-                  <Td className={numeric(op.actual_quantity) > 0 ? 'font-bold text-emerald-600' : 'text-gray-400'}>{numeric(op.actual_quantity) > 0 ? numeric(op.actual_quantity).toLocaleString() : '—'}</Td>
-                  <Td><Badge label={estadoApiLabel[op.status]} color={estadoApiColor[op.status]} /></Td>
-                  <Td>{op.is_dispensed ? <CheckCircle size={14} className="text-emerald-500" /> : <Clock size={14} className="text-gray-300" />}</Td>
-                  <Td>{op.is_output_received ? <CheckCircle size={14} className="text-emerald-500" /> : <Clock size={14} className="text-gray-300" />}</Td>
-                  <Td className="text-xs text-gray-500">{op.responsible || '—'}</Td>
-                  <Td>
-                    <div className="flex gap-1">
-                      <button className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600"><Eye size={13} /></button>
-                      {op.status === 'IN_PROGRESS' && op.is_dispensed && op.is_output_received && (
-                        <button onClick={() => { setCierreOP(op); setCierreForm({ actualQuantity: op.planned_quantity, notes: '' }); }} className="p-1.5 rounded-lg hover:bg-emerald-50 text-gray-400 hover:text-emerald-600" title="Cerrar orden"><ClipboardCheck size={13} /></button>
-                      )}
-                    </div>
-                  </Td>
-                </tr>
-              ))}
-              {!loading && (data?.productionOrders ?? []).length === 0 && <EmptyRow colSpan={9} label="Sin órdenes de producción registradas" />}
-            </tbody>
-          </Tbl>
-
-          {/* Modal de Cierre de OP */}
-          {cierreOP && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center">
-              <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setCierreOP(null)} />
-              <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
-                <h3 className="font-bold text-gray-900 text-lg mb-1">Cerrar Orden de Producción</h3>
-                <p className="text-xs text-gray-500 mb-5">{cierreOP.number} · {itemName(data, cierreOP.output_item)}</p>
-                <div className="space-y-3 mb-6">
-                  {[
-                    { label: 'Dispensación verificada', ok: cierreOP.is_dispensed },
-                    { label: 'Recepción PT registrada', ok: cierreOP.is_output_received },
-                    { label: 'Mermas y sobrantes documentados', ok: true },
-                  ].map(item => (
-                    <div key={item.label} className={`flex items-center gap-3 p-3 rounded-xl ${item.ok ? 'bg-emerald-50 border border-emerald-100' : 'bg-red-50 border border-red-100'}`}>
-                      {item.ok ? <CheckCircle size={16} className="text-emerald-600 flex-shrink-0" /> : <AlertTriangle size={16} className="text-red-500 flex-shrink-0" />}
-                      <p className={`text-sm font-medium ${item.ok ? 'text-emerald-700' : 'text-red-700'}`}>{item.label}</p>
-                    </div>
-                  ))}
-                </div>
-                <div className="mb-4"><Field label="Cantidad real producida" required><input className={inp} type="number" value={cierreForm.actualQuantity} onChange={e => setCierreForm(f => ({ ...f, actualQuantity: e.target.value }))} /></Field></div>
-                <div className="mb-5"><Field label="Observaciones de cierre"><textarea className={inp + ' resize-none h-14'} placeholder="Notas finales de la orden..." value={cierreForm.notes} onChange={e => setCierreForm(f => ({ ...f, notes: e.target.value }))} /></Field></div>
-                <div className="flex gap-3">
-                  <button onClick={() => setCierreOP(null)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">Cancelar</button>
-                  <button onClick={handleCloseOrder} disabled={closing} className="flex-1 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50">{closing ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />} Confirmar Cierre</button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <Drawer title="Nueva Orden de Producción" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Número de orden"><input className={inp + ' bg-gray-50'} placeholder="Automático" readOnly /></Field>
-              <Field label="Fecha programada" required><input className={inp} type="date" value={orderForm.startedAt} onChange={e => setOrderForm(f => ({ ...f, startedAt: e.target.value }))} /></Field>
-              <div className="col-span-2"><Field label="Producto a fabricar" required><select className={sel} value={orderForm.outputItem} onChange={e => setOrderForm(f => ({ ...f, outputItem: e.target.value }))}><option value="">Seleccionar producto terminado...</option>{(data?.items ?? []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field></div>
-              <div className="col-span-2"><Field label="Fórmula / Receta" required><select className={sel} value={orderForm.formula} onChange={e => { const formula = maps.formulas.get(e.target.value); setOrderForm(f => ({ ...f, formula: e.target.value, outputItem: formula?.output_item ?? f.outputItem })); }}><option value="">Seleccionar fórmula...</option>{(data?.formulas ?? []).map(f => <option key={f.id} value={f.id}>{f.code} — {f.name}</option>)}</select></Field></div>
-              <Field label="Cantidad planificada" required><input className={inp} type="number" placeholder="0" value={orderForm.plannedQuantity} onChange={e => setOrderForm(f => ({ ...f, plannedQuantity: e.target.value }))} /></Field>
-              <Field label="Lote asignado" required><input className={inp} placeholder="Ej: PT2025-022" value={orderForm.batchCode} onChange={e => setOrderForm(f => ({ ...f, batchCode: e.target.value }))} /></Field>
-              <Field label="Fecha vencimiento del lote"><input className={inp} type="date" /></Field>
-              <div className="col-span-2"><Field label="Responsable" required><input className={inp} placeholder="Responsable" value={orderForm.responsible} onChange={e => setOrderForm(f => ({ ...f, responsible: e.target.value }))} /></Field></div>
-              <div className="col-span-2"><Field label="Observaciones"><textarea className={inp + ' resize-none h-14'} placeholder="Instrucciones especiales..." value={orderForm.notes} onChange={e => setOrderForm(f => ({ ...f, notes: e.target.value }))} /></Field></div>
-            </div>
-            <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 mt-4"><p className="text-xs text-blue-700 font-medium">Al crear la orden se generará automáticamente la Orden de Dispensación con las materias primas de la fórmula seleccionada.</p></div>
-            <div className="flex gap-3 mt-8 pt-5 border-t border-gray-100">
-              <button onClick={() => setDrawerOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancelar</button>
-              <button onClick={handleCreateOrder} disabled={saving} className="flex-1 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold hover:bg-[#3d5c4e] flex items-center justify-center gap-2 disabled:opacity-50">{saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Guardar</button>
-            </div>
-          </Drawer>
-        </>
-      )}
-
-      {/* FÓRMULAS */}
-      {tab === 'formulas' && (
-        <>
-          <Hdr title="Fórmulas y Recetas" subtitle="Composición de ingredientes por producto" onNew={() => setDrawerOpen(true)} newLabel="Nueva Fórmula" />
-          {loading && <div className="bg-white border border-gray-100 rounded-2xl p-6 text-center text-sm text-gray-400"><Loader2 size={16} className="inline animate-spin mr-2" /> Cargando fórmulas...</div>}
-          {!loading && (data?.formulas ?? []).map(f => (
-            <div key={f.id} className="bg-white border border-gray-100 rounded-2xl shadow-sm mb-4">
-              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-                <div><div className="flex items-center gap-2 mb-1"><span className="font-mono text-xs text-gray-400">{f.code}</span><Badge label={itemName(data, f.output_item)} color="green" /></div><h3 className="font-semibold text-gray-900">{f.name}</h3></div>
-                <div className="text-right"><p className="text-xs text-gray-500">Rendimiento base</p><p className="text-xl font-bold text-[#2a4038]">{numeric(f.yield_quantity)} {unitLabel(data, f.yield_unit)}</p></div>
-              </div>
-              <div className="px-5 py-3 overflow-x-auto">
-                <table className="w-full text-sm min-w-[560px]">
-                  <thead><tr className="text-[10px] font-bold uppercase tracking-wider text-gray-400"><th className="py-2 text-left">Ingrediente</th><th className="py-2 text-right">Cantidad</th><th className="py-2 text-right">Und</th><th className="py-2 text-right">%</th><th className="py-2 text-right">Stock disp.</th></tr></thead>
-                  <tbody>
-                    {f.lines.map((l, index) => {
-                      const stockDisp = 0;
-                      return (
-                        <tr key={l.id ?? index} className="border-t border-gray-50">
-                          <td className="py-2.5 font-medium text-gray-800">{itemName(data, l.item)}</td>
-                          <td className="py-2.5 text-right font-bold">{numeric(l.quantity)}</td>
-                          <td className="py-2.5 text-right text-gray-500">{unitLabel(data, maps.items.get(l.item)?.unit)}</td>
-                          <td className="py-2.5 text-right text-gray-500">{numeric(f.yield_quantity) > 0 ? ((numeric(l.quantity) / numeric(f.yield_quantity)) * 100).toFixed(1) : '0.0'}%</td>
-                          <td className="py-2.5 text-right"><span className={stockDisp > numeric(l.quantity) ? 'text-emerald-600 font-semibold' : 'text-red-600 font-semibold'}>{stockDisp > 0 ? stockDisp : 'Sin stock'}</span></td>
-                        </tr>
-                      );
-                    })}
-                    <tr className="border-t-2 border-gray-200"><td className="py-2.5 font-bold">Total</td><td className="py-2.5 text-right font-bold">{f.lines.reduce((a, l) => a + numeric(l.quantity), 0).toFixed(1)}</td><td className="py-2.5 text-right text-gray-500">{unitLabel(data, f.yield_unit)}</td><td className="py-2.5 text-right text-[#2a4038] font-bold">{numeric(f.yield_quantity) > 0 ? ((f.lines.reduce((a, l) => a + numeric(l.quantity), 0) / numeric(f.yield_quantity)) * 100).toFixed(1) : '0.0'}%</td><td /></tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ))}
-          <Drawer title="Nueva Fórmula / Receta" open={drawerOpen} onClose={() => setDrawerOpen(false)} wide>
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Código" required><input className={inp} placeholder="FM-XXX-000" value={formulaForm.code} onChange={e => setFormulaForm(f => ({ ...f, code: e.target.value }))} /></Field>
-              <div className="col-span-2"><Field label="Nombre de la fórmula" required><input className={inp} placeholder="Nombre descriptivo" value={formulaForm.name} onChange={e => setFormulaForm(f => ({ ...f, name: e.target.value }))} /></Field></div>
-              <div className="col-span-2"><Field label="Producto resultante" required><select className={sel} value={formulaForm.outputItem} onChange={e => setFormulaForm(f => ({ ...f, outputItem: e.target.value }))}><option value="">Seleccionar producto terminado...</option>{(data?.items ?? []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field></div>
-              <Field label="Rendimiento base" required><input className={inp} type="number" placeholder="100" value={formulaForm.yieldQuantity} onChange={e => setFormulaForm(f => ({ ...f, yieldQuantity: e.target.value }))} /></Field>
-              <Field label="Unidad del rendimiento"><select className={sel} value={formulaForm.yieldUnit} onChange={e => setFormulaForm(f => ({ ...f, yieldUnit: e.target.value }))}><option value="">Seleccionar...</option>{(data?.units ?? []).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}</select></Field>
-            </div>
-            <div className="mt-5">
-              <div className="flex items-center justify-between mb-3"><p className="text-xs font-bold uppercase tracking-wider text-gray-500">Ingredientes</p><button className="text-xs text-[#2a4038] font-semibold flex items-center gap-1"><Plus size={12} /> Agregar línea</button></div>
-              <div className="space-y-2">
-                  <div className="grid grid-cols-12 gap-2 items-center bg-gray-50 rounded-lg p-2">
-                    <div className="col-span-5"><select className={sel + ' text-xs py-2'} value={formulaForm.item} onChange={e => setFormulaForm(f => ({ ...f, item: e.target.value }))}><option value="">Seleccionar materia prima...</option>{(data?.items ?? []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
-                    <div className="col-span-3"><input className={inp + ' text-xs py-2'} type="number" placeholder="Cantidad" value={formulaForm.quantity} onChange={e => setFormulaForm(f => ({ ...f, quantity: e.target.value }))} /></div>
-                    <div className="col-span-2"><select className={sel + ' text-xs py-2'} value={maps.items.get(formulaForm.item)?.unit ?? ''} disabled>{(data?.units ?? []).map(u => <option key={u.id} value={u.id}>{u.abbreviation}</option>)}</select></div>
-                    <div className="col-span-2 flex justify-center"><button className="p-1 text-red-400 hover:text-red-600"><X size={14} /></button></div>
-                  </div>
-              </div>
-            </div>
-            <div className="flex gap-3 mt-8 pt-5 border-t border-gray-100">
-              <button onClick={() => setDrawerOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancelar</button>
-              <button onClick={handleCreateFormula} disabled={saving} className="flex-1 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold hover:bg-[#3d5c4e] flex items-center justify-center gap-2 disabled:opacity-50">{saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Guardar</button>
-            </div>
-          </Drawer>
-        </>
-      )}
-
-      {/* DISPENSACIÓN */}
-      {tab === 'dispensacion' && (
-        <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-10 text-center">
-          <Beaker size={28} className="mx-auto text-gray-300 mb-3" />
-          <p className="text-sm font-semibold text-gray-700">La dispensación ahora se gestiona en el módulo de Producción</p>
-          <p className="text-xs text-gray-400 mt-1 max-w-md mx-auto">
-            El pesaje y verificación real de materias primas por lote (con trazabilidad, tolerancias y descuento de
-            inventario) vive en <strong>Producción</strong>, dentro del expediente de cada lote. Esta pestaña quedó
-            reservada para no perder el enlace histórico; los datos de ejemplo que mostraba antes fueron retirados.
-          </p>
-        </div>
-      )}
-
-      {/* RECEPCIÓN PT */}
-      {tab === 'recepcion-pt' && (
-        <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-10 text-center">
-          <Beaker size={28} className="mx-auto text-gray-300 mb-3" />
-          <p className="text-sm font-semibold text-gray-700">La liberación de producto terminado ahora se gestiona en el módulo de Producción</p>
-          <p className="text-xs text-gray-400 mt-1 max-w-md mx-auto">
-            El control de llenado, acondicionamiento, calidad y liberación de cada lote vive en <strong>Producción</strong>,
-            dentro del expediente del lote correspondiente. Esta pestaña quedó reservada para no perder el enlace
-            histórico; los datos de ejemplo que mostraba antes fueron retirados.
-          </p>
-        </div>
-      )}
-
-      {/* MERMAS Y SOBRANTES */}
-      {tab === 'mermas' && (
-        <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-10 text-center">
-          <Beaker size={28} className="mx-auto text-gray-300 mb-3" />
-          <p className="text-sm font-semibold text-gray-700">Las mermas y sobrantes reales ya se gestionan en Inventario</p>
-          <p className="text-xs text-gray-400 mt-1 max-w-md mx-auto">
-            Usa el módulo <strong>Conversión</strong> (pestaña de Inventario) para registrar mermas y sobrantes reales
-            contra el inventario de materias primas — esa pestaña ya está conectada a datos reales. Esta sección
-            quedó reservada para no perder el enlace histórico; los datos de ejemplo que mostraba antes fueron retirados.
-          </p>
-        </div>
       )}
     </div>
   );

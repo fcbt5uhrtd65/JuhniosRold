@@ -13,20 +13,35 @@ from shared.interfaces.viewsets import SoftDeleteModelViewSet
 from ..infrastructure.batch_pdf import (
     render_analysis_certificate_pdf,
     render_batch_release_pdf,
+    render_cleaning_record_pdf,
     render_dispensing_order_pdf,
     render_document_checklist_pdf,
+    render_filling_control_pdf,
     render_full_batch_dossier_pdf,
     render_line_clearance_pdf,
+    render_line_identification_pdf,
+    render_manufacturing_steps_pdf,
+    render_microbiology_analysis_pdf,
+    render_packaging_control_pdf,
+    render_production_control_pdf,
+    render_raw_material_identification_pdf,
+    render_seal_integrity_control_pdf,
+    render_weight_volume_control_pdf,
 )
 
 from ..application.use_cases import (
     ApproveLineClearance,
+    AuthorizeWeightVolumeResume,
     ChangeBatchStatus,
     CloseDispensingOrder,
+    CompleteManufacturingStep,
+    CreateBatchLotMarking,
     CreateBatchWithOrder,
     LoadCertificateTestsFromSpecification,
     LoadMicrobiologySpecificationFromMaster,
+    RecordWeightVolumeSample,
     ReleaseBatch,
+    SignDocument,
     StartBatch,
     VerifyDispensingLine,
     WeighDispensingLine,
@@ -65,6 +80,7 @@ from ..infrastructure.models import (
     RawMaterialIdentificationPrint,
     SealIntegrityControl,
     SealIntegritySample,
+    Signature,
     WeightVolumeControl,
     WeightVolumeSample,
 )
@@ -103,6 +119,7 @@ from ..infrastructure.serializers import (
     RawMaterialIdentificationPrintSerializer,
     SealIntegrityControlSerializer,
     SealIntegritySampleSerializer,
+    SignatureSerializer,
     WeightVolumeControlSerializer,
     WeightVolumeSampleSerializer,
 )
@@ -141,6 +158,48 @@ class ManufacturingBaseViewSet(SoftDeleteModelViewSet):
     def perform_destroy(self, instance):
         super().perform_destroy(instance)
         self._audit("delete", instance)
+
+    @action(detail=True, methods=("post",), url_path="sign")
+    def sign(self, request, pk=None):
+        """Firma electrónica genérica (dibujar o cargar) para los recursos de
+        manufacturing que declaran signatures = GenericRelation(Signature)."""
+        instance = self.get_object()
+        if not hasattr(instance, "signatures"):
+            return Response({"detail": "Este recurso no admite firma electrónica."}, status=status.HTTP_400_BAD_REQUEST)
+        image = request.FILES.get("image")
+        if not image:
+            return Response({"detail": "Debes adjuntar la imagen de la firma."}, status=status.HTTP_400_BAD_REQUEST)
+        signature_type = request.data.get("signature_type")
+        if signature_type not in Signature.SignatureType.values:
+            return Response({"detail": "Tipo de firma no válido."}, status=status.HTTP_400_BAD_REQUEST)
+        role = request.data.get("role", Signature.Role.RESPONSIBLE)
+        if role not in Signature.Role.values:
+            return Response({"detail": "Rol de firma no válido."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            signature = SignDocument().execute(
+                instance,
+                actor=request.user,
+                image=image,
+                signature_type=signature_type,
+                role=role,
+                full_name=request.data.get("full_name", ""),
+                role_title=request.data.get("role_title", ""),
+                ip_address=request.META.get("REMOTE_ADDR"),
+                observation=request.data.get("observation", ""),
+                replace_reason=request.data.get("replace_reason", ""),
+            )
+        except BusinessRuleViolation as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        self._audit("sign", instance)
+        return Response(SignatureSerializer(signature).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=("get",), url_path="signatures")
+    def signatures(self, request, pk=None):
+        instance = self.get_object()
+        if not hasattr(instance, "signatures"):
+            return Response([])
+        return Response(SignatureSerializer(instance.signatures.all(), many=True).data)
 
     def _export_single_document(self, request, *, batch, document_code, render_fn, render_arg, filename_prefix):
         """Genera un documento individual, lo registra en BatchExport y lo
@@ -341,7 +400,9 @@ class ItemStockMovementViewSet(ManufacturingBaseViewSet):
 # ── Dispensación ──────────────────────────────────────────────────────────────
 
 class DispensingOrderViewSet(ManufacturingBaseViewSet):
-    queryset = DispensingOrder.objects.select_related("batch", "responsible", "verifier").prefetch_related("lines")
+    queryset = DispensingOrder.objects.select_related("batch", "responsible", "verifier").prefetch_related(
+        "lines__item", "lines__raw_material_batch"
+    )
     serializer_class = DispensingOrderSerializer
     filterset_fields = ("batch", "status")
 
@@ -418,6 +479,18 @@ class RawMaterialIdentificationPrintViewSet(ManufacturingBaseViewSet):
         serializer.save(printed_by=self.request.user)
         self._audit("create", serializer.instance)
 
+    @action(detail=True, methods=("get",), url_path="export")
+    def export(self, request, pk=None):
+        identification_print = self.get_object()
+        return self._export_single_document(
+            request,
+            batch=identification_print.dispensing_line.order.batch,
+            document_code="RAW_MATERIAL_IDENTIFICATION",
+            render_fn=render_raw_material_identification_pdf,
+            render_arg=identification_print.dispensing_line,
+            filename_prefix="identificacion-mp",
+        )
+
 
 # ── Instrucciones de fabricación ─────────────────────────────────────────────
 
@@ -431,6 +504,45 @@ class ManufacturingStepExecutionViewSet(ManufacturingBaseViewSet):
     queryset = ManufacturingStepExecution.objects.select_related("batch", "step", "performed_by", "verified_by")
     serializer_class = ManufacturingStepExecutionSerializer
     filterset_fields = ("batch", "step", "status")
+
+    @action(detail=False, methods=("get",), url_path="export")
+    def export(self, request):
+        batch_id = request.query_params.get("batch")
+        if not batch_id:
+            return Response({"detail": "Debes indicar el lote."}, status=status.HTTP_400_BAD_REQUEST)
+        batch = Batch.objects.filter(pk=batch_id).first()
+        if not batch:
+            return Response({"detail": "Lote no encontrado."}, status=status.HTTP_404_NOT_FOUND)
+        return self._export_single_document(
+            request,
+            batch=batch,
+            document_code="MANUFACTURING_STEPS",
+            render_fn=render_manufacturing_steps_pdf,
+            render_arg=batch,
+            filename_prefix="instrucciones-fabricacion",
+        )
+
+    @action(detail=True, methods=("post",), url_path="complete")
+    def complete(self, request, pk=None):
+        execution = self.get_object()
+        actual_fields = (
+            "actual_quantity", "actual_temperature", "actual_time_minutes",
+            "actual_agitation_speed", "actual_ph", "actual_pressure",
+        )
+        actual_data = {field: request.data[field] for field in actual_fields if field in request.data}
+        new_status = request.data.get("status", ManufacturingStepExecution.Status.COMPLETED)
+        try:
+            execution = CompleteManufacturingStep().execute(
+                execution,
+                actor=getattr(request.user, "employee_profile", None),
+                status=new_status,
+                actual_data=actual_data,
+                deviation=request.data.get("deviation", ""),
+            )
+        except BusinessRuleViolation as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        self._audit("complete", execution)
+        return Response(self.get_serializer(execution).data)
 
 
 # ── Despeje de línea y limpieza ──────────────────────────────────────────────
@@ -481,11 +593,35 @@ class CleaningRecordViewSet(ManufacturingBaseViewSet):
     serializer_class = CleaningRecordSerializer
     filterset_fields = ("batch", "record_type", "result")
 
+    @action(detail=True, methods=("get",), url_path="export")
+    def export(self, request, pk=None):
+        record = self.get_object()
+        return self._export_single_document(
+            request,
+            batch=record.batch,
+            document_code="CLEAN_AREA_EQUIPMENT",
+            render_fn=render_cleaning_record_pdf,
+            render_arg=record,
+            filename_prefix="limpieza",
+        )
+
 
 class LineIdentificationViewSet(ManufacturingBaseViewSet):
     queryset = LineIdentification.objects.select_related("batch", "placed_by", "removed_by")
     serializer_class = LineIdentificationSerializer
     filterset_fields = ("batch",)
+
+    @action(detail=True, methods=("get",), url_path="export")
+    def export(self, request, pk=None):
+        line_identification = self.get_object()
+        return self._export_single_document(
+            request,
+            batch=line_identification.batch,
+            document_code="LINE_IDENTIFICATION",
+            render_fn=render_line_identification_pdf,
+            render_arg=line_identification,
+            filename_prefix="identificacion-linea",
+        )
 
 
 # ── Control de producción ────────────────────────────────────────────────────
@@ -494,6 +630,18 @@ class ProductionControlViewSet(ManufacturingBaseViewSet):
     queryset = ProductionControl.objects.select_related("batch", "unit").prefetch_related("materials")
     serializer_class = ProductionControlSerializer
     filterset_fields = ("batch",)
+
+    @action(detail=True, methods=("get",), url_path="export")
+    def export(self, request, pk=None):
+        control = self.get_object()
+        return self._export_single_document(
+            request,
+            batch=control.batch,
+            document_code="PRODUCTION_CONTROL",
+            render_fn=render_production_control_pdf,
+            render_arg=control,
+            filename_prefix="control-produccion",
+        )
 
 
 class ProductionControlMaterialViewSet(ManufacturingBaseViewSet):
@@ -510,6 +658,18 @@ class FillingControlViewSet(ManufacturingBaseViewSet):
     )
     serializer_class = FillingControlSerializer
     filterset_fields = ("batch",)
+
+    @action(detail=True, methods=("get",), url_path="export")
+    def export(self, request, pk=None):
+        control = self.get_object()
+        return self._export_single_document(
+            request,
+            batch=control.batch,
+            document_code="FILLING_CONTROL",
+            render_fn=render_filling_control_pdf,
+            render_arg=control,
+            filename_prefix="control-llenado",
+        )
 
 
 class FillingParticipantViewSet(ManufacturingBaseViewSet):
@@ -531,6 +691,46 @@ class WeightVolumeControlViewSet(ManufacturingBaseViewSet):
     serializer_class = WeightVolumeControlSerializer
     filterset_fields = ("batch", "overall_result")
 
+    @action(detail=True, methods=("post",), url_path="record-sample")
+    def record_sample(self, request, pk=None):
+        control = self.get_object()
+        try:
+            RecordWeightVolumeSample().execute(
+                control,
+                sample_number=request.data.get("sample_number"),
+                gross_weight=request.data.get("gross_weight"),
+                tare=request.data.get("tare"),
+                volume=request.data.get("volume"),
+                actor=getattr(request.user, "employee_profile", None),
+            )
+        except BusinessRuleViolation as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        control.refresh_from_db()
+        self._audit("record-sample", control)
+        return Response(self.get_serializer(control).data)
+
+    @action(detail=True, methods=("post",), url_path="authorize-resume")
+    def authorize_resume(self, request, pk=None):
+        control = self.get_object()
+        try:
+            control = AuthorizeWeightVolumeResume().execute(control, actor=getattr(request.user, "employee_profile", None))
+        except BusinessRuleViolation as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        self._audit("authorize-resume", control)
+        return Response(self.get_serializer(control).data)
+
+    @action(detail=True, methods=("get",), url_path="export")
+    def export(self, request, pk=None):
+        control = self.get_object()
+        return self._export_single_document(
+            request,
+            batch=control.batch,
+            document_code="WEIGHT_VOLUME",
+            render_fn=render_weight_volume_control_pdf,
+            render_arg=control,
+            filename_prefix="peso-volumen",
+        )
+
 
 class WeightVolumeSampleViewSet(ManufacturingBaseViewSet):
     queryset = WeightVolumeSample.objects.select_related("control", "adjustment_by")
@@ -544,6 +744,18 @@ class SealIntegrityControlViewSet(ManufacturingBaseViewSet):
     queryset = SealIntegrityControl.objects.select_related("batch", "performed_by", "verified_by").prefetch_related("samples")
     serializer_class = SealIntegrityControlSerializer
     filterset_fields = ("batch", "overall_result")
+
+    @action(detail=True, methods=("get",), url_path="export")
+    def export(self, request, pk=None):
+        control = self.get_object()
+        return self._export_single_document(
+            request,
+            batch=control.batch,
+            document_code="SEAL_INTEGRITY",
+            render_fn=render_seal_integrity_control_pdf,
+            render_arg=control,
+            filename_prefix="hermeticidad",
+        )
 
 
 class SealIntegritySampleViewSet(ManufacturingBaseViewSet):
@@ -559,11 +771,48 @@ class PackagingControlViewSet(ManufacturingBaseViewSet):
     serializer_class = PackagingControlSerializer
     filterset_fields = ("batch",)
 
+    @action(detail=True, methods=("get",), url_path="export")
+    def export(self, request, pk=None):
+        control = self.get_object()
+        return self._export_single_document(
+            request,
+            batch=control.batch,
+            document_code="PACKAGING_CONTROL",
+            render_fn=render_packaging_control_pdf,
+            render_arg=control,
+            filename_prefix="acondicionamiento",
+        )
+
 
 class BatchLotMarkingViewSet(ManufacturingBaseViewSet):
     queryset = BatchLotMarking.objects.select_related("packaging_control", "performed_by", "verified_by")
     serializer_class = BatchLotMarkingSerializer
     filterset_fields = ("packaging_control", "stage")
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        packaging_control = serializer.validated_data.get("packaging_control")
+        stage = serializer.validated_data.get("stage")
+        if not packaging_control or not stage:
+            return Response({"detail": "Debes indicar el control de acondicionamiento y la etapa."}, status=status.HTTP_400_BAD_REQUEST)
+
+        validated_fields = {
+            key: value
+            for key, value in serializer.validated_data.items()
+            if key not in ("packaging_control", "stage")
+        }
+        try:
+            marking = CreateBatchLotMarking().execute(
+                packaging_control,
+                stage=stage,
+                actor=getattr(request.user, "employee_profile", None),
+                **validated_fields,
+            )
+        except BusinessRuleViolation as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        self._audit("create", marking)
+        return Response(self.get_serializer(marking).data, status=status.HTTP_201_CREATED)
 
 
 # ── Certificado de análisis y microbiología ──────────────────────────────────
@@ -614,6 +863,18 @@ class MicrobiologyAnalysisViewSet(ManufacturingBaseViewSet):
         except BusinessRuleViolation as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(self.get_serializer(microbiology).data)
+
+    @action(detail=True, methods=("get",), url_path="export")
+    def export(self, request, pk=None):
+        microbiology = self.get_object()
+        return self._export_single_document(
+            request,
+            batch=microbiology.batch,
+            document_code="MICROBIOLOGY",
+            render_fn=render_microbiology_analysis_pdf,
+            render_arg=microbiology,
+            filename_prefix="microbiologia",
+        )
 
 
 # ── Maestro de especificaciones de producto ──────────────────────────────────

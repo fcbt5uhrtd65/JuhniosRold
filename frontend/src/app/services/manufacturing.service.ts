@@ -12,7 +12,8 @@ interface PaginatedResponse<T> {
 }
 
 async function getPage<T>(path: string): Promise<T[]> {
-  const firstResponse = await api.get<PaginatedResponse<T>>(`${path}?page_size=100`);
+  const sep = path.includes('?') ? '&' : '?';
+  const firstResponse = await api.get<PaginatedResponse<T>>(`${path}${sep}page_size=100`);
   const firstPage = firstResponse.data;
   if (!firstPage) return [];
 
@@ -21,7 +22,7 @@ async function getPage<T>(path: string): Promise<T[]> {
 
   const remainingPages = await Promise.all(
     Array.from({ length: totalPages - 1 }, (_, index) =>
-      api.get<PaginatedResponse<T>>(`${path}?page_size=100&page=${index + 2}`),
+      api.get<PaginatedResponse<T>>(`${path}${sep}page_size=100&page=${index + 2}`),
     ),
   );
 
@@ -95,8 +96,10 @@ export interface BatchRecord {
   production_order_number: string;
   batch_code: string;
   status: BatchStatus;
-  area: string;
-  production_line: string;
+  area: UUID | null;
+  area_name: string | null;
+  production_line: UUID | null;
+  production_line_name: string | null;
   production_manager: UUID | null;
   quality_manager: UUID | null;
   scheduled_at: string | null;
@@ -106,6 +109,25 @@ export interface BatchRecord {
   created_by: UUID | null;
   is_terminal: boolean;
   status_history: BatchStatusHistoryRecord[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AreaRecord {
+  id: UUID;
+  code: string;
+  name: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProductionLineRecord {
+  id: UUID;
+  area: UUID | null;
+  code: string;
+  name: string;
+  is_active: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -140,7 +162,10 @@ export interface DispensingLineRecord {
   sequence: number;
   formula_line: UUID | null;
   item: UUID;
+  item_name: string | null;
+  item_code: string | null;
   raw_material_batch: UUID | null;
+  raw_material_batch_code: string | null;
   theoretical_quantity: string;
   tolerance_percentage: string;
   tare: string | null;
@@ -158,6 +183,15 @@ export interface DispensingLineRecord {
   observations: string;
   deviation_percentage: number | null;
   is_within_tolerance: boolean | null;
+}
+
+export interface RawMaterialIdentificationPrintRecord {
+  id: UUID;
+  dispensing_line: UUID;
+  printed_by: UUID | null;
+  printed_at: string;
+  is_reprint: boolean;
+  reprint_reason: string;
 }
 
 export interface DispensingOrderRecord {
@@ -189,8 +223,10 @@ export interface LineClearanceRecord {
   id: UUID;
   batch: UUID;
   phase: 'DISPENSING' | 'MANUFACTURING' | 'FILLING' | 'PACKAGING';
-  area: string;
-  production_line: string;
+  area: UUID | null;
+  area_name: string | null;
+  production_line: UUID | null;
+  production_line_name: string | null;
   cleared_at: string | null;
   previous_product: string;
   previous_batch_code: string;
@@ -226,8 +262,10 @@ export interface CleaningRecordRecord {
 export interface LineIdentificationRecord {
   id: UUID;
   batch: UUID;
-  area: string;
-  production_line: string;
+  area: UUID | null;
+  area_name: string | null;
+  production_line: UUID | null;
+  production_line_name: string | null;
   placed_at: string | null;
   placed_by: UUID | null;
   removed_at: string | null;
@@ -328,7 +366,8 @@ export interface FillingLogEntryRecord {
 export interface FillingControlRecord {
   id: UUID;
   batch: UUID;
-  production_line: string;
+  production_line: UUID | null;
+  production_line_name: string | null;
   equipment: string;
   source_tank: string;
   started_at: string | null;
@@ -589,14 +628,29 @@ export async function getBatch(id: string): Promise<BatchRecord> {
 
 export async function createBatch(input: {
   production_order: string;
-  area?: string;
-  production_line?: string;
+  area?: string | null;
+  production_line?: string | null;
   production_manager?: string | null;
   quality_manager?: string | null;
   scheduled_at?: string | null;
   notes?: string;
 }): Promise<BatchRecord> {
   const { data } = await api.post<BatchRecord>(`${BASE}/batches/`, input);
+  return data as BatchRecord;
+}
+
+export async function createBatchWithOrder(input: {
+  formula: string;
+  planned_quantity: number;
+  batch_code?: string;
+  area?: string | null;
+  production_line?: string | null;
+  production_manager?: string | null;
+  quality_manager?: string | null;
+  scheduled_at?: string | null;
+  notes?: string;
+}): Promise<BatchRecord> {
+  const { data } = await api.post<BatchRecord>(`${BASE}/batches/create-with-order/`, input);
   return data as BatchRecord;
 }
 
@@ -685,10 +739,31 @@ export async function exportDispensingOrder(id: string, batchCode: string): Prom
   await downloadBlob(`${BASE}/dispensing-orders/${id}/export/`, `orden-dispensacion-${batchCode}.pdf`);
 }
 
+export async function exportRawMaterialIdentification(id: string, batchCode: string): Promise<void> {
+  await downloadBlob(`${BASE}/raw-material-identification-prints/${id}/export/`, `identificacion-mp-${batchCode}.pdf`);
+}
+
+export async function getRawMaterialIdentificationPrints(dispensingLineId: string): Promise<RawMaterialIdentificationPrintRecord[]> {
+  return getPage<RawMaterialIdentificationPrintRecord>(`${BASE}/raw-material-identification-prints/?dispensing_line=${dispensingLineId}`);
+}
+
+export async function createRawMaterialIdentificationPrint(input: {
+  dispensing_line: string;
+  is_reprint?: boolean;
+  reprint_reason?: string;
+}): Promise<RawMaterialIdentificationPrintRecord> {
+  const { data } = await api.post<RawMaterialIdentificationPrintRecord>(`${BASE}/raw-material-identification-prints/`, input);
+  return data as RawMaterialIdentificationPrintRecord;
+}
+
 // ── Instrucciones de fabricación ─────────────────────────────────────────────
 
 export async function getManufacturingStepExecutions(batchId: string): Promise<ManufacturingStepExecutionRecord[]> {
   return getPage<ManufacturingStepExecutionRecord>(`${BASE}/manufacturing-step-executions/?batch=${batchId}`);
+}
+
+export async function exportManufacturingSteps(batchId: string, batchCode: string): Promise<void> {
+  await downloadBlob(`${BASE}/manufacturing-step-executions/export/?batch=${batchId}`, `instrucciones-fabricacion-${batchCode}.pdf`);
 }
 
 // ── Despeje de línea y limpieza ──────────────────────────────────────────────
@@ -711,6 +786,10 @@ export async function exportLineClearance(id: string, batchCode: string): Promis
   await downloadBlob(`${BASE}/line-clearances/${id}/export/`, `despeje-linea-${batchCode}.pdf`);
 }
 
+export async function exportCleaningRecord(id: string, batchCode: string): Promise<void> {
+  await downloadBlob(`${BASE}/cleaning-records/${id}/export/`, `limpieza-${batchCode}.pdf`);
+}
+
 export async function getCleaningRecords(batchId: string): Promise<CleaningRecordRecord[]> {
   return getPage<CleaningRecordRecord>(`${BASE}/cleaning-records/?batch=${batchId}`);
 }
@@ -720,11 +799,19 @@ export async function getLineIdentification(batchId: string): Promise<LineIdenti
   return data?.results?.[0] ?? null;
 }
 
+export async function exportLineIdentification(id: string, batchCode: string): Promise<void> {
+  await downloadBlob(`${BASE}/line-identifications/${id}/export/`, `identificacion-linea-${batchCode}.pdf`);
+}
+
 // ── Control de producción ────────────────────────────────────────────────────
 
 export async function getProductionControl(batchId: string): Promise<ProductionControlRecord | null> {
   const { data } = await api.get<PaginatedResponse<ProductionControlRecord>>(`${BASE}/production-controls/?batch=${batchId}`);
   return data?.results?.[0] ?? null;
+}
+
+export async function exportProductionControl(id: string, batchCode: string): Promise<void> {
+  await downloadBlob(`${BASE}/production-controls/${id}/export/`, `control-produccion-${batchCode}.pdf`);
 }
 
 // ── Control de llenado ───────────────────────────────────────────────────────
@@ -734,11 +821,19 @@ export async function getFillingControl(batchId: string): Promise<FillingControl
   return data?.results?.[0] ?? null;
 }
 
+export async function exportFillingControl(id: string, batchCode: string): Promise<void> {
+  await downloadBlob(`${BASE}/filling-controls/${id}/export/`, `control-llenado-${batchCode}.pdf`);
+}
+
 // ── Control de peso o volumen ────────────────────────────────────────────────
 
 export async function getWeightVolumeControl(batchId: string): Promise<WeightVolumeControlRecord | null> {
   const { data } = await api.get<PaginatedResponse<WeightVolumeControlRecord>>(`${BASE}/weight-volume-controls/?batch=${batchId}`);
   return data?.results?.[0] ?? null;
+}
+
+export async function exportWeightVolumeControl(id: string, batchCode: string): Promise<void> {
+  await downloadBlob(`${BASE}/weight-volume-controls/${id}/export/`, `peso-volumen-${batchCode}.pdf`);
 }
 
 // ── Control de hermeticidad ───────────────────────────────────────────────────
@@ -748,11 +843,19 @@ export async function getSealIntegrityControl(batchId: string): Promise<SealInte
   return data?.results?.[0] ?? null;
 }
 
+export async function exportSealIntegrityControl(id: string, batchCode: string): Promise<void> {
+  await downloadBlob(`${BASE}/seal-integrity-controls/${id}/export/`, `hermeticidad-${batchCode}.pdf`);
+}
+
 // ── Control de acondicionamiento ─────────────────────────────────────────────
 
 export async function getPackagingControl(batchId: string): Promise<PackagingControlRecord | null> {
   const { data } = await api.get<PaginatedResponse<PackagingControlRecord>>(`${BASE}/packaging-controls/?batch=${batchId}`);
   return data?.results?.[0] ?? null;
+}
+
+export async function exportPackagingControl(id: string, batchCode: string): Promise<void> {
+  await downloadBlob(`${BASE}/packaging-controls/${id}/export/`, `acondicionamiento-${batchCode}.pdf`);
 }
 
 // ── Certificado de análisis y microbiología ──────────────────────────────────
@@ -769,6 +872,10 @@ export async function exportAnalysisCertificate(id: string, batchCode: string): 
 export async function getMicrobiologyAnalysis(batchId: string): Promise<MicrobiologyAnalysisRecord | null> {
   const { data } = await api.get<PaginatedResponse<MicrobiologyAnalysisRecord>>(`${BASE}/microbiology-analyses/?batch=${batchId}`);
   return data?.results?.[0] ?? null;
+}
+
+export async function exportMicrobiologyAnalysis(id: string, batchCode: string): Promise<void> {
+  await downloadBlob(`${BASE}/microbiology-analyses/${id}/export/`, `microbiologia-${batchCode}.pdf`);
 }
 
 // ── Verificación documental ───────────────────────────────────────────────────
@@ -919,8 +1026,8 @@ export async function loadMicrobiologyFromSpecification(microbiologyId: string):
 export async function createLineClearance(input: {
   batch: string;
   phase: 'DISPENSING' | 'MANUFACTURING' | 'FILLING' | 'PACKAGING';
-  area?: string;
-  production_line?: string;
+  area?: string | null;
+  production_line?: string | null;
   previous_product?: string;
   previous_batch_code?: string;
   performed_by?: string | null;
@@ -965,8 +1072,8 @@ export async function createCleaningRecord(input: {
 
 export async function createLineIdentification(input: {
   batch: string;
-  area?: string;
-  production_line?: string;
+  area?: string | null;
+  production_line?: string | null;
   placed_at?: string | null;
   placed_by?: string | null;
 }): Promise<LineIdentificationRecord> {
@@ -997,7 +1104,7 @@ export async function createProductionControlMaterial(input: {
 
 export async function createFillingControl(input: {
   batch: string;
-  production_line?: string;
+  production_line?: string | null;
   equipment?: string;
   source_tank?: string;
   started_at?: string | null;
@@ -1035,6 +1142,35 @@ export async function createFillingParticipant(input: {
 }): Promise<FillingParticipantRecord> {
   const { data } = await api.post<FillingParticipantRecord>(`${BASE}/filling-participants/`, input);
   return data as FillingParticipantRecord;
+}
+
+export async function completeManufacturingStep(id: string, input: {
+  status?: 'IN_PROGRESS' | 'PAUSED' | 'COMPLETED' | 'DEVIATED';
+  actual_quantity?: number | null;
+  actual_temperature?: number | null;
+  actual_time_minutes?: number | null;
+  actual_agitation_speed?: string;
+  actual_ph?: number | null;
+  actual_pressure?: string;
+  deviation?: string;
+} = {}): Promise<ManufacturingStepExecutionRecord> {
+  const { data } = await api.post<ManufacturingStepExecutionRecord>(`${BASE}/manufacturing-step-executions/${id}/complete/`, input);
+  return data as ManufacturingStepExecutionRecord;
+}
+
+export async function recordWeightVolumeSample(controlId: string, input: {
+  sample_number: number;
+  gross_weight: number;
+  tare: number;
+  volume?: number | null;
+}): Promise<WeightVolumeControlRecord> {
+  const { data } = await api.post<WeightVolumeControlRecord>(`${BASE}/weight-volume-controls/${controlId}/record-sample/`, input);
+  return data as WeightVolumeControlRecord;
+}
+
+export async function authorizeWeightVolumeResume(controlId: string): Promise<WeightVolumeControlRecord> {
+  const { data } = await api.post<WeightVolumeControlRecord>(`${BASE}/weight-volume-controls/${controlId}/authorize-resume/`, {});
+  return data as WeightVolumeControlRecord;
 }
 
 export async function createWeightVolumeControl(input: {
@@ -1185,4 +1321,81 @@ export async function updateDocumentChecklistItem(
 ): Promise<DocumentChecklistItemRecord> {
   const { data } = await api.patch<DocumentChecklistItemRecord>(`${BASE}/document-checklist-items/${id}/`, input);
   return data as DocumentChecklistItemRecord;
+}
+
+// ── Catálogo de áreas y líneas de producción ─────────────────────────────────
+
+export async function getAreas(): Promise<AreaRecord[]> {
+  return getPage<AreaRecord>(`${BASE}/areas/`);
+}
+
+export async function createArea(input: { code: string; name: string; is_active?: boolean }): Promise<AreaRecord> {
+  const { data } = await api.post<AreaRecord>(`${BASE}/areas/`, input);
+  return data as AreaRecord;
+}
+
+export async function getProductionLines(): Promise<ProductionLineRecord[]> {
+  return getPage<ProductionLineRecord>(`${BASE}/production-lines/`);
+}
+
+export async function createProductionLine(input: {
+  code: string;
+  name: string;
+  area?: string | null;
+  is_active?: boolean;
+}): Promise<ProductionLineRecord> {
+  const { data } = await api.post<ProductionLineRecord>(`${BASE}/production-lines/`, input);
+  return data as ProductionLineRecord;
+}
+
+// ── Firma electrónica genérica ────────────────────────────────────────────────
+// Reutilizable contra cualquiera de los 12 recursos que admiten firma:
+// raw-material-identification-prints, manufacturing-step-executions,
+// cleaning-records, line-identifications, production-controls, filling-controls,
+// weight-volume-controls, seal-integrity-controls, packaging-controls,
+// batch-lot-markings, analysis-certificates, microbiology-analyses.
+
+export interface SignatureRecord {
+  id: UUID;
+  content_type_model: string;
+  image: string | null;
+  owner: UUID;
+  full_name: string;
+  role_title: string;
+  role: 'RESPONSIBLE' | 'VERIFIER';
+  signature_type: 'DRAWN' | 'UPLOADED';
+  ip_address: string | null;
+  integrity_hash: string;
+  document_status_at_signing: string;
+  observation: string;
+  replaced_reason: string;
+  replaced_by: UUID | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function signDocument(resourcePath: string, id: string, input: {
+  image: File;
+  signature_type: 'DRAWN' | 'UPLOADED';
+  role?: 'RESPONSIBLE' | 'VERIFIER';
+  full_name?: string;
+  role_title?: string;
+  observation?: string;
+  replace_reason?: string;
+}): Promise<SignatureRecord> {
+  const formData = new FormData();
+  formData.append('image', input.image);
+  formData.append('signature_type', input.signature_type);
+  if (input.role) formData.append('role', input.role);
+  if (input.full_name) formData.append('full_name', input.full_name);
+  if (input.role_title) formData.append('role_title', input.role_title);
+  if (input.observation) formData.append('observation', input.observation);
+  if (input.replace_reason) formData.append('replace_reason', input.replace_reason);
+  const { data } = await api.post<SignatureRecord>(`${BASE}/${resourcePath}/${id}/sign/`, formData);
+  return data as SignatureRecord;
+}
+
+export async function getSignatures(resourcePath: string, id: string): Promise<SignatureRecord[]> {
+  const { data } = await api.get<SignatureRecord[]>(`${BASE}/${resourcePath}/${id}/signatures/`);
+  return data ?? [];
 }

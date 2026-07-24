@@ -1,4 +1,6 @@
 from django.conf import settings
+from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
+from django.contrib.contenttypes.models import ContentType
 from django.core.validators import FileExtensionValidator
 from django.db import models
 
@@ -37,6 +39,55 @@ class ResultStatus(models.TextChoices):
     YES = "YES", "Sí / Cumple"
     NO = "NO", "No / No cumple"
     NOT_APPLICABLE = "NOT_APPLICABLE", "No aplica"
+
+
+class Signature(BaseModel):
+    """Firma electrónica genérica: registro auditable (imagen + metadatos)
+    vinculado por GenericForeignKey a cualquier modelo de manufacturing que
+    la requiera, en vez de repetir un FileField suelto en cada uno.
+
+    Los modelos que ya tenían su propio FileField de firma (DispensingOrder,
+    LineClearance, FillingParticipant, BatchRelease) NO se migran aquí — ya
+    están en uso y su patrón sigue funcionando; este modelo cubre los 11
+    modelos que carecían de firma electrónica."""
+
+    class SignatureType(models.TextChoices):
+        DRAWN = "DRAWN", "Dibujada"
+        UPLOADED = "UPLOADED", "Cargada"
+
+    class Role(models.TextChoices):
+        RESPONSIBLE = "RESPONSIBLE", "Responsable"
+        VERIFIER = "VERIFIER", "Verificador"
+
+    image = signature_field("manufacturing/signatures/")
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="manufacturing_signatures"
+    )
+    full_name = models.CharField(max_length=180, blank=True)
+    role_title = models.CharField(max_length=120, blank=True)
+    role = models.CharField(max_length=20, choices=Role.choices, default=Role.RESPONSIBLE)
+    signature_type = models.CharField(max_length=20, choices=SignatureType.choices)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    integrity_hash = models.CharField(max_length=64, blank=True)
+    document_status_at_signing = models.CharField(max_length=60, blank=True)
+    observation = models.TextField(blank=True)
+    replaced_reason = models.TextField(blank=True)
+    replaced_by = models.ForeignKey(
+        "self", on_delete=models.SET_NULL, null=True, blank=True, related_name="replaces"
+    )
+
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.UUIDField()
+    content_object = GenericForeignKey("content_type", "object_id")
+
+    class Meta(BaseModel.Meta):
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=("content_type", "object_id")),
+        ]
+
+    def __str__(self):
+        return f"Firma de {self.full_name or self.owner} ({self.get_role_display()})"
 
 
 class Area(BaseModel):
@@ -394,6 +445,7 @@ class RawMaterialIdentificationPrint(BaseModel):
     printed_at = models.DateTimeField(auto_now_add=True)
     is_reprint = models.BooleanField(default=False)
     reprint_reason = models.CharField(max_length=255, blank=True)
+    signatures = GenericRelation(Signature)
 
     class Meta(BaseModel.Meta):
         ordering = ("-printed_at",)
@@ -457,6 +509,7 @@ class ManufacturingStepExecution(BaseModel):
     )
     observations = models.TextField(blank=True)
     deviation = models.TextField(blank=True)
+    signatures = GenericRelation(Signature)
 
     class Meta(BaseModel.Meta):
         ordering = ("batch", "step__sequence")
@@ -561,6 +614,7 @@ class CleaningRecord(BaseModel):
     result = models.CharField(max_length=20, choices=Result.choices, null=True, blank=True)
     observations = models.TextField(blank=True)
     valid_until = models.DateTimeField(null=True, blank=True)
+    signatures = GenericRelation(Signature)
 
     class Meta(BaseModel.Meta):
         ordering = ("-cleaned_at", "-created_at")
@@ -589,6 +643,7 @@ class LineIdentification(BaseModel):
     removed_by = models.ForeignKey(
         "employees.Employee", on_delete=models.SET_NULL, null=True, blank=True, related_name="line_identifications_removed"
     )
+    signatures = GenericRelation(Signature)
 
     class Meta(BaseModel.Meta):
         ordering = ("-created_at",)
@@ -601,6 +656,7 @@ class ProductionControl(BaseModel):
     lot_size = models.DecimalField(max_digits=14, decimal_places=3, null=True, blank=True)
     unit = models.ForeignKey("inventory.UnitOfMeasure", on_delete=models.SET_NULL, null=True, blank=True)
     notes = models.TextField(blank=True)
+    signatures = GenericRelation(Signature)
 
     class Meta(BaseModel.Meta):
         ordering = ("-created_at",)
@@ -670,6 +726,7 @@ class FillingControl(BaseModel):
     recovered_quantity = models.DecimalField(max_digits=14, decimal_places=3, default=0)
     justification = models.TextField(blank=True)
     observations = models.TextField(blank=True)
+    signatures = GenericRelation(Signature)
 
     class Meta(BaseModel.Meta):
         ordering = ("-created_at",)
@@ -743,6 +800,7 @@ class WeightVolumeControl(BaseModel):
     resumed_authorized_by = models.ForeignKey(
         "employees.Employee", on_delete=models.SET_NULL, null=True, blank=True, related_name="weight_controls_authorized_resume"
     )
+    signatures = GenericRelation(Signature)
 
     class Meta(BaseModel.Meta):
         ordering = ("-created_at",)
@@ -798,6 +856,7 @@ class SealIntegrityControl(BaseModel):
     )
     observations = models.TextField(blank=True)
     overall_result = models.CharField(max_length=20, choices=OverallResult.choices, default=OverallResult.PENDING)
+    signatures = GenericRelation(Signature)
 
     class Meta(BaseModel.Meta):
         ordering = ("-created_at",)
@@ -860,6 +919,7 @@ class PackagingControl(BaseModel):
     balances = models.DecimalField(max_digits=14, decimal_places=3, default=0)
     rejections = models.DecimalField(max_digits=14, decimal_places=3, default=0)
     rejection_reasons = models.TextField(blank=True)
+    signatures = GenericRelation(Signature)
 
     class Meta(BaseModel.Meta):
         ordering = ("-created_at",)
@@ -886,6 +946,7 @@ class BatchLotMarking(BaseModel):
     verified_by = models.ForeignKey(
         "employees.Employee", on_delete=models.SET_NULL, null=True, blank=True, related_name="lot_markings_verified"
     )
+    signatures = GenericRelation(Signature)
 
     class Meta(BaseModel.Meta):
         ordering = ("stage", "created_at")
@@ -963,6 +1024,7 @@ class AnalysisCertificate(BaseModel):
     )
     concept = models.CharField(max_length=20, choices=Concept.choices, default=Concept.QUARANTINE)
     observations = models.TextField(blank=True)
+    signatures = GenericRelation(Signature)
 
     class Meta(BaseModel.Meta):
         ordering = ("-created_at",)
@@ -1019,6 +1081,7 @@ class MicrobiologyAnalysis(BaseModel):
         "employees.Employee", on_delete=models.SET_NULL, null=True, blank=True, related_name="microbiology_approved"
     )
     observations = models.TextField(blank=True)
+    signatures = GenericRelation(Signature)
 
     class Meta(BaseModel.Meta):
         ordering = ("-created_at",)
