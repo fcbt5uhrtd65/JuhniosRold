@@ -300,15 +300,14 @@ class EmployeeViewSet(SoftDeleteModelViewSet):
     @action(detail=True, methods=("post",), url_path="export-certificate-pdf")
     def export_certificate_pdf(self, request, pk=None):
         employee = self.get_object()
-        issued_by = getattr(request.user, "employee_profile", None) or get_default_hr_signer()
-        signature_file = request.FILES.get("signature")
-        if not signature_file and not (issued_by and issued_by.signature):
+        issued_by = get_default_hr_signer()
+        if not (issued_by and issued_by.signature):
             return Response(
-                {"detail": "Debes firmar (dibujar o subir tu firma) antes de generar el certificado."},
+                {"detail": "Registra primero la firma digital del Administrador para generar certificados laborales."},
                 status=status.HTTP_409_CONFLICT,
             )
         try:
-            pdf_buffer = render_employee_certificate_pdf(employee, issued_by=issued_by, signature_file=signature_file)
+            pdf_buffer = render_employee_certificate_pdf(employee, issued_by=issued_by)
         except Exception:
             logger.exception("Fallo al generar el certificado laboral para el empleado %s", employee.id)
             return Response(
@@ -330,21 +329,19 @@ class EmployeeViewSet(SoftDeleteModelViewSet):
         except Employee.DoesNotExist:
             raise NotFound("Tu usuario no tiene un perfil de empleado asociado.")
 
-        signature_file = request.FILES.get("signature")
         issued_by = get_default_hr_signer()
-        if not signature_file and not (issued_by and issued_by.signature):
+        if not (issued_by and issued_by.signature):
             return Response(
                 {
                     "detail": (
-                        "Aún no hay una firma digital registrada en Recursos Humanos. "
-                        "Dibuja o sube una firma para generar tu certificado, o solicita a un "
-                        "administrador/RRHH que guarde su firma en su perfil."
+                        "Aun no hay una firma digital registrada del Administrador. "
+                        "Solicita que el Administrador guarde su firma en su perfil para generar tu certificado."
                     )
                 },
                 status=status.HTTP_409_CONFLICT,
             )
         try:
-            pdf_buffer = render_employee_certificate_pdf(employee, issued_by=issued_by, signature_file=signature_file)
+            pdf_buffer = render_employee_certificate_pdf(employee, issued_by=issued_by)
         except Exception:
             logger.exception("Fallo al generar tu certificado laboral (empleado %s)", employee.id)
             return Response(

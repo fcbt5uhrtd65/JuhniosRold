@@ -1,9 +1,12 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.core.files.uploadedfile import SimpleUploadedFile
+from pypdf import PdfReader
 from rest_framework.test import APIClient
 
 from apps.employees.infrastructure.models import Department, Employee, Position
+from apps.human_resources.infrastructure.models import VacationRequest
+from apps.human_resources.infrastructure.request_pdf import _parse_runs, render_request_pdf
 from apps.identity.infrastructure.models import Role
 
 
@@ -141,3 +144,24 @@ class VacationRequestPortalTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("support_document", response.data)
+
+    def test_request_pdf_sanitizes_reason_whitespace_and_leaves_signature_area_blank(self):
+        vacation = VacationRequest.objects.create(
+            employee=self.employee,
+            request_type=VacationRequest.RequestType.PERMISSION,
+            start_date="2026-07-27",
+            end_date="2026-07-27",
+            is_full_day=False,
+            reason="Buenas tardes,\r\n\r\nPor medio de la presente,\tAgradezco su comprension.",
+        )
+
+        tokens = _parse_runs([(f"“{vacation.reason}”", False)])
+        self.assertNotIn("\r", "".join(token for token, _ in tokens))
+        self.assertNotIn("\n", "".join(token for token, _ in tokens))
+        self.assertNotIn("\t", "".join(token for token, _ in tokens))
+
+        pdf_buffer = render_request_pdf(vacation)
+        text = "\n".join(page.extract_text() or "" for page in PdfReader(pdf_buffer).pages)
+
+        self.assertIn("Firmas de aprob", text)
+        self.assertNotIn("firmas registradas", text)

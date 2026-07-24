@@ -12,6 +12,7 @@ import {
   FlaskConical,
   Gauge,
   History,
+  Layers,
   Loader2,
   Package,
   PlayCircle,
@@ -112,11 +113,12 @@ type BatchTab =
   | 'release'
   | 'history';
 
-type ManufacturingSection = 'planning' | 'batches';
+type ManufacturingSection = 'planning' | 'batches' | 'batching_flow';
 
 const MANUFACTURING_SECTIONS: Array<{ id: ManufacturingSection; label: string; icon: typeof FileText }> = [
   { id: 'planning', label: 'Planificación', icon: Factory },
   { id: 'batches', label: 'Expedientes de lote', icon: Package },
+  { id: 'batching_flow', label: 'Tandas y consumo', icon: Layers },
 ];
 
 const BATCH_TABS: Array<{ id: BatchTab; label: string; icon: typeof FileText }> = [
@@ -158,12 +160,219 @@ const STATUS_ORDER: BatchStatus[] = [
   'PENDING_DOCUMENTS', 'PENDING_MICROBIOLOGY', 'RELEASED',
 ];
 
+const BATCHING_FLOW_EXAMPLE = {
+  order: {
+    number: 'OP-202607-0042',
+    commercialLot: 'PT-202607-014',
+    product: 'Shampoo Botanico 400 ml',
+    totalQuantity: 1000,
+    unit: 'kg',
+    formula: 'FM-SHB-001 vigente',
+    formulaBase: 1000,
+    qualityNote: 'Tolerancias de rendimiento y reglas de redondeo: pendientes de definicion en configuracion/procedimiento.',
+  },
+  batches: [
+    {
+      code: 'T-01',
+      status: 'Aprobada',
+      programmed: 400,
+      scheduledDate: '2026-07-22',
+      realDate: '2026-07-22',
+      area: 'Fabricacion liquidos',
+      equipment: 'Mezclador MZ-1200',
+      capacity: '1.200 kg',
+      responsible: 'Ana Gonzalez',
+      actualObtained: 390,
+      approved: 390,
+      rejected: 0,
+      mode: 'Permanece separada y luego se consolida',
+      notes: 'Cierre sin diferencias no justificadas.',
+    },
+    {
+      code: 'T-02',
+      status: 'Calidad pendiente',
+      programmed: 350,
+      scheduledDate: '2026-07-23',
+      realDate: '2026-07-23',
+      area: 'Fabricacion liquidos',
+      equipment: 'Mezclador MZ-800',
+      capacity: '800 kg',
+      responsible: 'Pedro Vasquez',
+      actualObtained: 342,
+      approved: 0,
+      rejected: 0,
+      mode: 'Se consolida en tanque TK-02',
+      notes: 'Pendiente concepto de calidad antes de liberar.',
+    },
+    {
+      code: 'T-03',
+      status: 'Bloqueada',
+      programmed: 250,
+      scheduledDate: '2026-07-24',
+      realDate: null,
+      area: 'Fabricacion liquidos',
+      equipment: 'Por asignar',
+      capacity: 'Pendiente',
+      responsible: 'Sin asignar',
+      actualObtained: 0,
+      approved: 0,
+      rejected: 0,
+      mode: 'Mismo lote comercial; puede generar sublote si se llena separada',
+      notes: 'No inicia: fragancia sin lote aprobado asignado.',
+    },
+  ],
+  formulaLines: [
+    { material: 'Agua purificada', lot: 'MP-AG-260701', total: 600, t1: 240, t2: 210, t3: 150, unit: 'kg' },
+    { material: 'Betaina de coco 30%', lot: 'MP-BE-260612', total: 180, t1: 72, t2: 63, t3: 45, unit: 'kg' },
+    { material: 'Glicerina vegetal USP', lot: 'MP-GL-260620', total: 50, t1: 20, t2: 17.5, t3: 12.5, unit: 'kg' },
+    { material: 'Fragancia Coco Tahiti', lot: 'Pendiente T-03', total: 10, t1: 4, t2: 3.5, t3: 2.5, unit: 'kg' },
+  ],
+  startChecks: [
+    { label: 'Materias primas requeridas incluidas', t1: true, t2: true, t3: false, note: 'Falta asignar lote de fragancia para T-03.' },
+    { label: 'Materias primas dispensadas', t1: true, t2: true, t3: false, note: 'T-03 no se dispensa hasta completar lote.' },
+    { label: 'Lote de MP asignado', t1: true, t2: true, t3: false, note: 'Bloquea inicio de fabricacion.' },
+    { label: 'MP vigente y aprobada por calidad', t1: true, t2: true, t3: false, note: 'No usar materias vencidas/en cuarentena.' },
+    { label: 'Pesada y verificada', t1: true, t2: true, t3: false, note: 'Pesaje obligatorio antes de iniciar.' },
+    { label: 'Sin fuera de tolerancia sin autorizacion', t1: true, t2: true, t3: true, note: 'La tolerancia debe venir de formula/configuracion.' },
+    { label: 'Despeje de linea aprobado', t1: true, t2: true, t3: false, note: 'Pendiente liberar equipo asignado.' },
+    { label: 'Area y equipo liberados', t1: true, t2: true, t3: false, note: 'Equipo de T-03 pendiente.' },
+  ],
+  inventoryStates: [
+    {
+      material: 'Agua purificada',
+      rawLot: 'MP-AG-260701',
+      available: 950,
+      reserved: 600,
+      delivered: 450,
+      weighed: 450,
+      added: 448.5,
+      consumed: 447.2,
+      returned: 1.3,
+      lost: 0,
+      rejected: 0,
+      unit: 'kg',
+    },
+    {
+      material: 'Betaina de coco 30%',
+      rawLot: 'MP-BE-260612',
+      available: 310,
+      reserved: 180,
+      delivered: 135,
+      weighed: 135,
+      added: 134.4,
+      consumed: 134,
+      returned: 0.4,
+      lost: 0,
+      rejected: 0,
+      unit: 'kg',
+    },
+    {
+      material: 'Fragancia Coco Tahiti',
+      rawLot: 'MP-FR-260701 / pendiente T-03',
+      available: 24,
+      reserved: 7.5,
+      delivered: 7.5,
+      weighed: 7.5,
+      added: 7.45,
+      consumed: 7.45,
+      returned: 0.05,
+      lost: 0,
+      rejected: 0,
+      unit: 'kg',
+    },
+  ],
+  closing: [
+    {
+      code: 'T-01',
+      theoretical: 400,
+      dispensed: 400,
+      added: 398.5,
+      returned: 1,
+      consumed: 397.5,
+      bulk: 390,
+      sample: 2,
+      retained: 3,
+      lost: 2.5,
+      unexplained: 0,
+      lossReason: 'Retencion en manguera y transferencia',
+      quality: 'Aprobada',
+    },
+    {
+      code: 'T-02',
+      theoretical: 350,
+      dispensed: 350,
+      added: 349,
+      returned: 0.8,
+      consumed: 348.2,
+      bulk: 342,
+      sample: 1.5,
+      retained: 2,
+      lost: 2.7,
+      unexplained: 0,
+      lossReason: 'Espuma de proceso y retencion en equipo',
+      quality: 'Pendiente',
+    },
+  ],
+  movements: [
+    {
+      reference: 'MP-MOV-202607-0048',
+      step: 'Adicion fase A',
+      batch: 'T-01',
+      material: 'Agua purificada',
+      rawLot: 'MP-AG-260701',
+      quantity: 239.2,
+      unit: 'kg',
+      user: 'Ana Gonzalez',
+      at: '2026-07-22 10:18',
+      type: 'Baja definitiva por cantidad adicionada',
+    },
+    {
+      reference: 'MP-MOV-202607-0059',
+      step: 'Transferencia a tanque',
+      batch: 'T-02',
+      material: 'Granel shampoo botanico',
+      rawLot: 'PT-202607-014-T02',
+      quantity: 342,
+      unit: 'kg',
+      user: 'Pedro Vasquez',
+      at: '2026-07-23 15:42',
+      type: 'Consumo/produccion vinculada a tanda',
+    },
+  ],
+  consolidation: {
+    originBatches: 'T-01 + T-02',
+    quantities: '390 kg + 342 kg',
+    destination: 'Tanque TK-02',
+    at: '2026-07-23 16:20',
+    expected: 732,
+    real: 730.8,
+    difference: 1.2,
+    loss: 1.2,
+    performedBy: 'Pedro Vasquez',
+    verifiedBy: 'Laura Mejia',
+    quality: 'Pendiente hasta concepto de T-02',
+  },
+  pendingDefinitions: [
+    'Tolerancias de rendimiento por producto/formula.',
+    'Porcentajes maximos de perdida por etapa.',
+    'Reglas de redondeo por unidad y bascula.',
+    'Procedimiento formal de autorizacion para fuera de tolerancia.',
+  ],
+};
+
 function statusBadgeColor(status: BatchStatus): BadgeColor {
   if (status === 'RELEASED') return 'green';
   if (status === 'REJECTED' || status === 'CANCELLED') return 'red';
   if (status === 'CLOSED') return 'blue';
   if (status.startsWith('PENDING') || status === 'FINISHED_QUARANTINE' || status === 'BULK_PENDING_ANALYSIS') return 'yellow';
   return 'purple';
+}
+
+function flowBadgeColor(status: string): BadgeColor {
+  if (status === 'Aprobada') return 'green';
+  if (status === 'Bloqueada') return 'red';
+  if (status.includes('pendiente') || status.includes('Pendiente')) return 'yellow';
+  return 'blue';
 }
 
 function formatDate(value: string | null): string {
@@ -174,6 +383,10 @@ function formatDate(value: string | null): string {
 function formatDateTime(value: string | null): string {
   if (!value) return 'Sin fecha';
   return new Date(value).toLocaleString('es-CO');
+}
+
+function formatQuantity(value: number, unit: string): string {
+  return `${value.toLocaleString('es-CO', { maximumFractionDigits: 3 })} ${unit}`;
 }
 
 function getEmployeeName(employee: Employee | undefined): string {
@@ -264,7 +477,7 @@ export function AdminManufacturing() {
     <div>
       <PageHeader
         title="Producción y manufactura"
-        subtitle="Planificación, fórmulas, órdenes y expediente completo de fabricación de lotes."
+        subtitle="Planificación, fórmulas, órdenes, tandas, consumo y expediente completo de fabricación de lotes."
         onNew={activeSection === 'batches' ? () => setShowNewBatchModal(true) : undefined}
         newLabel="Nuevo lote"
       />
@@ -272,6 +485,8 @@ export function AdminManufacturing() {
       <TabBar tabs={MANUFACTURING_SECTIONS} value={activeSection} onChange={setActiveSection} />
 
       {activeSection === 'planning' && <AdminProductionPlanning />}
+
+      {activeSection === 'batching_flow' && <BatchingConsumptionFlow />}
 
       {activeSection === 'batches' && (
         <>
@@ -341,6 +556,302 @@ export function AdminManufacturing() {
           await loadData();
         }}
       />
+    </div>
+  );
+}
+
+function BatchingConsumptionFlow() {
+  const example = BATCHING_FLOW_EXAMPLE;
+  const distributed = example.batches.reduce((sum, batch) => sum + batch.programmed, 0);
+  const manufactured = example.batches.reduce((sum, batch) => sum + batch.actualObtained, 0);
+  const approved = example.batches.reduce((sum, batch) => sum + batch.approved, 0);
+  const rejected = example.batches.reduce((sum, batch) => sum + batch.rejected, 0);
+  const pendingDistribution = Math.max(example.order.totalQuantity - distributed, 0);
+  const pendingManufacture = Math.max(example.order.totalQuantity - manufactured, 0);
+  const consolidationYield = example.consolidation.expected > 0
+    ? (example.consolidation.real / example.consolidation.expected) * 100
+    : 0;
+
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiCard label="Total orden" value={formatQuantity(example.order.totalQuantity, example.order.unit)} icon={Package} color="text-gray-600 bg-gray-100" />
+        <KpiCard label="Distribuida" value={formatQuantity(distributed, example.order.unit)} sub={`Pendiente ${formatQuantity(pendingDistribution, example.order.unit)}`} icon={Layers} color="text-blue-600 bg-blue-50" />
+        <KpiCard label="Fabricada" value={formatQuantity(manufactured, example.order.unit)} sub={`Pendiente ${formatQuantity(pendingManufacture, example.order.unit)}`} icon={Factory} color="text-amber-600 bg-amber-50" />
+        <KpiCard label="Calidad" value={`${formatQuantity(approved, example.order.unit)} aprobada`} sub={`${formatQuantity(rejected, example.order.unit)} rechazada`} icon={ShieldCheck} color="text-emerald-600 bg-emerald-50" />
+      </div>
+
+      <Card className="p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+          <div>
+            <div className="flex flex-wrap items-center gap-2 mb-1">
+              <span className="font-mono text-xs font-semibold text-[#2a4038]">{example.order.number}</span>
+              <Badge label={example.order.commercialLot} color="blue" />
+              <Badge label="Ejemplo de flujo" color="purple" />
+            </div>
+            <h3 className="text-base font-semibold text-gray-900">{example.order.product}</h3>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Inventario Producción gobierna la formula, reservas, dispensación, consumo real y trazabilidad de cada tanda.
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Formula vigente</p>
+            <p className="text-sm font-semibold text-gray-900">{example.order.formula}</p>
+            <p className="text-xs text-gray-500">Base {formatQuantity(example.order.formulaBase, example.order.unit)}</p>
+          </div>
+        </div>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <SectionField label="Lote principal" value={example.order.commercialLot} />
+          <SectionField label="Cantidad ya distribuida" value={formatQuantity(distributed, example.order.unit)} />
+          <SectionField label="Cantidad pendiente por fabricar" value={formatQuantity(pendingManufacture, example.order.unit)} />
+          <SectionField label="Reglas de tolerancia" value="Pendientes de definicion" />
+        </div>
+      </Card>
+
+      <Card className="p-5">
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <div>
+            <p className="text-sm font-semibold text-gray-900">Tandas programadas del lote</p>
+            <p className="text-xs text-gray-500">La suma programada no puede superar la cantidad total de la orden.</p>
+          </div>
+          <Badge label={distributed <= example.order.totalQuantity ? 'Distribucion valida' : 'Excede la orden'} color={distributed <= example.order.totalQuantity ? 'green' : 'red'} />
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-left text-[10px] uppercase text-gray-400 border-b border-gray-100">
+                <th className="py-2 pr-3">Tanda</th>
+                <th className="py-2 pr-3">Estado</th>
+                <th className="py-2 pr-3">Programada</th>
+                <th className="py-2 pr-3">Fecha programada</th>
+                <th className="py-2 pr-3">Fecha real</th>
+                <th className="py-2 pr-3">Area</th>
+                <th className="py-2 pr-3">Equipo</th>
+                <th className="py-2 pr-3">Capacidad</th>
+                <th className="py-2 pr-3">Responsable</th>
+                <th className="py-2 pr-3">Real obtenida</th>
+                <th className="py-2 pr-3">Observaciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {example.batches.map(batch => (
+                <tr key={batch.code} className="border-b border-gray-50 align-top">
+                  <td className="py-2 pr-3 font-mono font-semibold text-[#2a4038]">{batch.code}</td>
+                  <td className="py-2 pr-3"><Badge label={batch.status} color={flowBadgeColor(batch.status)} /></td>
+                  <td className="py-2 pr-3 font-semibold">{formatQuantity(batch.programmed, example.order.unit)}</td>
+                  <td className="py-2 pr-3">{formatDate(batch.scheduledDate)}</td>
+                  <td className="py-2 pr-3">{formatDate(batch.realDate)}</td>
+                  <td className="py-2 pr-3">{batch.area}</td>
+                  <td className="py-2 pr-3">{batch.equipment}</td>
+                  <td className="py-2 pr-3">{batch.capacity}</td>
+                  <td className="py-2 pr-3">{batch.responsible}</td>
+                  <td className="py-2 pr-3 font-semibold">{formatQuantity(batch.actualObtained, example.order.unit)}</td>
+                  <td className="py-2 pr-3 text-gray-500 min-w-52">{batch.notes}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <div className="grid lg:grid-cols-[1.25fr_0.75fr] gap-5">
+        <Card className="p-5">
+          <div className="mb-4">
+            <p className="text-sm font-semibold text-gray-900">Formula proporcional por tanda</p>
+            <p className="text-xs text-gray-500">Se calcula desde la formula vigente. No modifica ni duplica la formula maestra.</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left text-[10px] uppercase text-gray-400 border-b border-gray-100">
+                  <th className="py-2 pr-3">Materia prima</th>
+                  <th className="py-2 pr-3">Lote MP</th>
+                  <th className="py-2 pr-3">Total orden</th>
+                  <th className="py-2 pr-3">T-01</th>
+                  <th className="py-2 pr-3">T-02</th>
+                  <th className="py-2 pr-3">T-03</th>
+                </tr>
+              </thead>
+              <tbody>
+                {example.formulaLines.map(line => (
+                  <tr key={line.material} className="border-b border-gray-50">
+                    <td className="py-2 pr-3 font-medium text-gray-900">{line.material}</td>
+                    <td className="py-2 pr-3 text-gray-500">{line.lot}</td>
+                    <td className="py-2 pr-3 font-semibold">{formatQuantity(line.total, line.unit)}</td>
+                    <td className="py-2 pr-3">{formatQuantity(line.t1, line.unit)}</td>
+                    <td className="py-2 pr-3">{formatQuantity(line.t2, line.unit)}</td>
+                    <td className="py-2 pr-3">{formatQuantity(line.t3, line.unit)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+
+        <Card className="p-5">
+          <div className="mb-4">
+            <p className="text-sm font-semibold text-gray-900">Compuerta de inicio</p>
+            <p className="text-xs text-gray-500">Si falta una materia prima, la tanda queda bloqueada.</p>
+          </div>
+          <div className="space-y-2">
+            {example.startChecks.map(check => {
+              const allOk = check.t1 && check.t2 && check.t3;
+              return (
+                <div key={check.label} className={`p-3 rounded-xl border ${allOk ? 'bg-emerald-50 border-emerald-100' : 'bg-amber-50 border-amber-100'}`}>
+                  <div className="flex items-start gap-2">
+                    {allOk ? <CheckCircle2 size={15} className="mt-0.5 text-emerald-600 flex-shrink-0" /> : <AlertTriangle size={15} className="mt-0.5 text-amber-600 flex-shrink-0" />}
+                    <div>
+                      <p className={`text-xs font-semibold ${allOk ? 'text-emerald-800' : 'text-amber-800'}`}>{check.label}</p>
+                      <p className="text-[11px] text-gray-500 mt-0.5">{check.note}</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-1.5 mt-2">
+                    {(['T-01', 'T-02', 'T-03'] as const).map((code, index) => {
+                      const ok = index === 0 ? check.t1 : index === 1 ? check.t2 : check.t3;
+                      return <Badge key={code} label={`${code} ${ok ? 'OK' : 'Bloq.'}`} color={ok ? 'green' : 'red'} />;
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      </div>
+
+      <Card className="p-5">
+        <div className="mb-4">
+          <p className="text-sm font-semibold text-gray-900">Inventario de materia prima por estado</p>
+          <p className="text-xs text-gray-500">La baja definitiva se hace por cantidad adicionada/consumida, no solo por lo entregado a dispensacion.</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-left text-[10px] uppercase text-gray-400 border-b border-gray-100">
+                <th className="py-2 pr-3">Materia prima</th>
+                <th className="py-2 pr-3">Lote MP</th>
+                <th className="py-2 pr-3">Disponible</th>
+                <th className="py-2 pr-3">Reservada</th>
+                <th className="py-2 pr-3">Entregada</th>
+                <th className="py-2 pr-3">Pesada</th>
+                <th className="py-2 pr-3">Adicionada</th>
+                <th className="py-2 pr-3">Consumida</th>
+                <th className="py-2 pr-3">Devuelta</th>
+                <th className="py-2 pr-3">Perdida</th>
+                <th className="py-2 pr-3">Rechazada</th>
+              </tr>
+            </thead>
+            <tbody>
+              {example.inventoryStates.map(item => (
+                <tr key={item.material} className="border-b border-gray-50">
+                  <td className="py-2 pr-3 font-medium text-gray-900">{item.material}</td>
+                  <td className="py-2 pr-3 text-gray-500">{item.rawLot}</td>
+                  <td className="py-2 pr-3">{formatQuantity(item.available, item.unit)}</td>
+                  <td className="py-2 pr-3">{formatQuantity(item.reserved, item.unit)}</td>
+                  <td className="py-2 pr-3">{formatQuantity(item.delivered, item.unit)}</td>
+                  <td className="py-2 pr-3">{formatQuantity(item.weighed, item.unit)}</td>
+                  <td className="py-2 pr-3 font-semibold text-[#2a4038]">{formatQuantity(item.added, item.unit)}</td>
+                  <td className="py-2 pr-3 font-semibold text-[#2a4038]">{formatQuantity(item.consumed, item.unit)}</td>
+                  <td className="py-2 pr-3">{formatQuantity(item.returned, item.unit)}</td>
+                  <td className="py-2 pr-3">{formatQuantity(item.lost, item.unit)}</td>
+                  <td className="py-2 pr-3">{formatQuantity(item.rejected, item.unit)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <div className="grid lg:grid-cols-2 gap-5">
+        <Card className="p-5">
+          <div className="mb-4">
+            <p className="text-sm font-semibold text-gray-900">Cierre de tanda</p>
+            <p className="text-xs text-gray-500">No se permite cerrar con diferencias sin justificar.</p>
+          </div>
+          <div className="space-y-3">
+            {example.closing.map(item => {
+              const yieldPercent = item.theoretical > 0 ? (item.bulk / item.theoretical) * 100 : 0;
+              return (
+                <div key={item.code} className="border border-gray-100 rounded-xl p-3">
+                  <div className="flex items-start justify-between gap-2 mb-3">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">{item.code}</p>
+                      <p className="text-xs text-gray-500">{item.lossReason}</p>
+                    </div>
+                    <Badge label={item.quality} color={flowBadgeColor(item.quality)} />
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                    <SectionField label="Teorica" value={formatQuantity(item.theoretical, example.order.unit)} />
+                    <SectionField label="Dispensada" value={formatQuantity(item.dispensed, example.order.unit)} />
+                    <SectionField label="Adicionada" value={formatQuantity(item.added, example.order.unit)} />
+                    <SectionField label="Devuelta" value={formatQuantity(item.returned, example.order.unit)} />
+                    <SectionField label="Consumida" value={formatQuantity(item.consumed, example.order.unit)} />
+                    <SectionField label="Granel" value={formatQuantity(item.bulk, example.order.unit)} />
+                    <SectionField label="Muestra" value={formatQuantity(item.sample, example.order.unit)} />
+                    <SectionField label="Retenida" value={formatQuantity(item.retained, example.order.unit)} />
+                    <SectionField label="Perdida" value={formatQuantity(item.lost, example.order.unit)} />
+                    <SectionField label="Rendimiento" value={`${yieldPercent.toLocaleString('es-CO', { maximumFractionDigits: 2 })}%`} />
+                    <SectionField label="Diferencia" value={formatQuantity(item.unexplained, example.order.unit)} />
+                    <SectionField label="Estado calidad" value={item.quality} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+
+        <Card className="p-5">
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Consolidacion de tandas</p>
+              <p className="text-xs text-gray-500">Registra origen, destino, perdida, responsables y estado de calidad.</p>
+            </div>
+            <Badge label={example.consolidation.quality} color="yellow" />
+          </div>
+          <div className="grid sm:grid-cols-2 gap-4">
+            <SectionField label="Tandas origen" value={example.consolidation.originBatches} />
+            <SectionField label="Cantidad por tanda" value={example.consolidation.quantities} />
+            <SectionField label="Tanque destino" value={example.consolidation.destination} />
+            <SectionField label="Fecha y hora" value={example.consolidation.at} />
+            <SectionField label="Total esperado" value={formatQuantity(example.consolidation.expected, example.order.unit)} />
+            <SectionField label="Real consolidado" value={formatQuantity(example.consolidation.real, example.order.unit)} />
+            <SectionField label="Diferencia/perdida" value={formatQuantity(example.consolidation.difference, example.order.unit)} />
+            <SectionField label="Rendimiento consolidado" value={`${consolidationYield.toLocaleString('es-CO', { maximumFractionDigits: 2 })}%`} />
+            <SectionField label="Realizado por" value={example.consolidation.performedBy} />
+            <SectionField label="Verificado por" value={example.consolidation.verifiedBy} />
+          </div>
+
+          <div className="mt-5 pt-4 border-t border-gray-100">
+            <p className="text-xs font-semibold text-gray-900 mb-2">Movimientos trazables</p>
+            <div className="space-y-2">
+              {example.movements.map(movement => (
+                <div key={movement.reference} className="rounded-xl border border-gray-100 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-mono text-[11px] font-semibold text-[#2a4038]">{movement.reference}</span>
+                    <Badge label={movement.batch} color="blue" />
+                  </div>
+                  <p className="text-xs text-gray-900 mt-2">{movement.type}</p>
+                  <p className="text-[11px] text-gray-500 mt-0.5">
+                    {movement.material} · {movement.rawLot} · {formatQuantity(movement.quantity, movement.unit)} · {movement.step} · {movement.user} · {movement.at}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      <Card className="p-5 border-amber-100 bg-amber-50/60">
+        <div className="flex items-start gap-3">
+          <AlertTriangle size={18} className="text-amber-600 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-amber-900">Pendiente de definicion, no inventado por el sistema</p>
+            <p className="text-xs text-amber-800 mt-0.5">{example.order.qualityNote}</p>
+            <div className="flex flex-wrap gap-2 mt-3">
+              {example.pendingDefinitions.map(item => <Badge key={item} label={item} color="yellow" />)}
+            </div>
+          </div>
+        </div>
+      </Card>
     </div>
   );
 }

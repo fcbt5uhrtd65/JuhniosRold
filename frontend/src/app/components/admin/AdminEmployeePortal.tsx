@@ -211,7 +211,6 @@ export function AdminEmployeePortal() {
   const [selectedRequest, setSelectedRequest] = useState<VacationRequest | null>(null);
   const [downloadingCertificate, setDownloadingCertificate] = useState(false);
   const [showCertificateModal, setShowCertificateModal] = useState(false);
-  const [certificateSignatureFile, setCertificateSignatureFile] = useState<File | null>(null);
   const [allEmployees, setAllEmployees] = useState<Employee[]>([]);
   const [teamRequests, setTeamRequests] = useState<VacationRequest[]>([]);
   const [teamActionId, setTeamActionId] = useState<string | null>(null);
@@ -410,19 +409,17 @@ export function AdminEmployeePortal() {
   };
 
   const openCertificateModal = () => {
-    setCertificateSignatureFile(null);
     setShowCertificateModal(true);
   };
 
   const closeCertificateModal = () => {
     setShowCertificateModal(false);
-    setCertificateSignatureFile(null);
   };
 
   const handleDownloadCertificate = async () => {
     setDownloadingCertificate(true);
     try {
-      await exportMyEmployeeCertificatePdf(employeeProfile?.employee_code, certificateSignatureFile);
+      await exportMyEmployeeCertificatePdf(employeeProfile?.employee_code);
       toast.success('Certificado laboral generado');
       closeCertificateModal();
     } catch (error) {
@@ -1112,23 +1109,18 @@ export function AdminEmployeePortal() {
       <Modal title="Certificado laboral" open={showCertificateModal} onClose={closeCertificateModal}>
         <div className="space-y-4">
           <p className="text-xs text-gray-500">
-            Antes de generar tu certificado laboral, dibuja o sube tu firma. Se usará únicamente en este documento.
+            Tu certificado se emitirá con la firma digital registrada del Administrador.
           </p>
-          <SignaturePad
-            label="Tu firma"
-            helperText="Dibuja o sube tu firma para este certificado."
-            onChange={setCertificateSignatureFile}
-          />
           <div className="flex justify-end gap-2">
             <button onClick={closeCertificateModal} className="px-4 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
               Cancelar
             </button>
             <button
               onClick={handleDownloadCertificate}
-              disabled={!certificateSignatureFile || downloadingCertificate}
+              disabled={downloadingCertificate}
               className="px-4 py-2 bg-[#2a4038] rounded-lg text-xs font-semibold text-white hover:bg-[#3d5c4e] transition-colors disabled:opacity-40"
             >
-              {downloadingCertificate ? 'Generando...' : 'Firmar y generar certificado'}
+              {downloadingCertificate ? 'Generando...' : 'Generar certificado'}
             </button>
           </div>
         </div>

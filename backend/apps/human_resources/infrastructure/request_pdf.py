@@ -1,4 +1,5 @@
 import io
+import re
 from datetime import datetime
 
 from django.utils import timezone
@@ -182,12 +183,15 @@ def _draw_wrapped_text(c, x, y, text, max_width, size=9, leading=None, color=TEX
 def _parse_runs(parts):
     tokens = []
     for text, bold in parts:
-        words = text.split(" ")
-        for idx, word in enumerate(words):
-            if idx > 0:
-                tokens.append((" ", bold))
-            if word:
-                tokens.append((word, bold))
+        pieces = re.split(r"(\s+)", _safe(text, ""))
+        for piece in pieces:
+            if not piece:
+                continue
+            if piece.isspace():
+                if tokens and tokens[-1][0] != " ":
+                    tokens.append((" ", bold))
+                continue
+            tokens.append((piece, bold))
     return tokens
 
 
@@ -402,8 +406,6 @@ def _draw_signatures_section(c, x0, x1, y, vacation):
 
     steps = _signing_steps(vacation)
     if not steps:
-        y += 30
-        _text(c, x0, y, "Aún no hay firmas registradas para esta solicitud.", size=9, color=MUTED)
         return y - 14
 
     count = len(steps)

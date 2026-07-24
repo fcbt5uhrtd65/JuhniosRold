@@ -1228,7 +1228,6 @@ export function AdminHR() {
   const [showAccessPassword, setShowAccessPassword] = useState(false);
   const [showCertificateModal, setShowCertificateModal] = useState(false);
   const [certificateEmployee, setCertificateEmployee] = useState<Employee | null>(null);
-  const [certificateSignatureFile, setCertificateSignatureFile] = useState<File | null>(null);
   const [deletingBranchId, setDeletingBranchId] = useState<string | null>(null);
   const [vacationActionId, setVacationActionId] = useState<string | null>(null);
   const [showEmployeeModal, setShowEmployeeModal] = useState(false);
@@ -2022,21 +2021,19 @@ export function AdminHR() {
 
   const openCertificateModal = (employee: Employee) => {
     setCertificateEmployee(employee);
-    setCertificateSignatureFile(null);
     setShowCertificateModal(true);
   };
 
   const closeCertificateModal = () => {
     setShowCertificateModal(false);
     setCertificateEmployee(null);
-    setCertificateSignatureFile(null);
   };
 
   const handleEmployeeCertificatePdfExport = async () => {
     if (!certificateEmployee) return;
     setExportingCertificateId(certificateEmployee.id);
     try {
-      await exportEmployeeCertificatePdf(certificateEmployee.id, certificateEmployee.employee_code, certificateSignatureFile);
+      await exportEmployeeCertificatePdf(certificateEmployee.id, certificateEmployee.employee_code);
       toast.success('Certificado laboral generado');
       closeCertificateModal();
     } catch (error) {
@@ -3952,23 +3949,18 @@ export function AdminHR() {
       <Modal title="Certificado laboral" open={showCertificateModal && Boolean(certificateEmployee)} onClose={closeCertificateModal}>
         <div className="space-y-4">
           <p className="text-xs text-gray-500">
-            Vas a generar el certificado laboral de {certificateEmployee ? getEmployeeName(certificateEmployee) : ''}. Firma antes de exportarlo.
+            Vas a generar el certificado laboral de {certificateEmployee ? getEmployeeName(certificateEmployee) : ''}. Se emitirá con la firma digital registrada del Administrador.
           </p>
-          <SignaturePad
-            label="Tu firma para este certificado"
-            helperText="Dibuja o sube tu firma. Se usará únicamente en este certificado."
-            onChange={setCertificateSignatureFile}
-          />
           <div className="flex justify-end gap-2">
             <button onClick={closeCertificateModal} className="px-4 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
               Cancelar
             </button>
             <button
               onClick={handleEmployeeCertificatePdfExport}
-              disabled={!certificateSignatureFile || (certificateEmployee ? exportingCertificateId === certificateEmployee.id : false)}
+              disabled={certificateEmployee ? exportingCertificateId === certificateEmployee.id : false}
               className="px-4 py-2 bg-[#2a4038] rounded-lg text-xs font-semibold text-white hover:bg-[#3d5c4e] transition-colors disabled:opacity-40"
             >
-              {certificateEmployee && exportingCertificateId === certificateEmployee.id ? 'Generando...' : 'Firmar y generar certificado'}
+              {certificateEmployee && exportingCertificateId === certificateEmployee.id ? 'Generando...' : 'Generar certificado'}
             </button>
           </div>
         </div>

@@ -294,10 +294,10 @@ def render_employee_certificate_pdf(
 
 
 def get_default_hr_signer() -> Employee | None:
-    """Firmante por defecto: primer Admin o RRHH con firma cargada."""
+    """Firmante oficial: Administrador con firma registrada."""
     return (
-        Employee.objects.filter(user__role__code__in=("ADMIN", "RRHH"))
+        Employee.objects.filter(user__role__code="ADMIN")
         .exclude(signature="")
-        .order_by("user__role__code")
+        .order_by("created_at")
         .first()
     )
