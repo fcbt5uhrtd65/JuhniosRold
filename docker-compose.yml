@@ -30,6 +30,7 @@ services:
              python manage.py collectstatic --noinput &&
              python manage.py seed_catalog &&
              python manage.py seed_catalog --warm-cache &&
+             python manage.py seed_manufacturing_demo &&
              python manage.py seed_admin_users &&
              python manage.py seed_orders &&
              python manage.py runserver 0.0.0.0:8000"
