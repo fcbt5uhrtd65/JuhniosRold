@@ -159,6 +159,8 @@ class VacationRequestPortalTests(TestCase):
         self.assertNotIn("\r", "".join(token for token, _ in tokens))
         self.assertNotIn("\n", "".join(token for token, _ in tokens))
         self.assertNotIn("\t", "".join(token for token, _ in tokens))
+        boundary_tokens = _parse_runs([("solicitud de", False), (" Permiso ", True), ("identificada", False)])
+        self.assertEqual(" ".join(token for token, _ in boundary_tokens), "solicitud de Permiso identificada")
 
         pdf_buffer = render_request_pdf(vacation)
         text = "\n".join(page.extract_text() or "" for page in PdfReader(pdf_buffer).pages)

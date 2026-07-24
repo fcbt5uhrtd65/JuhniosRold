@@ -183,15 +183,7 @@ def _draw_wrapped_text(c, x, y, text, max_width, size=9, leading=None, color=TEX
 def _parse_runs(parts):
     tokens = []
     for text, bold in parts:
-        pieces = re.split(r"(\s+)", _safe(text, ""))
-        for piece in pieces:
-            if not piece:
-                continue
-            if piece.isspace():
-                if tokens and tokens[-1][0] != " ":
-                    tokens.append((" ", bold))
-                continue
-            tokens.append((piece, bold))
+        tokens.extend((word, bold) for word in re.findall(r"\S+", _safe(text, "")))
     return tokens
 
 
@@ -204,35 +196,33 @@ def _draw_rich_paragraph(c, x, y, parts, max_width, size=10, leading=15, align="
     current_width = 0.0
     for word, bold in tokens:
         word_width = stringWidth(word, FONT_BOLD if bold else FONT, size)
-        if word != " " and current_width + word_width > max_width and current_line:
-            while current_line and current_line[-1][0] == " ":
-                current_line.pop()
+        space_width = stringWidth(" ", FONT, size) if current_line else 0
+        if current_width + space_width + word_width > max_width and current_line:
             lines.append(current_line)
             current_line = []
-            current_width = 0.0
+            current_width = word_width
+        else:
+            current_width += space_width + word_width
         current_line.append((word, bold))
-        current_width += word_width
     if current_line:
-        while current_line and current_line[-1][0] == " ":
-            current_line.pop()
         lines.append(current_line)
 
     c.setFillColor(TEXT)
     for line_idx, line in enumerate(lines):
         line_y = y - line_idx * leading
         is_last = line_idx == len(lines) - 1
+        gap_count = max(len(line) - 1, 0)
         natural_w = sum(stringWidth(w, FONT_BOLD if b else FONT, size) for w, b in line)
-        gap_count = sum(1 for w, _ in line if w == " ")
+        natural_w += gap_count * stringWidth(" ", FONT, size)
         extra_per_gap = (
             (max(max_width - natural_w, 0) / gap_count)
             if (align == "justify" and not is_last and gap_count)
             else 0
         )
         cursor_x = x
-        for word, bold in line:
-            if word == " ":
+        for word_idx, (word, bold) in enumerate(line):
+            if word_idx > 0:
                 cursor_x += stringWidth(" ", FONT, size) + extra_per_gap
-                continue
             c.setFont(FONT_BOLD if bold else FONT, size)
             c.drawString(cursor_x, line_y, word)
             cursor_x += stringWidth(word, FONT_BOLD if bold else FONT, size)
