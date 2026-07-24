@@ -613,6 +613,37 @@ class ReleaseBatch:
         if rejected_clearances.exists():
             errors.append("Hay despejes de línea rechazados.")
 
+        # Rendimiento calculado: si hay control de llenado, debe tener un
+        # rendimiento ya calculado (cantidad programada y producida registradas).
+        filling_control = getattr(batch, "filling_control", None)
+        if filling_control is not None and filling_control.yield_percentage is None:
+            errors.append("El rendimiento del control de llenado no ha sido calculado.")
+
+        # Conciliación de materiales: toda diferencia de conciliación distinta
+        # de cero debe quedar justificada en observaciones antes de liberar.
+        production_control = getattr(batch, "production_control", None)
+        if production_control is not None:
+            unjustified = [
+                material for material in production_control.materials.all()
+                if material.reconciliation_difference != 0 and not material.observations
+            ]
+            if unjustified:
+                errors.append("Hay materiales de acondicionamiento con diferencia de conciliación sin justificar.")
+
+        # Loteado aprobado: si hay control de acondicionamiento, el loteado
+        # final (cuando exista) debe estar aprobado.
+        packaging_control = getattr(batch, "packaging_control", None)
+        if packaging_control is not None:
+            final_marking = packaging_control.lot_markings.filter(stage=BatchLotMarking.Stage.FINAL).first()
+            if final_marking is not None and final_marking.result != ResultStatus.YES:
+                errors.append("El loteado final no está aprobado.")
+
+        # Desviaciones cerradas: ningún paso de fabricación puede seguir en
+        # estado DEVIATED (desviación abierta) al momento de liberar.
+        open_deviations = batch.step_executions.filter(status=ManufacturingStepExecution.Status.DEVIATED)
+        if open_deviations.exists():
+            errors.append("Hay pasos de fabricación con desviaciones sin cerrar.")
+
         if errors:
             raise BusinessRuleViolation(" ".join(errors))
 
