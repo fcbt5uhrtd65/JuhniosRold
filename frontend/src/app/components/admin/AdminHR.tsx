@@ -482,6 +482,46 @@ function parseDate(value: string | null | undefined): string {
   return new Date(value).toLocaleDateString('es-CO');
 }
 
+function formatTime(value: string | null | undefined): string {
+  if (!value) return 'Sin hora';
+  const normalized = value.length === 5 ? `${value}:00` : value;
+  const parsed = new Date(`1970-01-01T${normalized}`);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit', hour12: true });
+}
+
+/** Rango de fechas de la solicitud, con la hora que digitó el empleado cuando la
+ * solicitud no es de jornada completa (permisos parciales, horas extra). */
+function getRequestScheduleLabel(request: VacationRequest): string {
+  const dateLabel =
+    request.start_date === request.end_date
+      ? parseDate(request.start_date)
+      : `${parseDate(request.start_date)} - ${parseDate(request.end_date)}`;
+
+  if (request.request_type === 'LOAN') {
+    return dateLabel;
+  }
+
+  if (request.request_type === 'OVERTIME' && request.overtime_shifts?.length) {
+    const count = request.overtime_shifts.length;
+    return `${dateLabel} · ${count} turno${count === 1 ? '' : 's'} · ${Number(request.hours_count ?? 0).toFixed(1)} h`;
+  }
+
+  if (request.is_full_day) {
+    return `${dateLabel} · Jornada completa`;
+  }
+
+  if (request.start_time && request.end_time) {
+    return `${dateLabel} · ${formatTime(request.start_time)} - ${formatTime(request.end_time)}`;
+  }
+
+  if (request.start_time) {
+    return `${dateLabel} · Desde ${formatTime(request.start_time)} hasta fin del día`;
+  }
+
+  return dateLabel;
+}
+
 function formatCurrency(amount: number | string | null | undefined): string {
   const parsed = typeof amount === 'number' ? amount : Number(amount ?? 0);
   return new Intl.NumberFormat('es-CO', {
@@ -3479,7 +3519,7 @@ export function AdminHR() {
                             <div>{getRequestTypeLabel(request.request_type)}</div>
                             <div className="text-gray-400 text-[11px] mt-1">{getRequestSubtypeLabel(request.subtype)}</div>
                           </Td>
-                          <Td>{parseDate(request.start_date)} - {parseDate(request.end_date)}</Td>
+                          <Td>{getRequestScheduleLabel(request)}</Td>
                           <Td className="max-w-xs">
                             {request.reason ? (
                               <button
@@ -3814,8 +3854,18 @@ export function AdminHR() {
                     ['Área', employee?.department ? departmentById.get(employee.department)?.name : 'Sin área'],
                     ['Estado', requestStatusLabel(viewingRequest.status)],
                     ['Fecha creación', parseDate(viewingRequest.created_at)],
-                    ['Fecha inicio', parseDate(viewingRequest.start_date)],
-                    ['Fecha fin', parseDate(viewingRequest.end_date)],
+                    [
+                      'Fecha inicio',
+                      viewingRequest.is_full_day || !viewingRequest.start_time
+                        ? parseDate(viewingRequest.start_date)
+                        : `${parseDate(viewingRequest.start_date)} · ${formatTime(viewingRequest.start_time)}`,
+                    ],
+                    [
+                      'Fecha fin',
+                      viewingRequest.is_full_day || !viewingRequest.end_time
+                        ? parseDate(viewingRequest.end_date)
+                        : `${parseDate(viewingRequest.end_date)} · ${formatTime(viewingRequest.end_time)}`,
+                    ],
                     ['Días / horas', `${viewingRequest.days_count ?? 0} días · ${viewingRequest.hours_count ?? 0} horas`],
                   ].map(([label, value]) => (
                     <div key={label} className="border border-gray-100 rounded-xl p-4 bg-gray-50/60">

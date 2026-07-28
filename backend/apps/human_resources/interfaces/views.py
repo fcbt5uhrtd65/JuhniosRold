@@ -93,7 +93,7 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
     OWNER_DELETABLE_STATUSES = (VacationRequest.Status.PENDING, VacationRequest.Status.IN_REVIEW)
 
     def get_permissions(self):
-        if self.action in {"me", "team", "approve", "reject", "destroy"}:
+        if self.action in {"me", "team", "loans", "approve", "reject", "destroy"}:
             return (IsAuthenticated(),)
         self.required_component_action = "view" if self.action in {"list", "retrieve", "dashboard"} else "edit"
         return super().get_permissions()
@@ -226,7 +226,12 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
     @action(detail=False, methods=("get",), permission_classes=(IsAuthenticated,), url_path="team")
     def team(self, request):
         """Solicitudes de los empleados que reportan directamente al usuario
-        autenticado (su equipo a cargo como jefe inmediato)."""
+        autenticado (su equipo a cargo como jefe inmediato).
+
+        Las solicitudes de tipo PRÉSTAMO quedan excluidas de esta vista: son
+        información sensible que el jefe inmediato no debe ver, solo Recursos
+        Humanos, Contabilidad, el Administrador, o alguien con acceso puntual
+        marcado explícitamente (ver ``VacationRequestViewSet.loans``)."""
         employee = getattr(request.user, "employee_profile", None)
         if not employee:
             return Response(
@@ -235,6 +240,32 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
             )
 
         queryset = self._self_service_queryset().filter(employee__manager=employee).order_by("-created_at")
+        if not getattr(request.user, "can_view_loans", False):
+            queryset = queryset.exclude(request_type=VacationRequest.RequestType.LOAN)
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=("get",), permission_classes=(IsAuthenticated,), url_path="loans")
+    def loans(self, request):
+        """Listado dedicado y exclusivo de solicitudes de tipo PRÉSTAMO, para
+        Recursos Humanos, Administrador, el rol Contabilidad, o cualquier
+        usuario con acceso puntual (``can_view_loan_requests``). No expone
+        ningún otro tipo de solicitud ni otros datos del módulo de RRHH."""
+        if not getattr(request.user, "can_view_loans", False):
+            return Response(
+                {"detail": "No tienes permiso para ver solicitudes de préstamo."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        queryset = (
+            self._self_service_queryset()
+            .filter(request_type=VacationRequest.RequestType.LOAN)
+            .order_by("-created_at")
+        )
         page = self.paginate_queryset(queryset)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
@@ -249,6 +280,11 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
         if getattr(user, "role_code", None) == "RRHH":
             return "HR"
         if vacation is not None:
+            # El jefe inmediato no tiene ningún rol de decisión sobre solicitudes de
+            # préstamo de su subordinado: esa información queda reservada a RRHH,
+            # Administrador, Contabilidad o quien tenga acceso puntual habilitado.
+            if vacation.request_type == VacationRequest.RequestType.LOAN and not getattr(user, "can_view_loans", False):
+                return None
             requester_employee = vacation.employee
             manager = getattr(requester_employee, "manager", None)
             if manager is not None and getattr(manager, "user_id", None) == user.id:

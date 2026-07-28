@@ -22,6 +22,7 @@ import {
   Gift,
   Truck,
   FlaskConical,
+  HandCoins,
 } from 'lucide-react';
 
 interface AdminLayoutProps {
@@ -68,13 +69,18 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
     { id: 'reports', label: 'Reportes', icon: BarChart3, roles: ['ADMIN', 'SELLER'] },
     { id: 'hr', label: 'RRHH', icon: Briefcase, roles: ['ADMIN', 'RRHH'] },
     { id: 'employee-portal', label: 'Mis solicitudes', icon: CalendarClock, roles: ['ADMIN', 'SELLER', 'DISTRIBUTOR', 'RRHH', 'EMPLEADO', 'PEDIDOS'] },
+    { id: 'loans', label: 'Préstamos', icon: HandCoins, roles: ['ADMIN', 'RRHH', 'CONTABILIDAD'] },
     { id: 'roles', label: 'Roles', icon: Shield, roles: ['ADMIN'] },
     { id: 'components', label: 'Permisos', icon: Puzzle, roles: ['ADMIN'] },
   ] as const;
 
   const allowedNavItems = useMemo(() => {
     if (!currentUser) return navItems;
-    return navItems.filter(item => item.roles.includes(currentUser.rol));
+    // "Préstamos" también se habilita por acceso puntual (canViewLoans), no solo
+    // por rol — así una persona específica puede verlo sin cambiar su rol asignado.
+    return navItems.filter(
+      item => item.roles.includes(currentUser.rol) || (item.id === 'loans' && currentUser.canViewLoans),
+    );
   }, [currentUser, navItems]);
 
   const roleLabel = useMemo(() => {

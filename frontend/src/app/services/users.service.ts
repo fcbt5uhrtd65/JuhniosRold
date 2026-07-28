@@ -101,3 +101,10 @@ export async function updateUserRole(userId: string, role: UserRole): Promise<Au
 export async function deactivateUser(userId: string): Promise<void> {
   await api.patch(`/auth/users/${userId}/`, { is_active: false });
 }
+
+// ---- Admin: Grant/revoke punctual access to loan requests (independent of role) ----
+export async function setUserCanViewLoanRequests(userId: string, canView: boolean): Promise<AuthUser> {
+  const res = await api.patch<AuthUser>(`/auth/users/${userId}/`, { can_view_loan_requests: canView });
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}

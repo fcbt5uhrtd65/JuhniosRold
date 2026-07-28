@@ -598,7 +598,8 @@ export async function createMyOvertimeRequest(payload: {
 }
 
 /** Solicitudes de los empleados que reportan directamente al usuario autenticado
- * (su equipo a cargo como jefe inmediato). */
+ * (su equipo a cargo como jefe inmediato). Nunca incluye préstamos: esos quedan
+ * reservados a RRHH, Administrador, Contabilidad o acceso puntual habilitado. */
 export async function getTeamVacationRequests(params?: { page?: number; limit?: number }): Promise<{
   data: VacationRequest[];
   total: number;
@@ -607,6 +608,19 @@ export async function getTeamVacationRequests(params?: { page?: number; limit?: 
 }> {
   const query = buildQuery({ page: params?.page, page_size: params?.limit });
   const res = await api.get<VacationRequest[] | PaginatedResponse<VacationRequest>>(`${VACATIONS_PATH}team/${query}`);
+  return normalizeListResponse(res.data);
+}
+
+/** Listado dedicado y exclusivo de solicitudes de préstamo, para Recursos Humanos,
+ * Administrador, el rol Contabilidad, o un usuario con acceso puntual habilitado. */
+export async function getLoanRequests(params?: { page?: number; limit?: number }): Promise<{
+  data: VacationRequest[];
+  total: number;
+  next: string | null;
+  previous: string | null;
+}> {
+  const query = buildQuery({ page: params?.page, page_size: params?.limit });
+  const res = await api.get<VacationRequest[] | PaginatedResponse<VacationRequest>>(`${VACATIONS_PATH}loans/${query}`);
   return normalizeListResponse(res.data);
 }
 

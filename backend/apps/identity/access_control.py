@@ -136,6 +136,13 @@ ROLE_DEFINITIONS = (
         "is_superuser": False,
         "is_default": False,
     },
+    {
+        "code": "CONTABILIDAD",
+        "name": "Contabilidad",
+        "description": "Consulta solicitudes de préstamo de empleados para su registro contable.",
+        "is_superuser": False,
+        "is_default": False,
+    },
 )
 
 
@@ -308,4 +315,8 @@ def build_default_role_permissions():
         "employees.management": {"can_view": True, "can_edit": False},
         "commerce.orders": {"can_view": True, "can_edit": False},
     }
+    # Contabilidad no recibe ningún componente genérico: su único acceso es la
+    # vista dedicada de solicitudes de préstamo (VacationRequestViewSet.loans),
+    # autorizada por rol directamente en la vista, no por HasComponentAccess.
+    permissions["CONTABILIDAD"] = {}
     return permissions

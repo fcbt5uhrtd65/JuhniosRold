@@ -7,6 +7,7 @@ export interface User {
   nombre: string;
   email: string;
   rol: UserRole;
+  canViewLoans?: boolean;
 }
 
 export interface Product {

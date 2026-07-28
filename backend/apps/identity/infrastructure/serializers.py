@@ -97,6 +97,7 @@ class UserSerializer(serializers.ModelSerializer):
     created_at = serializers.DateTimeField(source="date_joined", read_only=True)
     updated_at = serializers.SerializerMethodField()
     has_usable_password = serializers.SerializerMethodField()
+    can_view_loans = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = User
@@ -116,8 +117,10 @@ class UserSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "has_usable_password",
+            "can_view_loan_requests",
+            "can_view_loans",
         )
-        read_only_fields = ("id", "date_joined", "created_at", "updated_at", "role", "has_usable_password")
+        read_only_fields = ("id", "date_joined", "created_at", "updated_at", "role", "has_usable_password", "can_view_loans")
 
     def get_has_usable_password(self, user):
         return user.has_usable_password()

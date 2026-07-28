@@ -387,6 +387,7 @@ function mapAdminUser(user: Awaited<ReturnType<typeof getCurrentUser>>): User {
     nombre: `${user.first_name} ${user.last_name}`.trim() || user.email,
     email: user.email,
     rol: user.role,
+    canViewLoans: user.can_view_loans,
   };
 }
 

@@ -24,7 +24,8 @@ export type UserRole =
   | 'ASEGURAMIENTO_CALIDAD'
   | 'CONTROL_CALIDAD'
   | 'DIRECTOR_TECNICO'
-  | 'AUDITOR';
+  | 'AUDITOR'
+  | 'CONTABILIDAD';
 
 export interface AuthUser {
   id: string;
@@ -36,6 +37,8 @@ export interface AuthUser {
   is_active: boolean;
   avatar_url?: string;
   has_usable_password: boolean;
+  can_view_loan_requests?: boolean;
+  can_view_loans?: boolean;
   created_at: string;
   updated_at: string;
 }

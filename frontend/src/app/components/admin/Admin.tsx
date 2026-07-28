@@ -15,6 +15,7 @@ import { AdminPayroll } from './AdminPayroll';
 import { AdminHR } from './AdminHR';
 import { AdminLegal } from './AdminLegal';
 import { AdminEmployeePortal } from './AdminEmployeePortal';
+import { AdminLoans } from './AdminLoans';
 import { AdminRoles } from './AdminRoles';
 import { AdminComponents } from './AdminComponents';
 import { AdminReferrals } from './AdminReferrals';
@@ -45,6 +46,8 @@ function getDefaultViewForRole(role?: string) {
     case 'DIRECTOR_TECNICO':
     case 'AUDITOR':
       return 'manufacturing';
+    case 'CONTABILIDAD':
+      return 'loans';
     case 'ADMIN':
     default:
       return 'dashboard';
@@ -99,6 +102,8 @@ export function Admin() {
         return <AdminLegal />;
       case 'employee-portal':
         return <AdminEmployeePortal />;
+      case 'loans':
+        return <AdminLoans />;
       case 'roles':
         return <AdminRoles />;
       case 'components':

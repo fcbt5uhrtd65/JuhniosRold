@@ -131,6 +131,10 @@ class User(AbstractUser):
         on_delete=models.PROTECT,
         related_name="users",
     )
+    can_view_loan_requests = models.BooleanField(
+        default=False,
+        help_text="Acceso puntual a solicitudes de préstamo, independiente del rol asignado.",
+    )
     deleted_at = models.DateTimeField(null=True, blank=True, db_index=True)
 
     USERNAME_FIELD = "email"
@@ -162,6 +166,17 @@ class User(AbstractUser):
     @property
     def has_full_access(self):
         return bool(self.is_superuser or (self.role and self.role.is_superuser))
+
+    @property
+    def can_view_loans(self):
+        """Quién puede ver solicitudes de tipo PRÉSTAMO: Administrador, RRHH, el rol
+        Contabilidad, o cualquier usuario marcado puntualmente con
+        `can_view_loan_requests` (excepción por persona, sin depender de su rol)."""
+        return bool(
+            self.has_full_access
+            or self.role_code in ("RRHH", "CONTABILIDAD")
+            or self.can_view_loan_requests
+        )
 
     def has_component_access(self, component_code: str, action: str = "view") -> bool:
         if not self.is_authenticated:
