@@ -52,7 +52,8 @@ function normalizeListResponse<T>(payload: T[] | PaginatedResponse<T> | undefine
 function buildVacationRequestBody(
   payload: Omit<VacationRequestPayload, 'employee'>,
 ): FormData | Record<string, string | boolean | number> {
-  if (payload.support_document instanceof Blob) {
+  const hasFile = Object.values(payload).some((value) => value instanceof Blob);
+  if (hasFile) {
     const formData = new FormData();
     Object.entries(payload).forEach(([key, value]) => {
       if (value === null || value === undefined || value === '') return;
@@ -62,9 +63,8 @@ function buildVacationRequestBody(
     return formData;
   }
 
-  const { support_document: _supportDocument, ...rest } = payload;
   return Object.fromEntries(
-    Object.entries(rest).filter(([, value]) => value !== null && value !== undefined && value !== ''),
+    Object.entries(payload).filter(([, value]) => value !== null && value !== undefined && value !== ''),
   ) as Record<string, string | boolean | number>;
 }
 
@@ -89,7 +89,8 @@ export type HRRequestStatus =
   | 'FINALIZED'
   | 'EXPIRED';
 export type VacationRequestStatus = HRRequestStatus;
-export type VacationRequestType = 'PERMISSION' | 'OVERTIME' | 'LEAVE' | 'INCAPACITY' | 'VACATION' | 'OTHER';
+export type VacationRequestType = 'PERMISSION' | 'OVERTIME' | 'LEAVE' | 'INCAPACITY' | 'VACATION' | 'LOAN' | 'OTHER';
+export type LoanFrequency = 'BIWEEKLY' | 'MONTHLY';
 export type HRRequestSubtype =
   | 'PERSONAL'
   | 'MEDICAL'
@@ -224,6 +225,16 @@ export interface VacationRequest {
   observations: string;
   due_date: string | null;
   support_document: string | null;
+  loan_amount: string | null;
+  loan_requester_name: string;
+  loan_requester_document: string;
+  loan_city: string;
+  loan_position: string;
+  loan_concept: string;
+  loan_frequency: LoanFrequency | '';
+  loan_installments_count: number | null;
+  loan_expense_number: string;
+  loan_requester_signature: string | null;
   status: HRRequestStatus;
   reviewed_by: string | null;
   reviewed_at: string | null;
@@ -357,6 +368,15 @@ export interface VacationRequestPayload {
   observations?: string;
   due_date?: string | null;
   support_document?: File | null;
+  loan_amount?: string | number | null;
+  loan_requester_name?: string;
+  loan_requester_document?: string;
+  loan_city?: string;
+  loan_position?: string;
+  loan_concept?: string;
+  loan_frequency?: LoanFrequency | '';
+  loan_installments_count?: number | null;
+  loan_requester_signature?: File | null;
 }
 
 export interface PayrollPayload {
@@ -524,6 +544,15 @@ export async function createVacationRequest(payload: VacationRequestPayload): Pr
       observations: payload.observations,
       due_date: payload.due_date,
       support_document: payload.support_document,
+      loan_amount: payload.loan_amount,
+      loan_requester_name: payload.loan_requester_name,
+      loan_requester_document: payload.loan_requester_document,
+      loan_city: payload.loan_city,
+      loan_position: payload.loan_position,
+      loan_concept: payload.loan_concept,
+      loan_frequency: payload.loan_frequency,
+      loan_installments_count: payload.loan_installments_count,
+      loan_requester_signature: payload.loan_requester_signature,
     }),
   );
   if (res.data) return res.data;

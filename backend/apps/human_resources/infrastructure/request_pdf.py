@@ -118,6 +118,20 @@ def _is_overtime(vacation):
     return getattr(vacation, "request_type", "") == "OVERTIME"
 
 
+def _is_loan(vacation):
+    return getattr(vacation, "request_type", "") == "LOAN"
+
+
+def _money_label(value):
+    if value in (None, ""):
+        return "-"
+    return f"${float(value):,.0f} COP"
+
+
+def _loan_frequency_label(vacation):
+    return _safe(vacation.get_loan_frequency_display()) if vacation.loan_frequency else "-"
+
+
 def _status_color(status):
     status = _safe(status, "").upper()
     if "APROB" in status or status in {"APPROVED", "FINALIZED"}:
@@ -275,6 +289,9 @@ def _draw_body(c, x0, x1, y, vacation, employee):
     y = _draw_rich_paragraph(c, x0, y, intro_parts, w, size=10, leading=15)
     y -= 14
 
+    if _is_loan(vacation):
+        return _draw_loan_details(c, x0, x1, y, vacation, employee)
+
     period_parts = [
         ("El periodo solicitado comprende desde el", False),
         (f" {_date_label(vacation.start_date)} ", True),
@@ -296,6 +313,53 @@ def _draw_body(c, x0, x1, y, vacation, employee):
     reason = vacation.reason or vacation.description or "No se registró un motivo adicional."
     reason_parts = [("Motivo o descripción registrada por el(la) solicitante: ", True), (f"“{reason}”", False)]
     y = _draw_rich_paragraph(c, x0, y, reason_parts, w, size=10, leading=15, align="left")
+    y -= 18
+
+    return y
+
+
+# ── Bloque exclusivo de solicitudes de tipo PRÉSTAMO ────────────────────────────
+def _draw_loan_details(c, x0, x1, y, vacation, employee):
+    w = x1 - x0
+
+    rows = [
+        ("Ciudad", vacation.loan_city or "-"),
+        ("Fecha de la solicitud", _date_label(vacation.start_date)),
+        ("Cargo", vacation.loan_position or "-"),
+        ("Nombre del solicitante", vacation.loan_requester_name or _employee_name(employee)),
+        ("Cédula", vacation.loan_requester_document or "-"),
+        ("Concepto", vacation.loan_concept or "-"),
+        ("Monto solicitado", _money_label(vacation.loan_amount)),
+        ("Forma de pago", _loan_frequency_label(vacation)),
+        ("Número de cuotas", str(vacation.loan_installments_count) if vacation.loan_installments_count else "-"),
+        ("Número de egreso", vacation.loan_expense_number or "-"),
+    ]
+
+    _text(c, x0, y, "Datos del préstamo", size=10.5, bold=True, color=TEXT)
+    y -= 20
+    col_w = w / 2
+    for index, (label, value) in enumerate(rows):
+        col = index % 2
+        row = index // 2
+        col_x = x0 + col * col_w
+        row_y = y - row * 16
+        _text(c, col_x, row_y, f"{label}:", size=8.6, bold=True, color=MUTED)
+        _text(c, col_x + 118, row_y, _fit_text(value, col_w - 122, FONT, 9), size=9, color=TEXT)
+    y -= (((len(rows) + 1) // 2) * 16) + 20
+
+    frequency_label = _loan_frequency_label(vacation).lower()
+    installments = vacation.loan_installments_count or "-"
+    authorization_parts = [
+        ("Autorización de descuento:", True),
+        (" recibí de la empresa", False),
+        (f" {COMPANY_NAME}, ", True),
+        ("identificada en el encabezado de este documento, la suma arriba mencionada en calidad de préstamo. Autorizo expresamente para que se descuente de mi(s) salario(s), de forma", False),
+        (f" {frequency_label}, ", True),
+        (f"en un total de", False),
+        (f" {installments} cuota(s), ", True),
+        ("el valor correspondiente a este préstamo. Así mismo, autorizo se cobre de mi liquidación de prestaciones sociales, salarios e indemnización, el saldo pendiente de este préstamo si llegase a finalizar mi contrato de trabajo antes de cancelarlo en su totalidad.", False),
+    ]
+    y = _draw_rich_paragraph(c, x0, y, authorization_parts, w, size=9.6, leading=14, align="justify")
     y -= 18
 
     return y
@@ -395,24 +459,35 @@ def _draw_signatures_section(c, x0, x1, y, vacation):
     y -= 60
 
     steps = _signing_steps(vacation)
-    if not steps:
+    requester_signature = _is_loan(vacation) and vacation.loan_requester_signature
+    if not steps and not requester_signature:
         return y - 14
 
-    count = len(steps)
-    gap = 20 if count >= 3 else 30
-    col_w = (w - gap * (count - 1)) / count
-    for index, step in enumerate(steps):
-        col_x = x0 + index * (col_w + gap)
+    columns = []
+    if requester_signature:
+        columns.append((
+            vacation.loan_requester_name or _employee_name(vacation.employee),
+            "Solicitante",
+            vacation.loan_requester_signature,
+        ))
+    for step in steps:
         employee = getattr(step.user, "employee_profile", None)
         signer_name = _employee_name(employee) if employee else _safe(getattr(step.user, "email", None))
         signature_file = getattr(step, "signature", None) or (getattr(employee, "signature", None) if employee else None)
+        columns.append((signer_name, f"{step.get_step_display()} · {step.get_status_display()}", signature_file))
+
+    count = len(columns)
+    gap = 20 if count >= 3 else 30
+    col_w = (w - gap * (count - 1)) / count
+    for index, (signer_name, role_label, signature_file) in enumerate(columns):
+        col_x = x0 + index * (col_w + gap)
         draw_signature_line_block(
             c,
             col_x,
             y,
             col_w,
             signer_name,
-            f"{step.get_step_display()} · {step.get_status_display()}",
+            role_label,
             signature_file,
             font=(FONT, FONT_BOLD),
             navy=TEXT,

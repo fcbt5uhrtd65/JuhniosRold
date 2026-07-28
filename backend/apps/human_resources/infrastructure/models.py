@@ -28,7 +28,12 @@ class VacationRequest(BaseModel):
         LEAVE = "LEAVE", "Licencia"
         INCAPACITY = "INCAPACITY", "Incapacidad"
         VACATION = "VACATION", "Vacaciones"
+        LOAN = "LOAN", "Préstamo"
         OTHER = "OTHER", "Otro"
+
+    class LoanFrequency(models.TextChoices):
+        BIWEEKLY = "BIWEEKLY", "Quincenal"
+        MONTHLY = "MONTHLY", "Mensual"
 
     class RequestSubtype(models.TextChoices):
         PERSONAL = "PERSONAL", "Personal"
@@ -88,6 +93,24 @@ class VacationRequest(BaseModel):
         blank=True,
         validators=[FileExtensionValidator(allowed_extensions=("pdf", "png", "jpg", "jpeg"))],
     )
+
+    # ── Datos exclusivos de solicitudes de tipo PRÉSTAMO ────────────────────────
+    loan_amount = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    loan_requester_name = models.CharField(max_length=180, blank=True)
+    loan_requester_document = models.CharField(max_length=50, blank=True)
+    loan_city = models.CharField(max_length=120, blank=True)
+    loan_position = models.CharField(max_length=120, blank=True)
+    loan_concept = models.CharField(max_length=255, blank=True)
+    loan_frequency = models.CharField(max_length=20, choices=LoanFrequency.choices, blank=True)
+    loan_installments_count = models.PositiveIntegerField(null=True, blank=True)
+    loan_expense_number = models.CharField(max_length=30, blank=True)
+    loan_requester_signature = models.FileField(
+        upload_to="hr/loans/signatures/",
+        null=True,
+        blank=True,
+        validators=[FileExtensionValidator(allowed_extensions=("png", "jpg", "jpeg"))],
+    )
+
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
     reviewed_at = models.DateTimeField(null=True, blank=True)
@@ -122,6 +145,12 @@ class VacationRequest(BaseModel):
                 update_fields = set(update_fields)
                 update_fields.add("request_number")
                 kwargs["update_fields"] = tuple(update_fields)
+        if self.request_type == self.RequestType.LOAN and not self.loan_expense_number:
+            self.loan_expense_number = self.generate_loan_expense_number()
+            if update_fields is not None:
+                update_fields = set(update_fields)
+                update_fields.add("loan_expense_number")
+                kwargs["update_fields"] = tuple(update_fields)
         if self.start_date and self.end_date and not self.days_count:
             self.days_count = max((self.end_date - self.start_date).days + 1, 0)
             if update_fields is not None:
@@ -148,6 +177,16 @@ class VacationRequest(BaseModel):
         while True:
             number = f"{prefix}-{next_number:04d}"
             if not cls.all_objects.filter(request_number=number).exists():
+                return number
+            next_number += 1
+
+    @classmethod
+    def generate_loan_expense_number(cls):
+        prefix = f"EGR-{timezone.localdate():%Y%m}"
+        next_number = cls.all_objects.filter(loan_expense_number__startswith=prefix).count() + 1
+        while True:
+            number = f"{prefix}-{next_number:04d}"
+            if not cls.all_objects.filter(loan_expense_number=number).exists():
                 return number
             next_number += 1
 

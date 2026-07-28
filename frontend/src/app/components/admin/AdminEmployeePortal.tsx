@@ -9,6 +9,7 @@ import {
   Clock3,
   FileCheck2,
   FileText,
+  HandCoins,
   HeartPulse,
   Paperclip,
   Plane,
@@ -28,9 +29,11 @@ import {
   approveVacationRequest,
   createMyOvertimeRequest,
   createMyVacationRequest,
+  deleteVacationRequest,
   getMyVacationRequests,
   getTeamVacationRequests,
   rejectVacationRequest,
+  type LoanFrequency,
   type OvertimeShiftInput,
   type VacationRequest,
   type VacationRequestStatus,
@@ -50,7 +53,13 @@ const REQUEST_TYPE_ICONS: Record<VacationRequestType, React.ComponentType<{ size
   OVERTIME: Clock3,
   INCAPACITY: HeartPulse,
   LEAVE: Briefcase,
+  LOAN: HandCoins,
   OTHER: FileText,
+};
+
+const LOAN_FREQUENCY_LABELS: Record<LoanFrequency, string> = {
+  BIWEEKLY: 'Quincenal',
+  MONTHLY: 'Mensual',
 };
 
 type RequestPeriodMode = 'SINGLE_DAY' | 'DATE_RANGE';
@@ -67,6 +76,14 @@ interface VacationFormState {
   end_time: string;
   reason: string;
   support_document: File | null;
+  loan_amount: string;
+  loan_requester_name: string;
+  loan_requester_document: string;
+  loan_city: string;
+  loan_position: string;
+  loan_concept: string;
+  loan_frequency: LoanFrequency | '';
+  loan_installments_count: string;
 }
 
 const EMPTY_FORM: VacationFormState = {
@@ -80,9 +97,26 @@ const EMPTY_FORM: VacationFormState = {
   end_time: '',
   reason: '',
   support_document: null,
+  loan_amount: '',
+  loan_requester_name: '',
+  loan_requester_document: '',
+  loan_city: '',
+  loan_position: '',
+  loan_concept: '',
+  loan_frequency: '',
+  loan_installments_count: '',
 };
 
 function formatDate(value: string): string {
+  // Un valor "solo fecha" (YYYY-MM-DD, sin hora) lo interpreta el motor JS como
+  // medianoche UTC; al convertir a la hora local de Colombia (UTC-5) eso puede
+  // mostrar el día anterior. Para fechas puras se arma la fecha en horario local
+  // explícitamente en vez de dejar que Date la trate como UTC.
+  const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (dateOnlyMatch) {
+    const [, year, month, day] = dateOnlyMatch;
+    return new Date(Number(year), Number(month) - 1, Number(day)).toLocaleDateString('es-CO');
+  }
   return new Date(value).toLocaleDateString('es-CO');
 }
 
@@ -150,6 +184,7 @@ const REQUEST_TYPE_LABELS: Record<VacationRequestType, string> = {
   OVERTIME: 'Horas extras',
   INCAPACITY: 'Incapacidad',
   LEAVE: 'Licencia',
+  LOAN: 'Préstamo',
   OTHER: 'Otro',
 };
 
@@ -202,6 +237,8 @@ export function AdminEmployeePortal() {
   const [employeeProfile, setEmployeeProfile] = useState<Employee | null>(null);
   const [requests, setRequests] = useState<VacationRequest[]>([]);
   const [form, setForm] = useState<VacationFormState>(EMPTY_FORM);
+  const [loanSignatureFile, setLoanSignatureFile] = useState<File | null>(null);
+  const [deletingRequestId, setDeletingRequestId] = useState<string | null>(null);
   const [overtimeShifts, setOvertimeShifts] = useState<Array<OvertimeShiftInput & { localId: string }>>([]);
   const [shiftDraft, setShiftDraft] = useState({ date: '', start_time: '', end_time: '' });
   const [requestsQuery, setRequestsQuery] = useState('');
@@ -351,10 +388,71 @@ export function AdminEmployeePortal() {
     }
   };
 
+  const handleSubmitLoan = async () => {
+    if (!employeeProfile) {
+      toast.error('Tu usuario no tiene un perfil de empleado asociado');
+      return;
+    }
+    const amount = Number(form.loan_amount);
+    if (!form.loan_amount || Number.isNaN(amount) || amount <= 0) {
+      toast.error('Indica un monto válido para el préstamo');
+      return;
+    }
+    if (!form.loan_requester_name.trim() || !form.loan_requester_document.trim()) {
+      toast.error('Indica el nombre y la cédula del solicitante');
+      return;
+    }
+    if (!form.loan_city.trim() || !form.loan_position.trim() || !form.loan_concept.trim()) {
+      toast.error('Indica la ciudad, el cargo y el concepto del préstamo');
+      return;
+    }
+    if (!form.loan_frequency || !form.loan_installments_count) {
+      toast.error('Indica si el pago es quincenal o mensual y el número de cuotas');
+      return;
+    }
+    if (!loanSignatureFile) {
+      toast.error('Firma la solicitud de préstamo (dibuja o sube tu firma)');
+      return;
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    setSaving(true);
+    try {
+      await createMyVacationRequest({
+        request_type: 'LOAN',
+        start_date: today,
+        end_date: today,
+        is_full_day: true,
+        loan_amount: amount,
+        loan_requester_name: form.loan_requester_name.trim(),
+        loan_requester_document: form.loan_requester_document.trim(),
+        loan_city: form.loan_city.trim(),
+        loan_position: form.loan_position.trim(),
+        loan_concept: form.loan_concept.trim(),
+        loan_frequency: form.loan_frequency,
+        loan_installments_count: Number(form.loan_installments_count),
+        loan_requester_signature: loanSignatureFile,
+      });
+      toast.success('Solicitud de préstamo enviada a RRHH');
+      setForm(EMPTY_FORM);
+      setLoanSignatureFile(null);
+      await loadData();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo crear la solicitud de préstamo');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (form.request_type === 'OVERTIME') {
       await handleSubmitOvertime();
+      return;
+    }
+    if (form.request_type === 'LOAN') {
+      await handleSubmitLoan();
       return;
     }
     if (!employeeProfile) {
@@ -405,6 +503,26 @@ export function AdminEmployeePortal() {
       toast.error('No se pudo crear la solicitud');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const isRequestDeletableByOwner = (request: VacationRequest) =>
+    request.status === 'PENDING' || request.status === 'IN_REVIEW';
+
+  const handleDeleteOwnRequest = async (request: VacationRequest) => {
+    if (!isRequestDeletableByOwner(request)) return;
+    if (!window.confirm('¿Eliminar esta solicitud? Esta acción no se puede deshacer.')) return;
+    setDeletingRequestId(request.id);
+    try {
+      await deleteVacationRequest(request.id);
+      toast.success('Solicitud eliminada');
+      if (selectedRequest?.id === request.id) setSelectedRequest(null);
+      await loadData();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo eliminar la solicitud');
+    } finally {
+      setDeletingRequestId(null);
     }
   };
 
@@ -613,7 +731,120 @@ export function AdminEmployeePortal() {
               </div>
             </div>
 
-            {form.request_type === 'OVERTIME' ? (
+            {form.request_type === 'LOAN' ? (
+              <div className="space-y-4">
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Nombre del solicitante</label>
+                    <input
+                      type="text"
+                      value={form.loan_requester_name}
+                      onChange={(event) => setForm({ ...form, loan_requester_name: event.target.value })}
+                      className={inputCls}
+                      placeholder="Nombre completo"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Cédula</label>
+                    <input
+                      type="text"
+                      value={form.loan_requester_document}
+                      onChange={(event) => setForm({ ...form, loan_requester_document: event.target.value })}
+                      className={inputCls}
+                      placeholder="Número de cédula"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Ciudad</label>
+                    <input
+                      type="text"
+                      value={form.loan_city}
+                      onChange={(event) => setForm({ ...form, loan_city: event.target.value })}
+                      className={inputCls}
+                      placeholder="Ciudad"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Cargo</label>
+                    <input
+                      type="text"
+                      value={form.loan_position}
+                      onChange={(event) => setForm({ ...form, loan_position: event.target.value })}
+                      className={inputCls}
+                      placeholder="Tu cargo actual"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Concepto</label>
+                  <input
+                    type="text"
+                    value={form.loan_concept}
+                    onChange={(event) => setForm({ ...form, loan_concept: event.target.value })}
+                    className={inputCls}
+                    placeholder="Motivo o concepto del préstamo"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Monto solicitado</label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="0.01"
+                    value={form.loan_amount}
+                    onChange={(event) => setForm({ ...form, loan_amount: event.target.value })}
+                    className={inputCls}
+                    placeholder="$"
+                  />
+                </div>
+
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Forma de pago</label>
+                    <select
+                      value={form.loan_frequency}
+                      onChange={(event) => setForm({ ...form, loan_frequency: event.target.value as LoanFrequency })}
+                      className={selectCls}
+                    >
+                      <option value="">Selecciona...</option>
+                      <option value="BIWEEKLY">Quincenal</option>
+                      <option value="MONTHLY">Mensual</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Número de cuotas</label>
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={form.loan_installments_count}
+                      onChange={(event) => setForm({ ...form, loan_installments_count: event.target.value })}
+                      className={inputCls}
+                      placeholder="Ej. 6"
+                    />
+                  </div>
+                </div>
+
+                <div className="p-4 border border-amber-200 bg-amber-50 rounded-xl text-xs text-amber-800 leading-relaxed">
+                  Autorización de descuento: recibí de la empresa <strong>PRODUCTOS JUHNIOS ROLD SAS</strong>, identificada en el
+                  encabezado de este documento, la suma arriba mencionada en calidad de préstamo. Autorizo expresamente para
+                  que se descuente de mi(s) salario(s) el valor correspondiente a este préstamo. Así mismo, autorizo se cobre
+                  de mi liquidación de prestaciones sociales, salarios e indemnización, el saldo pendiente de este préstamo si
+                  llegase a finalizar mi contrato de trabajo antes de cancelarlo en su totalidad.
+                </div>
+
+                <SignaturePad
+                  label="Firma del solicitante"
+                  helperText="Dibuja o sube tu firma para autorizar este préstamo."
+                  onChange={setLoanSignatureFile}
+                />
+              </div>
+            ) : form.request_type === 'OVERTIME' ? (
               <div>
                 <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">
                   Turnos de horas extra
@@ -804,55 +1035,59 @@ export function AdminEmployeePortal() {
               </>
             )}
 
-            <div>
-              <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Motivo</label>
-              <textarea
-                value={form.reason}
-                onChange={(event) => setForm({ ...form, reason: event.target.value })}
-                rows={4}
-                className={inputCls + ' resize-none'}
-                placeholder="Describe brevemente tu solicitud"
-              />
-            </div>
-
-            <div>
-              <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Documento de soporte</label>
-              <label className="flex items-center gap-3 w-full px-4 py-3 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors">
-                <Paperclip size={15} className="text-gray-400 shrink-0" />
-                <div className="text-sm flex-1">
-                  <p className="font-medium text-gray-900">
-                    {form.support_document ? form.support_document.name : 'Subir PDF, PNG o JPG'}
-                  </p>
-                  <p className="text-xs text-gray-400">Adjunta soportes como cita médica, certificado o constancia.</p>
+            {form.request_type !== 'LOAN' && (
+              <>
+                <div>
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Motivo</label>
+                  <textarea
+                    value={form.reason}
+                    onChange={(event) => setForm({ ...form, reason: event.target.value })}
+                    rows={4}
+                    className={inputCls + ' resize-none'}
+                    placeholder="Describe brevemente tu solicitud"
+                  />
                 </div>
-                {form.support_document && (
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      setForm({ ...form, support_document: null });
-                    }}
-                    className="p-2.5 rounded-lg hover:bg-white border border-gray-200 transition-colors flex-shrink-0"
-                    aria-label="Quitar documento de soporte"
-                  >
-                    <X size={14} />
-                  </button>
-                )}
-                <input
-                  key={form.support_document?.name ?? 'empty'}
-                  type="file"
-                  accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      support_document: event.target.files?.[0] ?? null,
-                    })
-                  }
-                  className="hidden"
-                />
-              </label>
-            </div>
+
+                <div>
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Documento de soporte</label>
+                  <label className="flex items-center gap-3 w-full px-4 py-3 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors">
+                    <Paperclip size={15} className="text-gray-400 shrink-0" />
+                    <div className="text-sm flex-1">
+                      <p className="font-medium text-gray-900">
+                        {form.support_document ? form.support_document.name : 'Subir PDF, PNG o JPG'}
+                      </p>
+                      <p className="text-xs text-gray-400">Adjunta soportes como cita médica, certificado o constancia.</p>
+                    </div>
+                    {form.support_document && (
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          setForm({ ...form, support_document: null });
+                        }}
+                        className="p-2.5 rounded-lg hover:bg-white border border-gray-200 transition-colors flex-shrink-0"
+                        aria-label="Quitar documento de soporte"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                    <input
+                      key={form.support_document?.name ?? 'empty'}
+                      type="file"
+                      accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+                      onChange={(event) =>
+                        setForm({
+                          ...form,
+                          support_document: event.target.files?.[0] ?? null,
+                        })
+                      }
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </>
+            )}
 
             <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pt-2 border-t border-gray-100">
               <button
@@ -879,7 +1114,20 @@ export function AdminEmployeePortal() {
           <Card className="p-6">
             <h3 className="text-sm font-semibold text-gray-900 mb-4">Resumen de la solicitud</h3>
             <dl className="space-y-3 text-xs">
-              {(form.request_type === 'OVERTIME'
+              {(form.request_type === 'LOAN'
+                ? [
+                    ['Tipo', REQUEST_TYPE_LABELS[form.request_type]],
+                    ['Solicitante', form.loan_requester_name || '—'],
+                    ['Cédula', form.loan_requester_document || '—'],
+                    ['Ciudad', form.loan_city || '—'],
+                    ['Cargo', form.loan_position || '—'],
+                    ['Concepto', form.loan_concept || '—'],
+                    ['Monto', form.loan_amount ? `$${Number(form.loan_amount).toLocaleString('es-CO')}` : '—'],
+                    ['Forma de pago', form.loan_frequency ? LOAN_FREQUENCY_LABELS[form.loan_frequency] : '—'],
+                    ['Cuotas', form.loan_installments_count || '—'],
+                    ['Firma', loanSignatureFile ? loanSignatureFile.name : '—'],
+                  ]
+                : form.request_type === 'OVERTIME'
                 ? [
                     ['Tipo', REQUEST_TYPE_LABELS[form.request_type]],
                     ['Turnos agregados', overtimeShifts.length ? `${overtimeShifts.length}` : '—'],
@@ -920,10 +1168,12 @@ export function AdminEmployeePortal() {
                   <dd className="text-gray-900 font-medium text-right truncate max-w-[60%]" title={value}>{value}</dd>
                 </div>
               ))}
-              <div>
-                <dt className="text-gray-400 mb-1">Motivo</dt>
-                <dd className="text-gray-900 font-medium whitespace-pre-wrap break-words">{form.reason.trim() || '—'}</dd>
-              </div>
+              {form.request_type !== 'LOAN' && (
+                <div>
+                  <dt className="text-gray-400 mb-1">Motivo</dt>
+                  <dd className="text-gray-900 font-medium whitespace-pre-wrap break-words">{form.reason.trim() || '—'}</dd>
+                </div>
+              )}
             </dl>
           </Card>
 
@@ -950,12 +1200,20 @@ export function AdminEmployeePortal() {
               const isLongReason = (request.reason ?? '').length > REASON_TRUNCATE_LENGTH;
               const isExpanded = expandedRequestId === request.id;
               const reasonText = request.reason || 'Sin motivo';
+              const canDelete = isRequestDeletableByOwner(request);
               return (
-                <button
+                <div
                   key={request.id}
-                  type="button"
+                  role="button"
+                  tabIndex={0}
                   onClick={() => setSelectedRequest(request)}
-                  className="w-full text-left rounded-xl border border-gray-100 hover:border-gray-200 hover:bg-gray-50/60 transition-colors p-3"
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      setSelectedRequest(request);
+                    }
+                  }}
+                  className="w-full text-left rounded-xl border border-gray-100 hover:border-gray-200 hover:bg-gray-50/60 transition-colors p-3 cursor-pointer"
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-9 h-9 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center flex-shrink-0">
@@ -968,6 +1226,21 @@ export function AdminEmployeePortal() {
                     <div className="flex-shrink-0 whitespace-nowrap">
                       <Badge label={getStatusLabel(request.status)} color={getStatusColor(request.status)} />
                     </div>
+                    {canDelete && (
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void handleDeleteOwnRequest(request);
+                        }}
+                        disabled={deletingRequestId === request.id}
+                        className="p-2 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors disabled:opacity-40 flex-shrink-0"
+                        title="Eliminar solicitud"
+                        aria-label="Eliminar solicitud"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
                     <ChevronRight size={16} className="text-gray-300 flex-shrink-0 hidden sm:block" />
                   </div>
                   {reasonText !== 'Sin motivo' && (
@@ -995,7 +1268,7 @@ export function AdminEmployeePortal() {
                       )}
                     </div>
                   )}
-                </button>
+                </div>
               );
             })}
 
@@ -1055,6 +1328,30 @@ export function AdminEmployeePortal() {
                 </div>
               </dl>
 
+              {selectedRequest.request_type === 'LOAN' && (
+                <div className="pt-2 border-t border-gray-100">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Datos del préstamo</p>
+                  <dl className="space-y-2 text-xs">
+                    {[
+                      ['Solicitante', selectedRequest.loan_requester_name || '—'],
+                      ['Cédula', selectedRequest.loan_requester_document || '—'],
+                      ['Ciudad', selectedRequest.loan_city || '—'],
+                      ['Cargo', selectedRequest.loan_position || '—'],
+                      ['Concepto', selectedRequest.loan_concept || '—'],
+                      ['Monto', selectedRequest.loan_amount ? `$${Number(selectedRequest.loan_amount).toLocaleString('es-CO')}` : '—'],
+                      ['Forma de pago', selectedRequest.loan_frequency ? LOAN_FREQUENCY_LABELS[selectedRequest.loan_frequency] : '—'],
+                      ['Cuotas', selectedRequest.loan_installments_count ?? '—'],
+                      ['Número de egreso', selectedRequest.loan_expense_number || '—'],
+                    ].map(([label, value]) => (
+                      <div key={label} className="flex items-start justify-between gap-4">
+                        <dt className="text-gray-400 flex-shrink-0">{label}</dt>
+                        <dd className="text-gray-900 font-medium text-right">{value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+              )}
+
               {selectedRequest.request_type === 'OVERTIME' && selectedRequest.overtime_shifts?.length > 0 && (
                 <div className="pt-2 border-t border-gray-100">
                   <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Turnos</p>
@@ -1102,6 +1399,19 @@ export function AdminEmployeePortal() {
                 </div>
               </div>
             </div>
+            {isRequestDeletableByOwner(selectedRequest) && (
+              <div className="px-6 py-4 border-t border-gray-100 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => void handleDeleteOwnRequest(selectedRequest)}
+                  disabled={deletingRequestId === selectedRequest.id}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold text-red-600 border border-red-200 hover:bg-red-50 transition-colors disabled:opacity-40"
+                >
+                  <Trash2 size={13} />
+                  {deletingRequestId === selectedRequest.id ? 'Eliminando...' : 'Eliminar solicitud'}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

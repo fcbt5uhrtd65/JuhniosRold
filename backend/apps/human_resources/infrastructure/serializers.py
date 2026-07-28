@@ -103,10 +103,12 @@ class VacationRequestSerializer(serializers.ModelSerializer):
             "hr_decided_by",
             "hr_decided_at",
             "hr_comment",
+            "loan_expense_number",
         )
 
     def validate(self, attrs):
         instance = self.instance
+        request_type = attrs.get("request_type", getattr(instance, "request_type", None))
         start_date = attrs.get("start_date", getattr(instance, "start_date", None))
         end_date = attrs.get("end_date", getattr(instance, "end_date", None))
         is_full_day = attrs.get("is_full_day", getattr(instance, "is_full_day", True))
@@ -118,7 +120,25 @@ class VacationRequestSerializer(serializers.ModelSerializer):
         if start_date and end_date and end_date < start_date:
             errors["end_date"] = ["La fecha final no puede ser anterior a la fecha inicial."]
 
-        if is_full_day:
+        if request_type == VacationRequest.RequestType.LOAN:
+            required_loan_fields = {
+                "loan_amount": "Indica el monto solicitado.",
+                "loan_requester_name": "Indica el nombre del solicitante.",
+                "loan_requester_document": "Indica la cédula del solicitante.",
+                "loan_city": "Indica la ciudad.",
+                "loan_position": "Indica el cargo.",
+                "loan_concept": "Indica el concepto del préstamo.",
+                "loan_frequency": "Indica si el pago es quincenal o mensual.",
+                "loan_installments_count": "Indica el número de cuotas.",
+            }
+            for field_name, message in required_loan_fields.items():
+                value = attrs.get(field_name, getattr(instance, field_name, None))
+                if value in (None, ""):
+                    errors[field_name] = [message]
+            loan_amount = attrs.get("loan_amount", getattr(instance, "loan_amount", None))
+            if loan_amount is not None and loan_amount <= 0:
+                errors["loan_amount"] = ["El monto debe ser mayor a cero."]
+        elif is_full_day:
             if start_time is not None:
                 errors["start_time"] = ["No se debe enviar hora de inicio cuando la solicitud es de jornada completa."]
             if end_time is not None:

@@ -470,6 +470,15 @@ const MODAL_TABS: Array<{ id: EmployeeModalTab; label: string; icon: typeof User
 
 function parseDate(value: string | null | undefined): string {
   if (!value) return 'Sin fecha';
+  // Un valor "solo fecha" (YYYY-MM-DD, sin hora) lo interpreta el motor JS como
+  // medianoche UTC; al convertir a la hora local de Colombia (UTC-5) eso puede
+  // mostrar el día anterior. Para fechas puras se arma la fecha en horario local
+  // explícitamente en vez de dejar que Date la trate como UTC.
+  const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (dateOnlyMatch) {
+    const [, year, month, day] = dateOnlyMatch;
+    return new Date(Number(year), Number(month) - 1, Number(day)).toLocaleDateString('es-CO');
+  }
   return new Date(value).toLocaleDateString('es-CO');
 }
 
@@ -745,6 +754,7 @@ function getRequestTypeLabel(type: string): string {
     LEAVE: 'Licencia',
     INCAPACITY: 'Incapacidad',
     VACATION: 'Vacaciones',
+    LOAN: 'Préstamo',
     OTHER: 'Otro',
   };
   return labels[type] ?? type;
@@ -1534,6 +1544,7 @@ export function AdminHR() {
     OVERTIME: 'amber',
     LEAVE: 'purple',
     INCAPACITY: 'red',
+    LOAN: 'pink',
     OTHER: 'pink',
   };
 
@@ -3815,6 +3826,29 @@ export function AdminHR() {
                 </div>
               );
             })()}
+            {viewingRequest.request_type === 'LOAN' && (
+              <Card className="p-4">
+                <div className="text-sm font-semibold text-gray-900 mb-3">Datos del préstamo</div>
+                <div className="grid md:grid-cols-4 gap-4 text-xs">
+                  {[
+                    ['Solicitante', viewingRequest.loan_requester_name || '—'],
+                    ['Cédula', viewingRequest.loan_requester_document || '—'],
+                    ['Ciudad', viewingRequest.loan_city || '—'],
+                    ['Cargo', viewingRequest.loan_position || '—'],
+                    ['Concepto', viewingRequest.loan_concept || '—'],
+                    ['Monto', viewingRequest.loan_amount ? `$${Number(viewingRequest.loan_amount).toLocaleString('es-CO')}` : '—'],
+                    ['Forma de pago', viewingRequest.loan_frequency === 'MONTHLY' ? 'Mensual' : viewingRequest.loan_frequency === 'BIWEEKLY' ? 'Quincenal' : '—'],
+                    ['Cuotas', viewingRequest.loan_installments_count ?? '—'],
+                    ['Número de egreso', viewingRequest.loan_expense_number || '—'],
+                  ].map(([label, value]) => (
+                    <div key={label}>
+                      <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1">{label}</div>
+                      <div className="text-gray-700">{value}</div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
             <div className="grid md:grid-cols-3 gap-4">
               <Card className="p-4"><div className="text-sm font-semibold text-gray-900 mb-2">Motivo</div><p className="text-xs text-gray-500">{viewingRequest.reason || 'Sin motivo'}</p></Card>
               <Card className="p-4"><div className="text-sm font-semibold text-gray-900 mb-2">Descripción</div><p className="text-xs text-gray-500">{viewingRequest.description || 'Sin descripción'}</p></Card>

@@ -90,8 +90,10 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
     search_fields = ("request_number", "reason", "description", "employee__employee_code", "employee__first_name", "employee__last_name")
     ordering_fields = ("created_at", "start_date", "end_date", "status", "request_type")
 
+    OWNER_DELETABLE_STATUSES = (VacationRequest.Status.PENDING, VacationRequest.Status.IN_REVIEW)
+
     def get_permissions(self):
-        if self.action in {"me", "team", "approve", "reject"}:
+        if self.action in {"me", "team", "approve", "reject", "destroy"}:
             return (IsAuthenticated(),)
         self.required_component_action = "view" if self.action in {"list", "retrieve", "dashboard"} else "edit"
         return super().get_permissions()
@@ -106,13 +108,25 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
         )
 
     def destroy(self, request, *args, **kwargs):
-        # Borrar solicitudes queda reservado al Administrador: RRHH puede gestionar
-        # (crear/aprobar/rechazar) pero no eliminar del historial, para no perder
-        # trazabilidad por error operativo del día a día.
-        if not getattr(request.user, "has_full_access", False):
+        # El Administrador puede eliminar cualquier solicitud (borrado administrativo
+        # general). Además, el propio empleado dueño de la solicitud puede eliminarla
+        # (no editarla) mientras nadie la haya resuelto todavía — una vez que Jefe/
+        # RRHH/Admin ya actuaron sobre ella, se conserva por trazabilidad.
+        if getattr(request.user, "has_full_access", False):
+            return super().destroy(request, *args, **kwargs)
+
+        vacation = self.get_object()
+        requester_employee = getattr(request.user, "employee_profile", None)
+        is_owner = requester_employee is not None and vacation.employee_id == requester_employee.id
+        if not is_owner:
             return Response(
-                {"detail": "Solo un Administrador puede eliminar solicitudes."},
+                {"detail": "Solo un Administrador puede eliminar solicitudes de otros empleados."},
                 status=status.HTTP_403_FORBIDDEN,
+            )
+        if vacation.status not in self.OWNER_DELETABLE_STATUSES:
+            return Response(
+                {"detail": "Ya no puedes eliminar esta solicitud porque ya fue gestionada. Contacta a RRHH o al Administrador."},
+                status=status.HTTP_409_CONFLICT,
             )
         return super().destroy(request, *args, **kwargs)
 
