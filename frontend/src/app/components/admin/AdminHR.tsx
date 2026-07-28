@@ -81,6 +81,7 @@ import {
   regenerateEmployeeAccessPassword,
   updateBranch,
   updateEmployee,
+  updateMyEmployeeProfile,
   type Branch,
   type Department,
   type Employee,
@@ -1228,6 +1229,9 @@ export function AdminHR() {
   const [showAccessPassword, setShowAccessPassword] = useState(false);
   const [showCertificateModal, setShowCertificateModal] = useState(false);
   const [certificateEmployee, setCertificateEmployee] = useState<Employee | null>(null);
+  const [certificateNeedsSignature, setCertificateNeedsSignature] = useState(false);
+  const [certificateSignatureFile, setCertificateSignatureFile] = useState<File | null>(null);
+  const [savingCertificateSignature, setSavingCertificateSignature] = useState(false);
   const [deletingBranchId, setDeletingBranchId] = useState<string | null>(null);
   const [vacationActionId, setVacationActionId] = useState<string | null>(null);
   const [showEmployeeModal, setShowEmployeeModal] = useState(false);
@@ -2027,6 +2031,8 @@ export function AdminHR() {
   const closeCertificateModal = () => {
     setShowCertificateModal(false);
     setCertificateEmployee(null);
+    setCertificateNeedsSignature(false);
+    setCertificateSignatureFile(null);
   };
 
   const handleEmployeeCertificatePdfExport = async () => {
@@ -2038,9 +2044,32 @@ export function AdminHR() {
       closeCertificateModal();
     } catch (error) {
       console.error(error);
+      const status = (error as { status?: number })?.status;
+      if (status === 409) {
+        setCertificateNeedsSignature(true);
+      }
       toast.error(error instanceof Error ? error.message : 'No se pudo generar el certificado laboral');
     } finally {
       setExportingCertificateId(null);
+    }
+  };
+
+  const handleSaveCertificateSignature = async () => {
+    if (!certificateSignatureFile) {
+      toast.error('Dibuja o sube tu firma primero');
+      return;
+    }
+    setSavingCertificateSignature(true);
+    try {
+      await updateMyEmployeeProfile({ signature: certificateSignatureFile });
+      toast.success('Firma guardada. Ya puedes generar el certificado.');
+      setCertificateNeedsSignature(false);
+      setCertificateSignatureFile(null);
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo guardar tu firma');
+    } finally {
+      setSavingCertificateSignature(false);
     }
   };
 
@@ -3951,6 +3980,24 @@ export function AdminHR() {
           <p className="text-xs text-gray-500">
             Vas a generar el certificado laboral de {certificateEmployee ? getEmployeeName(certificateEmployee) : ''}. Se emitirá con la firma digital vigente este mes de Administrador o Recursos Humanos.
           </p>
+
+          {certificateNeedsSignature && (
+            <div className="p-4 border border-amber-200 bg-amber-50 rounded-xl space-y-3">
+              <p className="text-xs text-amber-800">
+                Aún no hay una firma digital vigente este mes. Dibuja o sube tu firma aquí para habilitarla y generar el certificado.
+              </p>
+              <SignaturePad onChange={setCertificateSignatureFile} label="Tu firma digital" />
+              <button
+                type="button"
+                onClick={handleSaveCertificateSignature}
+                disabled={!certificateSignatureFile || savingCertificateSignature}
+                className="px-4 py-2 bg-[#2a4038] text-white rounded-lg text-xs font-semibold hover:bg-[#3d5c4e] disabled:opacity-40 transition-colors"
+              >
+                {savingCertificateSignature ? 'Guardando firma...' : 'Guardar firma'}
+              </button>
+            </div>
+          )}
+
           <div className="flex justify-end gap-2">
             <button onClick={closeCertificateModal} className="px-4 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
               Cancelar

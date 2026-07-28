@@ -775,7 +775,9 @@ export async function exportEmployeeCertificatePdf(id: string, employeeCode?: st
 
   if (!response.ok) {
     const detail = await response.json().catch(() => null);
-    throw new Error(detail?.detail || 'No se pudo generar el certificado laboral.');
+    const error = new Error(detail?.detail || 'No se pudo generar el certificado laboral.') as Error & { status?: number };
+    error.status = response.status;
+    throw error;
   }
 
   const blob = await response.blob();
