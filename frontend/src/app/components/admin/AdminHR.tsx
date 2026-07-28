@@ -3745,7 +3745,19 @@ export function AdminHR() {
                             <div>{getRequestTypeLabel(request.request_type)}</div>
                             <div className="text-gray-400 text-[11px] mt-1">{getRequestSubtypeLabel(request.subtype)}</div>
                           </Td>
-                          <Td>{getRequestScheduleLabel(request)}</Td>
+                          <Td>
+                            {canManageAccessCredentials && request.request_type !== 'LOAN' && CORRECTABLE_STATUSES.includes(request.status) ? (
+                              <button
+                                onClick={() => openCorrectScheduleModal(request)}
+                                className="text-left hover:underline decoration-dotted underline-offset-2 hover:text-[#2a4038] transition-colors"
+                                title="Editar fecha/hora"
+                              >
+                                {getRequestScheduleLabel(request)}
+                              </button>
+                            ) : (
+                              getRequestScheduleLabel(request)
+                            )}
+                          </Td>
                           <Td className="max-w-xs">
                             {request.reason ? (
                               <button
