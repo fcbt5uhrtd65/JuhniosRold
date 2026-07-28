@@ -94,6 +94,14 @@ class UserSerializer(serializers.ModelSerializer):
         queryset=Role.objects.filter(deleted_at__isnull=True),
         required=False,
     )
+    additional_role_ids = serializers.PrimaryKeyRelatedField(
+        source="additional_roles",
+        queryset=Role.objects.filter(deleted_at__isnull=True),
+        many=True,
+        required=False,
+    )
+    additional_roles = serializers.SerializerMethodField()
+    all_role_codes = serializers.SerializerMethodField()
     created_at = serializers.DateTimeField(source="date_joined", read_only=True)
     updated_at = serializers.SerializerMethodField()
     has_usable_password = serializers.SerializerMethodField()
@@ -113,6 +121,9 @@ class UserSerializer(serializers.ModelSerializer):
             "role",
             "role_name",
             "role_id",
+            "additional_role_ids",
+            "additional_roles",
+            "all_role_codes",
             "date_joined",
             "created_at",
             "updated_at",
@@ -120,10 +131,22 @@ class UserSerializer(serializers.ModelSerializer):
             "can_view_loan_requests",
             "can_view_loans",
         )
-        read_only_fields = ("id", "date_joined", "created_at", "updated_at", "role", "has_usable_password", "can_view_loans")
+        read_only_fields = (
+            "id", "date_joined", "created_at", "updated_at", "role", "has_usable_password",
+            "can_view_loans", "additional_roles", "all_role_codes",
+        )
 
     def get_has_usable_password(self, user):
         return user.has_usable_password()
+
+    def get_additional_roles(self, user):
+        return [
+            {"id": str(role.id), "code": role.code, "name": role.name}
+            for role in user.additional_roles.all()
+        ]
+
+    def get_all_role_codes(self, user):
+        return sorted(user.all_role_codes)
 
     def get_role(self, user):
         return user.role.code if user.role_id else ""

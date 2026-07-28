@@ -130,6 +130,13 @@ class User(AbstractUser):
         Role,
         on_delete=models.PROTECT,
         related_name="users",
+        help_text="Rol principal: define la vista por defecto al iniciar sesión.",
+    )
+    additional_roles = models.ManyToManyField(
+        Role,
+        blank=True,
+        related_name="users_with_additional_role",
+        help_text="Roles extra que se suman al principal (ej. Contabilidad), sin reemplazarlo.",
     )
     can_view_loan_requests = models.BooleanField(
         default=False,
@@ -164,17 +171,28 @@ class User(AbstractUser):
         return self.role.code if self.role_id else ""
 
     @property
+    def all_role_codes(self):
+        """Código del rol principal más los de todos los roles adicionales
+        asignados. Se usa para chequeos de acceso que deben reconocer cualquier
+        rol que tenga el usuario, no solo el principal."""
+        codes = {self.role_code} if self.role_id else set()
+        if self.pk:
+            codes.update(self.additional_roles.values_list("code", flat=True))
+        codes.discard("")
+        return codes
+
+    @property
     def has_full_access(self):
         return bool(self.is_superuser or (self.role and self.role.is_superuser))
 
     @property
     def can_view_loans(self):
         """Quién puede ver solicitudes de tipo PRÉSTAMO: Administrador, RRHH, el rol
-        Contabilidad, o cualquier usuario marcado puntualmente con
-        `can_view_loan_requests` (excepción por persona, sin depender de su rol)."""
+        Contabilidad (como principal o adicional), o cualquier usuario marcado
+        puntualmente con `can_view_loan_requests` (excepción por persona)."""
         return bool(
             self.has_full_access
-            or self.role_code in ("RRHH", "CONTABILIDAD")
+            or ("RRHH" in self.all_role_codes or "CONTABILIDAD" in self.all_role_codes)
             or self.can_view_loan_requests
         )
 
@@ -185,15 +203,18 @@ class User(AbstractUser):
             return True
         if not self.role_id:
             return False
-        permission = self.role.component_permissions.select_related("component").filter(
+        role_ids = [self.role_id]
+        if self.pk:
+            role_ids += list(self.additional_roles.values_list("id", flat=True))
+        # El más permisivo entre el rol principal y los adicionales gana: basta con
+        # que UNO de los roles del usuario otorgue el permiso para el componente.
+        permission_field = "can_edit" if action == "edit" else "can_view"
+        return RoleComponentPermission.objects.filter(
+            role_id__in=role_ids,
             component__code=component_code,
             component__deleted_at__isnull=True,
-        ).first()
-        if not permission:
-            return False
-        if action == "edit":
-            return permission.can_edit
-        return permission.can_view
+            **{permission_field: True},
+        ).exists()
 
     def soft_delete(self):
         self.deleted_at = timezone.now()

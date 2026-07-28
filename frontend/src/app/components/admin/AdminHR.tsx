@@ -214,6 +214,7 @@ type EmployeeModalTab =
 interface EmployeeFormState {
   user: string;
   user_role: UserRole | '';
+  user_additional_roles: UserRole[];
   user_email: string;
   user_email_confirm: string;
   user_password: string;
@@ -300,6 +301,10 @@ interface BranchFormState {
 }
 
 const INTERNAL_EMPLOYEE_ROLES: UserRole[] = ['ADMIN', 'RRHH', 'EMPLEADO', 'PEDIDOS', 'SELLER', 'DISTRIBUTOR'];
+// Roles que se pueden sumar como acceso EXTRA sobre el rol principal (ej. un
+// Empleado que además debe ver Préstamos), sin reemplazarlo. Se excluye ADMIN a
+// propósito: el acceso total no debe otorgarse como "extra" sobre otro rol.
+const ADDITIONAL_ROLE_OPTIONS: UserRole[] = ['CONTABILIDAD', 'RRHH', 'EMPLEADO', 'PEDIDOS'];
 const ACCESS_EMAIL_DOMAIN = 'juhnios.com';
 
 function randomFrom(chars: string, length: number): string {
@@ -345,6 +350,7 @@ function generateAccessEmail(firstName: string, lastName: string, employees: Emp
 const EMPTY_EMPLOYEE_FORM: EmployeeFormState = {
   user: '',
   user_role: '',
+  user_additional_roles: [],
   user_email: '',
   user_email_confirm: '',
   user_password: '',
@@ -863,6 +869,7 @@ function mapEmployeeToForm(employee: Employee): EmployeeFormState {
     ...EMPTY_EMPLOYEE_FORM,
     user: employee.user ?? '',
     user_role: employee.user_role_code ?? '',
+    user_additional_roles: employee.user_additional_role_codes ?? [],
     user_email: employee.email,
     user_email_confirm: employee.email,
     employee_code: employee.employee_code,
@@ -929,6 +936,9 @@ function buildEmployeePayload(form: EmployeeFormState): EmployeePayload {
   return {
     ...(form.user ? { user: form.user } : {}),
     ...(form.user_role ? { user_role: form.user_role } : {}),
+    // Se envía siempre (incluso vacío) para poder quitar roles adicionales ya
+    // asignados; a diferencia de los campos string, [] no debe tratarse como "sin cambios".
+    user_additional_roles: form.user_additional_roles,
     ...(form.user_email ? { user_email: form.user_email.trim().toLowerCase() } : {}),
     ...(form.user_email_confirm ? { user_email_confirm: form.user_email_confirm.trim().toLowerCase() } : {}),
     ...(form.user_password ? { user_password: form.user_password } : {}),
@@ -2676,6 +2686,39 @@ export function AdminHR() {
 
         <div className="grid sm:grid-cols-2 gap-4">
           <SelectInput label="Rol dentro del sistema" value={employeeForm.user_role} onChange={(value) => setFormField('user_role', value as UserRole | '')} options={INTERNAL_EMPLOYEE_ROLES.map((role) => ({ value: role, label: getRoleLabel(role) }))} emptyLabel="Sin acceso al sistema" disabled={!canManageAccessCredentials} />
+          <div className="sm:col-span-2">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Roles adicionales</span>
+            <p className="text-[11px] text-gray-400 mb-2">
+              Acceso extra a otros módulos sin cambiar el rol principal (ej. que un Empleado también vea Préstamos).
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {ADDITIONAL_ROLE_OPTIONS.filter((role) => role !== employeeForm.user_role).map((role) => {
+                const active = employeeForm.user_additional_roles.includes(role);
+                return (
+                  <button
+                    key={role}
+                    type="button"
+                    disabled={!canManageAccessCredentials}
+                    onClick={() => {
+                      setEmployeeForm((current) => ({
+                        ...current,
+                        user_additional_roles: active
+                          ? current.user_additional_roles.filter((code) => code !== role)
+                          : [...current.user_additional_roles, role],
+                      }));
+                    }}
+                    className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors disabled:opacity-40 ${
+                      active
+                        ? 'border-[#2a4038] bg-[#2a4038]/10 text-[#2a4038]'
+                        : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    {getRoleLabel(role)}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           <TextInput label="Usuario / correo" type="email" value={employeeForm.user_email} onChange={(value) => {
             const email = value.trim().toLowerCase();
             setEmployeeForm((current) => ({ ...current, user_email: email, user_email_confirm: email }));

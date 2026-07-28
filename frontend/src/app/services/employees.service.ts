@@ -185,6 +185,7 @@ export interface Employee {
   id: string;
   user: string | null;
   user_role_code: UserRole | '';
+  user_additional_role_codes: UserRole[];
   access_password?: string;
   access_password_updated_at?: string | null;
   access_password_updated_by?: string | null;
@@ -297,6 +298,7 @@ export interface WorkDayPayload {
 export interface EmployeePayload {
   user?: string | null;
   user_role?: UserRole | '';
+  user_additional_roles?: UserRole[];
   user_email?: string;
   user_email_confirm?: string;
   user_password?: string;

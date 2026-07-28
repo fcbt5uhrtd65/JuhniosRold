@@ -17,7 +17,8 @@ type Role =
   | 'ASEGURAMIENTO_CALIDAD'
   | 'CONTROL_CALIDAD'
   | 'DIRECTOR_TECNICO'
-  | 'AUDITOR';
+  | 'AUDITOR'
+  | 'CONTABILIDAD';
 
 interface Permission {
   canCreateProducts: boolean;
@@ -268,6 +269,8 @@ export function getRoleLabel(role: Role): string {
       return 'Director técnico';
     case 'AUDITOR':
       return 'Auditor';
+    case 'CONTABILIDAD':
+      return 'Contabilidad';
     default:
       return role;
   }

@@ -71,6 +71,7 @@ class ContractSerializer(serializers.ModelSerializer):
 class EmployeeSerializer(serializers.ModelSerializer):
     contracts = ContractSerializer(many=True, read_only=True)
     user_role_code = serializers.SerializerMethodField(read_only=True)
+    user_additional_role_codes = serializers.SerializerMethodField(read_only=True)
     age = serializers.IntegerField(read_only=True)
     seniority_days = serializers.IntegerField(read_only=True)
     time_in_position_days = serializers.IntegerField(read_only=True)
@@ -79,6 +80,13 @@ class EmployeeSerializer(serializers.ModelSerializer):
     pending_documents_count = serializers.IntegerField(read_only=True)
     expired_documents_count = serializers.IntegerField(read_only=True)
     user_role = serializers.CharField(write_only=True, required=False, allow_blank=True, allow_null=True)
+    user_additional_roles = serializers.ListField(
+        child=serializers.CharField(),
+        write_only=True,
+        required=False,
+        allow_null=True,
+        help_text="Códigos de roles adicionales que se suman al rol principal (ej. ['CONTABILIDAD']).",
+    )
     user_email = serializers.EmailField(write_only=True, required=False, allow_blank=True, allow_null=True)
     user_email_confirm = serializers.EmailField(write_only=True, required=False, allow_blank=True, allow_null=True)
     user_password = serializers.CharField(
@@ -143,6 +151,11 @@ class EmployeeSerializer(serializers.ModelSerializer):
             return ""
         return employee.user.role.code
 
+    def get_user_additional_role_codes(self, employee: Employee) -> list[str]:
+        if not employee.user_id:
+            return []
+        return list(employee.user.additional_roles.values_list("code", flat=True))
+
     def to_representation(self, instance):
         data = super().to_representation(instance)
         user = self._current_user()
@@ -187,6 +200,17 @@ class EmployeeSerializer(serializers.ModelSerializer):
         if role_code and not Role.objects.filter(code=role_code, deleted_at__isnull=True).exists():
             raise serializers.ValidationError({"user_role": ["El rol enviado no existe."]})
 
+        additional_role_codes = attrs.get("user_additional_roles")
+        if additional_role_codes:
+            normalized = [str(code).strip().upper() for code in additional_role_codes if str(code).strip()]
+            existing_codes = set(
+                Role.objects.filter(code__in=normalized, deleted_at__isnull=True).values_list("code", flat=True)
+            )
+            unknown = [code for code in normalized if code not in existing_codes]
+            if unknown:
+                raise serializers.ValidationError({"user_additional_roles": [f"Rol(es) inexistente(s): {', '.join(unknown)}."]})
+            attrs["user_additional_roles"] = normalized
+
         if creating_user and not role_code:
             raise serializers.ValidationError({"user_role": ["El rol es obligatorio cuando se crea un usuario para el empleado."]})
 
@@ -213,11 +237,19 @@ class EmployeeSerializer(serializers.ModelSerializer):
         role_code: str,
         password: str,
         user_email: str,
+        additional_role_codes: list[str] | None = None,
     ) -> Employee:
         target_user = user or employee.user
+
+        def apply_additional_roles():
+            if additional_role_codes is None:
+                return
+            roles = Role.objects.filter(code__in=additional_role_codes, deleted_at__isnull=True)
+            target_user.additional_roles.set(roles)
+
         access_email = user_email or employee.email
 
-        if not target_user and not role_code and not password:
+        if not target_user and not role_code and not password and not additional_role_codes:
             return employee
 
         if not target_user:
@@ -231,6 +263,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
             )
             target_user.set_password(password)
             target_user.save()
+            apply_additional_roles()
             employee.user = target_user
             if password:
                 employee.access_password = password
@@ -250,6 +283,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
         if password:
             target_user.set_password(password)
         target_user.save()
+        apply_additional_roles()
 
         if password:
             employee.access_password = password
@@ -331,9 +365,10 @@ class EmployeeSerializer(serializers.ModelSerializer):
         validated_data.pop("user_email_confirm", None)
         password = str(validated_data.pop("user_password", "") or "")
         validated_data.pop("user_password_confirm", None)
+        additional_role_codes = validated_data.pop("user_additional_roles", None)
         with transaction.atomic():
             employee = super().create(validated_data)
-            employee = self._sync_employee_user(employee, user, role_code, password, user_email)
+            employee = self._sync_employee_user(employee, user, role_code, password, user_email, additional_role_codes)
             self._create_initial_history(employee)
             return employee
 
@@ -344,13 +379,14 @@ class EmployeeSerializer(serializers.ModelSerializer):
         validated_data.pop("user_email_confirm", None)
         password = str(validated_data.pop("user_password", "") or "")
         validated_data.pop("user_password_confirm", None)
+        additional_role_codes = validated_data.pop("user_additional_roles", None)
         previous_values = {
             field_name: getattr(instance, field_name, None)
             for field_name in self.TRACKED_FIELDS
         }
         with transaction.atomic():
             employee = super().update(instance, validated_data)
-            employee = self._sync_employee_user(employee, user, role_code, password, user_email)
+            employee = self._sync_employee_user(employee, user, role_code, password, user_email, additional_role_codes)
             self._create_change_history(employee, previous_values)
             return employee
 
@@ -392,10 +428,12 @@ class EmployeeSelfServiceSerializer(EmployeeSerializer):
             if field_name in fields:
                 fields[field_name].read_only = True
         fields["user_role"].read_only = True
+        fields["user_additional_roles"].read_only = True
         return fields
 
     def validate(self, attrs):
         attrs.pop("user_role", None)
+        attrs.pop("user_additional_roles", None)
         return super().validate(attrs)
 
 
