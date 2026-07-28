@@ -78,7 +78,7 @@ export function FAQ() {
             </div>
 
             <motion.a
-              href="https://wa.me/573001234567"
+              href="https://wa.me/573046353167"
               target="_blank"
               rel="noopener noreferrer"
               whileHover={{ scale: 1.03 }}
@@ -162,7 +162,7 @@ export function FAQ() {
             <p className="text-xs text-muted-foreground">Nuestro equipo responde en menos de 24 horas.</p>
           </div>
           <motion.a
-            href="https://wa.me/573001234567"
+            href="https://wa.me/573046353167"
             target="_blank"
             rel="noopener noreferrer"
             whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}

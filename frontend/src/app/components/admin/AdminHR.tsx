@@ -299,7 +299,7 @@ interface BranchFormState {
 }
 
 const INTERNAL_EMPLOYEE_ROLES: UserRole[] = ['ADMIN', 'RRHH', 'EMPLEADO', 'PEDIDOS', 'SELLER', 'DISTRIBUTOR'];
-const ACCESS_EMAIL_DOMAIN = 'juhniosrold.com';
+const ACCESS_EMAIL_DOMAIN = 'juhnios.com';
 
 function randomFrom(chars: string, length: number): string {
   const bytes = new Uint32Array(length);

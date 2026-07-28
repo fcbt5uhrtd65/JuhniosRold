@@ -60,15 +60,9 @@ const TikTokIcon = () => (
   </svg>
 );
 
-const FacebookIcon = () => (
+const LinktreeIcon = () => (
   <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/>
-  </svg>
-);
-
-const WhatsAppIcon = () => (
-  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/>
+    <path d="M12 3v18M12 8l-6-5M12 8l6-5M12 14l-6 5M12 14l6 5"/>
   </svg>
 );
 
@@ -122,16 +116,17 @@ export function Footer() {
               JUHNIOS ROLD
             </div>
             <div className="text-[9px] tracking-[0.22em] uppercase text-[#C4A97D] mb-5">
-              CUIDADO CAPILAR NATURAL
+              CUIDADO CAPILAR Y COSMÉTICO
             </div>
             <p className="text-[12px] text-white/45 leading-relaxed mb-6 max-w-[220px]">
-              Productos capilares premium para mujeres colombianas que no piden permiso para brillar.
+              Productos capilares y cosméticos elaborados para acompañar el cuidado, la belleza y el brillo de las mujeres colombianas.
             </p>
             <div className="space-y-2.5">
               {[
-                { Icon: Mail,  text: 'hola@juhniosrold.com', href: 'mailto:hola@juhniosrold.com' },
-                { Icon: Phone, text: '+57 300 123 4567',     href: 'tel:+573001234567' },
-                { Icon: MapPin,text: 'Bogotá, Colombia',     href: undefined },
+                { Icon: Mail,  text: 'administracion@juhnios.com', href: 'mailto:administracion@juhnios.com' },
+                { Icon: Phone, text: '+57 304 635 3167',           href: 'tel:+573046353167' },
+                { Icon: Phone, text: '+57 304 637 7598',           href: 'tel:+573046377598' },
+                { Icon: MapPin,text: 'Calle 41 #22-82, barrio San José, Barranquilla, Atlántico', href: undefined },
               ].map(({ Icon, text, href }) => (
                 <div key={text} className="flex items-center gap-2">
                   <Icon className="w-3 h-3 text-white/30 flex-shrink-0" strokeWidth={1.5} />
@@ -149,10 +144,14 @@ export function Footer() {
             <p className="text-[8.5px] tracking-[0.38em] uppercase text-white/35 mb-4">Productos</p>
             <ul className="space-y-2.5">
               {[
-                { href: '#productos',  label: 'Capilar' },
-                { href: '#aceites',    label: 'Aceites naturales' },
+                { href: '#productos',  label: 'Cuidado capilar' },
+                { href: '#aceites',    label: 'Aceites capilares' },
+                { href: '#tratamientos', label: 'Tratamientos para el cabello' },
+                { href: '#corporal',   label: 'Cuidado corporal' },
+                { href: '#cosmeticos', label: 'Cosméticos' },
                 { href: '#mayorista',  label: 'Materias primas' },
-                { href: '#pro',        label: 'Modo PRO' },
+                { href: '#detal',      label: 'Ventas al detal' },
+                { href: '#mayoreo',    label: 'Ventas al por mayor' },
                 { href: '#catalogo',   label: 'Ver todo el catálogo' },
               ].map(({ href, label }) => (
                 <li key={label}>
@@ -170,10 +169,10 @@ export function Footer() {
             <ul className="space-y-2.5">
               {([
                 ['shipping', 'Política de envíos'],
-                ['returns',  'Devoluciones'],
-                ['warranty', 'Garantía'],
+                ['returns',  'Cambios y devoluciones'],
+                ['warranty', 'Garantía de productos'],
                 ['terms',    'Términos y condiciones'],
-                ['privacy',  'Privacidad'],
+                ['privacy',  'Política de privacidad'],
               ] as [LegalModal, string][]).map(([key, label]) => (
                 <li key={key}>
                   <button
@@ -184,6 +183,14 @@ export function Footer() {
                   </button>
                 </li>
               ))}
+              <li>
+                <button
+                  onClick={() => openWhatsApp('Hola, quiero más información sobre los productos Juhnios Rold.')}
+                  className="text-[12px] text-white/45 hover:text-white/90 transition-colors text-left"
+                >
+                  Contáctanos
+                </button>
+              </li>
             </ul>
           </div>
 
@@ -191,12 +198,12 @@ export function Footer() {
           <div>
             <p className="text-[8.5px] tracking-[0.38em] uppercase text-white/35 mb-4">Newsletter</p>
             <p className="text-[12px] text-white/45 leading-relaxed mb-5">
-              Novedades, rituales y descuentos exclusivos directo a tu correo.
+              Recibe novedades, lanzamientos, rituales de cuidado y promociones exclusivas directamente en tu correo.
             </p>
             <form onSubmit={handleSubscribe} className="space-y-2">
               <div className="flex gap-2">
                 <input
-                  type="email" placeholder="tu@email.com"
+                  type="email" placeholder="Escribe tu correo electrónico"
                   value={email} onChange={e => setEmail(e.target.value)}
                   disabled={subscribed}
                   className="flex-1 px-3.5 py-2.5 bg-white/8 border border-white/12 rounded-xl text-[12px] text-white placeholder:text-white/25 focus:outline-none focus:border-white/30 transition-colors disabled:opacity-40"
@@ -220,10 +227,9 @@ export function Footer() {
               <p className="text-[8.5px] tracking-[0.38em] uppercase text-white/35 mb-4">Síguenos</p>
               <div className="flex items-center gap-2">
                 {[
-                  { Icon: InstagramIcon, label: 'Instagram', href: 'https://instagram.com' },
-                  { Icon: TikTokIcon,    label: 'TikTok',    href: 'https://tiktok.com' },
-                  { Icon: FacebookIcon,  label: 'Facebook',  href: 'https://facebook.com' },
-                  { Icon: WhatsAppIcon,  label: 'WhatsApp',  href: 'https://wa.me/573001234567' },
+                  { Icon: InstagramIcon, label: 'Instagram', href: 'https://instagram.com/juhniosrold' },
+                  { Icon: TikTokIcon,    label: 'TikTok',    href: 'https://tiktok.com/@juhniosrold' },
+                  { Icon: LinktreeIcon,  label: 'Linktree',  href: 'https://linktr.ee/juhniosrold' },
                 ].map(({ Icon, label, href }) => (
                   <motion.a
                     key={label} href={href} target="_blank" rel="noopener noreferrer"
@@ -243,7 +249,7 @@ export function Footer() {
         {/* ── BOTTOM BAR ── */}
         <div className="border-t border-white/10 pt-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <p className="text-[10.5px] text-white/25">
-            © 2026 Juhnios Rold · Bogotá, Colombia · Todos los derechos reservados.
+            © 2026 Productos Juhnios Rold S.A.S. · NIT 900.452.638 · Barranquilla, Atlántico, Colombia · Todos los derechos reservados.
           </p>
 
           {/* Métodos de pago */}
@@ -286,7 +292,7 @@ export function Footer() {
                 {activeModal === 'returns' && <>
                   <p>Aceptamos devoluciones dentro de los <strong className="text-stone-700">30 días</strong> posteriores a la compra.</p>
                   <p>El producto debe estar sin abrir o usado menos del 30%, en su empaque original y con comprobante de compra.</p>
-                  <p>Para iniciar una devolución escríbenos a <strong className="text-stone-700">hola@juhniosrold.com</strong> con tu número de pedido. Reembolso al método de pago original en 5–7 días hábiles.</p>
+                  <p>Para iniciar una devolución escríbenos a <strong className="text-stone-700">administracion@juhnios.com</strong> con tu número de pedido. Reembolso al método de pago original en 5–7 días hábiles.</p>
                 </>}
                 {activeModal === 'warranty' && <>
                   <p>Todos nuestros productos tienen <strong className="text-stone-700">garantía de satisfacción de 30 días</strong>. Si no estás satisfecha, te devolvemos tu dinero.</p>
@@ -301,7 +307,7 @@ export function Footer() {
                 {activeModal === 'privacy' && <>
                   <p>Recopilamos tu nombre, email, teléfono y dirección de envío únicamente para procesar pedidos y comunicarte promociones relevantes.</p>
                   <p>No vendemos ni transferimos tu información a terceros, salvo proveedores de pago necesarios para operar.</p>
-                  <p>Puedes solicitar acceso, corrección o eliminación de tus datos escribiendo a <strong className="text-stone-700">hola@juhniosrold.com</strong>.</p>
+                  <p>Puedes solicitar acceso, corrección o eliminación de tus datos escribiendo a <strong className="text-stone-700">administracion@juhnios.com</strong>.</p>
                 </>}
                 {activeModal === 'cookies' && <>
                   <p>Usamos cookies esenciales para el carrito y sesión, cookies de rendimiento (Google Analytics) para mejorar la experiencia, y cookies de marketing para mostrar anuncios relevantes.</p>

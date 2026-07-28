@@ -169,7 +169,7 @@ export function NavigationBar({ onLoginClick, variant = 'solid' }: NavigationBar
                   className="h-9 md:h-10 w-auto object-contain opacity-90 group-hover:opacity-100 transition-opacity"
                 />
                 <div className="text-[7.5px] tracking-[0.28em] uppercase text-[#8B7355] mt-2.5 font-light hidden sm:block">
-                  CUIDADO CAPILAR NATURAL
+                  CUIDADO CAPILAR Y COSMÉTICO
                 </div>
               </a>
 
@@ -334,7 +334,7 @@ export function NavigationBar({ onLoginClick, variant = 'solid' }: NavigationBar
               <div className="flex items-center justify-between px-7 py-5 border-b border-stone-100">
                 <div className="flex items-center gap-2">
                   <img src={logoImg} alt="Juhnios Rold" className="h-8 w-auto object-contain" />
-                  <div className="text-[8px] tracking-[0.25em] uppercase text-[#8B7355] mt-1.5">CUIDADO CAPILAR NATURAL</div>
+                  <div className="text-[8px] tracking-[0.25em] uppercase text-[#8B7355] mt-1.5">CUIDADO CAPILAR Y COSMÉTICO</div>
                 </div>
                 <button onClick={() => setMenuOpen(false)} className="p-2 rounded-full hover:bg-stone-100 transition-colors">
                   <X className="w-4 h-4 text-stone-400" strokeWidth={1.5} />
@@ -477,15 +477,15 @@ export function NavigationBar({ onLoginClick, variant = 'solid' }: NavigationBar
                 <div className="flex items-center justify-between pt-1">
                   <span className="text-[9px] tracking-[0.25em] uppercase text-stone-400">Síguenos</span>
                   <div className="flex items-center gap-3">
-                    <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" className="text-stone-400 hover:text-stone-700 transition-colors">
+                    <a href="https://instagram.com/juhniosrold" target="_blank" rel="noopener noreferrer" className="text-stone-400 hover:text-stone-700 transition-colors">
                       <Instagram className="w-3.5 h-3.5" strokeWidth={1.5} />
                     </a>
-                    <a href="https://tiktok.com" target="_blank" rel="noopener noreferrer" className="text-stone-400 hover:text-stone-700 transition-colors">
+                    <a href="https://tiktok.com/@juhniosrold" target="_blank" rel="noopener noreferrer" className="text-stone-400 hover:text-stone-700 transition-colors">
                       <TikTokIcon className="w-3.5 h-3.5" />
                     </a>
                   </div>
                 </div>
-                <div className="text-[9px] text-stone-300">© 2026 Juhnios Rold · Bogotá, Colombia</div>
+                <div className="text-[9px] text-stone-300">© 2026 Juhnios Rold · Barranquilla, Colombia</div>
               </div>
             </motion.div>
           </>

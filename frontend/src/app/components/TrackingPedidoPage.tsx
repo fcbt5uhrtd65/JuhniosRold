@@ -317,20 +317,20 @@ function HelpWidget({ onClose }: { onClose?: () => void }) {
           Estamos aquí para ayudarte con cualquier duda sobre tu pedido.
         </p>
         <a
-          href="https://wa.me/573001234567"
+          href="https://wa.me/573046353167"
           target="_blank"
           rel="noreferrer"
           className="flex items-center gap-2.5 rounded-xl border border-stone-100 bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-700 transition hover:bg-stone-100 mb-2"
         >
           <MessageCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" strokeWidth={1.5} />
-          +57 300 123 4567
+          +57 304 635 3167
         </a>
         <a
-          href="mailto:contacto@juhniosrold.com"
+          href="mailto:administracion@juhnios.com"
           className="flex items-center gap-2.5 rounded-xl border border-stone-100 bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-700 transition hover:bg-stone-100 min-w-0"
         >
           <Mail className="w-4 h-4 text-stone-400 flex-shrink-0" strokeWidth={1.5} />
-          <span className="break-all">contacto@juhniosrold.com</span>
+          <span className="break-all">administracion@juhnios.com</span>
         </a>
       </div>
 

@@ -1,11 +1,9 @@
 import { motion } from 'motion/react';
+import { openWhatsApp } from '../utils/whatsapp';
 
 export function WhatsAppButton() {
-  const phoneNumber = '573001234567';
-  const message = 'Hola, estoy interesada en los productos Juhnios Rold';
-
   const handleClick = () => {
-    window.open(`https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`, '_blank');
+    openWhatsApp('Hola, estoy interesada en los productos Juhnios Rold');
   };
 
   return (
