@@ -101,6 +101,7 @@ import {
 import type { UserRole } from '../../services/auth.service';
 import {
   approveVacationRequest,
+  correctVacationRequestSchedule,
   createEmployeeDocument,
   updateEmployeeDocument,
   deleteEmployeeDocument,
@@ -1319,6 +1320,17 @@ export function AdminHR() {
   const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
   const [viewingBranch, setViewingBranch] = useState<Branch | null>(null);
   const [viewingRequest, setViewingRequest] = useState<VacationRequest | null>(null);
+  const [correctingRequest, setCorrectingRequest] = useState<VacationRequest | null>(null);
+  const [correctingSchedule, setCorrectingSchedule] = useState({
+    period_mode: 'SINGLE_DAY' as 'SINGLE_DAY' | 'DATE_RANGE',
+    single_date: '',
+    start_date: '',
+    end_date: '',
+    is_full_day: true,
+    start_time: '',
+    end_time: '',
+  });
+  const [savingScheduleCorrection, setSavingScheduleCorrection] = useState(false);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
@@ -2315,6 +2327,58 @@ export function AdminHR() {
       toast.error('No se pudo generar el Excel de solicitudes');
     } finally {
       setExportingVacationXlsx(false);
+    }
+  };
+
+  const CORRECTABLE_STATUSES = ['PENDING', 'IN_REVIEW', 'PENDING_HR', 'PENDING_ADMIN'];
+
+  const openCorrectScheduleModal = (request: VacationRequest) => {
+    const sameDay = request.start_date === request.end_date;
+    setCorrectingRequest(request);
+    setCorrectingSchedule({
+      period_mode: sameDay ? 'SINGLE_DAY' : 'DATE_RANGE',
+      single_date: sameDay ? request.start_date : '',
+      start_date: request.start_date,
+      end_date: request.end_date,
+      is_full_day: request.is_full_day,
+      start_time: request.start_time ?? '',
+      end_time: request.end_time ?? '',
+    });
+  };
+
+  const closeCorrectScheduleModal = () => {
+    setCorrectingRequest(null);
+  };
+
+  const handleSaveScheduleCorrection = async () => {
+    if (!correctingRequest) return;
+    const start_date = correctingSchedule.period_mode === 'SINGLE_DAY' ? correctingSchedule.single_date : correctingSchedule.start_date;
+    const end_date = correctingSchedule.period_mode === 'SINGLE_DAY' ? correctingSchedule.single_date : correctingSchedule.end_date;
+    if (!start_date || !end_date) {
+      toast.error('Indica la(s) fecha(s) del permiso');
+      return;
+    }
+    if (!correctingSchedule.is_full_day && !correctingSchedule.start_time) {
+      toast.error('Indica la hora de inicio');
+      return;
+    }
+    setSavingScheduleCorrection(true);
+    try {
+      await correctVacationRequestSchedule(correctingRequest.id, {
+        start_date,
+        end_date,
+        is_full_day: correctingSchedule.is_full_day,
+        start_time: correctingSchedule.is_full_day ? null : correctingSchedule.start_time,
+        end_time: correctingSchedule.is_full_day ? null : (correctingSchedule.end_time || null),
+      });
+      toast.success('Fecha/hora corregida');
+      closeCorrectScheduleModal();
+      await loadVacationRows();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo corregir la solicitud');
+    } finally {
+      setSavingScheduleCorrection(false);
     }
   };
 
@@ -3676,6 +3740,12 @@ export function AdminHR() {
                                     link.click();
                                   } },
                                 ] : []),
+                                ...(canManageAccessCredentials && request.request_type !== 'LOAN' ? [{
+                                  label: 'Corregir fecha/hora',
+                                  icon: Edit2,
+                                  onClick: () => openCorrectScheduleModal(request),
+                                  disabled: !CORRECTABLE_STATUSES.includes(request.status),
+                                }] : []),
                                 {
                                   label: 'Aprobar',
                                   icon: Check,
@@ -4172,6 +4242,92 @@ export function AdminHR() {
             </button>
           </div>
         </div>
+      </Modal>
+
+      <Modal title="Corregir fecha/hora" open={Boolean(correctingRequest)} onClose={closeCorrectScheduleModal}>
+        {correctingRequest && (
+          <div className="space-y-4">
+            <p className="text-xs text-gray-500">
+              Corrige la fecha/hora que digitó el empleado en la solicitud {correctingRequest.request_number || ''}. El cambio queda registrado en el historial. Solo disponible mientras la solicitud sigue pendiente de resolución.
+            </p>
+
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Duración</label>
+              <select
+                value={correctingSchedule.period_mode}
+                onChange={(event) => setCorrectingSchedule({ ...correctingSchedule, period_mode: event.target.value as 'SINGLE_DAY' | 'DATE_RANGE' })}
+                className={selectCls}
+              >
+                <option value="SINGLE_DAY">Un solo día</option>
+                <option value="DATE_RANGE">Varios días</option>
+              </select>
+            </div>
+
+            {correctingSchedule.period_mode === 'SINGLE_DAY' ? (
+              <TextInput
+                label="Fecha"
+                type="date"
+                value={correctingSchedule.single_date}
+                onChange={(value) => setCorrectingSchedule({ ...correctingSchedule, single_date: value })}
+              />
+            ) : (
+              <div className="grid sm:grid-cols-2 gap-4">
+                <TextInput
+                  label="Fecha inicio"
+                  type="date"
+                  value={correctingSchedule.start_date}
+                  onChange={(value) => setCorrectingSchedule({ ...correctingSchedule, start_date: value })}
+                />
+                <TextInput
+                  label="Fecha fin"
+                  type="date"
+                  value={correctingSchedule.end_date}
+                  onChange={(value) => setCorrectingSchedule({ ...correctingSchedule, end_date: value })}
+                />
+              </div>
+            )}
+
+            <label className="flex items-center gap-2 text-xs text-gray-700">
+              <input
+                type="checkbox"
+                checked={correctingSchedule.is_full_day}
+                onChange={(event) => setCorrectingSchedule({ ...correctingSchedule, is_full_day: event.target.checked })}
+                className="accent-[#2a4038]"
+              />
+              Jornada completa (sin horario específico)
+            </label>
+
+            {!correctingSchedule.is_full_day && (
+              <div className="grid sm:grid-cols-2 gap-4">
+                <TextInput
+                  label="Hora inicio"
+                  type="time"
+                  value={correctingSchedule.start_time}
+                  onChange={(value) => setCorrectingSchedule({ ...correctingSchedule, start_time: value })}
+                />
+                <TextInput
+                  label="Hora fin"
+                  type="time"
+                  value={correctingSchedule.end_time}
+                  onChange={(value) => setCorrectingSchedule({ ...correctingSchedule, end_time: value })}
+                />
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <button onClick={closeCorrectScheduleModal} className="px-4 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+                Cancelar
+              </button>
+              <button
+                onClick={() => void handleSaveScheduleCorrection()}
+                disabled={savingScheduleCorrection}
+                className="px-4 py-2 bg-[#2a4038] rounded-lg text-xs font-semibold text-white hover:bg-[#3d5c4e] transition-colors disabled:opacity-40"
+              >
+                {savingScheduleCorrection ? 'Guardando...' : 'Guardar corrección'}
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       <Modal title="Certificado laboral" open={showCertificateModal && Boolean(certificateEmployee)} onClose={closeCertificateModal}>

@@ -94,7 +94,7 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
     OWNER_DELETABLE_STATUSES = (VacationRequest.Status.PENDING, VacationRequest.Status.IN_REVIEW)
 
     def get_permissions(self):
-        if self.action in {"me", "team", "loans", "approve", "reject", "destroy"}:
+        if self.action in {"me", "team", "loans", "approve", "reject", "destroy", "correct_schedule"}:
             return (IsAuthenticated(),)
         self.required_component_action = "view" if self.action in {"list", "retrieve", "dashboard"} else "edit"
         return super().get_permissions()
@@ -340,6 +340,61 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
             new_status=vacation.status,
             comment=request.data.get("comment", "Solicitud cancelada"),
         )
+        return Response(self.get_serializer(vacation).data)
+
+    EDITABLE_SCHEDULE_STATUSES = (
+        VacationRequest.Status.PENDING,
+        VacationRequest.Status.IN_REVIEW,
+        VacationRequest.Status.PENDING_HR,
+        VacationRequest.Status.PENDING_ADMIN,
+    )
+
+    @action(detail=True, methods=("post",), url_path="correct-schedule")
+    def correct_schedule(self, request, pk=None):
+        """Corrección administrativa de fecha/hora: permite a Admin o RRHH arreglar
+        un dato mal digitado por el empleado (ej. eligió el día equivocado), sin
+        tener que rechazar y recrear todo el trámite. Solo mientras la solicitud
+        siga sin resolver — una vez aprobada/rechazada/finalizada, la fecha/hora
+        queda congelada como parte del registro histórico."""
+        if not (getattr(request.user, "has_full_access", False) or getattr(request.user, "role_code", None) == "RRHH"):
+            return Response(
+                {"detail": "Solo Administrador o Recursos Humanos pueden corregir la fecha/hora de una solicitud."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        vacation = self.get_object()
+        if vacation.status not in self.EDITABLE_SCHEDULE_STATUSES:
+            return Response(
+                {"detail": "Solo se puede corregir la fecha/hora mientras la solicitud sigue pendiente de resolución."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        EDITABLE_FIELDS = ("start_date", "end_date", "is_full_day", "start_time", "end_time")
+        previous = {field: getattr(vacation, field) for field in EDITABLE_FIELDS}
+
+        serializer = self.get_serializer(
+            vacation,
+            data={key: request.data[key] for key in EDITABLE_FIELDS if key in request.data},
+            partial=True,
+        )
+        serializer.is_valid(raise_exception=True)
+        vacation = serializer.save()
+
+        changes = []
+        for field in EDITABLE_FIELDS:
+            new_value = getattr(vacation, field)
+            if previous[field] != new_value:
+                changes.append(f"{field}: {previous[field] or '—'} → {new_value or '—'}")
+
+        if changes:
+            VacationRequestHistory.objects.create(
+                request=vacation,
+                action=VacationRequestHistory.Action.UPDATED,
+                user=request.user,
+                old_status=vacation.status,
+                new_status=vacation.status,
+                comment=f"Corrección de fecha/hora por {getattr(request.user, 'role_code', '')}: " + "; ".join(changes),
+            )
         return Response(self.get_serializer(vacation).data)
 
     @action(detail=True, methods=("post",))

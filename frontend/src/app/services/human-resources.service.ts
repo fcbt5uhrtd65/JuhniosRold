@@ -664,6 +664,25 @@ export async function finalizeVacationRequest(id: string, comment = ''): Promise
   throw new Error(res.message);
 }
 
+export interface CorrectVacationScheduleParams {
+  start_date: string;
+  end_date: string;
+  is_full_day: boolean;
+  start_time?: string | null;
+  end_time?: string | null;
+}
+
+/** Corrección administrativa de fecha/hora (Admin o RRHH), para arreglar un dato
+ * mal digitado por el empleado mientras la solicitud sigue sin resolver. */
+export async function correctVacationRequestSchedule(
+  id: string,
+  payload: CorrectVacationScheduleParams,
+): Promise<VacationRequest> {
+  const res = await api.post<VacationRequest>(`${REQUESTS_PATH}${id}/correct-schedule/`, payload);
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
 export async function openVacationRequestPdf(id: string): Promise<void> {
   const token = getAccessToken();
   if (!token) {
