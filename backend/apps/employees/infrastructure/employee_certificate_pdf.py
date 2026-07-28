@@ -294,10 +294,19 @@ def render_employee_certificate_pdf(
 
 
 def get_default_hr_signer() -> Employee | None:
-    """Firmante oficial: Administrador con firma registrada."""
+    """Firmante oficial: Administrador o Recursos Humanos con firma vigente.
+
+    La firma solo es hábil durante el mes calendario en que fue registrada;
+    pasado ese mes, deja de contar hasta que se renueve. Entre varios
+    firmantes con firma vigente, se usa el que firmó más recientemente.
+    """
+    month_start = timezone.localtime().replace(
+        day=1, hour=0, minute=0, second=0, microsecond=0,
+    )
     return (
-        Employee.objects.filter(user__role__code="ADMIN")
+        Employee.objects.filter(user__role__code__in=("ADMIN", "RRHH"))
         .exclude(signature="")
-        .order_by("created_at")
+        .filter(signature_updated_at__gte=month_start)
+        .order_by("-signature_updated_at")
         .first()
     )

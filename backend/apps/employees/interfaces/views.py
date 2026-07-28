@@ -208,7 +208,10 @@ class EmployeeViewSet(SoftDeleteModelViewSet):
             employee, data=request.data, partial=True, context={"request": request},
         )
         serializer.is_valid(raise_exception=True)
-        serializer.save(updated_by=request.user)
+        extra_fields = {"updated_by": request.user}
+        if "signature" in serializer.validated_data:
+            extra_fields["signature_updated_at"] = timezone.now()
+        serializer.save(**extra_fields)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=("get",), url_path="export-pdf")
@@ -303,7 +306,12 @@ class EmployeeViewSet(SoftDeleteModelViewSet):
         issued_by = get_default_hr_signer()
         if not (issued_by and issued_by.signature):
             return Response(
-                {"detail": "Registra primero la firma digital del Administrador para generar certificados laborales."},
+                {
+                    "detail": (
+                        "Registra primero la firma digital del mes vigente (Administrador o Recursos Humanos) "
+                        "para generar certificados laborales."
+                    )
+                },
                 status=status.HTTP_409_CONFLICT,
             )
         try:
@@ -334,8 +342,8 @@ class EmployeeViewSet(SoftDeleteModelViewSet):
             return Response(
                 {
                     "detail": (
-                        "Aun no hay una firma digital registrada del Administrador. "
-                        "Solicita que el Administrador guarde su firma en su perfil para generar tu certificado."
+                        "Aun no hay una firma digital vigente este mes (Administrador o Recursos Humanos). "
+                        "Solicita que alguno de ellos guarde o renueve su firma en su perfil para generar tu certificado."
                     )
                 },
                 status=status.HTTP_409_CONFLICT,

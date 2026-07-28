@@ -206,6 +206,7 @@ export interface Employee {
   residence_department: string;
   photo: string;
   signature: string | null;
+  signature_updated_at: string | null;
   nationality: string;
   gender: Gender;
   marital_status: MaritalStatus;

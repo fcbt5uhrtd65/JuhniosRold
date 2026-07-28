@@ -222,6 +222,7 @@ class Employee(BaseModel):
         blank=True,
         validators=[FileExtensionValidator(allowed_extensions=("png", "jpg", "jpeg"))],
     )
+    signature_updated_at = models.DateTimeField(null=True, blank=True)
     nationality = models.CharField(max_length=80, blank=True, default="Colombiana")
     gender = models.CharField(max_length=20, choices=Gender.choices, blank=True)
     marital_status = models.CharField(max_length=20, choices=MaritalStatus.choices, blank=True)

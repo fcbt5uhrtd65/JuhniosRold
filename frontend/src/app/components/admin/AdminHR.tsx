@@ -3949,7 +3949,7 @@ export function AdminHR() {
       <Modal title="Certificado laboral" open={showCertificateModal && Boolean(certificateEmployee)} onClose={closeCertificateModal}>
         <div className="space-y-4">
           <p className="text-xs text-gray-500">
-            Vas a generar el certificado laboral de {certificateEmployee ? getEmployeeName(certificateEmployee) : ''}. Se emitirá con la firma digital registrada del Administrador.
+            Vas a generar el certificado laboral de {certificateEmployee ? getEmployeeName(certificateEmployee) : ''}. Se emitirá con la firma digital vigente este mes de Administrador o Recursos Humanos.
           </p>
           <div className="flex justify-end gap-2">
             <button onClick={closeCertificateModal} className="px-4 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors">

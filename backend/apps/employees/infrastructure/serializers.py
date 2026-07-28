@@ -135,6 +135,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
             "access_password",
             "access_password_updated_at",
             "access_password_updated_by",
+            "signature_updated_at",
         )
 
     def get_user_role_code(self, employee: Employee) -> str:

@@ -303,6 +303,13 @@ export function EmployeeSelfProfileModal({ open, onClose }: { open: boolean; onC
     }
   };
 
+  const signatureIsCurrentMonth = (() => {
+    if (!employee?.signature || !employee.signature_updated_at) return false;
+    const updated = new Date(employee.signature_updated_at);
+    const now = new Date();
+    return updated.getFullYear() === now.getFullYear() && updated.getMonth() === now.getMonth();
+  })();
+
   const handleDocumentUpload = async () => {
     if (!documentFile) {
       toast.error('Selecciona un archivo para subir');
@@ -599,7 +606,18 @@ export function EmployeeSelfProfileModal({ open, onClose }: { open: boolean; onC
                     <p className="text-sm font-semibold text-gray-900 mb-1">Mi firma digital</p>
                     <p className="text-xs text-gray-500 mb-3">
                       Esta firma se usará automáticamente cuando apruebes o rechaces solicitudes, y en los certificados que emitas.
+                      Solo es válida durante el mes calendario en que la guardes o renueves: pasado ese mes debes volver a guardarla
+                      para seguir firmando certificados y decisiones.
                     </p>
+                    {signatureIsCurrentMonth ? (
+                      <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 mb-3">
+                        Firma vigente este mes.
+                      </p>
+                    ) : employee.signature ? (
+                      <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
+                        Tu firma venció el mes pasado. Vuelve a guardarla para que los certificados se puedan emitir.
+                      </p>
+                    ) : null}
                     <SignaturePad currentSignatureUrl={employee.signature} onChange={setSignatureFile} />
                     <button
                       type="button"
