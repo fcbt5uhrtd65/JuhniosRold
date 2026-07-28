@@ -9,6 +9,8 @@ import {
   CalendarDays,
   Cake,
   Check,
+  ChevronDown,
+  ChevronUp,
   Clock3,
   Copy,
   Download,
@@ -103,6 +105,7 @@ import {
   updateEmployeeDocument,
   deleteEmployeeDocument,
   deleteVacationRequest,
+  exportRequestsXlsx,
   getEmployeeDocuments,
   getHRNotifications,
   getRequestsDashboard,
@@ -806,6 +809,8 @@ function getRequestTypeLabel(type: string): string {
   return labels[type] ?? type;
 }
 
+const REQUEST_TYPE_FILTER_OPTIONS: VacationRequestType[] = ['PERMISSION', 'OVERTIME', 'LEAVE', 'INCAPACITY', 'VACATION', 'LOAN', 'OTHER'];
+
 function getRequestSubtypeLabel(subtype: string): string {
   const labels: Record<string, string> = {
     PERSONAL: 'Personal',
@@ -1270,6 +1275,10 @@ export function AdminHR() {
   const [vacationFilterBranch, setVacationFilterBranch] = useState<string>('all');
   const [vacationFilterStatus, setVacationFilterStatus] = useState<string>('all');
   const [vacationFilterEmployee, setVacationFilterEmployee] = useState<string>('all');
+  const [vacationFilterType, setVacationFilterType] = useState<string>('all');
+  const [vacationSort, setVacationSort] = useState<'created_at' | 'request_type' | 'start_date'>('created_at');
+  const [showVacationCharts, setShowVacationCharts] = useState(false);
+  const [exportingVacationXlsx, setExportingVacationXlsx] = useState(false);
   const [vacationTotal, setVacationTotal] = useState(0);
   const [vacationLoading, setVacationLoading] = useState(false);
   const [deletingVacationId, setDeletingVacationId] = useState<string | null>(null);
@@ -1556,6 +1565,7 @@ export function AdminHR() {
   const loadVacationRows = useCallback(async () => {
     setVacationLoading(true);
     try {
+      const orderingMap = { created_at: '-created_at', request_type: 'request_type', start_date: '-start_date' } as const;
       const res = await getVacationRequests({
         page: vacationPage,
         limit: vacationPageSize,
@@ -1564,6 +1574,8 @@ export function AdminHR() {
         branch: vacationFilterBranch === 'all' ? undefined : vacationFilterBranch,
         status: vacationFilterStatus === 'all' ? undefined : (vacationFilterStatus as VacationRequestStatus),
         employee: vacationFilterEmployee === 'all' ? undefined : vacationFilterEmployee,
+        request_type: vacationFilterType === 'all' ? undefined : (vacationFilterType as VacationRequestType),
+        ordering: orderingMap[vacationSort],
       });
       setVacationRows(res.data);
       setVacationTotal(res.total);
@@ -1573,7 +1585,7 @@ export function AdminHR() {
     } finally {
       setVacationLoading(false);
     }
-  }, [vacationPage, vacationPageSize, vacationSearch, vacationFilterDepartment, vacationFilterBranch, vacationFilterStatus, vacationFilterEmployee, toast]);
+  }, [vacationPage, vacationPageSize, vacationSearch, vacationFilterDepartment, vacationFilterBranch, vacationFilterStatus, vacationFilterEmployee, vacationFilterType, vacationSort, toast]);
 
   useEffect(() => {
     if (activeTab !== 'vacations') return;
@@ -1583,7 +1595,7 @@ export function AdminHR() {
 
   useEffect(() => {
     setVacationPage(1);
-  }, [vacationSearch, vacationFilterDepartment, vacationFilterBranch, vacationFilterStatus, vacationFilterEmployee, vacationPageSize]);
+  }, [vacationSearch, vacationFilterDepartment, vacationFilterBranch, vacationFilterStatus, vacationFilterEmployee, vacationFilterType, vacationSort, vacationPageSize]);
 
   const paginatedVacationRequests = vacationRows;
   const filteredVacationRequestsCount = vacationTotal;
@@ -2282,6 +2294,27 @@ export function AdminHR() {
     } catch (error) {
       console.error(error);
       toast.error('No se pudo abrir el documento de la solicitud');
+    }
+  };
+
+  const handleExportVacationXlsx = async () => {
+    setExportingVacationXlsx(true);
+    try {
+      const orderingMap = { created_at: 'created_at', request_type: 'request_type', start_date: 'start_date' } as const;
+      await exportRequestsXlsx({
+        search: vacationSearch.trim() || undefined,
+        employee__department: vacationFilterDepartment === 'all' ? undefined : vacationFilterDepartment,
+        employee__branch: vacationFilterBranch === 'all' ? undefined : vacationFilterBranch,
+        status: vacationFilterStatus === 'all' ? undefined : (vacationFilterStatus as VacationRequestStatus),
+        request_type: vacationFilterType === 'all' ? undefined : (vacationFilterType as VacationRequestType),
+        order_by: orderingMap[vacationSort],
+      });
+      toast.success('Excel de solicitudes generado');
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo generar el Excel de solicitudes');
+    } finally {
+      setExportingVacationXlsx(false);
     }
   };
 
@@ -3176,8 +3209,25 @@ export function AdminHR() {
             </div>
           ) : activeTab === 'vacations' ? (
             <div className="space-y-3 rounded-xl border border-gray-100 bg-white p-3 shadow-sm">
-              <SearchBar value={vacationSearch} onChange={setVacationSearch} placeholder="Buscar por empleado, código, motivo o N° de solicitud..." className="w-full" />
+              <div className="flex flex-col lg:flex-row gap-2.5">
+                <SearchBar value={vacationSearch} onChange={setVacationSearch} placeholder="Buscar por empleado, código, motivo o N° de solicitud..." className="w-full" />
+                <button
+                  type="button"
+                  onClick={() => void handleExportVacationXlsx()}
+                  disabled={exportingVacationXlsx}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#2a4038] px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#3d5c4e] disabled:opacity-50 whitespace-nowrap"
+                >
+                  {exportingVacationXlsx ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
+                  Exportar Excel
+                </button>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5">
+                <select value={vacationFilterType} onChange={(event) => setVacationFilterType(event.target.value)} className={`${selectCls} w-full`}>
+                  <option value="all">Todos los tipos</option>
+                  {REQUEST_TYPE_FILTER_OPTIONS.map((value) => (
+                    <option key={value} value={value}>{getRequestTypeLabel(value)}</option>
+                  ))}
+                </select>
                 <select value={vacationFilterEmployee} onChange={(event) => setVacationFilterEmployee(event.target.value)} className={`${selectCls} w-full`}>
                   <option value="all">Todos los empleados</option>
                   {employees.map((employee) => <option key={employee.id} value={employee.id}>{getEmployeeName(employee)}</option>)}
@@ -3193,8 +3243,13 @@ export function AdminHR() {
                 <select value={vacationFilterStatus} onChange={(event) => setVacationFilterStatus(event.target.value)} className={`${selectCls} w-full`}>
                   {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
+                <select value={vacationSort} onChange={(event) => setVacationSort(event.target.value as typeof vacationSort)} className={`${selectCls} w-full`}>
+                  <option value="created_at">Ordenar por fecha de solicitud</option>
+                  <option value="start_date">Ordenar por fecha del permiso</option>
+                  <option value="request_type">Ordenar por tipo</option>
+                </select>
               </div>
-              {(vacationSearch || vacationFilterEmployee !== 'all' || vacationFilterDepartment !== 'all' || vacationFilterBranch !== 'all' || vacationFilterStatus !== 'all') && (
+              {(vacationSearch || vacationFilterEmployee !== 'all' || vacationFilterDepartment !== 'all' || vacationFilterBranch !== 'all' || vacationFilterStatus !== 'all' || vacationFilterType !== 'all') && (
                 <div className="flex justify-end">
                   <button
                     type="button"
@@ -3204,6 +3259,7 @@ export function AdminHR() {
                       setVacationFilterDepartment('all');
                       setVacationFilterBranch('all');
                       setVacationFilterStatus('all');
+                      setVacationFilterType('all');
                     }}
                     className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-800"
                   >
@@ -3460,75 +3516,101 @@ export function AdminHR() {
             <div className="space-y-4">
               {requestsDashboard && (
                 <>
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                     {[
                       { label: 'Pendientes', value: requestsDashboard.pending },
                       { label: 'Aprobadas', value: requestsDashboard.approved },
                       { label: 'Rechazadas', value: requestsDashboard.rejected },
                       { label: 'En revisión', value: requestsDashboard.in_review },
                       { label: 'Vencidas', value: requestsDashboard.expired },
-                      { label: 'Horas extras', value: requestsDashboard.overtime_hours },
-                      { label: 'Días incapacidad', value: requestsDashboard.incapacity_days },
-                      { label: 'Vacaciones pendientes', value: requestsDashboard.pending_vacation_days },
                     ].map((item) => (
-                      <Card key={item.label} className="p-4">
-                        <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1">{item.label}</div>
-                        <div className="text-xl font-bold text-gray-900">{item.value}</div>
+                      <Card key={item.label} className="p-3">
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-0.5">{item.label}</div>
+                        <div className="text-lg font-bold text-gray-900">{item.value}</div>
                       </Card>
                     ))}
                   </div>
-                  <div className="grid lg:grid-cols-4 gap-4">
-                    {[
-                      ['Mes', requestsDashboard.charts.by_month],
-                      ['Tipo', requestsDashboard.charts.by_type],
-                      ['Área', requestsDashboard.charts.by_area],
-                      ['Sede', requestsDashboard.charts.by_branch],
-                    ].map(([label, data]) => (
-                      <Card key={label as string} className="p-4">
-                        <div className="flex items-center gap-2 mb-3 text-xs font-semibold text-gray-900">
-                          <BarChart3 size={14} />
-                          Por {label as string}
-                        </div>
-                        <div className="space-y-2">
-                          {(data as Array<{ label: string; value: number }>).slice(0, 5).map((item) => (
-                            <div key={item.label} className="text-xs">
-                              <div className="flex justify-between mb-1 text-gray-600">
-                                <span>{item.label}</span>
-                                <span>{item.value}</span>
-                              </div>
-                              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                                <div className="h-full bg-[#2a4038]" style={{ width: `${Math.min(item.value * 12, 100)}%` }} />
-                              </div>
-                            </div>
-                          ))}
-                          {(data as Array<{ label: string; value: number }>).length === 0 && (
-                            <p className="text-[11px] text-gray-400">Sin datos para los filtros aplicados.</p>
-                          )}
-                        </div>
-                      </Card>
-                    ))}
-                  </div>
-                  {requestsDashboard.charts.by_employee.length > 0 && (
-                    <Card className="p-4">
-                      <div className="flex items-center gap-2 mb-3 text-xs font-semibold text-gray-900">
-                        <Users size={14} />
-                        Solicitudes por empleado
-                      </div>
-                      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                        {requestsDashboard.charts.by_employee.map((item) => (
-                          <button
-                            key={item.employee_id}
-                            type="button"
-                            onClick={() => setVacationFilterEmployee(item.employee_id)}
-                            className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-gray-100 hover:border-gray-200 hover:bg-gray-50 transition-colors text-left"
-                            title="Filtrar solicitudes de este empleado"
-                          >
-                            <span className="text-xs text-gray-700 truncate">{item.label}</span>
-                            <span className="text-xs font-bold text-[#2a4038] flex-shrink-0">{item.value}</span>
-                          </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowVacationCharts((current) => !current)}
+                    className="flex w-full items-center justify-between gap-2 rounded-xl border border-gray-100 bg-white px-4 py-2.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <BarChart3 size={14} className="text-gray-400" />
+                      Estadísticas y desglose (horas extra, incapacidad, por mes/tipo/área/sede/empleado)
+                    </span>
+                    {showVacationCharts ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </button>
+
+                  {showVacationCharts && (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-3 gap-4">
+                        {[
+                          { label: 'Horas extras', value: requestsDashboard.overtime_hours },
+                          { label: 'Días incapacidad', value: requestsDashboard.incapacity_days },
+                          { label: 'Vacaciones pendientes', value: requestsDashboard.pending_vacation_days },
+                        ].map((item) => (
+                          <Card key={item.label} className="p-4">
+                            <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1">{item.label}</div>
+                            <div className="text-xl font-bold text-gray-900">{item.value}</div>
+                          </Card>
                         ))}
                       </div>
-                    </Card>
+                      <div className="grid lg:grid-cols-4 gap-4">
+                        {[
+                          ['Mes', requestsDashboard.charts.by_month],
+                          ['Tipo', requestsDashboard.charts.by_type],
+                          ['Área', requestsDashboard.charts.by_area],
+                          ['Sede', requestsDashboard.charts.by_branch],
+                        ].map(([label, data]) => (
+                          <Card key={label as string} className="p-4">
+                            <div className="flex items-center gap-2 mb-3 text-xs font-semibold text-gray-900">
+                              <BarChart3 size={14} />
+                              Por {label as string}
+                            </div>
+                            <div className="space-y-2">
+                              {(data as Array<{ label: string; value: number }>).slice(0, 5).map((item) => (
+                                <div key={item.label} className="text-xs">
+                                  <div className="flex justify-between mb-1 text-gray-600">
+                                    <span>{item.label}</span>
+                                    <span>{item.value}</span>
+                                  </div>
+                                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                    <div className="h-full bg-[#2a4038]" style={{ width: `${Math.min(item.value * 12, 100)}%` }} />
+                                  </div>
+                                </div>
+                              ))}
+                              {(data as Array<{ label: string; value: number }>).length === 0 && (
+                                <p className="text-[11px] text-gray-400">Sin datos para los filtros aplicados.</p>
+                              )}
+                            </div>
+                          </Card>
+                        ))}
+                      </div>
+                      {requestsDashboard.charts.by_employee.length > 0 && (
+                        <Card className="p-4">
+                          <div className="flex items-center gap-2 mb-3 text-xs font-semibold text-gray-900">
+                            <Users size={14} />
+                            Solicitudes por empleado
+                          </div>
+                          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                            {requestsDashboard.charts.by_employee.map((item) => (
+                              <button
+                                key={item.employee_id}
+                                type="button"
+                                onClick={() => setVacationFilterEmployee(item.employee_id)}
+                                className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-gray-100 hover:border-gray-200 hover:bg-gray-50 transition-colors text-left"
+                                title="Filtrar solicitudes de este empleado"
+                              >
+                                <span className="text-xs text-gray-700 truncate">{item.label}</span>
+                                <span className="text-xs font-bold text-[#2a4038] flex-shrink-0">{item.value}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </Card>
+                      )}
+                    </div>
                   )}
                 </>
               )}
@@ -3580,51 +3662,41 @@ export function AdminHR() {
                             )}
                           </Td>
                           <Td><Badge label={requestStatusLabel(request.status)} color={statusBadge(request.status)} /></Td>
-                          <Td>
-                            <div className="flex items-center justify-center gap-1">
-                              <button onClick={() => openRequestDetailModal(request)} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors" title="Ver detalle">
-                                <Eye size={13} />
-                              </button>
-                              <button onClick={() => handleVacationPdf(request)} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors" title="Ver PDF">
-                                <FileDown size={13} />
-                              </button>
-                              {request.support_document && (
-                                <>
-                                  <a href={getMediaUrl(request.support_document)} target="_blank" rel="noreferrer" className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors" title="Ver soporte adjunto">
-                                    <Paperclip size={13} />
-                                  </a>
-                                  <a href={getMediaUrl(request.support_document)} download={getSupportDocumentName(request.support_document)} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors" title="Descargar soporte">
-                                    <Download size={13} />
-                                  </a>
-                                </>
-                              )}
-                              <button
-                                onClick={() => handleVacationAction(request, 'approve')}
-                                disabled={!['PENDING', 'IN_REVIEW', 'PENDING_HR', 'PENDING_ADMIN'].includes(request.status) || vacationActionId === request.id}
-                                className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-emerald-50 hover:text-emerald-600 transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-gray-400"
-                                title="Aprobar"
-                              >
-                                <Check size={13} />
-                              </button>
-                              <button
-                                onClick={() => handleVacationAction(request, 'reject')}
-                                disabled={!['PENDING', 'IN_REVIEW', 'PENDING_HR', 'PENDING_ADMIN'].includes(request.status) || vacationActionId === request.id}
-                                className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-gray-400"
-                                title="Rechazar"
-                              >
-                                <XCircle size={13} />
-                              </button>
-                              {isAdmin && (
-                                <button
-                                  onClick={() => handleDeleteVacationRequest(request)}
-                                  disabled={deletingVacationId === request.id}
-                                  className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors disabled:opacity-50"
-                                  title="Eliminar solicitud"
-                                >
-                                  <Trash2 size={13} />
-                                </button>
-                              )}
-                            </div>
+                          <Td className={actionsCellCls} onClick={(e) => e.stopPropagation()}>
+                            <ActionsMenu
+                              items={[
+                                { label: 'Ver detalle', icon: Eye, onClick: () => openRequestDetailModal(request) },
+                                { label: 'Ver PDF', icon: FileDown, onClick: () => void handleVacationPdf(request) },
+                                ...(request.support_document ? [
+                                  { label: 'Ver soporte adjunto', icon: Paperclip, onClick: () => window.open(getMediaUrl(request.support_document!), '_blank', 'noopener,noreferrer') },
+                                  { label: 'Descargar soporte', icon: Download, onClick: () => {
+                                    const link = document.createElement('a');
+                                    link.href = getMediaUrl(request.support_document!);
+                                    link.download = getSupportDocumentName(request.support_document!);
+                                    link.click();
+                                  } },
+                                ] : []),
+                                {
+                                  label: 'Aprobar',
+                                  icon: Check,
+                                  onClick: () => handleVacationAction(request, 'approve'),
+                                  disabled: !['PENDING', 'IN_REVIEW', 'PENDING_HR', 'PENDING_ADMIN'].includes(request.status) || vacationActionId === request.id,
+                                },
+                                {
+                                  label: 'Rechazar',
+                                  icon: XCircle,
+                                  onClick: () => handleVacationAction(request, 'reject'),
+                                  disabled: !['PENDING', 'IN_REVIEW', 'PENDING_HR', 'PENDING_ADMIN'].includes(request.status) || vacationActionId === request.id,
+                                },
+                                ...(isAdmin ? [{
+                                  label: 'Eliminar solicitud',
+                                  icon: Trash2,
+                                  onClick: () => handleDeleteVacationRequest(request),
+                                  disabled: deletingVacationId === request.id,
+                                  danger: true,
+                                }] : []),
+                              ]}
+                            />
                           </Td>
                         </tr>
                       );

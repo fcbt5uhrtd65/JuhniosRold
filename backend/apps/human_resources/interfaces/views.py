@@ -36,6 +36,7 @@ from ..infrastructure.models import (
     VacationRequestAttachment,
     VacationRequestHistory,
 )
+from ..infrastructure.request_excel import render_requests_xlsx
 from ..infrastructure.request_list_pdf import render_request_list_pdf
 from ..infrastructure.request_pdf import render_request_pdf
 from ..infrastructure.serializers import (
@@ -494,6 +495,37 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
             as_attachment=True,
             filename=f"solicitudes-rrhh-{timezone.localdate():%Y%m%d}.pdf",
             content_type="application/pdf",
+        )
+
+    @action(detail=False, methods=("get",), url_path="export-xlsx")
+    def export_xlsx(self, request):
+        """Excel descargable de solicitudes, con los mismos filtros del listado
+        (request_type, status, employee__department, employee__branch, búsqueda)
+        más un rango de fechas y orden por fecha de solicitud o por tipo."""
+        queryset = self.filter_queryset(self.get_queryset())
+
+        start_from = request.query_params.get("start_date_from")
+        start_to = request.query_params.get("start_date_to")
+        if start_from:
+            queryset = queryset.filter(start_date__gte=start_from)
+        if start_to:
+            queryset = queryset.filter(end_date__lte=start_to)
+
+        order_by = request.query_params.get("order_by")
+        ordering_map = {
+            "created_at": ("-created_at",),
+            "request_type": ("request_type", "-created_at"),
+            "start_date": ("-start_date",),
+            "employee": ("employee__first_name", "employee__last_name", "-created_at"),
+        }
+        queryset = queryset.order_by(*ordering_map.get(order_by, ("-created_at",)))
+
+        xlsx_buffer = render_requests_xlsx(queryset)
+        return FileResponse(
+            xlsx_buffer,
+            as_attachment=True,
+            filename=f"solicitudes-rrhh-{timezone.localdate():%Y%m%d}.xlsx",
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
 

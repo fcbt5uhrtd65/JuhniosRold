@@ -426,6 +426,7 @@ export interface ListVacationParams {
   department?: string;
   branch?: string;
   search?: string;
+  ordering?: string;
 }
 
 export interface ListPayrollParams {
@@ -500,6 +501,7 @@ export async function getVacationRequests(params?: ListVacationParams): Promise<
     employee__department: params?.department,
     employee__branch: params?.branch,
     search: params?.search,
+    ordering: params?.ordering,
   });
   const res = await api.get<VacationRequest[] | PaginatedResponse<VacationRequest>>(`${REQUESTS_PATH}${query}`);
   return normalizeListResponse(res.data);
@@ -676,6 +678,39 @@ export async function openVacationRequestPdf(id: string): Promise<void> {
   const blob = await response.blob();
   const url = URL.createObjectURL(blob);
   window.open(url, '_blank');
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+export interface ExportRequestsXlsxParams {
+  request_type?: VacationRequestType;
+  status?: HRRequestStatus;
+  employee__department?: string;
+  employee__branch?: string;
+  search?: string;
+  order_by?: 'created_at' | 'request_type' | 'start_date' | 'employee';
+}
+
+/** Descarga el Excel de solicitudes con los mismos filtros aplicados en el listado. */
+export async function exportRequestsXlsx(params?: ExportRequestsXlsxParams): Promise<void> {
+  const token = getAccessToken();
+  if (!token) {
+    throw new Error('Tu sesión expiró. Inicia sesión de nuevo.');
+  }
+  const query = buildQuery({ ...params });
+  const response = await fetch(`${API_BASE_URL}${REQUESTS_PATH}export-xlsx/${query}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error('No se pudo generar el Excel de solicitudes.');
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `solicitudes-rrhh-${new Date().toISOString().slice(0, 10)}.xlsx`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
