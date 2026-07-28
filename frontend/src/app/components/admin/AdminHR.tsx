@@ -106,6 +106,7 @@ import {
   updateEmployeeDocument,
   deleteEmployeeDocument,
   deleteVacationRequest,
+  updateVacationRequest,
   exportRequestsXlsx,
   getEmployeeDocuments,
   getHRNotifications,
@@ -1331,6 +1332,9 @@ export function AdminHR() {
     end_time: '',
   });
   const [savingScheduleCorrection, setSavingScheduleCorrection] = useState(false);
+  const [editingRequest, setEditingRequest] = useState<VacationRequest | null>(null);
+  const [editingRequestForm, setEditingRequestForm] = useState({ reason: '', description: '', observations: '' });
+  const [savingRequestEdit, setSavingRequestEdit] = useState(false);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
@@ -2379,6 +2383,39 @@ export function AdminHR() {
       toast.error(error instanceof Error ? error.message : 'No se pudo corregir la solicitud');
     } finally {
       setSavingScheduleCorrection(false);
+    }
+  };
+
+  const openEditRequestModal = (request: VacationRequest) => {
+    setEditingRequest(request);
+    setEditingRequestForm({
+      reason: request.reason ?? '',
+      description: request.description ?? '',
+      observations: request.observations ?? '',
+    });
+  };
+
+  const closeEditRequestModal = () => {
+    setEditingRequest(null);
+  };
+
+  const handleSaveRequestEdit = async () => {
+    if (!editingRequest) return;
+    setSavingRequestEdit(true);
+    try {
+      await updateVacationRequest(editingRequest.id, {
+        reason: editingRequestForm.reason,
+        description: editingRequestForm.description,
+        observations: editingRequestForm.observations,
+      });
+      toast.success('Solicitud actualizada');
+      closeEditRequestModal();
+      await loadVacationRows();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo actualizar la solicitud');
+    } finally {
+      setSavingRequestEdit(false);
     }
   };
 
@@ -3740,9 +3777,14 @@ export function AdminHR() {
                                     link.click();
                                   } },
                                 ] : []),
+                                ...(canManageAccessCredentials ? [{
+                                  label: 'Editar',
+                                  icon: Edit2,
+                                  onClick: () => openEditRequestModal(request),
+                                }] : []),
                                 ...(canManageAccessCredentials && request.request_type !== 'LOAN' ? [{
                                   label: 'Corregir fecha/hora',
-                                  icon: Edit2,
+                                  icon: CalendarClock,
                                   onClick: () => openCorrectScheduleModal(request),
                                   disabled: !CORRECTABLE_STATUSES.includes(request.status),
                                 }] : []),
@@ -4242,6 +4284,55 @@ export function AdminHR() {
             </button>
           </div>
         </div>
+      </Modal>
+
+      <Modal title="Editar solicitud" open={Boolean(editingRequest)} onClose={closeEditRequestModal}>
+        {editingRequest && (
+          <div className="space-y-4">
+            <p className="text-xs text-gray-500">
+              Edita el motivo, la descripción o las observaciones de la solicitud {editingRequest.request_number || ''}.
+            </p>
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Motivo</label>
+              <textarea
+                value={editingRequestForm.reason}
+                onChange={(event) => setEditingRequestForm({ ...editingRequestForm, reason: event.target.value })}
+                rows={3}
+                className={inputCls + ' resize-none'}
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Descripción</label>
+              <textarea
+                value={editingRequestForm.description}
+                onChange={(event) => setEditingRequestForm({ ...editingRequestForm, description: event.target.value })}
+                rows={3}
+                className={inputCls + ' resize-none'}
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Observaciones</label>
+              <textarea
+                value={editingRequestForm.observations}
+                onChange={(event) => setEditingRequestForm({ ...editingRequestForm, observations: event.target.value })}
+                rows={3}
+                className={inputCls + ' resize-none'}
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={closeEditRequestModal} className="px-4 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+                Cancelar
+              </button>
+              <button
+                onClick={() => void handleSaveRequestEdit()}
+                disabled={savingRequestEdit}
+                className="px-4 py-2 bg-[#2a4038] rounded-lg text-xs font-semibold text-white hover:bg-[#3d5c4e] transition-colors disabled:opacity-40"
+              >
+                {savingRequestEdit ? 'Guardando...' : 'Guardar cambios'}
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       <Modal title="Corregir fecha/hora" open={Boolean(correctingRequest)} onClose={closeCorrectScheduleModal}>

@@ -528,6 +528,12 @@ export async function getRequestsDashboard(params?: ListVacationParams): Promise
   throw new Error(res.message);
 }
 
+export async function updateVacationRequest(id: string, payload: Partial<VacationRequestPayload>): Promise<VacationRequest> {
+  const res = await api.patch<VacationRequest>(`${REQUESTS_PATH}${id}/`, buildVacationRequestBody(payload as Omit<VacationRequestPayload, 'employee'>));
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
 export async function createVacationRequest(payload: VacationRequestPayload): Promise<VacationRequest> {
   const res = await api.post<VacationRequest>(
     REQUESTS_PATH,
