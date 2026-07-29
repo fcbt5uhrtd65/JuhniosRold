@@ -23,6 +23,7 @@ import {
   Truck,
   FlaskConical,
   HandCoins,
+  Settings,
 } from 'lucide-react';
 
 interface AdminLayoutProps {
@@ -35,6 +36,28 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
   const { currentUser, logout } = useAdmin();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
+
+  const employeeAccessRoles = [
+    'ADMIN',
+    'SELLER',
+    'DISTRIBUTOR',
+    'RRHH',
+    'EMPLEADO',
+    'PEDIDOS',
+    'PLANEACION',
+    'DISPENSADOR',
+    'VERIFICADOR_DISPENSACION',
+    'OPERARIO_PRODUCCION',
+    'SUPERVISOR_PRODUCCION',
+    'OPERARIO_LLENADO',
+    'OPERARIO_ACONDICIONAMIENTO',
+    'ASEGURAMIENTO_CALIDAD',
+    'CONTROL_CALIDAD',
+    'DIRECTOR_TECNICO',
+    'AUDITOR',
+    'CONTABILIDAD',
+    'TESORERIA',
+  ];
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['ADMIN', 'SELLER'] },
@@ -69,6 +92,7 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
     { id: 'reports', label: 'Reportes', icon: BarChart3, roles: ['ADMIN', 'SELLER'] },
     { id: 'hr', label: 'RRHH', icon: Briefcase, roles: ['ADMIN', 'RRHH'] },
     { id: 'employee-portal', label: 'Mis solicitudes', icon: CalendarClock, roles: ['ADMIN', 'SELLER', 'DISTRIBUTOR', 'RRHH', 'EMPLEADO', 'PEDIDOS'] },
+    { id: 'employee-settings', label: 'Configuración', icon: Settings, roles: employeeAccessRoles },
     { id: 'loans', label: 'Préstamos', icon: HandCoins, roles: ['ADMIN', 'RRHH', 'CONTABILIDAD', 'TESORERIA'] },
     { id: 'roles', label: 'Roles', icon: Shield, roles: ['ADMIN'] },
     { id: 'components', label: 'Permisos', icon: Puzzle, roles: ['ADMIN'] },

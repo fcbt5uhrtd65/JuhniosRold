@@ -398,7 +398,16 @@ class EmployeeSelfServiceSerializer(EmployeeSerializer):
     exclusive to RRHH/ADMIN via the regular EmployeeViewSet endpoints.
     """
 
+    current_password = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+        trim_whitespace=False,
+    )
+
     SELF_SERVICE_READ_ONLY_FIELDS = (
+        "user",
         "employee_code",
         "profile_status",
         "department",
@@ -432,6 +441,14 @@ class EmployeeSelfServiceSerializer(EmployeeSerializer):
         return fields
 
     def validate(self, attrs):
+        current_password = str(attrs.pop("current_password", "") or "")
+        new_password = str(attrs.get("user_password") or "")
+        user = getattr(self.instance, "user", None)
+        if new_password and user and user.has_usable_password() and not user.check_password(current_password):
+            raise serializers.ValidationError({"current_password": ["La contraseña actual no es correcta."]})
+        attrs.pop("user", None)
+        attrs.pop("user_email", None)
+        attrs.pop("user_email_confirm", None)
         attrs.pop("user_role", None)
         attrs.pop("user_additional_roles", None)
         return super().validate(attrs)

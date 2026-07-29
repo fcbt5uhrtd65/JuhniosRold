@@ -301,6 +301,7 @@ export interface EmployeePayload {
   user_additional_roles?: UserRole[];
   user_email?: string;
   user_email_confirm?: string;
+  current_password?: string;
   user_password?: string;
   user_password_confirm?: string;
   employee_code?: string;

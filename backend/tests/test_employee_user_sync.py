@@ -4,6 +4,7 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from apps.employees.infrastructure.models import Department, Employee, Position
+from apps.identity.infrastructure.models import Role
 
 
 class EmployeeUserSyncTests(TestCase):
@@ -94,3 +95,59 @@ class EmployeeUserSyncTests(TestCase):
         employee.refresh_from_db()
         self.assertEqual(employee.user.role.code, "RRHH")
         self.assertTrue(employee.user.check_password("UpdatedPass123!"))
+
+    def test_employee_self_service_updates_allowed_data_and_access_password_only(self):
+        employee_user = get_user_model().objects.create_user(
+            email="empleada@example.com",
+            password="InitialPass123!",
+            first_name="Marta",
+            last_name="Lopez",
+            role=Role.objects.get(code="EMPLEADO"),
+        )
+        employee = Employee.objects.create(
+            user=employee_user,
+            employee_code="EMP-902",
+            document_number="1098765434",
+            first_name="Marta",
+            last_name="Lopez",
+            email="empleada@example.com",
+            phone="3001234569",
+            address="Calle 1 #2-3",
+            department=self.department,
+            position=self.position,
+            hire_date="2025-01-17",
+            status=Employee.Status.ACTIVE,
+            base_salary=1500000,
+            access_password="InitialPass123!",
+        )
+
+        self.client.force_authenticate(employee_user)
+        response = self.client.patch(
+            "/api/v1/employees/me/",
+            {
+                "phone": "3112223344",
+                "eps": "Nueva EPS",
+                "bank_name": "Bancolombia",
+                "bank_account_type": "SAVINGS",
+                "bank_account_number": "123456789",
+                "emergency_contact_name": "Ana Lopez",
+                "emergency_contact_relationship": "Hermana",
+                "emergency_contact_mobile": "3000000000",
+                "base_salary": "9999999",
+                "current_password": "InitialPass123!",
+                "user_password": "UpdatedPass123!",
+                "user_password_confirm": "UpdatedPass123!",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        employee.refresh_from_db()
+        employee_user.refresh_from_db()
+        self.assertEqual(employee.phone, "3112223344")
+        self.assertEqual(employee.eps, "Nueva EPS")
+        self.assertEqual(employee.bank_name, "Bancolombia")
+        self.assertEqual(employee.emergency_contact_name, "Ana Lopez")
+        self.assertEqual(str(employee.base_salary), "1500000.00")
+        self.assertEqual(employee.access_password, "UpdatedPass123!")
+        self.assertTrue(employee_user.check_password("UpdatedPass123!"))

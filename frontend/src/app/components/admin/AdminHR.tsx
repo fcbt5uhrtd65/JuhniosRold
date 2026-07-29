@@ -534,6 +534,34 @@ function getRequestScheduleLabel(request: VacationRequest): string {
   return dateLabel;
 }
 
+function getDateRangeKeys(startDate: string, endDate: string): string[] {
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T00:00:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return [];
+
+  const keys: string[] = [];
+  const cursor = new Date(start);
+  while (cursor.getTime() <= end.getTime()) {
+    keys.push(toDateKey(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return keys;
+}
+
+function getRequestCalendarDateKeys(request: VacationRequest): string[] {
+  if (request.request_type === 'OVERTIME') {
+    const shiftDateKeys = new Set<string>();
+    for (const shift of request.overtime_shifts ?? []) {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(shift.date)) {
+        shiftDateKeys.add(shift.date);
+      }
+    }
+    if (shiftDateKeys.size > 0) return [...shiftDateKeys];
+  }
+
+  return getDateRangeKeys(request.start_date, request.end_date);
+}
+
 function formatCurrency(amount: number | string | null | undefined): string {
   const parsed = typeof amount === 'number' ? amount : Number(amount ?? 0);
   return new Intl.NumberFormat('es-CO', {
@@ -1643,17 +1671,11 @@ export function AdminHR() {
       if (calendarTypeFilter !== 'all' && request.request_type !== calendarTypeFilter) continue;
       if (calendarDepartmentFilter !== 'all' && employee?.department !== calendarDepartmentFilter) continue;
 
-      const start = new Date(`${request.start_date}T00:00:00`);
-      const end = new Date(`${request.end_date}T00:00:00`);
-      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) continue;
-
-      const cursor = new Date(start);
-      while (cursor.getTime() <= end.getTime()) {
-        const key = toDateKey(cursor);
+      const calendarDateKeys = getRequestCalendarDateKeys(request);
+      for (const key of calendarDateKeys) {
         const existing = map.get(key) ?? [];
         existing.push({ request, employee });
         map.set(key, existing);
-        cursor.setDate(cursor.getDate() + 1);
       }
     }
     return map;
