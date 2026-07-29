@@ -303,6 +303,11 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
                 {"detail": "No tienes permiso para resolver esta solicitud."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        raw_is_remunerated = request.data.get("is_remunerated")
+        is_remunerated = None
+        if raw_is_remunerated is not None and raw_is_remunerated != "":
+            is_remunerated = str(raw_is_remunerated).strip().lower() in ("true", "1", "yes")
+
         try:
             vacation = ResolveVacationRequestByRole().execute(
                 vacation,
@@ -311,6 +316,7 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
                 role,
                 request.data.get("comment", ""),
                 request.FILES.get("signature_override"),
+                is_remunerated,
             )
         except BusinessRuleViolation as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
@@ -557,7 +563,7 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
         """Excel descargable de solicitudes, con los mismos filtros del listado
         (request_type, status, employee__department, employee__branch, búsqueda)
         más un rango de fechas y orden por fecha de solicitud o por tipo."""
-        queryset = self.filter_queryset(self.get_queryset())
+        queryset = self.filter_queryset(self.get_queryset()).prefetch_related("overtime_shifts")
 
         start_from = request.query_params.get("start_date_from")
         start_to = request.query_params.get("start_date_to")

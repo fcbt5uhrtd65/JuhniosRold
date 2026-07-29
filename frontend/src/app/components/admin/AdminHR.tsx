@@ -1316,6 +1316,7 @@ export function AdminHR() {
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [approvingRequest, setApprovingRequest] = useState<VacationRequest | null>(null);
   const [decisionSignatureFile, setDecisionSignatureFile] = useState<File | null>(null);
+  const [approveIsRemunerated, setApproveIsRemunerated] = useState(true);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [viewingEmployee, setViewingEmployee] = useState<Employee | null>(null);
   const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
@@ -2235,6 +2236,7 @@ export function AdminHR() {
       return;
     }
     setApprovingRequest(request);
+    setApproveIsRemunerated(request.is_remunerated ?? request.request_type === 'OVERTIME');
     setShowApproveModal(true);
   };
 
@@ -2268,11 +2270,18 @@ export function AdminHR() {
     setDecisionSignatureFile(null);
   };
 
+  const isRRHH = currentUser?.rol === 'RRHH';
+
   const confirmApproveVacation = async () => {
     if (!approvingRequest) return;
     setVacationActionId(approvingRequest.id);
     try {
-      await approveVacationRequest(approvingRequest.id, '', decisionSignatureFile);
+      await approveVacationRequest(
+        approvingRequest.id,
+        '',
+        decisionSignatureFile,
+        isRRHH ? approveIsRemunerated : null,
+      );
       toast.success('Solicitud aprobada');
       await Promise.all([loadVacationRows(), loadRequestsDashboard(), loadData()]);
       closeApproveModal();
@@ -4106,6 +4115,10 @@ export function AdminHR() {
                         : `${parseDate(viewingRequest.end_date)} · ${formatTime(viewingRequest.end_time)}`,
                     ],
                     ['Días / horas', `${viewingRequest.days_count ?? 0} días · ${viewingRequest.hours_count ?? 0} horas`],
+                    ...(viewingRequest.request_type !== 'LOAN' ? [[
+                      'Remunerado',
+                      viewingRequest.is_remunerated === null ? 'Sin decidir' : viewingRequest.is_remunerated ? 'Sí' : 'No',
+                    ]] : []),
                   ].map(([label, value]) => (
                     <div key={label} className="border border-gray-100 rounded-xl p-4 bg-gray-50/60">
                       <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1">{label}</div>
@@ -4278,6 +4291,36 @@ export function AdminHR() {
           <p className="text-xs text-gray-500">
             Vas a aprobar la solicitud {approvingRequest?.request_number || ''}. Esta acción quedará registrada en el historial.
           </p>
+          {isRRHH && approvingRequest?.request_type !== 'LOAN' && (
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">
+                ¿Es remunerado?
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setApproveIsRemunerated(true)}
+                  className={`px-3 py-2 rounded-lg border text-xs font-medium transition-colors ${
+                    approveIsRemunerated ? 'border-[#2a4038] bg-[#2a4038]/5 text-[#2a4038]' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  Sí, remunerado
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setApproveIsRemunerated(false)}
+                  className={`px-3 py-2 rounded-lg border text-xs font-medium transition-colors ${
+                    !approveIsRemunerated ? 'border-[#2a4038] bg-[#2a4038]/5 text-[#2a4038]' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  No remunerado
+                </button>
+              </div>
+              {approvingRequest?.request_type === 'OVERTIME' && (
+                <p className="mt-1.5 text-[11px] text-gray-400">Las horas extra vienen marcadas como remuneradas por defecto.</p>
+              )}
+            </div>
+          )}
           <SignaturePad
             label="Tu firma para esta aprobación"
             helperText="Se usará tu firma guardada por defecto. Si quieres firmar distinto solo para esta solicitud, dibuja o sube una firma aquí."

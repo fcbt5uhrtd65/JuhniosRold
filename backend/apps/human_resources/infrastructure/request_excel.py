@@ -1,7 +1,10 @@
 import io
+from datetime import datetime
 
 from openpyxl import Workbook
 from openpyxl.styles import Font
+
+from .overtime_pay import summarize_shift
 
 COLUMNS = [
     ("numero", "N.º solicitud"),
@@ -15,11 +18,42 @@ COLUMNS = [
     ("fecha_fin", "Fecha fin"),
     ("dias", "Días"),
     ("horas", "Horas"),
+    ("desglose_recargo", "Desglose de recargo (horas extra)"),
+    ("remunerado", "Remunerado"),
     ("estado", "Estado"),
     ("motivo", "Motivo"),
     ("monto_prestamo", "Monto préstamo"),
     ("num_egreso", "N.º egreso"),
 ]
+
+
+def _remunerated_label(request):
+    if request.is_remunerated is None:
+        return "Sin decidir"
+    return "Sí" if request.is_remunerated else "No"
+
+
+def _overtime_breakdown_label(request):
+    if request.request_type != "OVERTIME":
+        return "-"
+
+    shifts = list(request.overtime_shifts.all())
+    if shifts:
+        parts = []
+        for shift in shifts:
+            start_dt = datetime.combine(shift.date, shift.start_time)
+            end_dt = datetime.combine(shift.date, shift.end_time)
+            if end_dt <= start_dt:
+                continue
+            parts.append(f"{shift.date:%d/%m}: {summarize_shift(start_dt, end_dt)}")
+        return " | ".join(parts) if parts else "-"
+
+    if request.start_time and request.end_time:
+        start_dt = datetime.combine(request.start_date, request.start_time)
+        end_dt = datetime.combine(request.start_date, request.end_time)
+        if end_dt > start_dt:
+            return summarize_shift(start_dt, end_dt)
+    return "-"
 
 
 def _safe(value, default="-"):
@@ -51,6 +85,8 @@ def _row(request):
         "fecha_fin": _date(request.end_date),
         "dias": float(request.days_count) if request.days_count is not None else "-",
         "horas": float(request.hours_count) if request.hours_count is not None else "-",
+        "desglose_recargo": _overtime_breakdown_label(request),
+        "remunerado": _remunerated_label(request),
         "estado": request.get_status_display(),
         "motivo": request.reason or request.description or "-",
         "monto_prestamo": float(request.loan_amount) if request.loan_amount is not None else "-",

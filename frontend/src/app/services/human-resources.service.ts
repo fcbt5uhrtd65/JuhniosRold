@@ -235,6 +235,9 @@ export interface VacationRequest {
   loan_installments_count: number | null;
   loan_expense_number: string;
   loan_requester_signature: string | null;
+  is_remunerated: boolean | null;
+  remuneration_decided_by: string | null;
+  remuneration_decided_at: string | null;
   status: HRRequestStatus;
   reviewed_by: string | null;
   reviewed_at: string | null;
@@ -632,18 +635,35 @@ export async function getLoanRequests(params?: { page?: number; limit?: number }
   return normalizeListResponse(res.data);
 }
 
-function buildDecisionBody(comment: string, signatureFile?: File | null): FormData | { comment: string } {
+function buildDecisionBody(
+  comment: string,
+  signatureFile?: File | null,
+  isRemunerated?: boolean | null,
+): FormData | { comment: string; is_remunerated?: boolean } {
   if (signatureFile) {
     const formData = new FormData();
     formData.append('comment', comment);
     formData.append('signature_override', signatureFile);
+    if (isRemunerated !== null && isRemunerated !== undefined) {
+      formData.append('is_remunerated', String(isRemunerated));
+    }
     return formData;
   }
-  return { comment };
+  return {
+    comment,
+    ...(isRemunerated !== null && isRemunerated !== undefined ? { is_remunerated: isRemunerated } : {}),
+  };
 }
 
-export async function approveVacationRequest(id: string, comment = '', signatureFile?: File | null): Promise<VacationRequest> {
-  const res = await api.post<VacationRequest>(`${REQUESTS_PATH}${id}/approve/`, buildDecisionBody(comment, signatureFile));
+/** ``isRemunerated`` solo lo deciden RRHH/Admin al aprobar (nunca el jefe
+ * inmediato); pásalo únicamente cuando el que aprueba tenga ese control en pantalla. */
+export async function approveVacationRequest(
+  id: string,
+  comment = '',
+  signatureFile?: File | null,
+  isRemunerated?: boolean | null,
+): Promise<VacationRequest> {
+  const res = await api.post<VacationRequest>(`${REQUESTS_PATH}${id}/approve/`, buildDecisionBody(comment, signatureFile, isRemunerated));
   if (res.data) return res.data;
   throw new Error(res.message);
 }

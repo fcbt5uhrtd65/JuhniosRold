@@ -212,12 +212,21 @@ class ResolveVacationRequestByRole:
         )
         return vacation
 
-    def execute(self, vacation, decision, reviewer, role, comment="", signature_override=None):
+    def execute(self, vacation, decision, reviewer, role, comment="", signature_override=None, is_remunerated=None):
         if role not in ("ADMIN", "HR", "MANAGER"):
             raise BusinessRuleViolation("Rol no autorizado para resolver solicitudes.")
 
         if role == "MANAGER":
             return self._resolve_manager_step(vacation, decision, reviewer, comment, signature_override)
+
+        # Si la solicitud es remunerada o no es una decisión exclusiva de Recursos
+        # Humanos: ni el jefe inmediato ni el Administrador la marcan, solo RRHH,
+        # y únicamente cuando aprueba explícitamente.
+        if role == "HR" and is_remunerated is not None and decision == VacationRequest.Status.APPROVED:
+            vacation.is_remunerated = is_remunerated
+            vacation.remuneration_decided_by = reviewer
+            vacation.remuneration_decided_at = timezone.now()
+            vacation.save(update_fields=("is_remunerated", "remuneration_decided_by", "remuneration_decided_at", "updated_at"))
 
         already_decided_by_role = (
             vacation.admin_decision if role == "ADMIN" else vacation.hr_decision
