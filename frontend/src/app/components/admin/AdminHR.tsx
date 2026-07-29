@@ -2275,12 +2275,13 @@ export function AdminHR() {
   const confirmApproveVacation = async () => {
     if (!approvingRequest) return;
     setVacationActionId(approvingRequest.id);
+    const canDecideRemuneration = isRRHH && approvingRequest.request_type !== 'LOAN' && approvingRequest.request_type !== 'OVERTIME';
     try {
       await approveVacationRequest(
         approvingRequest.id,
         '',
         decisionSignatureFile,
-        isRRHH ? approveIsRemunerated : null,
+        canDecideRemuneration ? approveIsRemunerated : null,
       );
       toast.success('Solicitud aprobada');
       await Promise.all([loadVacationRows(), loadRequestsDashboard(), loadData()]);
@@ -4291,7 +4292,7 @@ export function AdminHR() {
           <p className="text-xs text-gray-500">
             Vas a aprobar la solicitud {approvingRequest?.request_number || ''}. Esta acción quedará registrada en el historial.
           </p>
-          {isRRHH && approvingRequest?.request_type !== 'LOAN' && (
+          {isRRHH && approvingRequest?.request_type !== 'LOAN' && approvingRequest?.request_type !== 'OVERTIME' && (
             <div>
               <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">
                 ¿Es remunerado?
@@ -4316,9 +4317,6 @@ export function AdminHR() {
                   No remunerado
                 </button>
               </div>
-              {approvingRequest?.request_type === 'OVERTIME' && (
-                <p className="mt-1.5 text-[11px] text-gray-400">Las horas extra vienen marcadas como remuneradas por defecto.</p>
-              )}
             </div>
           )}
           <SignaturePad

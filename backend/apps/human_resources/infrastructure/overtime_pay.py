@@ -56,9 +56,10 @@ def _split_points(day: date) -> list[time]:
     return sorted(points)
 
 
-def _classify_segment(day: date, segment_start: time, is_extra: bool) -> tuple[str, Decimal]:
+def _classify_segment(day: date, segment_start: time, is_extra: bool) -> tuple[str, Decimal, bool]:
     """Clasifica un segmento horario (que no cruza medianoche ni un punto de
-    corte diurno/nocturno) y devuelve (etiqueta, porcentaje total de recargo)."""
+    corte diurno/nocturno) y devuelve (etiqueta, porcentaje total de recargo,
+    es_nocturno)."""
     night_start = _night_start_for(day)
     is_night = segment_start >= night_start or segment_start < DAY_START
     is_sunday = day.weekday() == 6
@@ -71,7 +72,7 @@ def _classify_segment(day: date, segment_start: time, is_extra: bool) -> tuple[s
         else:
             pct = sunday_pct + (Decimal("35") if is_night else Decimal("0"))
             label = "Dominical nocturna ordinaria" if is_night else "Dominical diurna ordinaria"
-        return label, pct
+        return label, pct, is_night
 
     if is_extra:
         pct = Decimal("75") if is_night else Decimal("25")
@@ -79,7 +80,7 @@ def _classify_segment(day: date, segment_start: time, is_extra: bool) -> tuple[s
     else:
         pct = Decimal("35") if is_night else Decimal("0")
         label = "Ordinaria nocturna" if is_night else "Ordinaria diurna"
-    return label, pct
+    return label, pct, is_night
 
 
 def classify_shift(start_dt: datetime, end_dt: datetime, is_extra: bool = True) -> list[dict]:
@@ -108,12 +109,25 @@ def classify_shift(start_dt: datetime, end_dt: datetime, is_extra: bool = True) 
         for seg_start, seg_end in zip(boundaries, boundaries[1:]):
             if seg_end <= seg_start:
                 continue
-            label, pct = _classify_segment(day, seg_start.time(), is_extra)
+            label, pct, is_night = _classify_segment(day, seg_start.time(), is_extra)
             minutes = int((seg_end - seg_start).total_seconds() // 60)
-            segments.append({"label": label, "surcharge_pct": pct, "minutes": minutes})
+            segments.append({"label": label, "surcharge_pct": pct, "minutes": minutes, "is_night": is_night})
         cursor = chunk_end
 
     return segments
+
+
+def hours_breakdown(start_dt: datetime, end_dt: datetime, is_extra: bool = True) -> dict:
+    """Total de horas diurnas y nocturnas de un turno (en horas decimales,
+    ej. 2.5), más el total general — para columnas separadas del Excel."""
+    segments = classify_shift(start_dt, end_dt, is_extra=is_extra)
+    day_minutes = sum(seg["minutes"] for seg in segments if not seg["is_night"])
+    night_minutes = sum(seg["minutes"] for seg in segments if seg["is_night"])
+    return {
+        "day_hours": round(day_minutes / 60, 2),
+        "night_hours": round(night_minutes / 60, 2),
+        "total_hours": round((day_minutes + night_minutes) / 60, 2),
+    }
 
 
 def summarize_shift(start_dt: datetime, end_dt: datetime, is_extra: bool = True) -> str:
