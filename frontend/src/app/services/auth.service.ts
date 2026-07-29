@@ -25,7 +25,8 @@ export type UserRole =
   | 'CONTROL_CALIDAD'
   | 'DIRECTOR_TECNICO'
   | 'AUDITOR'
-  | 'CONTABILIDAD';
+  | 'CONTABILIDAD'
+  | 'TESORERIA';
 
 export interface AuthUser {
   id: string;

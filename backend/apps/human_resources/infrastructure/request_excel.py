@@ -35,6 +35,10 @@ COLUMNS = [
 
 
 def _remunerated_label(request):
+    # Las horas extra son remuneradas por definición: no requieren decisión
+    # del Administrador, a diferencia de permisos/licencias.
+    if request.request_type == "OVERTIME":
+        return "Sí"
     if request.is_remunerated is None:
         return "Sin decidir"
     return "Sí" if request.is_remunerated else "No"
@@ -43,17 +47,15 @@ def _remunerated_label(request):
 def _non_remunerated_action_label(request):
     """Para permisos/licencias marcados como NO remunerados: se descuenta de las
     horas/días del empleado, nunca de dinero. Si es remunerado, el permiso queda
-    normal (ni se paga de más ni se resta)."""
+    normal (ni se paga de más ni se resta). Las horas extra siempre se pagan."""
     if request.request_type == "LOAN":
         return "-"
+    if request.request_type == "OVERTIME":
+        return "Normal (no se descuenta ni se paga de más)"
     if request.is_remunerated is None:
         return "Sin decidir"
     if request.is_remunerated:
         return "Normal (no se descuenta ni se paga de más)"
-
-    if request.request_type == "OVERTIME":
-        total_hours = float(request.hours_count) if request.hours_count is not None else 0
-        return f"No se pagan estas {total_hours:g} h; no se descuentan del salario."
 
     if request.hours_count not in (None, ""):
         return f"Descontar {float(request.hours_count):g} h de tiempo (no de salario)."

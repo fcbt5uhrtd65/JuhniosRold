@@ -69,7 +69,7 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
     { id: 'reports', label: 'Reportes', icon: BarChart3, roles: ['ADMIN', 'SELLER'] },
     { id: 'hr', label: 'RRHH', icon: Briefcase, roles: ['ADMIN', 'RRHH'] },
     { id: 'employee-portal', label: 'Mis solicitudes', icon: CalendarClock, roles: ['ADMIN', 'SELLER', 'DISTRIBUTOR', 'RRHH', 'EMPLEADO', 'PEDIDOS'] },
-    { id: 'loans', label: 'Préstamos', icon: HandCoins, roles: ['ADMIN', 'RRHH', 'CONTABILIDAD'] },
+    { id: 'loans', label: 'Préstamos', icon: HandCoins, roles: ['ADMIN', 'RRHH', 'CONTABILIDAD', 'TESORERIA'] },
     { id: 'roles', label: 'Roles', icon: Shield, roles: ['ADMIN'] },
     { id: 'components', label: 'Permisos', icon: Puzzle, roles: ['ADMIN'] },
   ] as const;

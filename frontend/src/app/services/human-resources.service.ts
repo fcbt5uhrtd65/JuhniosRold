@@ -659,8 +659,10 @@ function buildDecisionBody(
   };
 }
 
-/** ``isRemunerated`` solo lo deciden RRHH/Admin al aprobar (nunca el jefe
- * inmediato); pásalo únicamente cuando el que aprueba tenga ese control en pantalla. */
+/** ``isRemunerated`` es una decisión exclusiva del Administrador (nunca RRHH ni
+ * el jefe inmediato); pásalo únicamente cuando quien aprueba sea Admin y tenga
+ * ese control en pantalla. Se puede definir aquí al aprobar, o después con
+ * ``setRequestRemuneration``. */
 export async function approveVacationRequest(
   id: string,
   comment = '',
@@ -674,6 +676,15 @@ export async function approveVacationRequest(
 
 export async function rejectVacationRequest(id: string, comment = '', signatureFile?: File | null): Promise<VacationRequest> {
   const res = await api.post<VacationRequest>(`${REQUESTS_PATH}${id}/reject/`, buildDecisionBody(comment, signatureFile));
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
+/** Define si la solicitud es remunerada o no, en cualquier momento (incluso ya
+ * aprobada) — exclusivo del Administrador. Una vez guardada queda bloqueada
+ * de forma permanente; llamar de nuevo sobre la misma solicitud falla. */
+export async function setRequestRemuneration(id: string, isRemunerated: boolean): Promise<VacationRequest> {
+  const res = await api.post<VacationRequest>(`${REQUESTS_PATH}${id}/set-remuneration/`, { is_remunerated: isRemunerated });
   if (res.data) return res.data;
   throw new Error(res.message);
 }

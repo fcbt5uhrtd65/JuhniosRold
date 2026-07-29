@@ -22,6 +22,7 @@ from shared.domain.exceptions import BusinessRuleViolation
 
 from ..application.use_cases import (
     CreateOvertimeRequestWithShifts,
+    DefineRequestRemuneration,
     RegisterCheckIn,
     RegisterCheckOut,
     ResolveVacationRequestByRole,
@@ -109,7 +110,7 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
         return queryset
 
     def get_permissions(self):
-        if self.action in {"me", "team", "loans", "approve", "reject", "destroy", "correct_schedule"}:
+        if self.action in {"me", "team", "loans", "approve", "reject", "destroy", "correct_schedule", "set_remuneration"}:
             return (IsAuthenticated(),)
         self.required_component_action = "view" if self.action in {"list", "retrieve", "dashboard"} else "edit"
         return super().get_permissions()
@@ -306,16 +307,25 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
 
     @staticmethod
     def _resolver_role(user, vacation=None):
+        is_loan = vacation is not None and vacation.request_type == VacationRequest.RequestType.LOAN
+
+        if is_loan:
+            # Los préstamos tienen su propio circuito de aprobación, separado del
+            # resto de solicitudes: solo Administrador o Tesorería deciden
+            # (aprueban/rechazan). RRHH puede VER y descargar el PDF (ya cubierto
+            # por HasComponentAccess en list/retrieve/export), pero no resolver —
+            # y el jefe inmediato tampoco, salvo acceso puntual a préstamos.
+            if getattr(user, "has_full_access", False):
+                return "ADMIN"
+            if getattr(user, "role_code", None) == "TESORERIA":
+                return "HR"
+            return None
+
         if getattr(user, "has_full_access", False):
             return "ADMIN"
         if getattr(user, "role_code", None) == "RRHH":
             return "HR"
         if vacation is not None:
-            # El jefe inmediato no tiene ningún rol de decisión sobre solicitudes de
-            # préstamo de su subordinado: esa información queda reservada a RRHH,
-            # Administrador, Contabilidad o quien tenga acceso puntual habilitado.
-            if vacation.request_type == VacationRequest.RequestType.LOAN and not getattr(user, "can_view_loans", False):
-                return None
             requester_employee = vacation.employee
             manager = getattr(requester_employee, "manager", None)
             if manager is not None and getattr(manager, "user_id", None) == user.id:
@@ -333,10 +343,26 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
                 {"detail": "No tienes permiso para resolver esta solicitud."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+
+        signature_override = request.FILES.get("signature_override")
+        has_saved_signature = bool(getattr(getattr(request.user, "employee_profile", None), "signature", None))
+        if not signature_override and not has_saved_signature:
+            return Response(
+                {
+                    "detail": (
+                        "No tienes una firma registrada. Dibuja o sube tu firma en este formulario, "
+                        "o guárdala primero en tu perfil, para poder aprobar o rechazar."
+                    )
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
         raw_is_remunerated = request.data.get("is_remunerated")
         is_remunerated = None
         if raw_is_remunerated is not None and raw_is_remunerated != "":
             is_remunerated = str(raw_is_remunerated).strip().lower() in ("true", "1", "yes")
+
+        hr_slot_label = "Tesorería" if vacation.request_type == VacationRequest.RequestType.LOAN else "RRHH"
 
         try:
             vacation = ResolveVacationRequestByRole().execute(
@@ -347,6 +373,7 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
                 request.data.get("comment", ""),
                 request.FILES.get("signature_override"),
                 is_remunerated,
+                hr_slot_label,
             )
         except BusinessRuleViolation as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
@@ -359,6 +386,30 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
     @action(detail=True, methods=("post",))
     def reject(self, request, pk=None):
         return self._resolve(request, VacationRequest.Status.REJECTED)
+
+    @action(detail=True, methods=("post",), url_path="set-remuneration")
+    def set_remuneration(self, request, pk=None):
+        """Define si la solicitud es remunerada o no, en cualquier momento
+        (incluso ya aprobada) — decisión exclusiva del Administrador. Una vez
+        guardada queda bloqueada de forma permanente."""
+        if not getattr(request.user, "has_full_access", False):
+            return Response(
+                {"detail": "Solo el Administrador puede definir si una solicitud es remunerada."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        vacation = get_object_or_404(self.get_queryset(), pk=pk)
+
+        raw_is_remunerated = request.data.get("is_remunerated")
+        if raw_is_remunerated is None or raw_is_remunerated == "":
+            return Response({"detail": "Indica si la solicitud es remunerada o no."}, status=status.HTTP_400_BAD_REQUEST)
+        is_remunerated = str(raw_is_remunerated).strip().lower() in ("true", "1", "yes")
+
+        try:
+            vacation = DefineRequestRemuneration().execute(vacation, is_remunerated, request.user)
+        except BusinessRuleViolation as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        return Response(self.get_serializer(vacation).data)
 
     @action(detail=True, methods=("post",))
     def cancel(self, request, pk=None):

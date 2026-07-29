@@ -115,9 +115,12 @@ class VacationRequest(BaseModel):
     reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
     reviewed_at = models.DateTimeField(null=True, blank=True)
 
-    # Decisión de RRHH/Admin sobre si la solicitud es remunerada, tomada al
-    # aprobar (no la elige el empleado). Horas extras nace en True por defecto;
-    # el resto de tipos queda sin decidir (None) hasta que alguien lo marque.
+    # Decisión del Administrador sobre si la solicitud es remunerada. No se
+    # asigna automáticamente al aprobar (ni siquiera para horas extra): queda en
+    # None ("Pendiente por definir") hasta que el Administrador la defina
+    # explícitamente, en el momento de aprobar o después. Una vez guardada
+    # (True o False) queda bloqueada de forma permanente — ni siquiera el propio
+    # Administrador puede volver a cambiarla (ver VacationRequestViewSet.set_remuneration).
     is_remunerated = models.BooleanField(null=True, blank=True)
     remuneration_decided_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -152,8 +155,6 @@ class VacationRequest(BaseModel):
 
     def save(self, *args, **kwargs):
         update_fields = kwargs.get("update_fields")
-        if self.pk is None and self.request_type == self.RequestType.OVERTIME and self.is_remunerated is None:
-            self.is_remunerated = True
         if not self.request_number:
             self.request_number = self.generate_request_number()
             if update_fields is not None:

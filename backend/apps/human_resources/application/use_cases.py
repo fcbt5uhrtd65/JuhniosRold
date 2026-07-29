@@ -156,6 +156,34 @@ class ResolveVacationRequest:
         return vacation
 
 
+class DefineRequestRemuneration:
+    """Define si una solicitud es remunerada o no — decisión exclusiva del
+    Administrador, independiente del acto de aprobar/rechazar: puede tomarse en
+    el mismo momento de aprobar o en cualquier momento posterior, incluso con
+    la solicitud ya aprobada. Una vez guardada (True o False) queda bloqueada
+    de forma permanente: ni una segunda llamada del mismo Administrador puede
+    cambiarla."""
+
+    def execute(self, vacation, is_remunerated, reviewer):
+        if vacation.is_remunerated is not None:
+            raise BusinessRuleViolation(
+                "La remuneración de esta solicitud ya fue definida y no se puede modificar."
+            )
+        vacation.is_remunerated = is_remunerated
+        vacation.remuneration_decided_by = reviewer
+        vacation.remuneration_decided_at = timezone.now()
+        vacation.save(update_fields=("is_remunerated", "remuneration_decided_by", "remuneration_decided_at", "updated_at"))
+        VacationRequestHistory.objects.create(
+            request=vacation,
+            action=VacationRequestHistory.Action.UPDATED,
+            user=reviewer,
+            old_status=vacation.status,
+            new_status=vacation.status,
+            comment=f"[Administrador] Definió la solicitud como {'remunerada' if is_remunerated else 'no remunerada'}.",
+        )
+        return vacation
+
+
 class ResolveVacationRequestByRole:
     """Flujo de responsables: Jefe inmediato (opinión), Administrador y Recursos Humanos.
 
@@ -212,21 +240,25 @@ class ResolveVacationRequestByRole:
         )
         return vacation
 
-    def execute(self, vacation, decision, reviewer, role, comment="", signature_override=None, is_remunerated=None):
+    def execute(self, vacation, decision, reviewer, role, comment="", signature_override=None, is_remunerated=None, hr_slot_label="RRHH"):
         if role not in ("ADMIN", "HR", "MANAGER"):
             raise BusinessRuleViolation("Rol no autorizado para resolver solicitudes.")
+
+        # Para trazabilidad: el slot "HR" normalmente es RRHH, pero en préstamos lo
+        # ocupa Tesorería — hr_slot_label permite que el historial diga el nombre
+        # correcto sin cambiar la lógica de campos (hr_decision, etc., que se
+        # reutilizan igual para ambos casos).
+        display_role = "Administrador" if role == "ADMIN" else hr_slot_label if role == "HR" else role
 
         if role == "MANAGER":
             return self._resolve_manager_step(vacation, decision, reviewer, comment, signature_override)
 
-        # Si la solicitud es remunerada o no es una decisión exclusiva de Recursos
-        # Humanos: ni el jefe inmediato ni el Administrador la marcan, solo RRHH,
-        # y únicamente cuando aprueba explícitamente.
-        if role == "HR" and is_remunerated is not None and decision == VacationRequest.Status.APPROVED:
-            vacation.is_remunerated = is_remunerated
-            vacation.remuneration_decided_by = reviewer
-            vacation.remuneration_decided_at = timezone.now()
-            vacation.save(update_fields=("is_remunerated", "remuneration_decided_by", "remuneration_decided_at", "updated_at"))
+        # Si la solicitud es remunerada lo decide únicamente el Administrador, nunca
+        # RRHH ni el jefe inmediato. Puede definirse en el mismo momento de aprobar
+        # (aquí) o después con DefineRequestRemuneration — en ambos casos, una vez
+        # guardada la decisión queda bloqueada de forma permanente.
+        if role == "ADMIN" and is_remunerated is not None:
+            DefineRequestRemuneration().execute(vacation, is_remunerated, reviewer)
 
         already_decided_by_role = (
             vacation.admin_decision if role == "ADMIN" else vacation.hr_decision
@@ -288,7 +320,7 @@ class ResolveVacationRequestByRole:
                 user=reviewer,
                 old_status=vacation.status,
                 new_status=vacation.status,
-                comment=f"[HR] Traza registrada tras aprobación previa del Administrador: {comment}".strip(),
+                comment=f"[{display_role}] Traza registrada tras aprobación previa del Administrador: {comment}".strip(),
             )
             return vacation
 
@@ -327,12 +359,12 @@ class ResolveVacationRequestByRole:
                 **({"signature": signature_override} if signature_override else {}),
             },
         )
-        history_comment = f"[{role}] {comment}".strip()
+        history_comment = f"[{display_role}] {comment}".strip()
         if disagreement:
-            other_role = "RRHH" if role == "ADMIN" else "Administrador"
+            other_role = hr_slot_label if role == "ADMIN" else "Administrador"
             history_comment = (
                 f"DESACUERDO: {other_role} había registrado '{other_decision}', "
-                f"{('RRHH' if role == 'HR' else 'Administrador')} registró '{decision}'. {history_comment}"
+                f"{display_role} registró '{decision}'. {history_comment}"
             )
         VacationRequestHistory.objects.create(
             request=vacation,

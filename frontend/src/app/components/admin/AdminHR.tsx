@@ -114,6 +114,7 @@ import {
   getVacationRequests,
   openVacationRequestPdf,
   rejectVacationRequest,
+  setRequestRemuneration,
   type EmployeeDocument,
   type EmployeeDocumentStatus,
   type EmployeeDocumentType,
@@ -1319,6 +1320,9 @@ export function AdminHR() {
   const [approvingRequest, setApprovingRequest] = useState<VacationRequest | null>(null);
   const [decisionSignatureFile, setDecisionSignatureFile] = useState<File | null>(null);
   const [approveIsRemunerated, setApproveIsRemunerated] = useState(true);
+  const [remunerationRequest, setRemunerationRequest] = useState<VacationRequest | null>(null);
+  const [remunerationValue, setRemunerationValue] = useState(true);
+  const [savingRemuneration, setSavingRemuneration] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [viewingEmployee, setViewingEmployee] = useState<Employee | null>(null);
   const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
@@ -2279,7 +2283,10 @@ export function AdminHR() {
   const confirmApproveVacation = async () => {
     if (!approvingRequest) return;
     setVacationActionId(approvingRequest.id);
-    const canDecideRemuneration = isRRHH && approvingRequest.request_type !== 'LOAN' && approvingRequest.request_type !== 'OVERTIME';
+    // "Remunerado" es exclusivo de Admin, y solo se puede definir mientras
+    // sigue sin decidir (is_remunerated === null) — una vez guardada queda
+    // bloqueada permanentemente, sin importar el estado de la solicitud.
+    const canDecideRemuneration = isAdmin && approvingRequest.request_type !== 'LOAN' && approvingRequest.request_type !== 'OVERTIME' && approvingRequest.is_remunerated === null;
     try {
       await approveVacationRequest(
         approvingRequest.id,
@@ -2292,9 +2299,34 @@ export function AdminHR() {
       closeApproveModal();
     } catch (error) {
       console.error(error);
-      toast.error('No se pudo procesar la solicitud');
+      toast.error(error instanceof Error ? error.message : 'No se pudo procesar la solicitud');
     } finally {
       setVacationActionId(null);
+    }
+  };
+
+  const openRemunerationModal = (request: VacationRequest) => {
+    setRemunerationValue(true);
+    setRemunerationRequest(request);
+  };
+
+  const closeRemunerationModal = () => {
+    setRemunerationRequest(null);
+  };
+
+  const confirmSetRemuneration = async () => {
+    if (!remunerationRequest) return;
+    setSavingRemuneration(true);
+    try {
+      await setRequestRemuneration(remunerationRequest.id, remunerationValue);
+      toast.success('Remuneración definida. Este dato queda bloqueado y no se puede volver a cambiar.');
+      closeRemunerationModal();
+      await Promise.all([loadVacationRows(), loadRequestsDashboard()]);
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo definir la remuneración');
+    } finally {
+      setSavingRemuneration(false);
     }
   };
 
@@ -2312,7 +2344,7 @@ export function AdminHR() {
       closeRejectModal();
     } catch (error) {
       console.error(error);
-      toast.error('No se pudo procesar la solicitud');
+      toast.error(error instanceof Error ? error.message : 'No se pudo procesar la solicitud');
     } finally {
       setVacationActionId(null);
     }
@@ -3842,6 +3874,11 @@ export function AdminHR() {
                                   onClick: () => openCorrectScheduleModal(request),
                                   disabled: !CORRECTABLE_STATUSES.includes(request.status),
                                 }] : []),
+                                ...(isAdmin && request.request_type !== 'LOAN' && request.request_type !== 'OVERTIME' && request.is_remunerated === null ? [{
+                                  label: 'Definir remuneración',
+                                  icon: Wallet,
+                                  onClick: () => openRemunerationModal(request),
+                                }] : []),
                                 {
                                   label: 'Aprobar',
                                   icon: Check,
@@ -4150,7 +4187,9 @@ export function AdminHR() {
                     ['Días / horas', `${viewingRequest.days_count ?? 0} días · ${viewingRequest.hours_count ?? 0} horas`],
                     ...(viewingRequest.request_type !== 'LOAN' ? [[
                       'Remunerado',
-                      viewingRequest.is_remunerated === null ? 'Sin decidir' : viewingRequest.is_remunerated ? 'Sí' : 'No',
+                      viewingRequest.request_type === 'OVERTIME'
+                        ? 'Remunerado'
+                        : viewingRequest.is_remunerated === null ? 'Pendiente por definir' : viewingRequest.is_remunerated ? 'Remunerado' : 'No remunerado',
                     ]] : []),
                   ].map(([label, value]) => (
                     <div key={label} className="border border-gray-100 rounded-xl p-4 bg-gray-50/60">
@@ -4336,32 +4375,41 @@ export function AdminHR() {
           <p className="text-xs text-gray-500">
             Vas a aprobar la solicitud {approvingRequest?.request_number || ''}. Esta acción quedará registrada en el historial.
           </p>
-          {isRRHH && approvingRequest?.request_type !== 'LOAN' && approvingRequest?.request_type !== 'OVERTIME' && (
-            <div>
-              <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">
-                ¿Es remunerado?
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setApproveIsRemunerated(true)}
-                  className={`px-3 py-2 rounded-lg border text-xs font-medium transition-colors ${
-                    approveIsRemunerated ? 'border-[#2a4038] bg-[#2a4038]/5 text-[#2a4038]' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-                  }`}
-                >
-                  Sí, remunerado
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setApproveIsRemunerated(false)}
-                  className={`px-3 py-2 rounded-lg border text-xs font-medium transition-colors ${
-                    !approveIsRemunerated ? 'border-[#2a4038] bg-[#2a4038]/5 text-[#2a4038]' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-                  }`}
-                >
-                  No remunerado
-                </button>
+          {isAdmin && approvingRequest?.request_type !== 'LOAN' && approvingRequest?.request_type !== 'OVERTIME' && (
+            approvingRequest?.is_remunerated === null ? (
+              <div>
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">
+                  ¿Es remunerado?
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setApproveIsRemunerated(true)}
+                    className={`px-3 py-2 rounded-lg border text-xs font-medium transition-colors ${
+                      approveIsRemunerated ? 'border-[#2a4038] bg-[#2a4038]/5 text-[#2a4038]' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    Sí, remunerado
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setApproveIsRemunerated(false)}
+                    className={`px-3 py-2 rounded-lg border text-xs font-medium transition-colors ${
+                      !approveIsRemunerated ? 'border-[#2a4038] bg-[#2a4038]/5 text-[#2a4038]' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    No remunerado
+                  </button>
+                </div>
+                <p className="mt-1.5 text-[11px] text-gray-400">
+                  Puedes definirlo aquí o después desde el menú de la solicitud. Una vez guardado, no se puede modificar.
+                </p>
               </div>
-            </div>
+            ) : (
+              <p className="text-[11px] text-gray-400">
+                Remuneración ya definida: <span className="font-semibold text-gray-600">{approvingRequest?.is_remunerated ? 'Remunerado' : 'No remunerado'}</span> (bloqueada, no se puede cambiar).
+              </p>
+            )
           )}
           <SignaturePad
             label="Tu firma para esta aprobación"
@@ -4426,6 +4474,48 @@ export function AdminHR() {
                 className="px-4 py-2 bg-[#2a4038] rounded-lg text-xs font-semibold text-white hover:bg-[#3d5c4e] transition-colors disabled:opacity-40"
               >
                 {savingRequestEdit ? 'Guardando...' : 'Guardar cambios'}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal title="Definir remuneración" open={Boolean(remunerationRequest)} onClose={closeRemunerationModal}>
+        {remunerationRequest && (
+          <div className="space-y-4">
+            <p className="text-xs text-gray-500">
+              Vas a definir si la solicitud {remunerationRequest.request_number || ''} es remunerada o no. Esta decisión queda bloqueada de forma permanente una vez guardada — no podrás cambiarla después.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setRemunerationValue(true)}
+                className={`px-3 py-2 rounded-lg border text-xs font-medium transition-colors ${
+                  remunerationValue ? 'border-[#2a4038] bg-[#2a4038]/5 text-[#2a4038]' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                Sí, remunerado
+              </button>
+              <button
+                type="button"
+                onClick={() => setRemunerationValue(false)}
+                className={`px-3 py-2 rounded-lg border text-xs font-medium transition-colors ${
+                  !remunerationValue ? 'border-[#2a4038] bg-[#2a4038]/5 text-[#2a4038]' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                No remunerado
+              </button>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={closeRemunerationModal} className="px-4 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+                Cancelar
+              </button>
+              <button
+                onClick={() => void confirmSetRemuneration()}
+                disabled={savingRemuneration}
+                className="px-4 py-2 bg-[#2a4038] rounded-lg text-xs font-semibold text-white hover:bg-[#3d5c4e] transition-colors disabled:opacity-40"
+              >
+                {savingRemuneration ? 'Guardando...' : 'Guardar decisión'}
               </button>
             </div>
           </div>

@@ -1,11 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BarChart3, ChevronDown, ChevronUp, HandCoins } from 'lucide-react';
+import { BarChart3, Check, ChevronDown, ChevronUp, FileDown, HandCoins, XCircle } from 'lucide-react';
+import { useAdmin } from '../../contexts/AdminContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getEmployees, type Employee } from '../../services/employees.service';
-import { getLoanRequests, type VacationRequest, type VacationRequestStatus } from '../../services/human-resources.service';
-import { Badge, type BadgeColor, Card, Table, Th, Td, LoadingState, EmptyState } from './AdminUI';
+import {
+  approveVacationRequest,
+  getLoanRequests,
+  openVacationRequestPdf,
+  rejectVacationRequest,
+  type VacationRequest,
+  type VacationRequestStatus,
+} from '../../services/human-resources.service';
+import { ActionsMenu, actionsCellCls, Badge, type BadgeColor, Card, Modal, Table, Th, Td, LoadingState, EmptyState } from './AdminUI';
 import { SearchBar } from './SearchBar';
 import { Pagination } from './Pagination';
+import { SignaturePad } from './SignaturePad';
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50];
 
@@ -135,8 +144,15 @@ function BreakdownList({ title, rows, maxTotal }: { title: string; rows: Breakdo
   );
 }
 
+const MANAGEABLE_LOAN_STATUSES: VacationRequestStatus[] = ['PENDING', 'IN_REVIEW', 'PENDING_HR', 'PENDING_ADMIN'];
+
 export function AdminLoans() {
   const toast = useToast();
+  const { currentUser } = useAdmin();
+  // Solo Administrador o Tesorería pueden aprobar/rechazar préstamos. RRHH y
+  // Contabilidad ven la información completa (incluida esta pantalla), pero
+  // no deciden — solo consultan y descargan el PDF.
+  const canManage = currentUser?.rol === 'ADMIN' || currentUser?.rol === 'TESORERIA';
   const [isLoading, setIsLoading] = useState(true);
   const [loans, setLoans] = useState<VacationRequest[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -144,24 +160,74 @@ export function AdminLoans() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [showBreakdown, setShowBreakdown] = useState(false);
+  const [decisionRequest, setDecisionRequest] = useState<{ loan: VacationRequest; decision: 'approve' | 'reject' } | null>(null);
+  const [decisionComment, setDecisionComment] = useState('');
+  const [decisionSignature, setDecisionSignature] = useState<File | null>(null);
+  const [decisionSaving, setDecisionSaving] = useState(false);
+
+  const loadLoans = async (options?: { silent?: boolean }) => {
+    if (!options?.silent) setIsLoading(true);
+    const [loansRes, employeesRes] = await Promise.allSettled([getLoanRequests({ limit: 200 }), getEmployees({ limit: 500 })]);
+    if (loansRes.status === 'fulfilled') {
+      setLoans(loansRes.value.data);
+    } else {
+      toast.error('No se pudieron cargar las solicitudes de préstamo');
+    }
+    if (employeesRes.status === 'fulfilled') setEmployees(employeesRes.value.data);
+    if (!options?.silent) setIsLoading(false);
+  };
 
   useEffect(() => {
-    let cancelled = false;
-    setIsLoading(true);
-    Promise.allSettled([getLoanRequests({ limit: 200 }), getEmployees({ limit: 500 })]).then(([loansRes, employeesRes]) => {
-      if (cancelled) return;
-      if (loansRes.status === 'fulfilled') {
-        setLoans(loansRes.value.data);
+    void loadLoans();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const openDecisionModal = (loan: VacationRequest, decision: 'approve' | 'reject') => {
+    setDecisionComment('');
+    setDecisionSignature(null);
+    setDecisionRequest({ loan, decision });
+  };
+
+  const closeDecisionModal = () => {
+    setDecisionRequest(null);
+    setDecisionComment('');
+    setDecisionSignature(null);
+  };
+
+  const confirmDecision = async () => {
+    if (!decisionRequest) return;
+    const { loan, decision } = decisionRequest;
+    if (decision === 'reject' && !decisionComment.trim()) {
+      toast.error('Debes indicar el motivo del rechazo');
+      return;
+    }
+    setDecisionSaving(true);
+    try {
+      if (decision === 'approve') {
+        await approveVacationRequest(loan.id, decisionComment.trim(), decisionSignature);
+        toast.success('Préstamo aprobado');
       } else {
-        toast.error('No se pudieron cargar las solicitudes de préstamo');
+        await rejectVacationRequest(loan.id, decisionComment.trim(), decisionSignature);
+        toast.info('Préstamo rechazado');
       }
-      if (employeesRes.status === 'fulfilled') setEmployees(employeesRes.value.data);
-      setIsLoading(false);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [toast]);
+      closeDecisionModal();
+      await loadLoans({ silent: true });
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo registrar la decisión');
+    } finally {
+      setDecisionSaving(false);
+    }
+  };
+
+  const handleViewPdf = async (loan: VacationRequest) => {
+    try {
+      await openVacationRequestPdf(loan.id);
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo abrir el documento del préstamo');
+    }
+  };
 
   const employeeById = useMemo(() => new Map(employees.map((employee) => [employee.id, employee])), [employees]);
 
@@ -300,11 +366,13 @@ export function AdminLoans() {
               <Th>N.º egreso</Th>
               <Th>Fecha</Th>
               <Th>Estado</Th>
+              <Th>Acciones</Th>
             </tr>
           </thead>
           <tbody>
             {paginatedLoans.map((loan) => {
               const employee = employeeById.get(loan.employee);
+              const isManageable = MANAGEABLE_LOAN_STATUSES.includes(loan.status);
               return (
                 <tr key={loan.id}>
                   <Td>
@@ -321,6 +389,17 @@ export function AdminLoans() {
                   <Td>{formatDate(loan.start_date)}</Td>
                   <Td>
                     <Badge label={requestStatusLabel(loan.status)} color={statusBadge(loan.status)} />
+                  </Td>
+                  <Td className={actionsCellCls} onClick={(e) => e.stopPropagation()}>
+                    <ActionsMenu
+                      items={[
+                        { label: 'Ver PDF', icon: FileDown, onClick: () => void handleViewPdf(loan) },
+                        ...(canManage ? [
+                          { label: 'Aprobar', icon: Check, onClick: () => openDecisionModal(loan, 'approve'), disabled: !isManageable },
+                          { label: 'Rechazar', icon: XCircle, onClick: () => openDecisionModal(loan, 'reject'), disabled: !isManageable },
+                        ] : []),
+                      ]}
+                    />
                   </Td>
                 </tr>
               );
@@ -345,6 +424,56 @@ export function AdminLoans() {
           </div>
         )}
       </Card>
+
+      <Modal
+        title={decisionRequest?.decision === 'reject' ? 'Rechazar préstamo' : 'Aprobar préstamo'}
+        open={Boolean(decisionRequest)}
+        onClose={closeDecisionModal}
+      >
+        {decisionRequest && (
+          <div className="space-y-4">
+            <p className="text-xs text-gray-500">
+              {(() => {
+                const employee = employeeById.get(decisionRequest.loan.employee);
+                const name = decisionRequest.loan.loan_requester_name || getEmployeeName(employee);
+                const amount = decisionRequest.loan.loan_amount ? formatMoney(Number(decisionRequest.loan.loan_amount)) : '—';
+                return `Préstamo de ${name} por ${amount}. Esta acción queda registrada en el historial.`;
+              })()}
+            </p>
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">
+                Comentario {decisionRequest.decision === 'reject' && '(obligatorio)'}
+              </label>
+              <textarea
+                value={decisionComment}
+                onChange={(event) => setDecisionComment(event.target.value)}
+                rows={3}
+                className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#2a4038]/20 focus:border-[#2a4038] transition-all resize-none"
+                placeholder={decisionRequest.decision === 'reject' ? 'Indica el motivo del rechazo' : 'Comentario opcional'}
+              />
+            </div>
+            <SignaturePad
+              label="Tu firma para esta decisión"
+              helperText="Se usará tu firma guardada por defecto. Si quieres firmar distinto solo para esta solicitud, dibuja o sube una firma aquí."
+              onChange={setDecisionSignature}
+            />
+            <div className="flex justify-end gap-2">
+              <button onClick={closeDecisionModal} className="px-4 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+                Cancelar
+              </button>
+              <button
+                onClick={() => void confirmDecision()}
+                disabled={decisionSaving}
+                className={`px-4 py-2 rounded-lg text-xs font-semibold text-white transition-colors disabled:opacity-40 ${
+                  decisionRequest.decision === 'reject' ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700'
+                }`}
+              >
+                {decisionSaving ? 'Guardando...' : decisionRequest.decision === 'reject' ? 'Rechazar' : 'Aprobar'}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

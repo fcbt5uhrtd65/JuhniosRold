@@ -387,12 +387,18 @@ def _is_manager_not_applicable(step):
     return step.step == "MANAGER" and step.status == "CANCELLED" and not step.acted_at
 
 
+def _hr_step_label(vacation):
+    """El paso 'HR' del flujo lo ocupa Tesorería cuando la solicitud es de tipo
+    Préstamo (RRHH solo puede consultarlos, no resolverlos)."""
+    return "Tesorería" if _is_loan(vacation) else "RRHH"
+
+
 def _approval_steps_data(vacation):
     steps = list(vacation.approval_steps.all())
     if steps:
         return [
             {
-                "label": step.get_step_display(),
+                "label": _hr_step_label(vacation) if step.step == "HR" else step.get_step_display(),
                 "status": "No aplica" if _is_manager_not_applicable(step) else step.get_status_display(),
                 "actor": _safe(getattr(step.user, "email", None)),
                 "date": _datetime_label(step.acted_at),
@@ -406,7 +412,7 @@ def _approval_steps_data(vacation):
         ]
     decisions = [
         ("Administrador", vacation.admin_decision, vacation.admin_decided_by, vacation.admin_decided_at, vacation.admin_comment),
-        ("Recursos Humanos", vacation.hr_decision, vacation.hr_decided_by, vacation.hr_decided_at, vacation.hr_comment),
+        (_hr_step_label(vacation), vacation.hr_decision, vacation.hr_decided_by, vacation.hr_decided_at, vacation.hr_comment),
     ]
     result = []
     for role_label, decision, decided_by, decided_at, comment in decisions:
@@ -500,7 +506,8 @@ def _draw_signatures_section(c, x0, x1, y, vacation):
         employee = getattr(step.user, "employee_profile", None)
         signer_name = _employee_name(employee) if employee else _safe(getattr(step.user, "email", None))
         signature_file = getattr(step, "signature", None) or (getattr(employee, "signature", None) if employee else None)
-        columns.append((signer_name, f"{step.get_step_display()} · {step.get_status_display()}", signature_file))
+        step_label = _hr_step_label(vacation) if step.step == "HR" else step.get_step_display()
+        columns.append((signer_name, f"{step_label} · {step.get_status_display()}", signature_file))
 
     count = len(columns)
     gap = 20 if count >= 3 else 30
