@@ -654,16 +654,17 @@ export function AdminEmployeePortal() {
             )}
           </div>
           <p className="text-xs text-gray-500 mb-4">
-            Como jefe inmediato puedes firmar tu visto bueno o rechazo. La decisión final siempre queda a cargo del Administrador.
+            Como jefe inmediato puedes firmar tu visto bueno o rechazo. La decisión final siempre queda a cargo del Administrador. Las solicitudes ya resueltas se quedan en esta lista con su estado final.
           </p>
 
-          {pendingTeamRequests.length === 0 ? (
-            <p className="text-xs text-gray-400">No hay solicitudes pendientes de tu equipo.</p>
+          {teamRequests.length === 0 ? (
+            <p className="text-xs text-gray-400">No hay solicitudes de tu equipo.</p>
           ) : (
             <div className="space-y-2.5">
-              {pendingTeamRequests.map((request) => {
+              {teamRequests.map((request) => {
                 const requester = employeeById.get(request.employee);
                 const Icon = REQUEST_TYPE_ICONS[request.request_type];
+                const isPending = ['PENDING', 'IN_REVIEW', 'PENDING_HR', 'PENDING_ADMIN'].includes(request.status);
                 return (
                   <div
                     key={request.id}
@@ -692,26 +693,28 @@ export function AdminEmployeePortal() {
                     {request.support_document && (
                       <Paperclip size={13} className="text-gray-300 flex-shrink-0" />
                     )}
-                    <div className="flex items-center gap-2 flex-shrink-0" onClick={(event) => event.stopPropagation()}>
-                      <button
-                        type="button"
-                        onClick={() => openTeamDecisionModal(request, 'approve')}
-                        disabled={teamActionId === request.id}
-                        className="p-2 rounded-lg border border-gray-200 text-gray-400 hover:bg-emerald-50 hover:text-emerald-600 transition-colors disabled:opacity-40"
-                        title="Firmar aprobación"
-                      >
-                        <Check size={14} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => openTeamDecisionModal(request, 'reject')}
-                        disabled={teamActionId === request.id}
-                        className="p-2 rounded-lg border border-gray-200 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors disabled:opacity-40"
-                        title="Firmar rechazo"
-                      >
-                        <XCircle size={14} />
-                      </button>
-                    </div>
+                    {isPending && (
+                      <div className="flex items-center gap-2 flex-shrink-0" onClick={(event) => event.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => openTeamDecisionModal(request, 'approve')}
+                          disabled={teamActionId === request.id}
+                          className="p-2 rounded-lg border border-gray-200 text-gray-400 hover:bg-emerald-50 hover:text-emerald-600 transition-colors disabled:opacity-40"
+                          title="Firmar aprobación"
+                        >
+                          <Check size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openTeamDecisionModal(request, 'reject')}
+                          disabled={teamActionId === request.id}
+                          className="p-2 rounded-lg border border-gray-200 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors disabled:opacity-40"
+                          title="Firmar rechazo"
+                        >
+                          <XCircle size={14} />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               })}

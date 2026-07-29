@@ -307,6 +307,22 @@ def _draw_body(c, x0, x1, y, vacation, employee):
             ("para un total de", False),
             (f" {_calculate_hours_label(vacation)}.", True),
         ]
+    elif not vacation.is_full_day and vacation.start_time:
+        if vacation.end_time:
+            period_parts += [
+                (" El horario registrado va de", False),
+                (f" {_time_label(vacation.start_time)} ", True),
+                ("a", False),
+                (f" {_time_label(vacation.end_time)}, ", True),
+                ("para un total de", False),
+                (f" {_calculate_hours_label(vacation)}.", True),
+            ]
+        else:
+            period_parts += [
+                (" El horario registrado inicia a las", False),
+                (f" {_time_label(vacation.start_time)} ", True),
+                ("hasta el final de la jornada.", False),
+            ]
     y = _draw_rich_paragraph(c, x0, y, period_parts, w, size=10, leading=15)
     y -= 14
 
