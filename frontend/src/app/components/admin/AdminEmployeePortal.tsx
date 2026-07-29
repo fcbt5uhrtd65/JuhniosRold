@@ -1192,8 +1192,8 @@ export function AdminEmployeePortal() {
                       form.time_mode === 'FULL_DAY'
                         ? 'Jornada completa'
                         : form.time_mode === 'FROM_TIME'
-                          ? `Desde ${form.start_time || '—'}`
-                          : `${form.start_time || '—'} a ${form.end_time || '—'}`,
+                          ? `Desde ${form.start_time ? formatTime(form.start_time) : '—'}`
+                          : `${form.start_time ? formatTime(form.start_time) : '—'} a ${form.end_time ? formatTime(form.end_time) : '—'}`,
                     ],
                     ['Documento', form.support_document ? form.support_document.name : '—'],
                   ]

@@ -5,6 +5,8 @@ from reportlab.lib.colors import HexColor
 from reportlab.lib.pagesizes import landscape, letter
 from reportlab.pdfgen import canvas
 
+from shared.infrastructure.pdf_letterhead import format_time_co
+
 COMPANY_NAME = "PRODUCTOS JUHNIOS ROLD SAS"
 BRAND = HexColor("#2a4038")
 TEXT = HexColor("#111827")
@@ -52,7 +54,8 @@ def _text(c, x, y, text, size=8, bold=False, color=TEXT, align="left"):
 def _draw_header(c, page_w, page_h, count):
     x0, x1 = 32, page_w - 32
     _text(c, x0, page_h - 42, COMPANY_NAME, size=12, bold=True)
-    _text(c, x1, page_h - 38, f"Generado: {timezone.now():%d/%m/%Y %H:%M}", size=8, color=MUTED, align="right")
+    now = timezone.now()
+    _text(c, x1, page_h - 38, f"Generado: {now:%d/%m/%Y} {format_time_co(now)}", size=8, color=MUTED, align="right")
     _text(c, x1, page_h - 52, f"Total clientes: {count}", size=8, bold=True, color=BRAND, align="right")
     return page_h - 76
 

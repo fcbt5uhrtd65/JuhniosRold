@@ -312,7 +312,7 @@ function ModuloPanel() {
     { label: 'Artículos con lote', value: String(lotesAlerta), sub: 'Manejan trazabilidad', icon: Clock, color: 'text-amber-600 bg-amber-50', trend: 'Según maestros' },
     { label: 'OPs activas', value: String(opsActivas), sub: `${(data?.productionOrders ?? []).filter(o => o.status === 'IN_PROGRESS').length} en proceso`, icon: Factory, color: 'text-blue-600 bg-blue-50', trend: `${(data?.productionOrders ?? []).filter(o => o.is_dispensed && !o.is_output_received).length} sin recepción PT` },
     { label: 'OC pendientes', value: String(ocPendientes), sub: 'Enviadas o parciales', icon: ShoppingCart, color: 'text-purple-600 bg-purple-50', trend: '1 parcial pendiente' },
-    { label: 'Movimientos hoy', value: String(movementsToday.length), sub: `${movementsToday.filter(m => movementSignedQuantity(m) > 0).length} entradas · ${movementsToday.filter(m => movementSignedQuantity(m) < 0).length} salidas`, icon: RefreshCw, color: 'text-emerald-600 bg-emerald-50', trend: movementsToday[0]?.created_at ? `Último: ${new Date(movementsToday[0].created_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}` : 'Sin movimientos' },
+    { label: 'Movimientos hoy', value: String(movementsToday.length), sub: `${movementsToday.filter(m => movementSignedQuantity(m) > 0).length} entradas · ${movementsToday.filter(m => movementSignedQuantity(m) < 0).length} salidas`, icon: RefreshCw, color: 'text-emerald-600 bg-emerald-50', trend: movementsToday[0]?.created_at ? `Último: ${new Date(movementsToday[0].created_at).toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit', hour12: true })}` : 'Sin movimientos' },
   ];
 
   const alertasStock = (data?.stocks ?? []).filter(s => stockLevel(s) !== 'ok');
@@ -401,7 +401,7 @@ function ModuloPanel() {
               const qty = movementSignedQuantity(m);
               return (
               <tr key={m.id} className="hover:bg-gray-50/50">
-                <Td className="text-gray-400 text-xs">{new Date(m.created_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</Td>
+                <Td className="text-gray-400 text-xs">{new Date(m.created_at).toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit', hour12: true })}</Td>
                 <Td><Badge label={movementLabel(m.movement_type)} color={qty > 0 ? 'green' : 'red'} /></Td>
                 <Td className="font-medium">{variantName(data, m.variant)}</Td>
                 <Td><span className={`font-bold ${qty > 0 ? 'text-emerald-600' : 'text-red-600'}`}>{qty > 0 ? '+' : ''}{qty}</span></Td>
@@ -1883,7 +1883,7 @@ function ModuloAuditoria() {
             return (
             <tr key={a.id} className="hover:bg-gray-50/50">
               <Td className="text-xs text-gray-500">{createdAt.toLocaleDateString('es-CO')}</Td>
-              <Td className="font-mono text-xs text-gray-500">{createdAt.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</Td>
+              <Td className="font-mono text-xs text-gray-500">{createdAt.toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit', hour12: true })}</Td>
               <Td className="font-medium text-gray-900">{a.actor_email ?? 'Sistema'}</Td>
               <Td><Badge label={a.module} color="blue" /></Td>
               <Td className="text-xs font-semibold text-gray-700">{a.action}</Td>

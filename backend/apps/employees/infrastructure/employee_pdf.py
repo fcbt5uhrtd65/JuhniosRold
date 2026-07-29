@@ -9,6 +9,7 @@ from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
 
+from shared.infrastructure.pdf_letterhead import format_time_co
 
 COMPANY_NAME = "PRODUCTOS JUHNIOS ROLD SAS"
 LOGO_PATH = os.path.abspath(
@@ -93,7 +94,8 @@ def _draw_header(c, page_w, page_h, employees):
     logo_size = _draw_logo(c, x0, page_h - 40, 36)
     text_x = x0 + logo_size + (10 if logo_size else 0)
     _text(c, text_x, page_h - 56, COMPANY_NAME, size=12, bold=True)
-    _text(c, x1, page_h - 52, f"Generado: {timezone.now():%d/%m/%Y %H:%M}", size=8, color=MUTED, align="right")
+    now = timezone.now()
+    _text(c, x1, page_h - 52, f"Generado: {now:%d/%m/%Y} {format_time_co(now)}", size=8, color=MUTED, align="right")
     _text(c, x1, page_h - 66, f"Total empleados: {len(employees)}", size=8, bold=True, color=BRAND, align="right")
     return page_h - 94
 

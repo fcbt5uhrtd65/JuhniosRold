@@ -1278,6 +1278,8 @@ export function AdminHR() {
   const [vacationFilterStatus, setVacationFilterStatus] = useState<string>('all');
   const [vacationFilterEmployee, setVacationFilterEmployee] = useState<string>('all');
   const [vacationFilterType, setVacationFilterType] = useState<string>('all');
+  const [vacationFilterStartFrom, setVacationFilterStartFrom] = useState('');
+  const [vacationFilterStartTo, setVacationFilterStartTo] = useState('');
   const [vacationSort, setVacationSort] = useState<'created_at' | 'request_type' | 'start_date'>('created_at');
   const [showVacationCharts, setShowVacationCharts] = useState(false);
   const [exportingVacationXlsx, setExportingVacationXlsx] = useState(false);
@@ -1593,6 +1595,8 @@ export function AdminHR() {
         employee: vacationFilterEmployee === 'all' ? undefined : vacationFilterEmployee,
         request_type: vacationFilterType === 'all' ? undefined : (vacationFilterType as VacationRequestType),
         ordering: orderingMap[vacationSort],
+        start_date_from: vacationFilterStartFrom || undefined,
+        start_date_to: vacationFilterStartTo || undefined,
       });
       setVacationRows(res.data);
       setVacationTotal(res.total);
@@ -1602,7 +1606,7 @@ export function AdminHR() {
     } finally {
       setVacationLoading(false);
     }
-  }, [vacationPage, vacationPageSize, vacationSearch, vacationFilterDepartment, vacationFilterBranch, vacationFilterStatus, vacationFilterEmployee, vacationFilterType, vacationSort, toast]);
+  }, [vacationPage, vacationPageSize, vacationSearch, vacationFilterDepartment, vacationFilterBranch, vacationFilterStatus, vacationFilterEmployee, vacationFilterType, vacationSort, vacationFilterStartFrom, vacationFilterStartTo, toast]);
 
   useEffect(() => {
     if (activeTab !== 'vacations') return;
@@ -1612,7 +1616,7 @@ export function AdminHR() {
 
   useEffect(() => {
     setVacationPage(1);
-  }, [vacationSearch, vacationFilterDepartment, vacationFilterBranch, vacationFilterStatus, vacationFilterEmployee, vacationFilterType, vacationSort, vacationPageSize]);
+  }, [vacationSearch, vacationFilterDepartment, vacationFilterBranch, vacationFilterStatus, vacationFilterEmployee, vacationFilterType, vacationSort, vacationFilterStartFrom, vacationFilterStartTo, vacationPageSize]);
 
   const paginatedVacationRequests = vacationRows;
   const filteredVacationRequestsCount = vacationTotal;
@@ -2334,6 +2338,8 @@ export function AdminHR() {
         status: vacationFilterStatus === 'all' ? undefined : (vacationFilterStatus as VacationRequestStatus),
         request_type: vacationFilterType === 'all' ? undefined : (vacationFilterType as VacationRequestType),
         order_by: orderingMap[vacationSort],
+        start_date_from: vacationFilterStartFrom || undefined,
+        start_date_to: vacationFilterStartTo || undefined,
       });
       toast.success('Excel de solicitudes generado');
     } catch (error) {
@@ -3360,7 +3366,31 @@ export function AdminHR() {
                   <option value="request_type">Ordenar por tipo</option>
                 </select>
               </div>
-              {(vacationSearch || vacationFilterEmployee !== 'all' || vacationFilterDepartment !== 'all' || vacationFilterBranch !== 'all' || vacationFilterStatus !== 'all' || vacationFilterType !== 'all') && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <label className="block">
+                  <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1">
+                    Fecha del permiso desde
+                  </span>
+                  <input
+                    type="date"
+                    value={vacationFilterStartFrom}
+                    onChange={(event) => setVacationFilterStartFrom(event.target.value)}
+                    className={`${inputCls} w-full`}
+                  />
+                </label>
+                <label className="block">
+                  <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1">
+                    Fecha del permiso hasta
+                  </span>
+                  <input
+                    type="date"
+                    value={vacationFilterStartTo}
+                    onChange={(event) => setVacationFilterStartTo(event.target.value)}
+                    className={`${inputCls} w-full`}
+                  />
+                </label>
+              </div>
+              {(vacationSearch || vacationFilterEmployee !== 'all' || vacationFilterDepartment !== 'all' || vacationFilterBranch !== 'all' || vacationFilterStatus !== 'all' || vacationFilterType !== 'all' || vacationFilterStartFrom || vacationFilterStartTo) && (
                 <div className="flex justify-end">
                   <button
                     type="button"
@@ -3371,6 +3401,8 @@ export function AdminHR() {
                       setVacationFilterBranch('all');
                       setVacationFilterStatus('all');
                       setVacationFilterType('all');
+                      setVacationFilterStartFrom('');
+                      setVacationFilterStartTo('');
                     }}
                     className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-800"
                   >

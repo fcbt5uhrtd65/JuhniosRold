@@ -16,6 +16,7 @@ from .employee_pdf import (
     _fit,
     _safe,
     _text,
+    format_time_co,
 )
 
 
@@ -24,7 +25,8 @@ def _draw_header(c, page_w, page_h, count, total_label):
     logo_size = _draw_logo(c, x0, page_h - 40, 36)
     text_x = x0 + logo_size + (10 if logo_size else 0)
     _text(c, text_x, page_h - 56, COMPANY_NAME, size=12, bold=True)
-    _text(c, x1, page_h - 52, f"Generado: {timezone.now():%d/%m/%Y %H:%M}", size=8, color=MUTED, align="right")
+    now = timezone.now()
+    _text(c, x1, page_h - 52, f"Generado: {now:%d/%m/%Y} {format_time_co(now)}", size=8, color=MUTED, align="right")
     _text(c, x1, page_h - 66, f"{total_label}: {count}", size=8, bold=True, color=BRAND, align="right")
     return page_h - 94
 

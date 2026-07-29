@@ -93,6 +93,21 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
 
     OWNER_DELETABLE_STATUSES = (VacationRequest.Status.PENDING, VacationRequest.Status.IN_REVIEW)
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if self.action != "list":
+            return queryset
+        # Filtro por rango de fecha de la SOLICITUD (start_date/end_date, el
+        # periodo del permiso/vacación/etc.), no la fecha en que se creó el
+        # registro — para poder organizar el listado por cuándo es el permiso.
+        start_from = self.request.query_params.get("start_date_from")
+        start_to = self.request.query_params.get("start_date_to")
+        if start_from:
+            queryset = queryset.filter(start_date__gte=start_from)
+        if start_to:
+            queryset = queryset.filter(end_date__lte=start_to)
+        return queryset
+
     def get_permissions(self):
         if self.action in {"me", "team", "loans", "approve", "reject", "destroy", "correct_schedule"}:
             return (IsAuthenticated(),)

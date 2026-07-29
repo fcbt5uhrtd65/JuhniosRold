@@ -21,6 +21,7 @@ from reportlab.pdfgen import canvas
 from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from apps.commerce.infrastructure.models import Order, Payment
+from shared.infrastructure.pdf_letterhead import format_time_co
 
 from ..application.queries import DashboardQuery, InventoryReportQuery, SalesReportQuery
 
@@ -164,7 +165,7 @@ def _payment_row(payment):
         PAYMENT_STATUS_LABELS.get(payment.status, payment.status),
         payment.reference,
         invoice_number or "—",
-        payment.created_at.strftime("%d/%m/%Y %H:%M"),
+        f"{payment.created_at:%d/%m/%Y} {format_time_co(payment.created_at)}",
     )
 
 

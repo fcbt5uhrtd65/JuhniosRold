@@ -430,6 +430,8 @@ export interface ListVacationParams {
   branch?: string;
   search?: string;
   ordering?: string;
+  start_date_from?: string;
+  start_date_to?: string;
 }
 
 export interface ListPayrollParams {
@@ -505,6 +507,8 @@ export async function getVacationRequests(params?: ListVacationParams): Promise<
     employee__branch: params?.branch,
     search: params?.search,
     ordering: params?.ordering,
+    start_date_from: params?.start_date_from,
+    start_date_to: params?.start_date_to,
   });
   const res = await api.get<VacationRequest[] | PaginatedResponse<VacationRequest>>(`${REQUESTS_PATH}${query}`);
   return normalizeListResponse(res.data);
@@ -733,6 +737,8 @@ export interface ExportRequestsXlsxParams {
   employee__branch?: string;
   search?: string;
   order_by?: 'created_at' | 'request_type' | 'start_date' | 'employee';
+  start_date_from?: string;
+  start_date_to?: string;
 }
 
 /** Descarga el Excel de solicitudes con los mismos filtros aplicados en el listado. */

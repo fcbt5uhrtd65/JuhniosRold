@@ -23,6 +23,25 @@ HEADER_CONTENT_GAP = 34
 _image_cache: dict[str, ImageReader] = {}
 
 
+def format_time_co(value) -> str:
+    """Hora en formato 12h con a. m./p. m., como se usa en Colombia — nunca en
+    formato militar/24h. Acepta un ``time`` o ``datetime``; usar en todos los
+    PDF del sistema en lugar de ``strftime('%H:%M')``."""
+    if not value:
+        return "-"
+    hour12 = value.hour % 12 or 12
+    period = "a. m." if value.hour < 12 else "p. m."
+    return f"{hour12}:{value.minute:02d} {period}"
+
+
+def format_datetime_co(value) -> str:
+    """Fecha + hora en el formato colombiano estándar de los documentos:
+    'dd/mm/aaaa a las h:mm a. m./p. m.'."""
+    if not value:
+        return "-"
+    return f"{value.strftime('%d/%m/%Y')} a las {format_time_co(value)}"
+
+
 def _cached_image(path):
     if path not in _image_cache:
         if not os.path.exists(path):

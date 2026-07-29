@@ -12,6 +12,8 @@ from shared.infrastructure.pdf_letterhead import (
     draw_letterhead_footer,
     draw_letterhead_header,
     draw_signature_line_block,
+    format_datetime_co,
+    format_time_co,
 )
 
 COMPANY_NAME = "PRODUCTOS JUHNIOS ROLD SAS"
@@ -43,12 +45,8 @@ def _date_label(value):
     return f"{value:%d/%m/%Y}" if value else "-"
 
 
-def _datetime_label(value):
-    return f"{value:%d/%m/%Y %H:%M}" if value else "-"
-
-
-def _time_label(value):
-    return f"{value:%H:%M}" if value else "-"
+_time_label = format_time_co
+_datetime_label = format_datetime_co
 
 
 def _request_type_label(vacation):
@@ -254,7 +252,8 @@ def _draw_letterhead(c, page_w, page_h, x0, x1):
 
 def _draw_title(c, x0, x1, cx, y, vacation, request_number):
     _text(c, x0, y, f"Gestión de Talento Humano  ·  {request_number}", size=8.5, bold=True, color=MUTED)
-    _text(c, x1, y, f"Generado el {timezone.now():%d/%m/%Y a las %H:%M}", size=8, color=MUTED, align="right")
+    now = timezone.now()
+    _text(c, x1, y, f"Generado el {now:%d/%m/%Y} a las {_time_label(now)}", size=8, color=MUTED, align="right")
     y -= 38
 
     _text(c, cx, y, "CONSTANCIA DE SOLICITUD", size=17, bold=True, color=TEXT, align="center")
@@ -283,7 +282,7 @@ def _draw_body(c, x0, x1, y, vacation, employee):
         (f" {_employee_name(employee).upper()}, ", True),
         (f"con código de empleado {getattr(employee, 'employee_code', '') or '-'}, quien se desempeña como", False),
         (f" {hire_position} ", True),
-        (f"en el área de {hire_area}, sede {hire_branch}, fue registrada el {vacation.created_at:%d/%m/%Y a las %H:%M} y actualmente se encuentra en estado", False),
+        (f"en el área de {hire_area}, sede {hire_branch}, fue registrada el {vacation.created_at:%d/%m/%Y} a las {_time_label(vacation.created_at)} y actualmente se encuentra en estado", False),
         (f" {vacation.get_status_display().upper()}.", True),
     ]
     y = _draw_rich_paragraph(c, x0, y, intro_parts, w, size=10, leading=15)

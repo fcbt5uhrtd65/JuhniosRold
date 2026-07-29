@@ -117,7 +117,7 @@ function formatPasoFecha(iso: string) {
   const d = new Date(iso);
   const dia = d.getDate();
   const mes = d.toLocaleDateString('es-CO', { month: 'short' });
-  const hora = d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+  const hora = d.toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit', hour12: true });
   return `${dia} ${mes}, ${hora}`;
 }
 

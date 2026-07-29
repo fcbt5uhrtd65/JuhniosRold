@@ -6,7 +6,12 @@ from reportlab.lib.pagesizes import letter, landscape
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
 
-from shared.infrastructure.pdf_letterhead import draw_letterhead_footer, draw_letterhead_header
+from shared.infrastructure.pdf_letterhead import (
+    draw_letterhead_footer,
+    draw_letterhead_header,
+    format_datetime_co,
+    format_time_co,
+)
 
 from .models import VacationRequest
 
@@ -38,6 +43,10 @@ def _employee_name(employee):
 
 def _date_label(value):
     return f"{value:%d/%m/%Y}" if value else "-"
+
+
+_time_label = format_time_co
+_datetime_label = format_datetime_co
 
 
 def _status_color(status):
@@ -134,7 +143,7 @@ def _decided_by_label(item):
 
 def _decided_at_label(item):
     decided_at = item.hr_decided_at or item.admin_decided_at or item.reviewed_at
-    return f"{decided_at:%d/%m/%Y %H:%M}" if decided_at else "-"
+    return _datetime_label(decided_at)
 
 
 def _draw_table_header(c, x0, x1, y):
@@ -203,7 +212,8 @@ def render_request_list_pdf(requests, filters_applied=None):
     def draw_page_header():
         y = draw_letterhead_header(c, page_w, page_h, x0, x1)
         _text(c, x0, y, f"Gestión de Talento Humano  ·  {len(requests)} solicitud(es)", size=8.5, bold=True, color=MUTED)
-        _text(c, x1, y, f"Generado el {timezone.now():%d/%m/%Y a las %H:%M}", size=8, color=MUTED, align="right")
+        now = timezone.now()
+        _text(c, x1, y, f"Generado el {now:%d/%m/%Y} a las {_time_label(now)}", size=8, color=MUTED, align="right")
         y -= 34
         _text(c, x0, y, "LISTADO DE SOLICITUDES", size=16, bold=True, color=TEXT)
         return y - 30

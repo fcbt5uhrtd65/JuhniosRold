@@ -7,7 +7,12 @@ from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
 
-from shared.infrastructure.pdf_letterhead import draw_letterhead_footer, draw_letterhead_header
+from shared.infrastructure.pdf_letterhead import (
+    draw_letterhead_footer,
+    draw_letterhead_header,
+    format_datetime_co,
+    format_time_co,
+)
 
 TEXT = HexColor("#111827")
 MUTED = HexColor("#6b7280")
@@ -191,8 +196,7 @@ def _date(value):
     return f"{value:%d/%m/%Y}" if value else "-"
 
 
-def _datetime(value):
-    return f"{value:%d/%m/%Y %H:%M}" if value else "-"
+_datetime = format_datetime_co
 
 
 def _money(value):
@@ -214,7 +218,8 @@ def _draw_header(c, page_w, page_h, x0, x1, employee):
 
     _text(c, x1, y, "Perfil de empleado", size=12, bold=True, align="right", color=TEXT)
     y -= 16
-    _text(c, x1, y, f"Generado: {timezone.now():%d/%m/%Y %H:%M}", size=8.5, align="right", color=MUTED)
+    now = timezone.now()
+    _text(c, x1, y, f"Generado: {now:%d/%m/%Y} {format_time_co(now)}", size=8.5, align="right", color=MUTED)
     status_text = employee.get_status_display()
     pill_w = max(84, stringWidth(status_text, "Helvetica-Bold", 7.3) + 18)
     _pill(c, x1 - pill_w, y - 15, status_text, _status_color(employee.status), pill_w)

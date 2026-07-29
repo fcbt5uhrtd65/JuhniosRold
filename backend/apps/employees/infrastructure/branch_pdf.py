@@ -20,6 +20,7 @@ from .employee_pdf import (
     _safe,
     _status_color,
     _text,
+    format_time_co,
 )
 
 
@@ -38,11 +39,12 @@ def _draw_header(c, page_w, page_h, branches):
         bold=True,
     )
 
+    now = timezone.now()
     _text(
         c,
         x1,
         page_h - 52,
-        f"Generado: {timezone.now():%d/%m/%Y %H:%M}",
+        f"Generado: {now:%d/%m/%Y} {format_time_co(now)}",
         size=8,
         color=MUTED,
         align="right",

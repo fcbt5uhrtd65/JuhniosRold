@@ -4,6 +4,7 @@ from datetime import datetime
 from openpyxl import Workbook
 from openpyxl.styles import Font
 
+from shared.infrastructure.pdf_letterhead import format_time_co
 from .overtime_pay import hours_breakdown, summarize_shift
 
 COLUMNS = [
@@ -83,8 +84,7 @@ def _shift_list(request):
     return []
 
 
-def _time_label(value):
-    return value.strftime("%H:%M") if value else "-"
+_time_label = format_time_co
 
 
 def _hour_range_labels(request):

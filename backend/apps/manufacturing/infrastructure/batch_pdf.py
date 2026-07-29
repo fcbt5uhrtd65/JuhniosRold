@@ -8,6 +8,8 @@ from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
 
+from shared.infrastructure.pdf_letterhead import format_time_co
+
 COMPANY_NAME = "PRODUCTOS JUHNIOS ROLD SAS"
 LOGO_PATH = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "finance", "infrastructure", "assets", "logo.jpeg")
@@ -38,7 +40,7 @@ def _date(value):
 
 
 def _datetime(value):
-    return f"{value:%d/%m/%Y %H:%M}" if value else "-"
+    return f"{value:%d/%m/%Y} {format_time_co(value)}" if value else "-"
 
 
 def _text(c, x, y, text, size=9, bold=False, align="left", color=TEXT):
@@ -101,7 +103,7 @@ def _document_header(c, page_w, page_h, x0, x1, title, batch, code, version):
 
     _text(c, x1, y - 10, f"Código: {code}", size=7.5, color=MUTED, align="right")
     _text(c, x1, y - 20, f"Versión: {version}", size=7.5, color=MUTED, align="right")
-    _text(c, x1, y - 30, f"Generado: {timezone.now():%d/%m/%Y %H:%M}", size=7.5, color=MUTED, align="right")
+    _text(c, x1, y - 30, f"Generado: {_datetime(timezone.now())}", size=7.5, color=MUTED, align="right")
 
     y -= 48
     c.setStrokeColor(STEEL)
@@ -990,7 +992,7 @@ def render_full_batch_dossier_pdf(batch, *, include_attachments=True, include_ph
     y -= 16
     _text(c, page_w / 2, y, f"Estado: {batch.get_status_display()}", size=10, color=_status_color(batch.get_status_display()), bold=True, align="center")
     y -= 40
-    _text(c, page_w / 2, y, f"Generado: {timezone.now():%d/%m/%Y %H:%M}", size=8.5, color=MUTED, align="center")
+    _text(c, page_w / 2, y, f"Generado: {_datetime(timezone.now())}", size=8.5, color=MUTED, align="center")
 
     # 2. Información general de la orden
     c.showPage()
