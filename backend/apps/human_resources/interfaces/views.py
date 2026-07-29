@@ -147,10 +147,25 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
         return super().destroy(request, *args, **kwargs)
 
     def _ensure_approval_flow(self, vacation, requester=None):
-        manager_user = getattr(getattr(vacation.employee, "manager", None), "user", None)
+        manager = getattr(vacation.employee, "manager", None)
+        manager_user = getattr(manager, "user", None)
+
+        # Si el jefe inmediato es también el Administrador, su firma como jefe y
+        # como Admin serían la misma persona firmando dos veces por lo mismo: el
+        # paso "Jefe inmediato" no aplica en ese caso (queda registrado como tal,
+        # no como pendiente eterno) y el flujo real se reduce a RRHH + ese Admin.
+        manager_is_admin = bool(manager_user and getattr(manager_user, "has_full_access", False))
+
+        if manager_is_admin:
+            manager_status = VacationRequest.Status.CANCELLED
+            manager_comment = "No aplica: el jefe inmediato es el Administrador, su firma queda registrada en el paso de Aprobación final."
+        else:
+            manager_status = VacationRequest.Status.PENDING
+            manager_comment = ""
+
         flow = (
             (VacationRequestApprovalStep.Step.REQUESTER, 1, requester or vacation.employee.user, VacationRequest.Status.APPROVED, "Solicitud creada"),
-            (VacationRequestApprovalStep.Step.MANAGER, 2, manager_user, VacationRequest.Status.PENDING, ""),
+            (VacationRequestApprovalStep.Step.MANAGER, 2, manager_user, manager_status, manager_comment),
             (VacationRequestApprovalStep.Step.HR, 3, None, VacationRequest.Status.PENDING, ""),
             (VacationRequestApprovalStep.Step.FINAL, 4, None, VacationRequest.Status.PENDING, ""),
         )
@@ -162,7 +177,7 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
                     "sequence": sequence,
                     "user": user,
                     "status": step_status,
-                    "acted_at": timezone.now() if step == VacationRequestApprovalStep.Step.REQUESTER else None,
+                    "acted_at": timezone.now() if step in (VacationRequestApprovalStep.Step.REQUESTER, VacationRequestApprovalStep.Step.MANAGER) and step_status != VacationRequest.Status.PENDING else None,
                     "comment": comment,
                 },
             )

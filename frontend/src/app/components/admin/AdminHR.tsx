@@ -4219,14 +4219,26 @@ export function AdminHR() {
             <Card className="p-4">
               <div className="text-sm font-semibold text-gray-900 mb-3">Flujo de aprobación</div>
               <div className="grid md:grid-cols-4 gap-3">
-                {viewingRequest.approval_steps.map((step) => (
-                  <div key={step.id} className="border border-gray-100 rounded-xl p-3 text-xs">
-                    <div className="font-medium text-gray-900">{approvalStepLabel(step.step)}</div>
-                    <div className="inline-block mt-2"><Badge label={requestStatusLabel(step.status)} color={statusBadge(step.status)} /></div>
-                    <div className="text-gray-400 mt-2">{parseDate(step.acted_at)}</div>
-                    <div className="text-gray-400">{step.comment || 'Sin comentario'}</div>
-                  </div>
-                ))}
+                {viewingRequest.approval_steps.map((step) => {
+                  // El paso "Jefe inmediato" nace ya resuelto (sin pedir firma) cuando
+                  // ese jefe es el mismo Administrador: su firma real queda en el paso
+                  // de Aprobación final, no tiene sentido pedirle una segunda firma.
+                  const isManagerNotApplicable = step.step === 'MANAGER' && step.status === 'CANCELLED' && !step.acted_at;
+                  return (
+                    <div key={step.id} className="border border-gray-100 rounded-xl p-3 text-xs">
+                      <div className="font-medium text-gray-900">{approvalStepLabel(step.step)}</div>
+                      <div className="inline-block mt-2">
+                        {isManagerNotApplicable ? (
+                          <Badge label="No aplica" color="gray" />
+                        ) : (
+                          <Badge label={requestStatusLabel(step.status)} color={statusBadge(step.status)} />
+                        )}
+                      </div>
+                      <div className="text-gray-400 mt-2">{parseDate(step.acted_at)}</div>
+                      <div className="text-gray-400">{step.comment || 'Sin comentario'}</div>
+                    </div>
+                  );
+                })}
               </div>
             </Card>
             <div className="grid md:grid-cols-2 gap-4">

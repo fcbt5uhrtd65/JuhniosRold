@@ -380,16 +380,27 @@ def _draw_loan_details(c, x0, x1, y, vacation, employee):
     return y
 
 
+def _is_manager_not_applicable(step):
+    """El paso 'Jefe inmediato' nace ya resuelto (sin pedir firma) cuando ese
+    jefe es el mismo Administrador: su firma real queda en el paso de
+    Aprobación final, no tiene sentido pedirle una segunda firma por lo mismo."""
+    return step.step == "MANAGER" and step.status == "CANCELLED" and not step.acted_at
+
+
 def _approval_steps_data(vacation):
     steps = list(vacation.approval_steps.all())
     if steps:
         return [
             {
                 "label": step.get_step_display(),
-                "status": step.get_status_display(),
+                "status": "No aplica" if _is_manager_not_applicable(step) else step.get_status_display(),
                 "actor": _safe(getattr(step.user, "email", None)),
                 "date": _datetime_label(step.acted_at),
-                "detail": _safe(step.comment, "") or ("pendiente de gestión" if not step.acted_at else "acción registrada"),
+                "detail": (
+                    step.comment
+                    if _is_manager_not_applicable(step)
+                    else _safe(step.comment, "") or ("pendiente de gestión" if not step.acted_at else "acción registrada")
+                ),
             }
             for step in steps[:4]
         ]
