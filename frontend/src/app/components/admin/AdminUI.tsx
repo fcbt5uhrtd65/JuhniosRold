@@ -126,7 +126,7 @@ export const actionsCellCls = '[container-type:inline-size]';
 
 export function ActionsMenu({ items }: { items: ActionMenuItem[] }) {
   const [open, setOpen] = useState(false);
-  const [menuPos, setMenuPos] = useState({ top: 0, right: 0 });
+  const [menuPos, setMenuPos] = useState({ top: 0, right: 0, maxHeight: 0, openUpward: false });
   const containerRef = useRef<HTMLDivElement>(null);
   const kebabRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -152,12 +152,34 @@ export function ActionsMenu({ items }: { items: ActionMenuItem[] }) {
     if (!open) return;
     const MENU_WIDTH = 176; // w-44
     const EDGE_MARGIN = 8;
+    const GAP = 4;
+    const ITEM_HEIGHT = 33; // ~py-2 + texto + ícono, medido sobre el menú real
+    const estimatedMenuHeight = items.length * ITEM_HEIGHT + 8; // + padding vertical del contenedor (py-1 arriba y abajo)
+
     const updatePosition = () => {
       const rect = kebabRef.current?.getBoundingClientRect();
       if (!rect) return;
       const maxRight = window.innerWidth - MENU_WIDTH - EDGE_MARGIN;
       const right = Math.min(window.innerWidth - rect.right, maxRight);
-      setMenuPos({ top: rect.bottom + 4, right: Math.max(right, EDGE_MARGIN) });
+
+      // El menú puede tener más ítems de los que caben entre el botón y el borde
+      // inferior de la ventana (se veía "mochado" en filas cerca del final de la
+      // tabla). En vez de medir la altura real (requiere un pase extra tras montar
+      // y dejaba el primer render mal decidido), se estima con la cantidad de
+      // ítems desde el primer cálculo: si no alcanza el espacio de abajo pero sí
+      // el de arriba, abre hacia arriba. Si ni así cabe completo, se limita su
+      // alto con scroll interno en vez de recortarlo sin aviso.
+      const spaceBelow = window.innerHeight - rect.bottom - GAP - EDGE_MARGIN;
+      const spaceAbove = rect.top - GAP - EDGE_MARGIN;
+      const openUpward = estimatedMenuHeight > spaceBelow && spaceAbove > spaceBelow;
+      const availableSpace = Math.max(openUpward ? spaceAbove : spaceBelow, 80);
+
+      setMenuPos({
+        top: openUpward ? rect.top - GAP : rect.bottom + GAP,
+        right: Math.max(right, EDGE_MARGIN),
+        maxHeight: Math.min(estimatedMenuHeight, availableSpace),
+        openUpward,
+      });
     };
     updatePosition();
     window.addEventListener('resize', updatePosition);
@@ -166,7 +188,7 @@ export function ActionsMenu({ items }: { items: ActionMenuItem[] }) {
       window.removeEventListener('resize', updatePosition);
       window.removeEventListener('scroll', updatePosition, true);
     };
-  }, [open]);
+  }, [open, items.length]);
 
   return (
     <div ref={containerRef} className="relative">
@@ -202,7 +224,15 @@ export function ActionsMenu({ items }: { items: ActionMenuItem[] }) {
         {open && createPortal(
           <div
             ref={menuRef}
-            style={{ position: 'fixed', top: menuPos.top, right: menuPos.right }}
+            style={{
+              position: 'fixed',
+              right: menuPos.right,
+              ...(menuPos.openUpward
+                ? { bottom: window.innerHeight - menuPos.top, top: 'auto' }
+                : { top: menuPos.top }),
+              maxHeight: menuPos.maxHeight || undefined,
+              overflowY: 'auto',
+            }}
             className="z-50 w-44 bg-white border border-gray-100 rounded-xl shadow-lg py-1"
           >
             {items.map((item, i) => {

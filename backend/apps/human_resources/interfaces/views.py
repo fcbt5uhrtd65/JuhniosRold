@@ -709,9 +709,7 @@ class HRNotificationViewSet(SoftDeleteModelViewSet):
 
 
 class VacationRequestPdfView(APIView):
-    permission_classes = (HasComponentAccess,)
-    required_component = "human_resources.management"
-    required_component_action = "view"
+    permission_classes = (IsAuthenticated,)
 
     def get(self, request, pk):
         queryset = VacationRequest.objects.select_related(
@@ -719,6 +717,24 @@ class VacationRequestPdfView(APIView):
             "admin_decided_by", "hr_decided_by",
         ).prefetch_related("approval_steps__user__employee_profile", "overtime_shifts")
         vacation = get_object_or_404(queryset, pk=pk)
+
+        user = request.user
+        if not (getattr(user, "has_full_access", False) or user.has_component_access("human_resources.management", "view")):
+            # Sin acceso al módulo completo de RRHH: solo puede ver el PDF si es el
+            # dueño de la solicitud o su jefe inmediato — y, si es de tipo PRÉSTAMO,
+            # el jefe inmediato queda excluido salvo que tenga acceso especial a préstamos.
+            requester_employee = getattr(user, "employee_profile", None)
+            is_owner = requester_employee is not None and vacation.employee_id == requester_employee.id
+            manager = getattr(vacation.employee, "manager", None)
+            is_manager = requester_employee is not None and manager is not None and manager.id == requester_employee.id
+            if is_manager and vacation.request_type == VacationRequest.RequestType.LOAN and not getattr(user, "can_view_loans", False):
+                is_manager = False
+            if not (is_owner or is_manager):
+                return Response(
+                    {"detail": "No tienes permiso para ver el documento de esta solicitud."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
         pdf_buffer = render_request_pdf(vacation)
         return FileResponse(
             pdf_buffer,

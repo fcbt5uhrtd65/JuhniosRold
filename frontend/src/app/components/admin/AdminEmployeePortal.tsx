@@ -32,6 +32,7 @@ import {
   deleteVacationRequest,
   getMyVacationRequests,
   getTeamVacationRequests,
+  openVacationRequestPdf,
   rejectVacationRequest,
   type LoanFrequency,
   type OvertimeShiftInput,
@@ -247,6 +248,7 @@ export function AdminEmployeePortal() {
   const [expandedRequestId, setExpandedRequestId] = useState<string | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<VacationRequest | null>(null);
   const [downloadingCertificate, setDownloadingCertificate] = useState(false);
+  const [downloadingRequestPdfId, setDownloadingRequestPdfId] = useState<string | null>(null);
   const [showCertificateModal, setShowCertificateModal] = useState(false);
   const [allEmployees, setAllEmployees] = useState<Employee[]>([]);
   const [teamRequests, setTeamRequests] = useState<VacationRequest[]>([]);
@@ -545,6 +547,18 @@ export function AdminEmployeePortal() {
       toast.error(error instanceof Error ? error.message : 'No se pudo generar tu certificado laboral');
     } finally {
       setDownloadingCertificate(false);
+    }
+  };
+
+  const handleDownloadRequestPdf = async (request: VacationRequest) => {
+    setDownloadingRequestPdfId(request.id);
+    try {
+      await openVacationRequestPdf(request.id);
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo abrir el documento de la solicitud');
+    } finally {
+      setDownloadingRequestPdfId(null);
     }
   };
 
@@ -1330,7 +1344,18 @@ export function AdminEmployeePortal() {
               <button onClick={() => setSelectedRequest(null)} className="p-2.5 rounded-lg hover:bg-gray-200 flex-shrink-0"><X size={16} /></button>
             </div>
             <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
-              <Badge label={getStatusLabel(selectedRequest.status)} color={getStatusColor(selectedRequest.status)} />
+              <div className="flex items-center justify-between gap-3">
+                <Badge label={getStatusLabel(selectedRequest.status)} color={getStatusColor(selectedRequest.status)} />
+                <button
+                  type="button"
+                  onClick={() => void handleDownloadRequestPdf(selectedRequest)}
+                  disabled={downloadingRequestPdfId === selectedRequest.id}
+                  className="flex items-center gap-1.5 text-xs font-semibold text-[#2a4038] hover:underline disabled:opacity-50"
+                >
+                  <FileText size={13} />
+                  {downloadingRequestPdfId === selectedRequest.id ? 'Abriendo...' : 'Ver PDF'}
+                </button>
+              </div>
               <dl className="space-y-3 text-sm">
                 <div className="flex items-start justify-between gap-4">
                   <dt className="text-xs text-gray-400 flex-shrink-0">Fechas</dt>
