@@ -435,7 +435,7 @@ export function AdminEmployeePortal() {
         loan_installments_count: Number(form.loan_installments_count),
         loan_requester_signature: loanSignatureFile,
       });
-      toast.success('Solicitud de préstamo enviada a RRHH');
+      toast.success('Solicitud de préstamo enviada a Tesorería');
       setForm(EMPTY_FORM);
       setLoanSignatureFile(null);
       await loadData();

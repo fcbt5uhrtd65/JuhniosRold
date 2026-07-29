@@ -149,14 +149,9 @@ const MANAGEABLE_LOAN_STATUSES: VacationRequestStatus[] = ['PENDING', 'IN_REVIEW
 export function AdminLoans() {
   const toast = useToast();
   const { currentUser } = useAdmin();
-  // Solo Administrador o Tesorería pueden aprobar/rechazar préstamos. RRHH y
-  // Contabilidad ven la información completa (incluida esta pantalla), pero
-  // no deciden — solo consultan y descargan el PDF. Tesorería puede ser rol
-  // principal o adicional, por eso se revisa allRoleCodes y no solo `rol`.
-  const canManage =
-    currentUser?.rol === 'ADMIN' ||
-    currentUser?.rol === 'TESORERIA' ||
-    Boolean(currentUser?.allRoleCodes?.includes('TESORERIA'));
+  // Tesorería decide préstamos desde el permiso real del componente
+  // human_resources.loans. Contabilidad y RRHH solo consultan y descargan PDF.
+  const canManage = Boolean(currentUser?.canManageLoans);
   const [isLoading, setIsLoading] = useState(true);
   const [loans, setLoans] = useState<VacationRequest[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);

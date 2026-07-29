@@ -200,6 +200,11 @@ COMPONENT_DEFINITIONS = (
         "description": "Vacaciones, nómina, asistencia y revisiones de desempeño.",
     },
     {
+        "code": "human_resources.loans",
+        "name": "Préstamos",
+        "description": "Solicitudes de préstamo de empleados: ver, aprobar/rechazar y definir el monto.",
+    },
+    {
         "code": "finance.management",
         "name": "Finanzas",
         "description": "Transacciones financieras y facturación.",
@@ -322,10 +327,13 @@ def build_default_role_permissions():
         "employees.management": {"can_view": True, "can_edit": False},
         "commerce.orders": {"can_view": True, "can_edit": False},
     }
-    # Contabilidad y Tesorería no reciben ningún componente genérico: su único
-    # acceso es la vista dedicada de solicitudes de préstamo
-    # (VacationRequestViewSet.loans/approve-loan/reject-loan), autorizado por rol
-    # directamente en la vista, no por HasComponentAccess.
-    permissions["CONTABILIDAD"] = {}
-    permissions["TESORERIA"] = {}
+    # Contabilidad solo puede CONSULTAR y descargar el PDF de préstamos, nunca
+    # aprobar/rechazar ni definir el monto. Tesorería sí gestiona el módulo
+    # completo (ver, aprobar, rechazar, aprobar monto parcial).
+    permissions["CONTABILIDAD"] = {
+        "human_resources.loans": {"can_view": True, "can_edit": False},
+    }
+    permissions["TESORERIA"] = {
+        "human_resources.loans": {"can_view": True, "can_edit": True},
+    }
     return permissions

@@ -187,14 +187,25 @@ class User(AbstractUser):
 
     @property
     def can_view_loans(self):
-        """Quién puede ver solicitudes de tipo PRÉSTAMO: Administrador, RRHH, el rol
-        Contabilidad (como principal o adicional), o cualquier usuario marcado
-        puntualmente con `can_view_loan_requests` (excepción por persona)."""
+        """Quién puede ver solicitudes de tipo PRÉSTAMO: Administrador, RRHH
+        (acceso general a RRHH), cualquiera con acceso de vista al componente
+        ``human_resources.loans`` (Contabilidad, Tesorería — como rol principal
+        o adicional), o cualquier usuario marcado puntualmente con
+        `can_view_loan_requests` (excepción por persona)."""
         return bool(
             self.has_full_access
-            or ("RRHH" in self.all_role_codes or "CONTABILIDAD" in self.all_role_codes)
+            or "RRHH" in self.all_role_codes
+            or self.has_component_access("human_resources.loans", "view")
             or self.can_view_loan_requests
         )
+
+    @property
+    def can_manage_loans(self):
+        """Quién puede aprobar/rechazar préstamos y definir el monto aprobado:
+        cualquiera con acceso de EDICIÓN al componente ``human_resources.loans``
+        (Tesorería, como rol principal o adicional). RRHH y Contabilidad quedan
+        fuera a propósito: solo consultan."""
+        return bool(self.has_full_access or self.has_component_access("human_resources.loans", "edit"))
 
     def has_component_access(self, component_code: str, action: str = "view") -> bool:
         if not self.is_authenticated:

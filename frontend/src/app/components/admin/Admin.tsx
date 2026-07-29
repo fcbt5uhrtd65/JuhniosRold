@@ -47,6 +47,7 @@ function getDefaultViewForRole(role?: string) {
     case 'AUDITOR':
       return 'manufacturing';
     case 'CONTABILIDAD':
+    case 'TESORERIA':
       return 'loans';
     case 'ADMIN':
     default:

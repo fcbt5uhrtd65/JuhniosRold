@@ -117,6 +117,8 @@ const INTERNAL_ROLES = new Set<User['rol']>([
   'RRHH',
   'EMPLEADO',
   'PEDIDOS',
+  'CONTABILIDAD',
+  'TESORERIA',
 ]);
 
 // Offline demo users mirror the accounts created by seed_admin_users.
@@ -388,6 +390,7 @@ function mapAdminUser(user: Awaited<ReturnType<typeof getCurrentUser>>): User {
     email: user.email,
     rol: user.role,
     canViewLoans: user.can_view_loans,
+    canManageLoans: user.can_manage_loans,
     allRoleCodes: user.all_role_codes,
   };
 }

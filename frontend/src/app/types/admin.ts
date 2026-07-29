@@ -8,6 +8,7 @@ export interface User {
   email: string;
   rol: UserRole;
   canViewLoans?: boolean;
+  canManageLoans?: boolean;
   /** Rol principal más todos los roles adicionales asignados al usuario. */
   allRoleCodes?: UserRole[];
 }

@@ -342,9 +342,13 @@ class ResolveVacationRequestByRole:
         other_decision = vacation.hr_decision if role == "ADMIN" else vacation.admin_decision
         disagreement = bool(other_decision) and other_decision != decision
 
+        is_loan = vacation.request_type == VacationRequest.RequestType.LOAN
+
         if decision == VacationRequest.Status.REJECTED:
             vacation.status = VacationRequest.Status.REJECTED
         elif role == "ADMIN":
+            vacation.status = VacationRequest.Status.APPROVED
+        elif is_loan:
             vacation.status = VacationRequest.Status.APPROVED
         else:  # role == "HR", decision == APPROVED
             if vacation.admin_decision == VacationRequest.Status.APPROVED:

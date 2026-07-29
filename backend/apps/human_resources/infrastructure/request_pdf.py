@@ -400,6 +400,8 @@ def _hr_step_label(vacation):
 
 def _approval_steps_data(vacation):
     steps = list(vacation.approval_steps.all())
+    if _is_loan(vacation):
+        steps = [step for step in steps if step.step in ("REQUESTER", "HR")]
     if steps:
         return [
             {
@@ -416,9 +418,13 @@ def _approval_steps_data(vacation):
             for step in steps[:4]
         ]
     decisions = [
-        ("Administrador", vacation.admin_decision, vacation.admin_decided_by, vacation.admin_decided_at, vacation.admin_comment),
         (_hr_step_label(vacation), vacation.hr_decision, vacation.hr_decided_by, vacation.hr_decided_at, vacation.hr_comment),
     ]
+    if not _is_loan(vacation):
+        decisions.insert(
+            0,
+            ("Administrador", vacation.admin_decision, vacation.admin_decided_by, vacation.admin_decided_at, vacation.admin_comment),
+        )
     result = []
     for role_label, decision, decided_by, decided_at, comment in decisions:
         decision_label = dict(vacation.Status.choices).get(decision, "Pendiente") if decision else "Pendiente"
@@ -480,10 +486,11 @@ def _signing_steps(vacation):
     RRHH y/o Administrador), para que el PDF muestre la firma de cada uno de los
     que participaron — no solo de quienes decidieron el resultado final."""
     decided_statuses = {"APPROVED", "REJECTED"}
+    allowed_steps = {"HR"} if _is_loan(vacation) else {"MANAGER", "HR", "FINAL"}
     steps = [
         step
         for step in vacation.approval_steps.all()
-        if step.step in ("MANAGER", "HR", "FINAL") and step.status in decided_statuses and step.user_id and step.acted_at
+        if step.step in allowed_steps and step.status in decided_statuses and step.user_id and step.acted_at
     ]
     order = {"MANAGER": 0, "HR": 1, "FINAL": 2}
     steps.sort(key=lambda step: order.get(step.step, 3))

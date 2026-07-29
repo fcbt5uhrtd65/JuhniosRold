@@ -29,3 +29,31 @@ class AccessControlTests(TestCase):
         self.assertTrue(admin.is_staff)
         self.assertTrue(admin.is_superuser)
         self.assertTrue(admin.has_component_access("any.component", "edit"))
+
+    def test_loans_component_permissions_for_accounting_and_treasury(self):
+        contabilidad_role = Role.objects.get(code="CONTABILIDAD")
+        tesoreria_role = Role.objects.get(code="TESORERIA")
+
+        accountant = get_user_model().objects.create_user(
+            email="contabilidad@example.com",
+            password="SecurePass123!",
+            role=contabilidad_role,
+        )
+        treasurer = get_user_model().objects.create_user(
+            email="tesoreria@example.com",
+            password="SecurePass123!",
+            role=tesoreria_role,
+        )
+        employee_with_treasury = get_user_model().objects.create_user(
+            email="empleado-tesoreria@example.com",
+            password="SecurePass123!",
+            role=Role.objects.get(code="EMPLEADO"),
+        )
+        employee_with_treasury.additional_roles.add(tesoreria_role)
+
+        self.assertTrue(accountant.can_view_loans)
+        self.assertFalse(accountant.can_manage_loans)
+        self.assertTrue(treasurer.can_view_loans)
+        self.assertTrue(treasurer.can_manage_loans)
+        self.assertTrue(employee_with_treasury.can_view_loans)
+        self.assertTrue(employee_with_treasury.can_manage_loans)

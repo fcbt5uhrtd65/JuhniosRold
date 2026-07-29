@@ -5,7 +5,7 @@ from pypdf import PdfReader
 from rest_framework.test import APIClient
 
 from apps.employees.infrastructure.models import Department, Employee, Position
-from apps.human_resources.infrastructure.models import VacationRequest
+from apps.human_resources.infrastructure.models import VacationRequest, VacationRequestApprovalStep
 from apps.human_resources.infrastructure.request_pdf import _parse_runs, render_request_pdf
 from apps.identity.infrastructure.models import Role
 
@@ -167,3 +167,66 @@ class VacationRequestPortalTests(TestCase):
 
         self.assertIn("Firmas de aprob", text)
         self.assertNotIn("firmas registradas", text)
+
+    def test_treasury_approval_finalizes_loan_without_admin_step(self):
+        loan_signature = SimpleUploadedFile(
+            "solicitante.png",
+            b"fake-signature",
+            content_type="image/png",
+        )
+        create_response = self.client.post(
+            "/api/v1/hr/vacations/me/",
+            {
+                "request_type": "LOAN",
+                "start_date": "2026-07-29",
+                "end_date": "2026-07-29",
+                "is_full_day": True,
+                "loan_amount": "500000",
+                "loan_requester_name": "Ana Perez",
+                "loan_requester_document": "1234567890",
+                "loan_city": "Bogota",
+                "loan_position": "Auxiliar operativo",
+                "loan_concept": "Calamidad domestica",
+                "loan_frequency": "BIWEEKLY",
+                "loan_installments_count": "4",
+                "loan_requester_signature": loan_signature,
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(create_response.status_code, 201)
+        loan_id = create_response.data["id"]
+        self.assertEqual(
+            set(
+                VacationRequestApprovalStep.objects.filter(request_id=loan_id)
+                .values_list("step", flat=True)
+            ),
+            {"REQUESTER", "HR"},
+        )
+
+        treasurer = get_user_model().objects.create_user(
+            email="tesoreria@example.com",
+            password="SecurePass123!",
+            role=Role.objects.get(code="TESORERIA"),
+        )
+        self.client.force_authenticate(treasurer)
+        treasury_signature = SimpleUploadedFile(
+            "tesoreria.png",
+            b"fake-signature",
+            content_type="image/png",
+        )
+        approve_response = self.client.post(
+            f"/api/v1/hr/vacations/{loan_id}/approve/",
+            {
+                "approved_amount": "450000",
+                "comment": "Aprobado parcial por tesoreria",
+                "signature_override": treasury_signature,
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(approve_response.status_code, 200)
+        self.assertEqual(approve_response.data["status"], "APPROVED")
+        self.assertEqual(approve_response.data["hr_decision"], "APPROVED")
+        self.assertEqual(approve_response.data["admin_decision"], "")
+        self.assertEqual(approve_response.data["loan_approved_amount"], "450000.00")

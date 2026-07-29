@@ -149,6 +149,25 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
         return super().destroy(request, *args, **kwargs)
 
     def _ensure_approval_flow(self, vacation, requester=None):
+        if vacation.request_type == VacationRequest.RequestType.LOAN:
+            flow = (
+                (VacationRequestApprovalStep.Step.REQUESTER, 1, requester or vacation.employee.user, VacationRequest.Status.APPROVED, "Solicitud creada"),
+                (VacationRequestApprovalStep.Step.HR, 2, None, VacationRequest.Status.PENDING, ""),
+            )
+            for step, sequence, user, step_status, comment in flow:
+                VacationRequestApprovalStep.objects.get_or_create(
+                    request=vacation,
+                    step=step,
+                    defaults={
+                        "sequence": sequence,
+                        "user": user,
+                        "status": step_status,
+                        "acted_at": timezone.now() if step == VacationRequestApprovalStep.Step.REQUESTER else None,
+                        "comment": comment,
+                    },
+                )
+            return
+
         manager = getattr(vacation.employee, "manager", None)
         manager_user = getattr(manager, "user", None)
 
@@ -312,13 +331,10 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
 
         if is_loan:
             # Los préstamos tienen su propio circuito de aprobación, separado del
-            # resto de solicitudes: solo Administrador o Tesorería deciden
-            # (aprueban/rechazan). RRHH puede VER y descargar el PDF (ya cubierto
-            # por HasComponentAccess en list/retrieve/export), pero no resolver —
-            # y el jefe inmediato tampoco, salvo acceso puntual a préstamos.
-            if getattr(user, "has_full_access", False):
-                return "ADMIN"
-            if "TESORERIA" in getattr(user, "all_role_codes", set()):
+            # resto de solicitudes: quien tenga edición sobre el componente
+            # "human_resources.loans" ocupa el paso de Tesorería y decide. No hay
+            # paso ni firma final de Administrador en préstamos.
+            if getattr(user, "can_manage_loans", False):
                 return "HR"
             return None
 
