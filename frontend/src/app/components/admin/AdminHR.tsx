@@ -310,7 +310,7 @@ const INTERNAL_EMPLOYEE_ROLES: UserRole[] = ['ADMIN', 'RRHH', 'EMPLEADO', 'PEDID
 // Roles que se pueden sumar como acceso EXTRA sobre el rol principal (ej. un
 // Empleado que además debe ver Préstamos), sin reemplazarlo. Se excluye ADMIN a
 // propósito: el acceso total no debe otorgarse como "extra" sobre otro rol.
-const ADDITIONAL_ROLE_OPTIONS: UserRole[] = ['CONTABILIDAD', 'RRHH', 'EMPLEADO', 'PEDIDOS'];
+const ADDITIONAL_ROLE_OPTIONS: UserRole[] = ['CONTABILIDAD', 'TESORERIA', 'RRHH', 'EMPLEADO', 'PEDIDOS'];
 const ACCESS_EMAIL_DOMAIN = 'juhnios.com';
 
 function randomFrom(chars: string, length: number): string {
