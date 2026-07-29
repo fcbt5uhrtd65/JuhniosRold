@@ -151,8 +151,12 @@ export function AdminLoans() {
   const { currentUser } = useAdmin();
   // Solo Administrador o Tesorería pueden aprobar/rechazar préstamos. RRHH y
   // Contabilidad ven la información completa (incluida esta pantalla), pero
-  // no deciden — solo consultan y descargan el PDF.
-  const canManage = currentUser?.rol === 'ADMIN' || currentUser?.rol === 'TESORERIA';
+  // no deciden — solo consultan y descargan el PDF. Tesorería puede ser rol
+  // principal o adicional, por eso se revisa allRoleCodes y no solo `rol`.
+  const canManage =
+    currentUser?.rol === 'ADMIN' ||
+    currentUser?.rol === 'TESORERIA' ||
+    Boolean(currentUser?.allRoleCodes?.includes('TESORERIA'));
   const [isLoading, setIsLoading] = useState(true);
   const [loans, setLoans] = useState<VacationRequest[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -164,6 +168,7 @@ export function AdminLoans() {
   const [decisionComment, setDecisionComment] = useState('');
   const [decisionSignature, setDecisionSignature] = useState<File | null>(null);
   const [decisionSaving, setDecisionSaving] = useState(false);
+  const [decisionAmount, setDecisionAmount] = useState('');
 
   const loadLoans = async (options?: { silent?: boolean }) => {
     if (!options?.silent) setIsLoading(true);
@@ -185,6 +190,7 @@ export function AdminLoans() {
   const openDecisionModal = (loan: VacationRequest, decision: 'approve' | 'reject') => {
     setDecisionComment('');
     setDecisionSignature(null);
+    setDecisionAmount(loan.loan_amount ?? '');
     setDecisionRequest({ loan, decision });
   };
 
@@ -192,6 +198,7 @@ export function AdminLoans() {
     setDecisionRequest(null);
     setDecisionComment('');
     setDecisionSignature(null);
+    setDecisionAmount('');
   };
 
   const confirmDecision = async () => {
@@ -201,11 +208,28 @@ export function AdminLoans() {
       toast.error('Debes indicar el motivo del rechazo');
       return;
     }
+    let approvedAmount: number | null = null;
+    if (decision === 'approve') {
+      const requested = loan.loan_amount ? Number(loan.loan_amount) : 0;
+      approvedAmount = Number(decisionAmount);
+      if (!decisionAmount || Number.isNaN(approvedAmount) || approvedAmount <= 0) {
+        toast.error('Indica un monto aprobado válido');
+        return;
+      }
+      if (requested > 0 && approvedAmount > requested) {
+        toast.error('El monto aprobado no puede ser mayor al solicitado');
+        return;
+      }
+    }
     setDecisionSaving(true);
     try {
       if (decision === 'approve') {
-        await approveVacationRequest(loan.id, decisionComment.trim(), decisionSignature);
-        toast.success('Préstamo aprobado');
+        await approveVacationRequest(loan.id, decisionComment.trim(), decisionSignature, null, approvedAmount);
+        toast.success(
+          approvedAmount !== null && loan.loan_amount && approvedAmount < Number(loan.loan_amount)
+            ? `Préstamo aprobado parcialmente por ${formatMoney(approvedAmount)}`
+            : 'Préstamo aprobado',
+        );
       } else {
         await rejectVacationRequest(loan.id, decisionComment.trim(), decisionSignature);
         toast.info('Préstamo rechazado');
@@ -253,7 +277,7 @@ export function AdminLoans() {
     const totalActive = activeLoans.reduce((sum, loan) => sum + (loan.loan_amount ? Number(loan.loan_amount) : 0), 0);
     const totalApproved = filteredLoans
       .filter((loan) => loan.status === 'APPROVED' || loan.status === 'FINALIZED')
-      .reduce((sum, loan) => sum + (loan.loan_amount ? Number(loan.loan_amount) : 0), 0);
+      .reduce((sum, loan) => sum + (loan.loan_approved_amount ? Number(loan.loan_approved_amount) : loan.loan_amount ? Number(loan.loan_amount) : 0), 0);
     const pendingCount = filteredLoans.filter((loan) => ['PENDING', 'IN_REVIEW', 'PENDING_HR', 'PENDING_ADMIN'].includes(loan.status)).length;
     const average = filteredLoans.length > 0 ? totalRequested / filteredLoans.length : 0;
     return { totalRequested, totalActive, totalApproved, pendingCount, average, count: filteredLoans.length };
@@ -380,7 +404,14 @@ export function AdminLoans() {
                     <div className="text-xs text-gray-400">{loan.loan_requester_document || employee?.employee_code}</div>
                   </Td>
                   <Td>{loan.loan_concept || '—'}</Td>
-                  <Td className="font-semibold">{loan.loan_amount ? formatMoney(Number(loan.loan_amount)) : '—'}</Td>
+                  <Td className="font-semibold">
+                    {loan.loan_amount ? formatMoney(Number(loan.loan_amount)) : '—'}
+                    {loan.loan_approved_amount && loan.loan_amount && Number(loan.loan_approved_amount) !== Number(loan.loan_amount) && (
+                      <div className="text-[11px] font-medium text-amber-600 mt-0.5">
+                        Aprobado: {formatMoney(Number(loan.loan_approved_amount))}
+                      </div>
+                    )}
+                  </Td>
                   <Td>
                     {loan.loan_frequency ? LOAN_FREQUENCY_LABELS[loan.loan_frequency] ?? loan.loan_frequency : '—'}
                     {loan.loan_installments_count ? ` · ${loan.loan_installments_count} cuotas` : ''}
@@ -440,6 +471,25 @@ export function AdminLoans() {
                 return `Préstamo de ${name} por ${amount}. Esta acción queda registrada en el historial.`;
               })()}
             </p>
+            {decisionRequest.decision === 'approve' && (
+              <div>
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">
+                  Monto a aprobar
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={decisionAmount}
+                  onChange={(event) => setDecisionAmount(event.target.value)}
+                  className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#2a4038]/20 focus:border-[#2a4038] transition-all"
+                  placeholder="Monto a aprobar"
+                />
+                <p className="mt-1.5 text-[11px] text-gray-400">
+                  Por defecto viene el monto solicitado ({decisionRequest.loan.loan_amount ? formatMoney(Number(decisionRequest.loan.loan_amount)) : '—'}). Si autorizas menos, queda registrado como aprobación parcial.
+                </p>
+              </div>
+            )}
             <div>
               <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">
                 Comentario {decisionRequest.decision === 'reject' && '(obligatorio)'}

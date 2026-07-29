@@ -388,6 +388,7 @@ function mapAdminUser(user: Awaited<ReturnType<typeof getCurrentUser>>): User {
     email: user.email,
     rol: user.role,
     canViewLoans: user.can_view_loans,
+    allRoleCodes: user.all_role_codes,
   };
 }
 

@@ -240,7 +240,7 @@ class ResolveVacationRequestByRole:
         )
         return vacation
 
-    def execute(self, vacation, decision, reviewer, role, comment="", signature_override=None, is_remunerated=None, hr_slot_label="RRHH"):
+    def execute(self, vacation, decision, reviewer, role, comment="", signature_override=None, is_remunerated=None, hr_slot_label="RRHH", approved_amount=None):
         if role not in ("ADMIN", "HR", "MANAGER"):
             raise BusinessRuleViolation("Rol no autorizado para resolver solicitudes.")
 
@@ -283,6 +283,21 @@ class ResolveVacationRequestByRole:
         old_status = vacation.status
         now = timezone.now()
         update_fields = ["status", "updated_at"]
+
+        # Aprobación parcial de préstamos: Administrador o Tesorería pueden
+        # autorizar un monto menor al solicitado directamente al aprobar. Si no
+        # se indica, queda aprobado el monto completo (loan_amount).
+        if (
+            vacation.request_type == VacationRequest.RequestType.LOAN
+            and decision == VacationRequest.Status.APPROVED
+            and approved_amount is not None
+        ):
+            if approved_amount <= 0:
+                raise BusinessRuleViolation("El monto aprobado debe ser mayor a cero.")
+            if vacation.loan_amount is not None and approved_amount > vacation.loan_amount:
+                raise BusinessRuleViolation("El monto aprobado no puede ser mayor al monto solicitado.")
+            vacation.loan_approved_amount = approved_amount
+            update_fields.append("loan_approved_amount")
 
         if role == "ADMIN":
             vacation.admin_decision = decision
@@ -366,6 +381,11 @@ class ResolveVacationRequestByRole:
                 f"DESACUERDO: {other_role} había registrado '{other_decision}', "
                 f"{display_role} registró '{decision}'. {history_comment}"
             )
+        if vacation.loan_approved_amount is not None and vacation.loan_amount is not None and vacation.loan_approved_amount < vacation.loan_amount:
+            history_comment = (
+                f"Aprobación parcial: se autorizó ${vacation.loan_approved_amount:,.2f} "
+                f"de los ${vacation.loan_amount:,.2f} solicitados. {history_comment}"
+            ).strip()
         VacationRequestHistory.objects.create(
             request=vacation,
             action=VacationRequestHistory.Action.APPROVED

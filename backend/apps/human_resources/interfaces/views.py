@@ -1,4 +1,5 @@
 import json
+from decimal import Decimal, InvalidOperation
 
 from django.db.models import Count, Sum
 from django.db.models.functions import TruncMonth
@@ -317,7 +318,7 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
             # y el jefe inmediato tampoco, salvo acceso puntual a préstamos.
             if getattr(user, "has_full_access", False):
                 return "ADMIN"
-            if getattr(user, "role_code", None) == "TESORERIA":
+            if "TESORERIA" in getattr(user, "all_role_codes", set()):
                 return "HR"
             return None
 
@@ -364,6 +365,14 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
 
         hr_slot_label = "Tesorería" if vacation.request_type == VacationRequest.RequestType.LOAN else "RRHH"
 
+        raw_approved_amount = request.data.get("approved_amount")
+        approved_amount = None
+        if raw_approved_amount is not None and raw_approved_amount != "":
+            try:
+                approved_amount = Decimal(str(raw_approved_amount))
+            except InvalidOperation:
+                return Response({"detail": "El monto aprobado no es válido."}, status=status.HTTP_400_BAD_REQUEST)
+
         try:
             vacation = ResolveVacationRequestByRole().execute(
                 vacation,
@@ -374,6 +383,7 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
                 request.FILES.get("signature_override"),
                 is_remunerated,
                 hr_slot_label,
+                approved_amount,
             )
         except BusinessRuleViolation as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
@@ -806,7 +816,13 @@ class VacationRequestPdfView(APIView):
         vacation = get_object_or_404(queryset, pk=pk)
 
         user = request.user
-        if not (getattr(user, "has_full_access", False) or user.has_component_access("human_resources.management", "view")):
+        is_loan = vacation.request_type == VacationRequest.RequestType.LOAN
+        if is_loan and getattr(user, "can_view_loans", False):
+            # Contabilidad, Tesorería (como rol principal o adicional), RRHH y
+            # Admin siempre pueden ver/descargar el PDF de un préstamo — es
+            # justamente para eso que existe `can_view_loans`.
+            pass
+        elif not (getattr(user, "has_full_access", False) or user.has_component_access("human_resources.management", "view")):
             # Sin acceso al módulo completo de RRHH: solo puede ver el PDF si es el
             # dueño de la solicitud o su jefe inmediato — y, si es de tipo PRÉSTAMO,
             # el jefe inmediato queda excluido salvo que tenga acceso especial a préstamos.
@@ -814,7 +830,7 @@ class VacationRequestPdfView(APIView):
             is_owner = requester_employee is not None and vacation.employee_id == requester_employee.id
             manager = getattr(vacation.employee, "manager", None)
             is_manager = requester_employee is not None and manager is not None and manager.id == requester_employee.id
-            if is_manager and vacation.request_type == VacationRequest.RequestType.LOAN and not getattr(user, "can_view_loans", False):
+            if is_manager and is_loan and not getattr(user, "can_view_loans", False):
                 is_manager = False
             if not (is_owner or is_manager):
                 return Response(

@@ -104,6 +104,7 @@ class VacationRequestSerializer(serializers.ModelSerializer):
             "hr_decided_at",
             "hr_comment",
             "loan_expense_number",
+            "loan_approved_amount",
             "is_remunerated",
             "remuneration_decided_by",
             "remuneration_decided_at",

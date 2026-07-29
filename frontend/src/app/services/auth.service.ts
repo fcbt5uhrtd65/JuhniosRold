@@ -40,6 +40,7 @@ export interface AuthUser {
   has_usable_password: boolean;
   can_view_loan_requests?: boolean;
   can_view_loans?: boolean;
+  all_role_codes?: UserRole[];
   created_at: string;
   updated_at: string;
 }

@@ -226,6 +226,7 @@ export interface VacationRequest {
   due_date: string | null;
   support_document: string | null;
   loan_amount: string | null;
+  loan_approved_amount: string | null;
   loan_requester_name: string;
   loan_requester_document: string;
   loan_city: string;
@@ -643,7 +644,8 @@ function buildDecisionBody(
   comment: string,
   signatureFile?: File | null,
   isRemunerated?: boolean | null,
-): FormData | { comment: string; is_remunerated?: boolean } {
+  approvedAmount?: number | null,
+): FormData | { comment: string; is_remunerated?: boolean; approved_amount?: number } {
   if (signatureFile) {
     const formData = new FormData();
     formData.append('comment', comment);
@@ -651,25 +653,31 @@ function buildDecisionBody(
     if (isRemunerated !== null && isRemunerated !== undefined) {
       formData.append('is_remunerated', String(isRemunerated));
     }
+    if (approvedAmount !== null && approvedAmount !== undefined) {
+      formData.append('approved_amount', String(approvedAmount));
+    }
     return formData;
   }
   return {
     comment,
     ...(isRemunerated !== null && isRemunerated !== undefined ? { is_remunerated: isRemunerated } : {}),
+    ...(approvedAmount !== null && approvedAmount !== undefined ? { approved_amount: approvedAmount } : {}),
   };
 }
 
 /** ``isRemunerated`` es una decisión exclusiva del Administrador (nunca RRHH ni
  * el jefe inmediato); pásalo únicamente cuando quien aprueba sea Admin y tenga
  * ese control en pantalla. Se puede definir aquí al aprobar, o después con
- * ``setRequestRemuneration``. */
+ * ``setRequestRemuneration``. ``approvedAmount`` solo aplica a préstamos: permite
+ * a Administrador/Tesorería aprobar un monto menor al solicitado. */
 export async function approveVacationRequest(
   id: string,
   comment = '',
   signatureFile?: File | null,
   isRemunerated?: boolean | null,
+  approvedAmount?: number | null,
 ): Promise<VacationRequest> {
-  const res = await api.post<VacationRequest>(`${REQUESTS_PATH}${id}/approve/`, buildDecisionBody(comment, signatureFile, isRemunerated));
+  const res = await api.post<VacationRequest>(`${REQUESTS_PATH}${id}/approve/`, buildDecisionBody(comment, signatureFile, isRemunerated, approvedAmount));
   if (res.data) return res.data;
   throw new Error(res.message);
 }

@@ -350,6 +350,11 @@ def _draw_loan_details(c, x0, x1, y, vacation, employee):
         ("Número de egreso", vacation.loan_expense_number or "-"),
     ]
 
+    if vacation.loan_approved_amount is not None and vacation.loan_amount is not None and vacation.loan_approved_amount != vacation.loan_amount:
+        rows.append(("Monto aprobado", f"{_money_label(vacation.loan_approved_amount)} (aprobación parcial)"))
+    elif vacation.loan_approved_amount is not None and vacation.status == vacation.Status.APPROVED:
+        rows.append(("Monto aprobado", _money_label(vacation.loan_approved_amount)))
+
     _text(c, x0, y, "Datos del préstamo", size=10.5, bold=True, color=TEXT)
     y -= 20
     col_w = w / 2
@@ -485,16 +490,11 @@ def _signing_steps(vacation):
     return steps[:3]
 
 
-def _draw_signatures_section(c, x0, x1, y, vacation):
-    w = x1 - x0
-    _text(c, x0, y, "Firmas de aprobación", size=10.5, bold=True, color=TEXT)
-    y -= 60
-
+def _signature_columns(vacation):
+    """Firmas a dibujar: primero la del solicitante (solo en préstamos), luego
+    la de cada paso realmente decidido (Jefe inmediato, Tesorería/RRHH, Admin)."""
     steps = _signing_steps(vacation)
     requester_signature = _is_loan(vacation) and vacation.loan_requester_signature
-    if not steps and not requester_signature:
-        return y - 14
-
     columns = []
     if requester_signature:
         columns.append((
@@ -508,6 +508,26 @@ def _draw_signatures_section(c, x0, x1, y, vacation):
         signature_file = getattr(step, "signature", None) or (getattr(employee, "signature", None) if employee else None)
         step_label = _hr_step_label(vacation) if step.step == "HR" else step.get_step_display()
         columns.append((signer_name, f"{step_label} · {step.get_status_display()}", signature_file))
+    return columns
+
+
+# Alto real necesario para el bloque de firmas, medido desde donde empieza el
+# título "Firmas de aprobación" hasta el punto más bajo que efectivamente se
+# dibuja (rol/cargo debajo de la línea de firma): 60px hasta la línea + ~28px
+# de nombre/rol por debajo + margen de seguridad. Antes esta constante (130,
+# luego reducida a 120 por error) subestimaba el alto real (~88-90px solo
+# hasta el texto de rol) y dejaba que la firma invadiera el pie de página.
+SIGNATURES_SECTION_HEIGHT = 60 + 28 + 40
+
+
+def _draw_signatures_section(c, x0, x1, y, vacation):
+    w = x1 - x0
+    _text(c, x0, y, "Firmas de aprobación", size=10.5, bold=True, color=TEXT)
+    y -= 60
+
+    columns = _signature_columns(vacation)
+    if not columns:
+        return y - 14
 
     count = len(columns)
     gap = 20 if count >= 3 else 30
@@ -541,9 +561,14 @@ def _render_request_page(c, page_w, page_h, x0, x1, cx, vacation, employee, comp
     y = _draw_approval_narrative(c, x0, x1, y, vacation, compact=compact)
     y -= 8
 
-    signatures_height = 130
-    fits_one_page = (y - signatures_height) >= bottom_limit
+    fits_one_page = (y - SIGNATURES_SECTION_HEIGHT) >= bottom_limit
     return y, bottom_limit, fits_one_page
+
+
+def _draw_footer_note(c, page_w, bottom_limit):
+    c.setFillColor(MUTED)
+    c.setFont(FONT, 7.2)
+    c.drawCentredString(page_w / 2, bottom_limit - 12, f"Documento oficial · {COMPANY_NAME} · Válido con firmas digitales registradas.")
 
 
 def render_request_pdf(vacation):
@@ -564,13 +589,23 @@ def render_request_pdf(vacation):
     c = canvas.Canvas(buffer, pagesize=letter)
     c.setTitle(f"Solicitud {vacation.request_number or vacation.id}")
 
-    y, bottom_limit, _ = _render_request_page(c, page_w, page_h, x0, x1, cx, vacation, employee, compact=compact)
+    y, bottom_limit, fits_one_page = _render_request_page(c, page_w, page_h, x0, x1, cx, vacation, employee, compact=compact)
 
-    _draw_signatures_section(c, x0, x1, y, vacation)
-
-    c.setFillColor(MUTED)
-    c.setFont(FONT, 7.2)
-    c.drawCentredString(page_w / 2, bottom_limit - 12, f"Documento oficial · {COMPANY_NAME} · Válido con firmas digitales registradas.")
+    if fits_one_page:
+        _draw_signatures_section(c, x0, x1, y, vacation)
+        _draw_footer_note(c, page_w, bottom_limit)
+    else:
+        # Ni siquiera con espaciado compacto entra el bloque de firmas sin
+        # invadir el pie de página (ej. préstamos con 3 firmas + trazabilidad
+        # larga): se pasa a una segunda página en vez de dibujar encimado.
+        c.showPage()
+        footer_h = draw_letterhead_footer(c, page_w, x0, x1)
+        bottom_limit = footer_h + 26
+        y = _draw_letterhead(c, page_w, page_h, x0, x1)
+        _text(c, x0, y, f"Gestión de Talento Humano  ·  {vacation.request_number or vacation.id}  ·  continuación", size=8.5, bold=True, color=MUTED)
+        y -= 34
+        _draw_signatures_section(c, x0, x1, y, vacation)
+        _draw_footer_note(c, page_w, bottom_limit)
 
     c.save()
     buffer.seek(0)

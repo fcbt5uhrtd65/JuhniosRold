@@ -8,6 +8,8 @@ export interface User {
   email: string;
   rol: UserRole;
   canViewLoans?: boolean;
+  /** Rol principal más todos los roles adicionales asignados al usuario. */
+  allRoleCodes?: UserRole[];
 }
 
 export interface Product {

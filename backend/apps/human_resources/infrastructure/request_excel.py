@@ -30,6 +30,7 @@ COLUMNS = [
     ("estado", "Estado"),
     ("motivo", "Motivo"),
     ("monto_prestamo", "Monto préstamo"),
+    ("monto_aprobado", "Monto aprobado"),
     ("num_egreso", "N.º egreso"),
 ]
 
@@ -174,6 +175,7 @@ def _row(request):
         "estado": request.get_status_display(),
         "motivo": request.reason or request.description or "-",
         "monto_prestamo": float(request.loan_amount) if request.loan_amount is not None else "-",
+        "monto_aprobado": float(request.loan_approved_amount) if request.loan_approved_amount is not None else "-",
         "num_egreso": request.loan_expense_number or "-",
     }
 
