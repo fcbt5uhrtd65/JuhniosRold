@@ -651,16 +651,34 @@ export function AdminEmployeePortal() {
                 const requester = employeeById.get(request.employee);
                 const Icon = REQUEST_TYPE_ICONS[request.request_type];
                 return (
-                  <div key={request.id} className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-gray-100 p-3">
+                  <div
+                    key={request.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setSelectedRequest(request)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        setSelectedRequest(request);
+                      }
+                    }}
+                    className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-gray-100 p-3 cursor-pointer hover:border-gray-200 hover:bg-gray-50/60 transition-colors"
+                  >
                     <div className="w-9 h-9 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center flex-shrink-0">
                       <Icon size={15} />
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-gray-900 truncate">{requester ? getEmployeeName(requester) : request.employee}</p>
                       <p className="text-xs text-gray-400 truncate">{getRequestTypeLabel(request.request_type)} · {getRequestScheduleLabel(request)}</p>
+                      {request.reason && (
+                        <p className="text-xs text-gray-400 truncate mt-0.5">{request.reason}</p>
+                      )}
                     </div>
                     <Badge label={getStatusLabel(request.status)} color={getStatusColor(request.status)} />
-                    <div className="flex items-center gap-2 flex-shrink-0">
+                    {request.support_document && (
+                      <Paperclip size={13} className="text-gray-300 flex-shrink-0" />
+                    )}
+                    <div className="flex items-center gap-2 flex-shrink-0" onClick={(event) => event.stopPropagation()}>
                       <button
                         type="button"
                         onClick={() => openTeamDecisionModal(request, 'approve')}
