@@ -1,6 +1,8 @@
+import io
 from datetime import timedelta
 from decimal import Decimal
 
+from django.core.files.base import ContentFile
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
@@ -56,10 +58,8 @@ from apps.manufacturing.infrastructure.models import (
     WeightVolumeSample,
 )
 
-
-DEMO_BATCH_CODE = "DEMO-MFG-LOTE-001"
-DEMO_FORMULA_CODE = "DEMO-MFG-FRM-001"
 DEMO_PREFIX = "DEMO-MFG"
+DEMO_FORMULA_CODE = "DEMO-MFG-FRM-001"
 
 
 def decimal(value):
@@ -74,6 +74,48 @@ def upsert(model, lookup, defaults):
     return obj
 
 
+# ── Generación de imágenes de prueba (firmas y fotos) ──────────────────────
+# Sin estas, todas las secciones con evidencia gráfica (etiqueta testigo,
+# loteado, firmas electrónicas) quedarían siempre en su variante "vacía" y no
+# se podría probar el layout real de esos bloques en el PDF.
+
+def _signature_png(seed_text):
+    from PIL import Image, ImageDraw
+
+    img = Image.new("RGBA", (300, 100), (255, 255, 255, 0))
+    draw = ImageDraw.Draw(img)
+    offset = sum(ord(ch) for ch in seed_text) % 20
+    points = [(20, 70 - offset % 15), (80, 20 + offset % 10), (140, 80 - offset % 12), (200, 30 + offset % 8), (260, 70)]
+    draw.line(points, fill=(20, 40, 90, 255), width=6)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _photo_jpg(label):
+    from PIL import Image, ImageDraw
+
+    img = Image.new("RGB", (640, 420), (235, 236, 238))
+    draw = ImageDraw.Draw(img)
+    draw.rectangle([8, 8, 631, 411], outline=(140, 140, 140), width=3)
+    draw.text((24, 24), label, fill=(50, 55, 60))
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG")
+    return buf.getvalue()
+
+
+def _attach_signature(field, filename, seed_text):
+    if not field:
+        field.save(filename, ContentFile(_signature_png(seed_text)), save=True)
+
+
+def _attach_photo(field, filename, label):
+    if not field:
+        field.save(filename, ContentFile(_photo_jpg(label)), save=True)
+
+
+# ── Maestros compartidos entre todos los lotes demo ────────────────────────
+
 def ensure_employee():
     department = upsert(
         Department,
@@ -85,7 +127,7 @@ def ensure_employee():
         {"department": department, "name": "Operario lider de produccion"},
         {"description": "Responsable demo del lote de produccion.", "is_active": True},
     )
-    return upsert(
+    employee = upsert(
         Employee,
         {"employee_code": "DEMO-MFG-EMP-001"},
         {
@@ -99,6 +141,21 @@ def ensure_employee():
             "status": Employee.Status.ACTIVE,
         },
     )
+    quality_employee = upsert(
+        Employee,
+        {"employee_code": "DEMO-MFG-EMP-002"},
+        {
+            "document_number": "DEMO-MFG-DOC-002",
+            "first_name": "Ana",
+            "last_name": "Calidad Demo",
+            "email": "ana.calidad.demo@example.com",
+            "department": department,
+            "position": position,
+            "hire_date": timezone.localdate() - timedelta(days=300),
+            "status": Employee.Status.ACTIVE,
+        },
+    )
+    return employee, quality_employee
 
 
 def ensure_inventory_master():
@@ -259,7 +316,7 @@ def ensure_raw_batches(raw_materials, location, supplier):
         stock = upsert(
             ItemStock,
             {"item": item, "location": location, "raw_material_batch": batch},
-            {"quantity": formula_quantity * decimal("5"), "reserved_quantity": decimal("0")},
+            {"quantity": formula_quantity * decimal("20"), "reserved_quantity": decimal("0")},
         )
         ItemStockMovement.objects.get_or_create(
             item=item,
@@ -320,7 +377,21 @@ def ensure_formula(output_item, raw_materials, unit_un):
     return formula
 
 
-def ensure_batch(formula, output_item, unit_un, location, employee):
+# ── Escenario: construcción parametrizada de un lote ───────────────────────
+# Cada lote demo se identifica por su propio batch_code (DEMO-MFG-LOTE-00N) y
+# recibe cuánto avance debe tener (`stage`), para poder cubrir todo el rango
+# de estados de Batch y no solo el caso "liberado y perfecto".
+
+class Stage:
+    DRAFT = "draft"                    # Solo información general, nada diligenciado.
+    IN_PROCESS = "in_process"          # Dispensación + fabricación hechas; resto pendiente.
+    DEVIATION = "deviation"            # Llega a calidad con hermeticidad y peso fuera de especificación.
+    REJECTED = "rejected"              # Certificado de análisis rechazado, lote rechazado.
+    PENDING_DOCS = "pending_docs"      # Todo el proceso físico hecho, checklist documental incompleto.
+    COMPLETE = "complete"              # Expediente completo y liberado, con fotos/firmas reales.
+
+
+def ensure_batch(code, formula, output_item, unit_un, location, employee, *, status, notes, planned=100, actual=98):
     today = timezone.localdate()
     area = upsert(Area, {"code": "DEMO-MFG-AREA"}, {"name": "Area demo produccion", "is_active": True})
     line = upsert(
@@ -329,49 +400,50 @@ def ensure_batch(formula, output_item, unit_un, location, employee):
         {"name": "Linea demo de fabricacion", "area": area, "is_active": True},
     )
 
-    production_order = ProductionOrder.objects.filter(batch_code=DEMO_BATCH_CODE).first()
+    order_status_map = {
+        Batch.Status.DRAFT: ProductionOrder.Status.PENDING,
+        Batch.Status.MANUFACTURING: ProductionOrder.Status.IN_PROGRESS,
+        Batch.Status.PENDING_DOCUMENTS: ProductionOrder.Status.IN_PROGRESS,
+        Batch.Status.REJECTED: ProductionOrder.Status.CLOSED,
+        Batch.Status.RELEASED: ProductionOrder.Status.CLOSED,
+    }
+    order_status = order_status_map.get(status, ProductionOrder.Status.IN_PROGRESS)
+
+    production_order = ProductionOrder.objects.filter(batch_code=code).first()
+    order_fields = {
+        "formula": formula,
+        "output_item": output_item,
+        "planned_quantity": decimal(planned),
+        "actual_quantity": decimal(actual),
+        "batch_code": code,
+        "started_at": today - timedelta(days=2),
+        "closed_at": today if status in Batch.TERMINAL_STATUSES else None,
+        "responsible": "Teo Produccion Demo",
+        "is_dispensed": status != Batch.Status.DRAFT,
+        "is_output_received": status in Batch.TERMINAL_STATUSES,
+        "status": order_status,
+        "notes": f"Orden demo ({code}) creada por seed_manufacturing_demo.",
+    }
     if production_order is None:
-        production_order = ProductionOrder.objects.create(
-            formula=formula,
-            output_item=output_item,
-            planned_quantity=decimal("100"),
-            actual_quantity=decimal("98"),
-            batch_code=DEMO_BATCH_CODE,
-            started_at=today - timedelta(days=2),
-            closed_at=today,
-            responsible="Teo Produccion Demo",
-            is_dispensed=True,
-            is_output_received=True,
-            status=ProductionOrder.Status.CLOSED,
-            notes="Orden demo creada por seed_manufacturing_demo.",
-        )
+        production_order = ProductionOrder.objects.create(**order_fields)
     else:
-        production_order.formula = formula
-        production_order.output_item = output_item
-        production_order.planned_quantity = decimal("100")
-        production_order.actual_quantity = decimal("98")
-        production_order.started_at = today - timedelta(days=2)
-        production_order.closed_at = today
-        production_order.responsible = "Teo Produccion Demo"
-        production_order.is_dispensed = True
-        production_order.is_output_received = True
-        production_order.status = ProductionOrder.Status.CLOSED
-        production_order.notes = "Orden demo creada por seed_manufacturing_demo."
+        for field, value in order_fields.items():
+            setattr(production_order, field, value)
         production_order.save()
 
     batch = upsert(
         Batch,
         {"production_order": production_order},
         {
-            "status": Batch.Status.RELEASED,
+            "status": status,
             "area": area,
             "production_line": line,
             "production_manager": employee,
             "quality_manager": employee,
             "scheduled_at": today - timedelta(days=3),
-            "actual_start_at": timezone.now() - timedelta(days=2, hours=3),
-            "actual_end_at": timezone.now() - timedelta(hours=2),
-            "notes": "Lote demo completo para probar expediente, controles y PDF.",
+            "actual_start_at": timezone.now() - timedelta(days=2, hours=3) if status != Batch.Status.DRAFT else None,
+            "actual_end_at": timezone.now() - timedelta(hours=2) if status in Batch.TERMINAL_STATUSES else None,
+            "notes": notes,
             "created_by": None,
         },
     )
@@ -379,14 +451,14 @@ def ensure_batch(formula, output_item, unit_un, location, employee):
     BatchStatusHistory.objects.get_or_create(
         batch=batch,
         previous_status="",
-        new_status=Batch.Status.RELEASED,
-        reason="Seed demo lote completo",
-        defaults={"changed_by": None, "observation": "Lote demo precargado en estado liberado."},
+        new_status=status,
+        reason=f"Seed demo {code}",
+        defaults={"changed_by": None, "observation": f"Lote demo precargado en estado {status}."},
     )
     return batch, area, line
 
 
-def ensure_dispensing(batch, raw_batches, employee):
+def ensure_dispensing(batch, raw_batches, employee, *, with_signatures=False):
     order = upsert(
         DispensingOrder,
         {"batch": batch},
@@ -423,19 +495,18 @@ def ensure_dispensing(batch, raw_batches, employee):
             is_reprint=False,
             defaults={"printed_by": None, "reprint_reason": ""},
         )
+    if with_signatures:
+        _attach_signature(order.responsible_signature, "resp_sign.png", f"{batch.id}-resp")
+        _attach_signature(order.verifier_signature, "verif_sign.png", f"{batch.id}-verif")
     return order
 
 
-def ensure_process_controls(batch, raw_batches, packaging_materials, unit_un, location, employee, area, line):
+def ensure_early_process(batch, employee, area, line):
+    """Despeje y limpieza de dispensación/fabricación + pasos de fabricación
+    completados. Usado por los escenarios que no llegan hasta calidad/empaque."""
     now = timezone.now()
-    today = timezone.localdate()
 
-    for phase in (
-        LineClearance.Phase.DISPENSING,
-        LineClearance.Phase.MANUFACTURING,
-        LineClearance.Phase.FILLING,
-        LineClearance.Phase.PACKAGING,
-    ):
+    for phase in (LineClearance.Phase.DISPENSING, LineClearance.Phase.MANUFACTURING):
         clearance = upsert(
             LineClearance,
             {"batch": batch, "phase": phase},
@@ -471,7 +542,7 @@ def ensure_process_controls(batch, raw_batches, packaging_materials, unit_un, lo
             "sanitizer": "Alcohol 70%",
             "sanitizer_concentration": "70%",
             "sanitizer_batch": "SAN-DEMO-001",
-            "sanitizer_expires_at": today + timedelta(days=180),
+            "sanitizer_expires_at": timezone.localdate() + timedelta(days=180),
             "performed_by": employee,
             "verified_by": employee,
             "result": CleaningRecord.Result.APPROVED,
@@ -488,8 +559,8 @@ def ensure_process_controls(batch, raw_batches, packaging_materials, unit_un, lo
             "production_line": line,
             "placed_at": now - timedelta(days=2),
             "placed_by": employee,
-            "removed_at": now - timedelta(hours=1),
-            "removed_by": employee,
+            "removed_at": None,
+            "removed_by": None,
         },
     )
 
@@ -510,6 +581,63 @@ def ensure_process_controls(batch, raw_batches, packaging_materials, unit_un, lo
             verified_by=employee,
             observations="Paso demo ejecutado conforme.",
         )
+
+
+def ensure_process_controls(
+    batch, packaging_materials, unit_un, employee, area, line, *,
+    seal_result=None, weight_result=None, packaging_photos=False,
+):
+    """Fases de llenado/acondicionamiento en adelante: control de producción,
+    llenado, peso/volumen, hermeticidad y acondicionamiento. Los parámetros
+    seal_result/weight_result permiten forzar una desviación real (fuga,
+    fuera de tolerancia) para probar esa variante del PDF."""
+    now = timezone.now()
+    today = timezone.localdate()
+
+    for phase in (LineClearance.Phase.FILLING, LineClearance.Phase.PACKAGING):
+        clearance = upsert(
+            LineClearance,
+            {"batch": batch, "phase": phase},
+            {
+                "area": area,
+                "production_line": line,
+                "cleared_at": now - timedelta(days=1, hours=6),
+                "previous_product": "Sin producto anterior - demo",
+                "previous_batch_code": "N/A",
+                "status": LineClearance.Status.APPROVED,
+                "performed_by": employee,
+                "verified_by": employee,
+            },
+        )
+        for criterion, _label in LineClearanceCriterion.CRITERIA_CHOICES:
+            upsert(
+                LineClearanceCriterion,
+                {"clearance": clearance, "criterion": criterion},
+                {"result": ResultStatus.YES, "observation": "Cumple en demo."},
+            )
+
+    upsert(
+        CleaningRecord,
+        {"batch": batch, "record_type": CleaningRecord.Type.EQUIPMENT, "equipment_code": "DEMO-LLEN-001"},
+        {
+            "phase": LineClearance.Phase.FILLING,
+            "area": area.name,
+            "equipment": "Llenadora DEMO",
+            "cleaned_at": now - timedelta(days=1, hours=6),
+            "previous_product": "Sin producto anterior - demo",
+            "previous_batch_code": "N/A",
+            "cleaning_method": "Limpieza y sanitizacion segun procedimiento demo.",
+            "sanitizer": "Hipoclorito de sodio 0,5%",
+            "sanitizer_concentration": "0.5%",
+            "sanitizer_batch": "SAN-DEMO-002",
+            "sanitizer_expires_at": today + timedelta(days=180),
+            "performed_by": employee,
+            "verified_by": employee,
+            "result": CleaningRecord.Result.APPROVED,
+            "observations": "Equipo apto para llenado demo.",
+            "valid_until": now + timedelta(days=7),
+        },
+    )
 
     production_control = upsert(
         ProductionControl,
@@ -577,6 +705,7 @@ def ensure_process_controls(batch, raw_batches, packaging_materials, unit_un, lo
         observations="Registro demo de llenado.",
     )
 
+    weight_deviation = weight_result == "OUT_OF_SPEC"
     weight = upsert(
         WeightVolumeControl,
         {"batch": batch},
@@ -587,11 +716,13 @@ def ensure_process_controls(batch, raw_batches, packaging_materials, unit_un, lo
             "unit": unit_un,
             "performed_by": employee,
             "verified_by": employee,
-            "overall_result": WeightVolumeControl.OverallResult.APPROVED,
+            "overall_result": WeightVolumeControl.OverallResult.REJECTED if weight_deviation else WeightVolumeControl.OverallResult.APPROVED,
         },
     )
     weight.samples.all().delete()
-    for sample_number, gross in enumerate(["0.520", "0.518", "0.521"], start=1):
+    gross_values = ["0.560", "0.518", "0.521"] if weight_deviation else ["0.520", "0.518", "0.521"]
+    for sample_number, gross in enumerate(gross_values, start=1):
+        out_of_spec = weight_deviation and sample_number == 1
         WeightVolumeSample.objects.create(
             control=weight,
             sample_number=sample_number,
@@ -599,10 +730,11 @@ def ensure_process_controls(batch, raw_batches, packaging_materials, unit_un, lo
             gross_weight=decimal(gross),
             tare=decimal("0.020"),
             volume=decimal("500"),
-            result=ResultStatus.YES,
-            observation="Muestra demo conforme.",
+            result=ResultStatus.NO if out_of_spec else ResultStatus.YES,
+            observation="Muestra demo fuera de especificacion, se ajusta llenadora." if out_of_spec else "Muestra demo conforme.",
         )
 
+    seal_deviation = seal_result == "LEAK"
     seal = upsert(
         SealIntegrityControl,
         {"batch": batch},
@@ -614,17 +746,18 @@ def ensure_process_controls(batch, raw_batches, packaging_materials, unit_un, lo
             "time_seconds": 60,
             "performed_by": employee,
             "verified_by": employee,
-            "observations": "Sin fugas en muestras demo.",
-            "overall_result": SealIntegrityControl.OverallResult.APPROVED,
+            "observations": "Se detecta fuga en muestra demo, requiere reinspeccion." if seal_deviation else "Sin fugas en muestras demo.",
+            "overall_result": SealIntegrityControl.OverallResult.REJECTED if seal_deviation else SealIntegrityControl.OverallResult.APPROVED,
         },
     )
     seal.samples.all().delete()
     for sample_number in range(1, 4):
+        is_leak = seal_deviation and sample_number == 2
         SealIntegritySample.objects.create(
             control=seal,
             sample_number=sample_number,
-            result=SealIntegritySample.Result.CONFORMING,
-            observation="Conforme demo.",
+            result=SealIntegritySample.Result.LEAK if is_leak else SealIntegritySample.Result.CONFORMING,
+            observation="Fuga detectada en sellado demo." if is_leak else "Conforme demo.",
         )
 
     packaging = upsert(
@@ -652,12 +785,15 @@ def ensure_process_controls(batch, raw_batches, packaging_materials, unit_un, lo
             "rejection_reasons": "",
         },
     )
+    if packaging_photos:
+        _attach_photo(packaging.label_sample_file, "label_demo.jpg", "ETIQUETA TESTIGO DEMO")
+
     packaging.lot_markings.all().delete()
     for stage in (BatchLotMarking.Stage.INITIAL, BatchLotMarking.Stage.FINAL):
-        BatchLotMarking.objects.create(
+        marking = BatchLotMarking.objects.create(
             packaging_control=packaging,
             stage=stage,
-            printed_batch_code=DEMO_BATCH_CODE,
+            printed_batch_code=batch.production_order.batch_code,
             manufacture_date=today - timedelta(days=2),
             expiry_date=today + timedelta(days=730),
             printed_at=now - timedelta(hours=5 if stage == BatchLotMarking.Stage.INITIAL else 1),
@@ -667,9 +803,13 @@ def ensure_process_controls(batch, raw_batches, packaging_materials, unit_un, lo
             performed_by=employee,
             verified_by=employee,
         )
+        if packaging_photos:
+            _attach_photo(marking.photo, f"loteado_{stage}.jpg", f"LOTEADO {stage}")
+
+    return production_control, filling, weight, seal, packaging
 
 
-def ensure_quality(batch, output_item, unit_un, location, employee):
+def ensure_quality(batch, output_item, unit_un, location, employee, *, concept=AnalysisCertificate.Concept.APPROVED):
     today = timezone.localdate()
     spec = upsert(
         ProductSpecification,
@@ -702,6 +842,7 @@ def ensure_quality(batch, output_item, unit_un, location, employee):
             is_mandatory=True,
         )
 
+    is_rejected = concept == AnalysisCertificate.Concept.REJECTED
     certificate = upsert(
         AnalysisCertificate,
         {"batch": batch},
@@ -711,26 +852,27 @@ def ensure_quality(batch, output_item, unit_un, location, employee):
             "analyzed_at": today,
             "analyzed_by": employee,
             "verified_by": employee,
-            "concept": AnalysisCertificate.Concept.APPROVED,
-            "observations": "Resultados demo conformes.",
+            "concept": concept,
+            "observations": "Producto no cumple pH especificado, se rechaza el lote." if is_rejected else "Resultados demo conformes.",
         },
     )
     certificate.tests.all().delete()
     for test in spec.tests.all():
+        failing = is_rejected and test.name == "pH"
         AnalysisTestResult.objects.create(
             certificate=certificate,
             name=test.name,
-            result_type="Conforme",
+            result_type="No conforme" if failing else "Conforme",
             unit=test.unit,
             specification=test.specification_text,
             lower_limit=test.lower_limit,
             upper_limit=test.upper_limit,
             method=test.method,
             equipment=test.equipment,
-            bulk_result="Conforme" if test.name != "pH" else "6.5",
-            finished_product_result="Conforme" if test.name != "pH" else "6.5",
-            complies=True,
-            observations="Resultado demo dentro de especificacion.",
+            bulk_result="8.2" if failing else ("Conforme" if test.name != "pH" else "6.5"),
+            finished_product_result="8.2" if failing else ("Conforme" if test.name != "pH" else "6.5"),
+            complies=not failing,
+            observations="Resultado demo fuera de especificacion." if failing else "Resultado demo dentro de especificacion.",
             performed_by=employee,
             verified_by=employee,
         )
@@ -739,23 +881,49 @@ def ensure_quality(batch, output_item, unit_un, location, employee):
         MicrobiologyAnalysis,
         {"batch": batch},
         {
-            "sample_code": f"{DEMO_BATCH_CODE}-MIC",
+            "sample_code": f"{batch.production_order.batch_code}-MIC",
             "sample_type": "Producto terminado",
             "taken_at": today - timedelta(days=1),
             "taken_by": employee,
             "sent_at": today - timedelta(days=1),
             "laboratory": "Laboratorio demo",
-            "report_number": "MIC-DEMO-001",
-            "results": [{"ensayo": "Aerobios mesofilos", "resultado": "< 10 UFC/g", "cumple": True}],
+            "report_number": f"MIC-{batch.production_order.batch_code[-3:]}",
+            "results": [{"name": "Aerobios mesofilos", "value": "< 10 UFC/g"}],
             "specifications": [{"ensayo": "Aerobios mesofilos", "especificacion": "< 100 UFC/g"}],
-            "overall_result": MicrobiologyAnalysis.OverallResult.APPROVED,
+            "overall_result": MicrobiologyAnalysis.OverallResult.REJECTED if is_rejected else MicrobiologyAnalysis.OverallResult.APPROVED,
             "approved_at": today,
             "approved_by": employee,
-            "observations": "Analisis microbiologico demo aprobado.",
+            "observations": "Analisis microbiologico demo aprobado." if not is_rejected else "Pendiente de reanalisis.",
         },
     )
+    return certificate
 
-    for code, name in DocumentChecklistItem.DocumentCode.choices:
+
+def ensure_document_checklist(batch, employee, *, complete=True):
+    now = timezone.now()
+    for index, (code, name) in enumerate(DocumentChecklistItem.DocumentCode.choices):
+        if complete:
+            status = DocumentChecklistItem.Status.APPROVED
+            result = ResultStatus.YES
+            verified_at = now - timedelta(hours=1)
+            observations = "Documento demo aprobado."
+        else:
+            # Dos documentos quedan pendientes/rechazados a propósito para
+            # poder ver esa variante en el checklist y en el PDF.
+            if index == 0:
+                status, result, verified_at, observations = (
+                    DocumentChecklistItem.Status.REJECTED, ResultStatus.NO, now - timedelta(hours=1),
+                    "Documento demo rechazado, requiere correccion.",
+                )
+            elif index == 1:
+                status, result, verified_at, observations = (
+                    DocumentChecklistItem.Status.PENDING, ResultStatus.NOT_APPLICABLE, None, "",
+                )
+            else:
+                status, result, verified_at, observations = (
+                    DocumentChecklistItem.Status.APPROVED, ResultStatus.YES, now - timedelta(hours=1),
+                    "Documento demo aprobado.",
+                )
         upsert(
             DocumentChecklistItem,
             {"batch": batch, "document_code": code},
@@ -764,57 +932,128 @@ def ensure_quality(batch, output_item, unit_un, location, employee):
                 "format_code": f"DEMO-{code[:8]}",
                 "format_version": "1.0",
                 "applies": True,
-                "result": ResultStatus.YES,
-                "status": DocumentChecklistItem.Status.APPROVED,
+                "result": result,
+                "status": status,
                 "responsible": employee,
                 "verifier": employee,
-                "filled_at": timezone.now() - timedelta(hours=2),
-                "verified_at": timezone.now() - timedelta(hours=1),
-                "observations": "Documento demo aprobado.",
-                "blocks_release": False,
+                "filled_at": now - timedelta(hours=2),
+                "verified_at": verified_at,
+                "observations": observations,
+                "blocks_release": not complete,
             },
         )
 
+
+def ensure_release(batch, unit_un, location, employee, *, condition=BatchRelease.Condition.RELEASED):
     upsert(
         BatchRelease,
         {"batch": batch},
         {
-            "released_quantity": decimal("98"),
+            "released_quantity": decimal("98") if condition == BatchRelease.Condition.RELEASED else decimal("0"),
             "retained_quantity": decimal("1"),
-            "rejected_quantity": decimal("1"),
+            "rejected_quantity": decimal("1") if condition == BatchRelease.Condition.RELEASED else decimal("99"),
             "unit": unit_un,
             "warehouse_location": location,
             "released_at": timezone.now(),
-            "condition": BatchRelease.Condition.RELEASED,
+            "condition": condition,
             "released_by_quality": employee,
             "approved_by_technical_director": employee,
-            "observations": "Lote demo liberado para pruebas funcionales.",
+            "observations": "Lote demo liberado para pruebas funcionales." if condition == BatchRelease.Condition.RELEASED
+            else "Lote demo rechazado: no cumple especificacion de pH.",
         },
     )
 
 
-@transaction.atomic
-def seed_manufacturing_demo():
-    employee = ensure_employee()
-    output_item, raw_materials, packaging_materials, unit_un, location, supplier = ensure_inventory_master()
-    raw_batches = ensure_raw_batches(raw_materials, location, supplier)
-    formula = ensure_formula(output_item, [(item, quantity) for item, quantity in raw_materials], unit_un)
-    batch, area, line = ensure_batch(formula, output_item, unit_un, location, employee)
-    ensure_dispensing(batch, raw_batches, employee)
-    ensure_process_controls(batch, raw_batches, packaging_materials, unit_un, location, employee, area, line)
-    ensure_quality(batch, output_item, unit_un, location, employee)
+# ── Orquestación de cada escenario ──────────────────────────────────────────
+
+def build_scenario(code, stage, formula, master, employee, quality_employee, raw_batches):
+    output_item, _raw_materials, packaging_materials, unit_un, location, _supplier = master
+
+    notes_by_stage = {
+        Stage.DRAFT: "Lote demo recien creado, aun sin diligenciar (borrador).",
+        Stage.IN_PROCESS: "Lote demo a medio proceso: dispensacion y fabricacion completas, resto pendiente.",
+        Stage.DEVIATION: "Lote demo con desviaciones reales en hermeticidad y peso, pendiente de revision de calidad.",
+        Stage.REJECTED: "Lote demo rechazado por no conformidad en certificado de analisis.",
+        Stage.PENDING_DOCS: "Lote demo con proceso fisico completo pero checklist documental incompleto.",
+        Stage.COMPLETE: "Lote demo completo para probar expediente, controles y PDF (con fotos y firmas reales).",
+    }
+    status_by_stage = {
+        Stage.DRAFT: Batch.Status.DRAFT,
+        Stage.IN_PROCESS: Batch.Status.MANUFACTURING,
+        Stage.DEVIATION: Batch.Status.PENDING_DOCUMENTS,
+        Stage.REJECTED: Batch.Status.REJECTED,
+        Stage.PENDING_DOCS: Batch.Status.PENDING_DOCUMENTS,
+        Stage.COMPLETE: Batch.Status.RELEASED,
+    }
+
+    batch, area, line = ensure_batch(
+        code, formula, output_item, unit_un, location, employee,
+        status=status_by_stage[stage], notes=notes_by_stage[stage],
+    )
+
+    if stage == Stage.DRAFT:
+        return batch
+
+    ensure_dispensing(batch, raw_batches, employee, with_signatures=(stage == Stage.COMPLETE))
+    ensure_early_process(batch, employee, area, line)
+
+    if stage == Stage.IN_PROCESS:
+        return batch
+
+    seal_result = "LEAK" if stage == Stage.DEVIATION else None
+    weight_result = "OUT_OF_SPEC" if stage == Stage.DEVIATION else None
+    ensure_process_controls(
+        batch, packaging_materials, unit_un, employee, area, line,
+        seal_result=seal_result, weight_result=weight_result,
+        packaging_photos=(stage == Stage.COMPLETE),
+    )
+
+    concept = AnalysisCertificate.Concept.REJECTED if stage == Stage.REJECTED else AnalysisCertificate.Concept.APPROVED
+    ensure_quality(batch, output_item, unit_un, location, quality_employee, concept=concept)
+
+    if stage == Stage.DEVIATION:
+        return batch
+
+    ensure_document_checklist(batch, employee, complete=(stage != Stage.PENDING_DOCS))
+
+    if stage == Stage.PENDING_DOCS:
+        return batch
+
+    condition = BatchRelease.Condition.REJECTED if stage == Stage.REJECTED else BatchRelease.Condition.RELEASED
+    ensure_release(batch, unit_un, location, quality_employee, condition=condition)
     return batch
 
 
+@transaction.atomic
+def seed_manufacturing_demo():
+    employee, quality_employee = ensure_employee()
+    output_item, raw_materials, packaging_materials, unit_un, location, supplier = ensure_inventory_master()
+    raw_batches = ensure_raw_batches(raw_materials, location, supplier)
+    formula = ensure_formula(output_item, [(item, quantity) for item, quantity in raw_materials], unit_un)
+
+    master = (output_item, raw_materials, packaging_materials, unit_un, location, supplier)
+
+    scenarios = [
+        ("DEMO-MFG-LOTE-001", Stage.COMPLETE),
+        ("DEMO-MFG-LOTE-002", Stage.DRAFT),
+        ("DEMO-MFG-LOTE-003", Stage.IN_PROCESS),
+        ("DEMO-MFG-LOTE-004", Stage.DEVIATION),
+        ("DEMO-MFG-LOTE-005", Stage.REJECTED),
+        ("DEMO-MFG-LOTE-006", Stage.PENDING_DOCS),
+    ]
+    batches = []
+    for code, stage in scenarios:
+        batch = build_scenario(code, stage, formula, master, employee, quality_employee, raw_batches)
+        batches.append(batch)
+    return batches
+
+
 class Command(BaseCommand):
-    help = "Carga un unico ejemplo completo de produccion/manufactura para pruebas."
+    help = "Carga varios lotes demo de produccion/manufactura (distintos estados y escenarios) para pruebas."
 
     def handle(self, *args, **options):
-        batch = seed_manufacturing_demo()
-        order = batch.production_order
-        self.stdout.write(
-            self.style.SUCCESS(
-                "Demo de produccion cargado: "
-                f"producto={order.output_item.code}, formula={order.formula.code}, lote={order.batch_code}."
-            )
-        )
+        batches = seed_manufacturing_demo()
+        self.stdout.write(self.style.SUCCESS(f"Demo de produccion cargado: {len(batches)} lotes."))
+        for batch in batches:
+            order = batch.production_order
+            self.stdout.write(f"  - {order.batch_code}: estado={batch.get_status_display()}")
