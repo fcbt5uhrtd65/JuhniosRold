@@ -1,12 +1,15 @@
 import io
 import re
 from datetime import datetime
+from pathlib import Path
 
 from django.utils import timezone
 from reportlab.lib.colors import HexColor
 from reportlab.lib.pagesizes import letter
+from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
+from pypdf import PdfReader, PdfWriter
 
 from shared.infrastructure.pdf_letterhead import (
     draw_letterhead_footer,
@@ -578,6 +581,102 @@ def _draw_footer_note(c, page_w, bottom_limit):
     c.drawCentredString(page_w / 2, bottom_limit - 12, f"Documento oficial · {COMPANY_NAME} · Válido con firmas digitales registradas.")
 
 
+def _read_support_document_bytes(support_document):
+    if not support_document:
+        return b""
+    support_document.open("rb")
+    try:
+        return support_document.read()
+    finally:
+        support_document.close()
+
+
+def _render_support_image_pdf(image_bytes, filename):
+    page_w, page_h = letter
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=letter)
+    x0, x1 = 48, page_w - 48
+    top = page_h - 46
+    bottom = 46
+    available_w = x1 - x0
+    available_h = top - bottom - 28
+
+    c.setFillColor(TEXT)
+    c.setFont(FONT_BOLD, 12)
+    c.drawString(x0, page_h - 30, "Soporte adjunto")
+    c.setFillColor(MUTED)
+    c.setFont(FONT, 8)
+    c.drawString(x0, page_h - 42, _safe(filename, "Documento de soporte"))
+
+    image = ImageReader(io.BytesIO(image_bytes))
+    image_w, image_h = image.getSize()
+    scale = min(available_w / image_w, available_h / image_h)
+    draw_w = image_w * scale
+    draw_h = image_h * scale
+    draw_x = x0 + (available_w - draw_w) / 2
+    draw_y = bottom + (available_h - draw_h) / 2
+    c.drawImage(image, draw_x, draw_y, width=draw_w, height=draw_h, preserveAspectRatio=True, anchor="c")
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+    return buffer
+
+
+def _render_support_error_pdf(filename):
+    page_w, page_h = letter
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=letter)
+    x0 = 64
+    c.setFillColor(TEXT)
+    c.setFont(FONT_BOLD, 12)
+    c.drawString(x0, page_h - 72, "Soporte adjunto")
+    c.setFillColor(DANGER)
+    c.setFont(FONT, 9)
+    c.drawString(x0, page_h - 92, f"No fue posible anexar el archivo: {_safe(filename)}")
+    c.setFillColor(MUTED)
+    c.drawString(x0, page_h - 108, "Descargue el soporte original desde el detalle de la solicitud.")
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+    return buffer
+
+
+def _append_support_document(base_pdf_buffer, vacation):
+    support_document = getattr(vacation, "support_document", None)
+    if not support_document:
+        base_pdf_buffer.seek(0)
+        return base_pdf_buffer
+
+    filename = Path(support_document.name).name
+    extension = Path(filename).suffix.lower()
+    writer = PdfWriter()
+    base_pdf_buffer.seek(0)
+    for page in PdfReader(base_pdf_buffer).pages:
+        writer.add_page(page)
+
+    try:
+        support_bytes = _read_support_document_bytes(support_document)
+        if extension == ".pdf":
+            for page in PdfReader(io.BytesIO(support_bytes)).pages:
+                writer.add_page(page)
+        elif extension in {".png", ".jpg", ".jpeg"}:
+            image_pdf = _render_support_image_pdf(support_bytes, filename)
+            for page in PdfReader(image_pdf).pages:
+                writer.add_page(page)
+        else:
+            base_pdf_buffer.seek(0)
+            return base_pdf_buffer
+    except Exception:
+        error_pdf = _render_support_error_pdf(filename)
+        for page in PdfReader(error_pdf).pages:
+            writer.add_page(page)
+
+    output = io.BytesIO()
+    writer.write(output)
+    output.seek(0)
+    return output
+
+
 def render_request_pdf(vacation):
     page_w, page_h = letter
     x0, x1 = 64, page_w - 64
@@ -616,4 +715,4 @@ def render_request_pdf(vacation):
 
     c.save()
     buffer.seek(0)
-    return buffer
+    return _append_support_document(buffer, vacation)

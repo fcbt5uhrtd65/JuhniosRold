@@ -769,15 +769,22 @@ function getCalendarPdfEventLabel(event: CalendarRequestEvent, dateKey: string):
   const typeLabel = getRequestTypeLabel(request.request_type);
 
   if (request.request_type === 'OVERTIME') {
-    const shift = request.overtime_shifts?.find((item) => item.date === dateKey);
-    if (shift) {
-      return `${employeeName} - ${typeLabel}: ${formatTime(shift.start_time)} a ${formatTime(shift.end_time)} (${Number(shift.hours_count ?? 0).toFixed(1)} h)`;
+    const shifts = request.overtime_shifts?.filter((item) => item.date === dateKey) ?? [];
+    if (shifts.length > 0) {
+      const shiftsLabel = shifts
+        .map((shift) => `${formatTime(shift.start_time)} a ${formatTime(shift.end_time)} (${Number(shift.hours_count ?? 0).toFixed(1)} h)`)
+        .join(' | ');
+      return `${employeeName} - ${typeLabel}: ${shiftsLabel}`;
     }
     return `${employeeName} - ${typeLabel}: ${Number(request.hours_count ?? 0).toFixed(1)} h`;
   }
 
   if (!request.is_full_day && (request.start_time || request.end_time)) {
     return `${employeeName} - ${typeLabel}: ${formatTime(request.start_time)} a ${formatTime(request.end_time)}`;
+  }
+
+  if (request.is_full_day) {
+    return `${employeeName} - ${typeLabel}: jornada completa`;
   }
 
   return `${employeeName} - ${typeLabel}`;
@@ -815,12 +822,15 @@ async function exportRequestsCalendarPdf({
   const pageHeight = 210;
   const margin = 10;
   const headerHeight = 20;
-  const weekHeaderY = headerHeight + 13;
-  const gridTop = weekHeaderY + 6;
+  const metaY = headerHeight + 6;
+  const legendY = headerHeight + 10;
+  const weekHeaderY = headerHeight + 18;
+  const gridTop = weekHeaderY + 7;
   const cellWidth = (pageWidth - margin * 2) / 7;
-  const cellHeight = (pageHeight - gridTop - 12) / 6;
+  const cellHeight = pageHeight - gridTop - margin;
   const weekdays = ['Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab', 'Dom'];
   const days = getMonthGrid(month);
+  const weeks = Array.from({ length: 6 }, (_, weekIndex) => days.slice(weekIndex * 7, weekIndex * 7 + 7));
   const monthLabel = month.toLocaleDateString('es-CO', { month: 'long', year: 'numeric' });
   const totalEvents = [...eventsByDay.values()].reduce((sum, dayEvents) => sum + dayEvents.length, 0);
 
@@ -837,146 +847,109 @@ async function exportRequestsCalendarPdf({
     pdf.text(`Pagina ${pageNumber}`, pageWidth - margin, 14, { align: 'right' });
   };
 
-  let page = 1;
-  drawHeader(`Calendario RRHH - ${monthLabel}`, page);
-  pdf.setTextColor(75, 85, 99);
-  pdf.setFont('helvetica', 'normal');
-  pdf.setFontSize(8);
-  pdf.text(`Filtros: ${typeFilterLabel} | ${departmentFilterLabel} | Eventos: ${totalEvents}`, margin, headerHeight + 6);
-
-  const legendItems: VacationRequestType[] = ['PERMISSION', 'OVERTIME', 'VACATION', 'LEAVE', 'INCAPACITY', 'LOAN', 'OTHER'];
-  let legendX = margin;
-  for (const type of legendItems) {
-    const colors = REQUEST_TYPE_PDF_COLORS[type];
-    pdf.setFillColor(...colors.fill);
-    pdf.setDrawColor(...colors.stroke);
-    pdf.rect(legendX, headerHeight + 9, 4, 3, 'FD');
-    pdf.setTextColor(...colors.text);
-    pdf.setFontSize(7);
-    pdf.text(getRequestTypeLabel(type), legendX + 5.5, headerHeight + 11.5);
-    legendX += Math.max(23, pdf.getTextWidth(getRequestTypeLabel(type)) + 12);
-  }
-
-  weekdays.forEach((label, index) => {
-    const x = margin + index * cellWidth;
-    pdf.setFillColor(245, 247, 246);
-    pdf.setDrawColor(229, 231, 235);
-    pdf.rect(x, weekHeaderY, cellWidth, 6, 'FD');
+  const drawLegend = () => {
     pdf.setTextColor(75, 85, 99);
-    pdf.setFont('helvetica', 'bold');
-    pdf.setFontSize(7);
-    pdf.text(label, x + cellWidth / 2, weekHeaderY + 4, { align: 'center' });
-  });
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(8);
+    pdf.text(`Filtros: ${typeFilterLabel} | ${departmentFilterLabel} | Eventos: ${totalEvents}`, margin, metaY);
 
-  days.forEach((date, index) => {
-    const row = Math.floor(index / 7);
-    const col = index % 7;
-    const x = margin + col * cellWidth;
-    const y = gridTop + row * cellHeight;
-    const inMonth = date.getMonth() === month.getMonth();
-    const key = toDateKey(date);
-    const events = eventsByDay.get(key) ?? [];
-
-    pdf.setFillColor(inMonth ? 255 : 249, inMonth ? 255 : 250, inMonth ? 255 : 251);
-    pdf.setDrawColor(229, 231, 235);
-    pdf.rect(x, y, cellWidth, cellHeight, 'FD');
-    pdf.setTextColor(inMonth ? 31 : 180, inMonth ? 41 : 188, inMonth ? 55 : 197);
-    pdf.setFont('helvetica', 'bold');
-    pdf.setFontSize(7);
-    pdf.text(String(date.getDate()), x + 2, y + 4.2);
-
-    let eventY = y + 7;
-    const maxY = y + cellHeight - 2;
-    for (let eventIndex = 0; eventIndex < events.length; eventIndex += 1) {
-      const event = events[eventIndex];
-      const colors = REQUEST_TYPE_PDF_COLORS[event.request.request_type];
-      const lines = pdf.splitTextToSize(getCalendarPdfEventLabel(event, key), cellWidth - 5) as string[];
-      const visibleLines = lines.slice(0, 2);
-      const chipHeight = Math.max(4.5, visibleLines.length * 3 + 1.5);
-
-      if (eventY + chipHeight > maxY) {
-        const remaining = events.length - eventIndex;
-        pdf.setTextColor(75, 85, 99);
-        pdf.setFont('helvetica', 'bold');
-        pdf.setFontSize(6);
-        pdf.text(`+${remaining} en detalle`, x + 2, maxY);
-        break;
-      }
-
+    const legendItems: VacationRequestType[] = ['PERMISSION', 'OVERTIME', 'VACATION', 'LEAVE', 'INCAPACITY', 'LOAN', 'OTHER'];
+    let legendX = margin;
+    for (const type of legendItems) {
+      const colors = REQUEST_TYPE_PDF_COLORS[type];
       pdf.setFillColor(...colors.fill);
       pdf.setDrawColor(...colors.stroke);
-      pdf.rect(x + 1.5, eventY - 2.4, cellWidth - 3, chipHeight, 'FD');
+      pdf.rect(legendX, legendY, 4, 3, 'FD');
       pdf.setTextColor(...colors.text);
       pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(5.6);
-      pdf.text(visibleLines, x + 2.5, eventY);
-      eventY += chipHeight + 1;
+      pdf.setFontSize(7);
+      pdf.text(getRequestTypeLabel(type), legendX + 5.5, legendY + 2.5);
+      legendX += Math.max(23, pdf.getTextWidth(getRequestTypeLabel(type)) + 12);
     }
-  });
+  };
 
-  pdf.addPage();
-  page += 1;
-  drawHeader(`Detalle por dia - ${monthLabel}`, page);
-  let y = headerHeight + 10;
-  const sortedEntries = [...eventsByDay.entries()]
-    .filter(([, events]) => events.length > 0)
-    .sort(([a], [b]) => a.localeCompare(b));
+  const drawWeekChrome = (week: Date[], pageTitle: string, pageNumber: number) => {
+    drawHeader(pageTitle, pageNumber);
+    drawLegend();
+    weekdays.forEach((label, index) => {
+      const x = margin + index * cellWidth;
+      pdf.setFillColor(245, 247, 246);
+      pdf.setDrawColor(229, 231, 235);
+      pdf.rect(x, weekHeaderY, cellWidth, 6, 'FD');
+      pdf.setTextColor(75, 85, 99);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(7);
+      pdf.text(label, x + cellWidth / 2, weekHeaderY + 4, { align: 'center' });
+    });
 
-  if (sortedEntries.length === 0) {
+    week.forEach((date, col) => {
+      const x = margin + col * cellWidth;
+      const inMonth = date.getMonth() === month.getMonth();
+      pdf.setFillColor(inMonth ? 255 : 249, inMonth ? 255 : 250, inMonth ? 255 : 251);
+      pdf.setDrawColor(229, 231, 235);
+      pdf.rect(x, gridTop, cellWidth, cellHeight, 'FD');
+      pdf.setTextColor(inMonth ? 31 : 180, inMonth ? 41 : 188, inMonth ? 55 : 197);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(8);
+      pdf.text(`${date.getDate()} ${date.toLocaleDateString('es-CO', { month: 'short' })}`, x + 2, gridTop + 5);
+    });
+  };
+
+  let page = 1;
+  if (totalEvents === 0) {
+    drawHeader(`Calendario RRHH - ${monthLabel}`, page);
+    drawLegend();
     pdf.setTextColor(75, 85, 99);
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(10);
-    pdf.text('No hay novedades para los filtros seleccionados.', margin, y);
-  }
+    pdf.text('No hay novedades para los filtros seleccionados.', margin, gridTop + 12);
+  } else {
+    weeks.forEach((week, weekIndex) => {
+    const dayIndexes = week.map(() => 0);
+    let continuation = 0;
+    let hasPending = week.some((date) => (eventsByDay.get(toDateKey(date)) ?? []).length > 0);
 
-  for (const [dateKey, events] of sortedEntries) {
-    const date = new Date(`${dateKey}T00:00:00`);
-    const dateTitle = date.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-    const blockLines: Array<{ text: string; type?: VacationRequestType; bold?: boolean }> = [{ text: dateTitle, bold: true }];
+    while (hasPending || continuation === 0) {
+      if (page > 1) pdf.addPage();
+      const title = `Calendario RRHH - ${monthLabel} - Semana ${weekIndex + 1}${continuation > 0 ? ` continuacion ${continuation + 1}` : ''}`;
+      drawWeekChrome(week, title, page);
 
-    events.forEach((event) => {
-      getCalendarPdfDetailLines(event, dateKey).forEach((text, index) => {
-        blockLines.push({ text, type: event.request.request_type, bold: index === 0 });
+      hasPending = false;
+      week.forEach((date, col) => {
+        const key = toDateKey(date);
+        const events = eventsByDay.get(key) ?? [];
+        const x = margin + col * cellWidth;
+        let eventY = gridTop + 10;
+        const maxY = gridTop + cellHeight - 3;
+
+        for (let eventIndex = dayIndexes[col]; eventIndex < events.length; eventIndex += 1) {
+          const event = events[eventIndex];
+          const colors = REQUEST_TYPE_PDF_COLORS[event.request.request_type];
+          const lines = pdf.splitTextToSize(getCalendarPdfEventLabel(event, key), cellWidth - 5) as string[];
+          const chipHeight = Math.max(5, lines.length * 3 + 2);
+
+          if (eventY + chipHeight > maxY) {
+            dayIndexes[col] = eventIndex;
+            hasPending = true;
+            return;
+          }
+
+          pdf.setFillColor(...colors.fill);
+          pdf.setDrawColor(...colors.stroke);
+          pdf.rect(x + 1.5, eventY - 2.5, cellWidth - 3, chipHeight, 'FD');
+          pdf.setTextColor(...colors.text);
+          pdf.setFont('helvetica', 'normal');
+          pdf.setFontSize(5.8);
+          pdf.text(lines, x + 2.5, eventY);
+          eventY += chipHeight + 1.2;
+          dayIndexes[col] = eventIndex + 1;
+        }
       });
-      blockLines.push({ text: '' });
-    });
 
-    const estimatedHeight = blockLines.reduce((height, line) => {
-      if (!line.text) return height + 2;
-      const wrapped = pdf.splitTextToSize(line.text, pageWidth - margin * 2 - 8) as string[];
-      return height + wrapped.length * 3.5 + (line.bold ? 1.5 : 0);
-    }, 4);
-
-    if (y + estimatedHeight > pageHeight - margin) {
-      pdf.addPage();
+      continuation += 1;
       page += 1;
-      drawHeader(`Detalle por dia - ${monthLabel}`, page);
-      y = headerHeight + 10;
     }
-
-    pdf.setDrawColor(229, 231, 235);
-    pdf.line(margin, y - 3, pageWidth - margin, y - 3);
-
-    for (const line of blockLines) {
-      if (!line.text) {
-        y += 2;
-        continue;
-      }
-      const colors = line.type ? REQUEST_TYPE_PDF_COLORS[line.type] : null;
-      const textColor: PdfRgb = colors?.text ?? [31, 41, 55];
-      pdf.setTextColor(...textColor);
-      pdf.setFont('helvetica', line.bold ? 'bold' : 'normal');
-      pdf.setFontSize(line.bold ? 8 : 7);
-      const wrapped = pdf.splitTextToSize(line.text, pageWidth - margin * 2 - 8) as string[];
-      pdf.text(wrapped, line.type ? margin + 6 : margin, y);
-      if (line.type && line.bold) {
-        pdf.setFillColor(...REQUEST_TYPE_PDF_COLORS[line.type].fill);
-        pdf.setDrawColor(...REQUEST_TYPE_PDF_COLORS[line.type].stroke);
-        pdf.rect(margin, y - 2.6, 3.5, 3.5, 'FD');
-      }
-      y += wrapped.length * 3.5 + (line.bold ? 1.5 : 0);
-    }
-    y += 2;
+    });
   }
 
   pdf.save(`${slugifyFilename(`calendario-rrhh-${monthLabel}`)}.pdf`);
