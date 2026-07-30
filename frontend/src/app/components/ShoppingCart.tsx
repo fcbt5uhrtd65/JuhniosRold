@@ -144,7 +144,7 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
         whileHover={{ scale: 1.04 }}
         whileTap={{ scale: 0.96 }}
         onClick={openCart}
-        className="relative flex items-center gap-2 px-3 py-1.5 rounded-full hover:bg-stone-100 text-muted-foreground hover:text-foreground transition-all duration-200"
+        className="relative flex h-9 w-9 items-center justify-center gap-2 rounded-full px-0 text-muted-foreground transition-all duration-200 hover:bg-stone-100 hover:text-foreground sm:w-auto sm:px-3 sm:py-1.5"
       >
         <ShoppingBag className="w-4 h-4" strokeWidth={1.5} />
         <span className="hidden sm:inline text-[11px] tracking-wide">Carrito</span>
