@@ -74,7 +74,7 @@ export function Hero({ onLoginClick }: HeroProps = {}) {
 
   return (
     <section
-      className="relative mx-3 h-[clamp(300px,78vw,430px)] overflow-hidden rounded-[20px] bg-[#F7F1EA] md:mx-5 md:h-[min(100vh,680px)] md:min-h-[480px] lg:mx-7"
+      className="relative mx-3 aspect-[1920/800] overflow-hidden rounded-[20px] bg-[#F7F1EA] md:mx-5 md:aspect-auto md:h-[min(100vh,680px)] md:min-h-[480px] lg:mx-7"
       style={{ marginTop: 14 }}
     >
       {/* Fondo: rota entre las imágenes del banner */}
@@ -87,7 +87,7 @@ export function Hero({ onLoginClick }: HeroProps = {}) {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.8, ease: 'easeInOut' }}
-          className="absolute inset-0 h-full w-full object-contain object-top md:object-cover md:object-center"
+          className="absolute inset-0 h-full w-full object-cover object-center"
           loading="eager"
           decoding="async"
         />
@@ -121,7 +121,7 @@ export function Hero({ onLoginClick }: HeroProps = {}) {
       </motion.div>
 
       {/* Puntos de navegación */}
-      <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2">
+      <div className="absolute bottom-3 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 md:bottom-5">
         {SLIDES.map((slide, i) => (
           <button
             key={slide.id}
