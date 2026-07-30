@@ -1346,6 +1346,7 @@ export function AdminHR() {
   const [rejectReason, setRejectReason] = useState('');
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [approvingRequest, setApprovingRequest] = useState<VacationRequest | null>(null);
+  const [approveComment, setApproveComment] = useState('');
   const [decisionSignatureFile, setDecisionSignatureFile] = useState<File | null>(null);
   const [approveIsRemunerated, setApproveIsRemunerated] = useState(true);
   const [remunerationRequest, setRemunerationRequest] = useState<VacationRequest | null>(null);
@@ -2266,6 +2267,7 @@ export function AdminHR() {
       return;
     }
     setApprovingRequest(request);
+    setApproveComment('');
     setApproveIsRemunerated(request.is_remunerated ?? request.request_type === 'OVERTIME');
     setShowApproveModal(true);
   };
@@ -2297,6 +2299,7 @@ export function AdminHR() {
   const closeApproveModal = () => {
     setShowApproveModal(false);
     setApprovingRequest(null);
+    setApproveComment('');
     setDecisionSignatureFile(null);
   };
 
@@ -2312,7 +2315,7 @@ export function AdminHR() {
     try {
       await approveVacationRequest(
         approvingRequest.id,
-        '',
+        approveComment.trim(),
         decisionSignatureFile,
         canDecideRemuneration ? approveIsRemunerated : null,
       );
@@ -4398,6 +4401,12 @@ export function AdminHR() {
           <p className="text-xs text-gray-500">
             Vas a aprobar la solicitud {approvingRequest?.request_number || ''}. Esta acción quedará registrada en el historial.
           </p>
+          <TextareaInput
+            label="Comentario para el solicitante"
+            value={approveComment}
+            onChange={setApproveComment}
+            placeholder="Comentario opcional que verá el empleado"
+          />
           {isAdmin && approvingRequest?.request_type !== 'LOAN' && approvingRequest?.request_type !== 'OVERTIME' && (
             approvingRequest?.is_remunerated === null ? (
               <div>

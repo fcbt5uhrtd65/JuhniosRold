@@ -182,6 +182,9 @@ export function UserProfile({ isOpen, onClose }: UserProfileProps) {
   const documentLabel = currentUser.tipoDocumento
     ? DOCUMENT_TYPES[currentUser.tipoDocumento] ?? currentUser.tipoDocumento
     : null;
+  const visibleDocumentNumber = currentUser.numeroDocumento?.startsWith('USR-')
+    ? ''
+    : currentUser.numeroDocumento ?? '';
 
   return createPortal(
     <AnimatePresence>
@@ -235,10 +238,10 @@ export function UserProfile({ isOpen, onClose }: UserProfileProps) {
                         <BadgeCheck className="h-3.5 w-3.5" strokeWidth={1.8} />
                         Cuenta de cliente
                       </span>
-                      {documentLabel && currentUser.numeroDocumento && (
+                      {documentLabel && visibleDocumentNumber && (
                         <span className="inline-flex items-center gap-1.5 rounded-full bg-stone-100 px-3 py-1 text-[11px] font-semibold text-stone-600">
                           <Hash className="h-3.5 w-3.5" strokeWidth={1.8} />
-                          {documentLabel}: {currentUser.numeroDocumento}
+                          {documentLabel}: {visibleDocumentNumber}
                         </span>
                       )}
                     </div>
@@ -352,21 +355,19 @@ export function UserProfile({ isOpen, onClose }: UserProfileProps) {
                         placeholder="3001234567"
                       />
                     </label>
-                    <label>
-                      <span className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-stone-500">
-                        <Hash className="h-3.5 w-3.5" /> Documento
-                      </span>
-                      <input
-                        type="text"
-                        value={
-                          currentUser.numeroDocumento
-                            ? `${documentLabel ?? ''} · ${currentUser.numeroDocumento}`
-                            : 'Sin registrar'
-                        }
-                        disabled
-                        className={inputBaseClass + ' cursor-not-allowed bg-stone-50 text-stone-400'}
-                      />
-                    </label>
+                    {visibleDocumentNumber && (
+                      <label>
+                        <span className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-stone-500">
+                          <Hash className="h-3.5 w-3.5" /> Documento
+                        </span>
+                        <input
+                          type="text"
+                          value={`${documentLabel ?? ''} · ${visibleDocumentNumber}`}
+                          disabled
+                          className={inputBaseClass + ' cursor-not-allowed bg-stone-50 text-stone-400'}
+                        />
+                      </label>
+                    )}
                   </div>
                 </section>
 

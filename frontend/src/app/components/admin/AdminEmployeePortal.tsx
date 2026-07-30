@@ -179,6 +179,56 @@ function getStatusColor(status: VacationRequestStatus): BadgeColor {
   return colors[status];
 }
 
+function getApprovalStepLabel(step: VacationRequest['approval_steps'][number]['step'], requestType: VacationRequestType): string {
+  if (step === 'MANAGER') return 'Jefe inmediato';
+  if (step === 'HR') return requestType === 'LOAN' ? 'Tesorería' : 'RRHH';
+  if (step === 'FINAL') return 'Administrador';
+  return 'Solicitante';
+}
+
+function getRequestDecisionComments(request: VacationRequest): Array<{
+  key: string;
+  label: string;
+  status: VacationRequestStatus;
+  comment: string;
+  actedAt: string | null;
+}> {
+  const rows: Array<{
+    key: string;
+    label: string;
+    status: VacationRequestStatus;
+    comment: string;
+    actedAt: string | null;
+  }> = [];
+  const seen = new Set<string>();
+
+  const add = (key: string, label: string, status: VacationRequestStatus | '', comment: string | null | undefined, actedAt: string | null) => {
+    const trimmed = comment?.trim();
+    if (!trimmed || !status || !['APPROVED', 'REJECTED'].includes(status)) return;
+    const dedupeKey = `${status}|${trimmed}`;
+    if (seen.has(dedupeKey)) return;
+    seen.add(dedupeKey);
+    rows.push({ key, label, status, comment: trimmed, actedAt });
+  };
+
+  [...request.approval_steps]
+    .sort((a, b) => a.sequence - b.sequence)
+    .forEach((step) => {
+      add(
+        step.id,
+        getApprovalStepLabel(step.step, request.request_type),
+        step.status,
+        step.comment,
+        step.acted_at,
+      );
+    });
+
+  add('admin-comment', 'Administrador', request.admin_decision, request.admin_comment, request.admin_decided_at);
+  add('hr-comment', request.request_type === 'LOAN' ? 'Tesorería' : 'RRHH', request.hr_decision, request.hr_comment, request.hr_decided_at);
+
+  return rows;
+}
+
 const REQUEST_TYPE_LABELS: Record<VacationRequestType, string> = {
   PERMISSION: 'Permiso',
   VACATION: 'Vacaciones',
@@ -1412,6 +1462,28 @@ export function AdminEmployeePortal() {
                   </div>
                 </div>
               )}
+
+              {(() => {
+                const decisionComments = getRequestDecisionComments(selectedRequest);
+                if (decisionComments.length === 0) return null;
+                return (
+                  <div className="pt-2 border-t border-gray-100">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Comentarios de aprobación</p>
+                    <div className="space-y-2">
+                      {decisionComments.map((item) => (
+                        <div key={item.key} className="rounded-xl border border-gray-100 bg-gray-50/60 p-3">
+                          <div className="flex items-center justify-between gap-2 mb-1.5">
+                            <span className="text-xs font-semibold text-gray-800">{item.label}</span>
+                            <Badge label={getStatusLabel(item.status)} color={getStatusColor(item.status)} />
+                          </div>
+                          <p className="text-xs text-gray-600 whitespace-pre-wrap">{item.comment}</p>
+                          {item.actedAt && <p className="text-[10px] text-gray-400 mt-1.5">{formatDate(item.actedAt)}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div className="pt-2 border-t border-gray-100">
                 <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Documentos adjuntos</p>

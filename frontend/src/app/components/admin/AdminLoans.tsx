@@ -487,14 +487,14 @@ export function AdminLoans() {
             )}
             <div>
               <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">
-                Comentario {decisionRequest.decision === 'reject' && '(obligatorio)'}
+                Comentario para el solicitante {decisionRequest.decision === 'reject' && '(obligatorio)'}
               </label>
               <textarea
                 value={decisionComment}
                 onChange={(event) => setDecisionComment(event.target.value)}
                 rows={3}
                 className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#2a4038]/20 focus:border-[#2a4038] transition-all resize-none"
-                placeholder={decisionRequest.decision === 'reject' ? 'Indica el motivo del rechazo' : 'Comentario opcional'}
+                placeholder={decisionRequest.decision === 'reject' ? 'Indica el motivo del rechazo' : 'Comentario opcional para el empleado'}
               />
             </div>
             <SignaturePad

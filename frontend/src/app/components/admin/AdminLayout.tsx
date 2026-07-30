@@ -36,6 +36,7 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
   const { currentUser, logout } = useAdmin();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const isCompactSidebar = currentView !== 'dashboard';
 
   const employeeAccessRoles = [
     'ADMIN',
@@ -126,14 +127,22 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
     }
   }, [currentUser?.rol]);
 
-  const Sidebar = () => (
-    <div className="bg-gray-50 border-r border-gray-100 h-full flex flex-col">
-      <div className="px-5 pt-6 pb-4 border-b border-gray-100">
-        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400 mb-0.5">Juhnios Rold</p>
-        <p className="text-[11px] text-gray-500">Panel Admin</p>
+  const Sidebar = ({ compact = false }: { compact?: boolean }) => (
+    <div className={`bg-gray-50 border-r border-gray-100 h-full flex flex-col ${compact ? 'items-center' : ''}`}>
+      <div className={`border-b border-gray-100 ${compact ? 'px-2 pt-5 pb-4' : 'px-5 pt-6 pb-4'}`}>
+        {compact ? (
+          <div className="h-10 w-10 rounded-2xl bg-[#2a4038] text-white flex items-center justify-center text-xs font-bold" title="Juhnios Rold">
+            JR
+          </div>
+        ) : (
+          <>
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400 mb-0.5">Juhnios Rold</p>
+            <p className="text-[11px] text-gray-500">Panel Admin</p>
+          </>
+        )}
       </div>
 
-      <nav className="flex-1 overflow-y-auto p-3">
+      <nav className={`flex-1 overflow-y-auto ${compact ? 'w-full px-2 py-3' : 'p-3'}`}>
         <div className="space-y-0.5">
           {allowedNavItems.map((item) => {
             const Icon = item.icon;
@@ -146,37 +155,45 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
                   onViewChange(item.id);
                   setSidebarOpen(false);
                 }}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-xs font-medium transition-all ${
+                title={compact ? item.label : undefined}
+                className={`${compact ? 'mx-auto h-11 w-11 justify-center px-0' : 'w-full gap-3 px-3'} flex items-center py-2.5 rounded-xl text-left text-xs font-medium transition-all ${
                   isActive
                     ? 'bg-[#2a4038] text-white shadow-sm'
                     : 'text-gray-600 hover:bg-white hover:shadow-sm'
                 }`}
               >
                 <Icon size={15} className={isActive ? 'text-white' : 'text-gray-400'} strokeWidth={1.75} />
-                {item.label}
+                {!compact && item.label}
               </button>
             );
           })}
         </div>
       </nav>
 
-      <div className="p-3 border-t border-gray-100">
+      <div className={`border-t border-gray-100 ${compact ? 'w-full p-2' : 'p-3'}`}>
         <button
           type="button"
           onClick={() => {
             setProfileModalOpen(true);
             setSidebarOpen(false);
           }}
-          className="w-full mb-3 p-3 bg-white border border-gray-100 rounded-xl text-left hover:border-[#2a4038]/40 hover:shadow-sm transition-all cursor-pointer"
+          className={`${compact ? 'mx-auto mb-2 flex h-11 w-11 items-center justify-center p-0' : 'w-full mb-3 p-3 text-left'} bg-white border border-gray-100 rounded-xl hover:border-[#2a4038]/40 hover:shadow-sm transition-all cursor-pointer`}
           title="Ver mi perfil"
         >
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400 mb-1">Usuario</p>
-          <p className="text-xs font-semibold text-gray-800 mb-0.5">{currentUser?.nombre}</p>
-          <p className="text-[11px] text-gray-400">{roleLabel}</p>
+          {compact ? (
+            <Users size={16} className="text-gray-500" strokeWidth={1.75} />
+          ) : (
+            <>
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400 mb-1">Usuario</p>
+              <p className="text-xs font-semibold text-gray-800 mb-0.5">{currentUser?.nombre}</p>
+              <p className="text-[11px] text-gray-400">{roleLabel}</p>
+            </>
+          )}
         </button>
         <button
           onClick={logout}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 hover:bg-white transition-colors"
+          title="Cerrar sesión"
+          className={`${compact ? 'mx-auto h-11 w-11 px-0 overflow-hidden text-[0px]' : 'w-full gap-2 px-4 text-xs'} flex items-center justify-center py-2.5 border border-gray-200 rounded-xl font-semibold text-gray-600 hover:bg-white transition-colors`}
         >
           <LogOut size={14} strokeWidth={1.75} />
           Cerrar Sesión
@@ -188,8 +205,8 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
   return (
     <div className="min-h-screen bg-gray-50/40 flex">
       {/* Desktop Sidebar */}
-      <div className="hidden md:block w-56 lg:w-64 fixed left-0 top-0 bottom-0 z-30">
-        <Sidebar />
+      <div className={`hidden md:block fixed left-0 top-0 bottom-0 z-30 transition-[width] duration-200 ${isCompactSidebar ? 'w-[68px]' : 'w-56 lg:w-64'}`}>
+        <Sidebar compact={isCompactSidebar} />
       </div>
 
       {/* Mobile Sidebar overlay */}
@@ -201,13 +218,13 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
             transition={{ type: 'spring', stiffness: 320, damping: 30 }}
             className="absolute left-0 top-0 bottom-0 w-64 bg-gray-50 shadow-xl"
           >
-            <Sidebar />
+            <Sidebar compact={false} />
           </motion.div>
         </div>
       )}
 
       {/* Main Content */}
-      <div className="flex-1 md:ml-56 lg:ml-64 min-w-0">
+      <div className={`flex-1 min-w-0 transition-[margin] duration-200 ${isCompactSidebar ? 'md:ml-[68px]' : 'md:ml-56 lg:ml-64'}`}>
         {/* Mobile top bar */}
         <div className="sticky top-0 z-40 bg-white border-b border-gray-100 md:hidden">
           <div className="flex items-center justify-between px-4 h-14">

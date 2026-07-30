@@ -14,6 +14,7 @@ import { EMPTY_DELIVERY_LOCATION, type DeliveryLocationValue } from '../services
 import authHeroImg from '../../assets/auth-hero.jpg';
 
 const OLIVE = '#2D3A1F';
+type LegalModal = 'terms' | 'privacy' | null;
 
 /* ─── imágenes por pantalla ─── */
 const IMAGES = {
@@ -136,6 +137,7 @@ export function LoginModal({ isOpen, onClose, onAdminAccess, onGoogleNewUser }: 
   const [error,      setError]      = useState('');
   const [success,    setSuccess]    = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [legalModal, setLegalModal] = useState<LegalModal>(null);
 
 
   const clear = () => {
@@ -148,6 +150,7 @@ export function LoginModal({ isOpen, onClose, onAdminAccess, onGoogleNewUser }: 
     setRegLoc(EMPTY_LOCATION); setDelLoc(EMPTY_DELIVERY_LOCATION); setCities([]);
     setVerificationId(''); setVerificationEmail(''); setVerificationCode(''); setDebugCode('');
     setResetVid(''); setResetCode(''); setResetDbg(''); setResetToken(''); setNewPass(''); setConfNewPass('');
+    setLegalModal(null);
   };
 
   const handleClose = () => { clear(); setScreen('login'); onClose(); };
@@ -357,6 +360,8 @@ export function LoginModal({ isOpen, onClose, onAdminAccess, onGoogleNewUser }: 
     : screen === 'login' ? 'Iniciar sesión'
     : screen === 'reg2' ? 'Crear cuenta'
     : ''; // reg1 tiene su propio handler
+
+  const legalTitle = legalModal === 'terms' ? 'Terminos y condiciones' : 'Politica de privacidad';
 
   return (
     <AnimatePresence>
@@ -625,14 +630,44 @@ export function LoginModal({ isOpen, onClose, onAdminAccess, onGoogleNewUser }: 
                     )}
                     {/* términos */}
                     <label className="flex items-start gap-2 cursor-pointer select-none">
-                      <div className="relative flex-shrink-0 mt-0.5" onClick={() => setTerms(t => !t)}>
-                        <div className="w-3.5 h-3.5 rounded border-2 flex items-center justify-center transition-all"
-                          style={{ borderColor: terms ? OLIVE : '#D6D0C8', backgroundColor: terms ? OLIVE : 'transparent' }}>
-                          {terms && <svg width="8" height="6" viewBox="0 0 9 7" fill="none"><path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                        </div>
-                      </div>
+                      <input
+                        type="checkbox"
+                        checked={terms}
+                        onChange={(event) => setTerms(event.target.checked)}
+                        className="sr-only"
+                      />
+                      <span
+                        className="mt-0.5 flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded border-2 transition-all"
+                        style={{ borderColor: terms ? OLIVE : '#D6D0C8', backgroundColor: terms ? OLIVE : 'transparent' }}
+                        aria-hidden="true"
+                      >
+                        {terms && <svg width="8" height="6" viewBox="0 0 9 7" fill="none"><path d="M1 3.5L3.5 6L8 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                      </span>
                       <span className="text-[11px] text-stone-500 leading-tight">
-                        Acepto los <a href="#" className="underline" onClick={e => e.preventDefault()}>Términos</a> y la <a href="#" className="underline" onClick={e => e.preventDefault()}>Política de privacidad</a>
+                        Acepto los{' '}
+                        <button
+                          type="button"
+                          className="underline underline-offset-2 hover:text-stone-800"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            setLegalModal('terms');
+                          }}
+                        >
+                          Términos
+                        </button>
+                        {' '}y la{' '}
+                        <button
+                          type="button"
+                          className="underline underline-offset-2 hover:text-stone-800"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            setLegalModal('privacy');
+                          }}
+                        >
+                          Política de privacidad
+                        </button>
                       </span>
                     </label>
                     {/* siguiente */}
@@ -740,6 +775,65 @@ export function LoginModal({ isOpen, onClose, onAdminAccess, onGoogleNewUser }: 
               </div>
             </div>
           </motion.div>
+          {legalModal && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 z-30 flex items-center justify-center p-4"
+              style={{ backgroundColor: 'rgba(14,12,8,0.48)' }}
+              onClick={(event) => {
+                event.stopPropagation();
+                setLegalModal(null);
+              }}
+            >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.96, y: 8 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.96 }}
+                transition={{ duration: 0.18 }}
+                className="max-h-[80dvh] w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="flex items-center justify-between gap-4 border-b border-stone-100 px-5 py-4">
+                  <h3 className="text-sm font-semibold text-stone-900">{legalTitle}</h3>
+                  <button
+                    type="button"
+                    onClick={() => setLegalModal(null)}
+                    className="rounded-full p-1.5 text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-700"
+                    aria-label="Cerrar"
+                  >
+                    <X className="h-4 w-4" strokeWidth={1.6} />
+                  </button>
+                </div>
+                <div className="max-h-[58dvh] space-y-3 overflow-y-auto px-5 py-4 text-sm leading-6 text-stone-600">
+                  {legalModal === 'terms' ? (
+                    <>
+                      <p>Al usar juhniosrold.com aceptas estos terminos. Los productos son para uso personal y no para reventa. Nos reservamos el derecho de modificar precios y disponibilidad sin previo aviso.</p>
+                      <p>Los pagos se procesan de forma segura. Envios gratuitos en compras mayores a $80.000 COP. Devoluciones dentro de 30 dias.</p>
+                      <p>Todo el contenido del sitio es propiedad de Juhnios Rold y esta protegido por derechos de autor colombianos.</p>
+                    </>
+                  ) : (
+                    <>
+                      <p>Recopilamos tu nombre, email, telefono y direccion de envio unicamente para procesar pedidos y comunicarte informacion relevante sobre tu compra.</p>
+                      <p>No vendemos ni transferimos tu informacion a terceros, salvo proveedores necesarios para operar pagos, envios y soporte.</p>
+                      <p>Puedes solicitar acceso, correccion o eliminacion de tus datos escribiendo a administracion@juhnios.com.</p>
+                    </>
+                  )}
+                </div>
+                <div className="border-t border-stone-100 px-5 py-4">
+                  <button
+                    type="button"
+                    onClick={() => setLegalModal(null)}
+                    className="w-full rounded-xl px-4 py-2.5 text-[11px] font-bold uppercase tracking-[0.2em] text-white"
+                    style={{ backgroundColor: OLIVE }}
+                  >
+                    Entendido
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
         </motion.div>
       )}
     </AnimatePresence>

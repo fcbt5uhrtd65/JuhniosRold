@@ -177,9 +177,9 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 16, scale: 0.98 }}
                 transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-                className="fixed inset-0 z-[100] mx-auto flex h-[100dvh] w-full max-w-4xl flex-col bg-[#F7F5F1] shadow-2xl sm:inset-4 sm:h-[calc(100dvh-2rem)] sm:rounded-[32px] sm:border sm:border-white/70 overflow-hidden"
+                className="fixed inset-y-0 right-0 z-[100] flex h-[100dvh] w-full max-w-[500px] flex-col overflow-hidden bg-[#F7F5F1] shadow-2xl sm:inset-y-4 sm:right-4 sm:h-[calc(100dvh-2rem)] sm:rounded-[28px] sm:border sm:border-white/70"
               >
-                <div className="flex items-center justify-between px-5 py-4 bg-white/95 border-b border-stone-200 sm:rounded-t-[32px] md:px-8">
+                <div className="flex items-center justify-between px-4 py-3.5 bg-white/95 border-b border-stone-200 sm:rounded-t-[28px] sm:px-5">
                   <div className="flex items-center gap-3">
                     <div className="w-9 h-9 rounded-full bg-[#2D3A1F]/10 text-[#2D3A1F] flex items-center justify-center">
                       <ShoppingBag className="w-4 h-4" strokeWidth={1.7} />
@@ -198,7 +198,7 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
                   </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto px-4 py-4 md:px-8 md:py-6">
+                <div className="flex-1 overflow-y-auto px-3 py-3 sm:px-4 sm:py-4">
                   {isLoading ? (
                     <div className="h-full min-h-[420px] flex flex-col items-center justify-center gap-4 text-center">
                       <div className="w-16 h-16 rounded-2xl bg-white flex items-center justify-center shadow-sm">
@@ -232,8 +232,8 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
                       </motion.button>
                     </div>
                   ) : (
-                    <div className="space-y-4 pb-3">
-                      <div className="rounded-3xl bg-white p-4 shadow-sm border border-stone-100">
+                    <div className="space-y-3 pb-3">
+                      <div className="rounded-2xl bg-white p-3.5 shadow-sm border border-stone-100">
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-2 text-[#2D3A1F]">
                             <Truck className="w-4 h-4" strokeWidth={1.7} />
@@ -257,10 +257,10 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
                           initial={{ opacity: 0, y: 12 }}
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, x: 20 }}
-                          className="rounded-3xl bg-white p-4 shadow-sm border border-stone-100"
+                        className="rounded-2xl bg-white p-3.5 shadow-sm border border-stone-100"
                         >
                           <div className="flex gap-3">
-                            <div className="w-[92px] h-[92px] rounded-2xl overflow-hidden bg-stone-100 flex-shrink-0">
+                            <div className="w-[84px] h-[84px] rounded-2xl overflow-hidden bg-stone-100 flex-shrink-0">
                               <img
                                 src={primaryItem.image}
                                 alt={primaryItem.name}
@@ -271,7 +271,7 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
                             <div className="flex-1 min-w-0">
                               <div className="flex items-start justify-between gap-2">
                                 <div>
-                                  <p className="text-[13px] font-bold text-stone-950 leading-snug uppercase line-clamp-2">{primaryItem.name}</p>
+                                  <p className="text-[13px] font-bold text-stone-950 leading-snug line-clamp-2">{primaryItem.name}</p>
                                   <p className="text-[11px] text-stone-500 mt-1">{primaryItem.size || 'Unidad'}</p>
                                 </div>
                                 <button
@@ -382,44 +382,39 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
                         </motion.div>
                       ))}
 
-                      <section className="rounded-3xl bg-[#FFFDF4] border border-amber-100 p-4">
-                        <div className="flex items-center gap-2 mb-3">
+                      <section className="rounded-2xl bg-white border border-stone-100 p-3.5 shadow-sm">
+                        <div className="flex items-center justify-between gap-2 mb-3">
+                          <div className="flex items-center gap-2">
                           <Sparkles className="w-4 h-4 text-amber-500" strokeWidth={1.7} />
-                          <h3 className="text-[12px] tracking-[0.14em] uppercase font-bold text-stone-800">Completa tu rutina capilar</h3>
+                            <h3 className="text-[12px] font-bold text-stone-900">También puede servirte</h3>
+                          </div>
+                          <span className="text-[10px] text-stone-400">Opcional</span>
                         </div>
-                        <div className="flex gap-3 overflow-x-auto pb-1 snap-x">
-                          {recommendedProducts.map((product) => (
-                            <article
+                        <div className="grid gap-2">
+                          {recommendedProducts.slice(0, 3).map((product) => (
+                            <button
                               key={product.id}
-                              className="snap-start flex-shrink-0 w-[172px] rounded-2xl bg-white border border-amber-100 p-3 shadow-sm"
+                              type="button"
+                              onClick={() => goToRecommendedProduct(product.query)}
+                              className="grid grid-cols-[54px_1fr_auto] items-center gap-3 rounded-xl border border-stone-100 bg-[#FBFAF7] p-2 text-left transition-colors hover:border-[#2D3A1F]/30 hover:bg-white"
                             >
-                              <div className="relative mb-2">
-                                <div className="w-full aspect-square rounded-xl overflow-hidden bg-stone-100">
-                                  <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
-                                </div>
-                                <span className="absolute top-2 left-2 rounded-full bg-amber-100 px-2 py-1 text-[9px] font-semibold text-amber-800">
-                                  {product.promo}
-                                </span>
+                              <div className="h-[54px] w-[54px] overflow-hidden rounded-lg bg-stone-100">
+                                <img src={product.image} alt={product.name} className="h-full w-full object-cover" />
                               </div>
-                              <p className="text-[12px] font-bold text-stone-950 leading-tight line-clamp-2">{product.name}</p>
-                              <p className="mt-1 text-[10px] text-stone-500">{product.benefit}</p>
-                              <div className="mt-3 flex items-center justify-between">
-                                <span className="text-[13px] font-bold text-stone-950">{formatMoney(product.price)}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => goToRecommendedProduct(product.query)}
-                                  className="w-9 h-9 rounded-full bg-stone-950 text-white flex items-center justify-center hover:bg-[#2D3A1F] transition-colors"
-                                  aria-label={`Buscar ${product.name}`}
-                                >
-                                  <Plus className="w-4 h-4" strokeWidth={2.2} />
-                                </button>
+                              <div className="min-w-0">
+                                <p className="truncate text-[12px] font-bold text-stone-950">{product.name}</p>
+                                <p className="truncate text-[10px] text-stone-500">{product.benefit}</p>
+                                <p className="mt-1 text-[11px] font-semibold text-stone-900">{formatMoney(product.price)}</p>
                               </div>
-                            </article>
+                              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-stone-950 text-white">
+                                <Plus className="w-3.5 h-3.5" strokeWidth={2.2} />
+                              </span>
+                            </button>
                           ))}
                         </div>
                       </section>
 
-                      <section className="rounded-3xl bg-white p-4 shadow-sm border border-stone-100">
+                      <section className="rounded-2xl bg-white p-3.5 shadow-sm border border-stone-100">
                         <div className="flex items-center gap-2 mb-3">
                           <Tag className="w-4 h-4 text-[#2D3A1F]" strokeWidth={1.7} />
                           <h3 className="text-[13px] font-bold text-stone-900">Cupón de descuento</h3>
@@ -460,9 +455,9 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
                 </div>
 
                 {items.length > 0 && (
-                  <div className="border-t border-stone-200 bg-white px-4 py-4 sm:rounded-b-[32px] md:px-8">
-                    <div className="mx-auto grid max-w-3xl gap-4 md:grid-cols-[1fr_auto] md:items-end">
-                      <div className="rounded-3xl border border-stone-200 bg-[#F8F7F4] p-4">
+                  <div className="border-t border-stone-200 bg-white px-3 py-3 sm:rounded-b-[28px] sm:px-4">
+                    <div className="grid gap-3">
+                      <div className="rounded-2xl border border-stone-200 bg-[#F8F7F4] p-3.5">
                         <h3 className="mb-3 text-sm font-semibold text-stone-950">Resumen del pedido</h3>
                         <div className="space-y-2">
                           <div className="flex justify-between text-sm">
@@ -485,15 +480,15 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
                               {freeShipping ? 'Gratis' : 'Por calcular'}
                             </span>
                           </div>
-                          <div className="flex justify-between border-t border-stone-200 pt-3 text-lg font-bold text-stone-950">
+                          <div className="flex justify-between border-t border-stone-200 pt-3 text-base font-bold text-stone-950">
                             <span>Total</span>
                             <span>{finalTotal !== null ? formatMoney(finalTotal) : `${formatMoney(total)} + envío`}</span>
                           </div>
                         </div>
                       </div>
 
-                      <div className="min-w-[260px]">
-                        <div className="mb-3 flex flex-wrap items-center justify-center gap-1.5 text-center text-[11px] text-stone-500 md:justify-end">
+                      <div>
+                        <div className="mb-2 flex flex-wrap items-center justify-center gap-1.5 text-center text-[10px] text-stone-500">
                           <ShieldCheck className="h-3.5 w-3.5 text-[#2D3A1F]" strokeWidth={1.8} />
                           <span>Compra segura</span>
                           <span>|</span>
@@ -510,7 +505,7 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
                             setIsOpen(false);
                             setCheckoutOpen(true);
                           }}
-                          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#2D3A1F] px-6 py-4 text-sm font-bold uppercase tracking-[0.12em] text-white shadow-lg shadow-[#2D3A1F]/15 transition-opacity hover:opacity-95"
+                          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#2D3A1F] px-5 py-3.5 text-sm font-bold uppercase tracking-[0.12em] text-white shadow-lg shadow-[#2D3A1F]/15 transition-opacity hover:opacity-95"
                         >
                           Finalizar compra segura
                           <ArrowRight className="h-4 w-4" strokeWidth={2} />
