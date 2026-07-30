@@ -594,6 +594,7 @@ class CleaningRecord(BaseModel):
 
     batch = models.ForeignKey(Batch, on_delete=models.CASCADE, related_name="cleaning_records")
     record_type = models.CharField(max_length=20, choices=Type.choices)
+    phase = models.CharField(max_length=20, choices=LineClearance.Phase.choices, blank=True)
     area = models.CharField(max_length=120, blank=True)
     equipment = models.CharField(max_length=120, blank=True)
     equipment_code = models.CharField(max_length=60, blank=True)
@@ -949,7 +950,7 @@ class BatchLotMarking(BaseModel):
     signatures = GenericRelation(Signature)
 
     class Meta(BaseModel.Meta):
-        ordering = ("stage", "created_at")
+        ordering = ("created_at",)
 
 
 # ── Maestro de especificaciones de producto ──────────────────────────────────

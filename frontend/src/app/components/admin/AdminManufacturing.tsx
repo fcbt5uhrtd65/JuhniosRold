@@ -180,6 +180,13 @@ const STATUS_LABELS: Record<BatchStatus, string> = {
   CANCELLED: 'Cancelada',
 };
 
+const PHASE_LABELS: Record<string, string> = {
+  DISPENSING: 'Dispensación',
+  MANUFACTURING: 'Fabricación',
+  FILLING: 'Llenado',
+  PACKAGING: 'Acondicionamiento',
+};
+
 const STATUS_ORDER: BatchStatus[] = [
   'DRAFT', 'SCHEDULED', 'PENDING_DISPENSING', 'DISPENSING', 'DISPENSING_DONE', 'MANUFACTURING',
   'BULK_PENDING_ANALYSIS', 'BULK_APPROVED', 'FILLING', 'PACKAGING', 'FINISHED_QUARANTINE',
@@ -1752,7 +1759,7 @@ function ManufacturingTab({ batch, employeeById }: { batch: BatchRecord; employe
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-xs font-semibold text-gray-900">{record.record_type === 'AREA' ? record.area : record.equipment}</p>
-                    <p className="text-[11px] text-gray-400">Sanitizante: {record.sanitizer || '-'} · {formatDateTime(record.cleaned_at)}</p>
+                    <p className="text-[11px] text-gray-400">{PHASE_LABELS[record.phase] || 'Fase sin definir'} · Sanitizante: {record.sanitizer || '-'} · {formatDateTime(record.cleaned_at)}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     {record.is_expired && <Badge label="Vencida" color="red" />}
@@ -2029,6 +2036,7 @@ function NewCleaningRecordModal({
 }) {
   const toast = useToast();
   const [recordType, setRecordType] = useState<'AREA' | 'EQUIPMENT'>('AREA');
+  const [phase, setPhase] = useState<'DISPENSING' | 'MANUFACTURING' | 'FILLING' | 'PACKAGING'>('MANUFACTURING');
   const [area, setArea] = useState('');
   const [equipment, setEquipment] = useState('');
   const [equipmentCode, setEquipmentCode] = useState('');
@@ -2046,6 +2054,7 @@ function NewCleaningRecordModal({
       await createCleaningRecord({
         batch: batchId,
         record_type: recordType,
+        phase,
         area: recordType === 'AREA' ? area : '',
         equipment: recordType === 'EQUIPMENT' ? equipment : '',
         equipment_code: equipmentCode,
@@ -2075,6 +2084,15 @@ function NewCleaningRecordModal({
           <select value={recordType} onChange={(e) => setRecordType(e.target.value as typeof recordType)} className={selectCls}>
             <option value="AREA">Área limpia</option>
             <option value="EQUIPMENT">Equipo limpio</option>
+          </select>
+        </label>
+        <label className="block">
+          <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Fase del proceso</span>
+          <select value={phase} onChange={(e) => setPhase(e.target.value as typeof phase)} className={selectCls}>
+            <option value="DISPENSING">Dispensación</option>
+            <option value="MANUFACTURING">Fabricación</option>
+            <option value="FILLING">Llenado</option>
+            <option value="PACKAGING">Acondicionamiento</option>
           </select>
         </label>
         {recordType === 'AREA' ? (

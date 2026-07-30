@@ -461,6 +461,7 @@ def ensure_process_controls(batch, raw_batches, packaging_materials, unit_un, lo
         CleaningRecord,
         {"batch": batch, "record_type": CleaningRecord.Type.EQUIPMENT, "equipment_code": "DEMO-TQ-001"},
         {
+            "phase": LineClearance.Phase.MANUFACTURING,
             "area": area.name,
             "equipment": "Tanque mezclador DEMO",
             "cleaned_at": now - timedelta(days=2, hours=4),

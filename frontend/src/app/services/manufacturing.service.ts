@@ -240,6 +240,7 @@ export interface CleaningRecordRecord {
   id: UUID;
   batch: UUID;
   record_type: 'AREA' | 'EQUIPMENT';
+  phase: 'DISPENSING' | 'MANUFACTURING' | 'FILLING' | 'PACKAGING' | '';
   area: string;
   equipment: string;
   equipment_code: string;
@@ -1049,6 +1050,7 @@ export async function createLineClearanceCriterion(input: {
 export async function createCleaningRecord(input: {
   batch: string;
   record_type: 'AREA' | 'EQUIPMENT';
+  phase?: 'DISPENSING' | 'MANUFACTURING' | 'FILLING' | 'PACKAGING';
   area?: string;
   equipment?: string;
   equipment_code?: string;
