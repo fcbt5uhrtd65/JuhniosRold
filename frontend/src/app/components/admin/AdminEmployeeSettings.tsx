@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from 'react';
-import { Eye, EyeOff, HeartPulse, Landmark, LockKeyhole, Save, ShieldCheck, UserRound } from 'lucide-react';
+import { Eye, EyeOff, FileUp, HeartPulse, Landmark, LockKeyhole, Save, ShieldCheck, UserRound } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import {
   getMyEmployeeProfile,
@@ -12,6 +12,12 @@ import {
   type MaritalStatus,
 } from '../../services/employees.service';
 import {
+  createMyEmployeeDocument,
+  getMyEmployeeDocuments,
+  type EmployeeDocument,
+  type EmployeeDocumentType,
+} from '../../services/human-resources.service';
+import {
   ARL_OPTIONS,
   ARL_RISK_LEVEL_OPTIONS,
   BANK_OPTIONS,
@@ -20,9 +26,9 @@ import {
   PENSION_FUND_OPTIONS,
   SEVERANCE_FUND_OPTIONS,
 } from '../../utils/socialSecurityCatalog';
-import { Card, EmptyState, inputCls, LoadingState, selectCls } from './AdminUI';
+import { Badge, type BadgeColor, Card, EmptyState, inputCls, LoadingState, selectCls } from './AdminUI';
 
-type SettingsTab = 'personal' | 'social' | 'banking' | 'emergency' | 'security';
+type SettingsTab = 'personal' | 'social' | 'banking' | 'emergency' | 'documents' | 'security';
 
 type ProfileForm = {
   document_type: DocumentType;
@@ -97,8 +103,44 @@ const TABS: Array<{ id: SettingsTab; label: string; icon: ComponentType<{ size?:
   { id: 'social', label: 'Seguridad social', icon: ShieldCheck },
   { id: 'banking', label: 'Banco', icon: Landmark },
   { id: 'emergency', label: 'Emergencia', icon: HeartPulse },
+  { id: 'documents', label: 'Documentos', icon: FileUp },
   { id: 'security', label: 'Contraseña', icon: LockKeyhole },
 ];
+
+const DOCUMENT_TYPE_OPTIONS: Array<{ value: EmployeeDocumentType; label: string }> = [
+  { value: 'ID_COPY', label: 'Cédula de Ciudadanía' },
+  { value: 'RESUME', label: 'Hoja de vida con soportes' },
+  { value: 'SIGNED_CONTRACT', label: 'Contrato firmado' },
+  { value: 'BANK_CERTIFICATE', label: 'Certificado bancario' },
+  { value: 'EPS_CERTIFICATE', label: 'Certificado EPS' },
+  { value: 'PENSION_CERTIFICATE', label: 'Certificado de pensión' },
+  { value: 'SEVERANCE_CERTIFICATE', label: 'Certificado de cesantías' },
+  { value: 'ARL_CERTIFICATE', label: 'Certificado ARL' },
+  { value: 'COMPENSATION_CERTIFICATE', label: 'Certificado Caja de Compensación' },
+  { value: 'WORK_CERTIFICATE', label: 'Certificados laborales' },
+  { value: 'OTHER', label: 'Otros documentos' },
+];
+
+const REQUIRED_DOCUMENT_TYPES = new Set<EmployeeDocumentType>([
+  'ID_COPY',
+  'RESUME',
+  'SIGNED_CONTRACT',
+  'BANK_CERTIFICATE',
+  'EPS_CERTIFICATE',
+  'PENSION_CERTIFICATE',
+  'SEVERANCE_CERTIFICATE',
+  'ARL_CERTIFICATE',
+  'COMPENSATION_CERTIFICATE',
+]);
+
+const EMPTY_DOCUMENT_FORM = {
+  document_type: 'ID_COPY' as EmployeeDocumentType,
+  name: 'Cédula de Ciudadanía',
+  file: null as File | null,
+  issued_at: '',
+  expires_at: '',
+  observations: '',
+};
 
 function employeeToForm(employee: Employee): ProfileForm {
   return {
@@ -140,6 +182,45 @@ function optionalDate(value: string) {
   return value || null;
 }
 
+function optionLabel(options: Array<{ value: string; label: string }>, value: string): string {
+  return options.find((option) => option.value === value)?.label ?? value;
+}
+
+function parseDate(value: string | null | undefined): string {
+  if (!value) return 'Sin fecha';
+  const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (dateOnlyMatch) {
+    const [, year, month, day] = dateOnlyMatch;
+    return new Date(Number(year), Number(month) - 1, Number(day)).toLocaleDateString('es-CO');
+  }
+  return new Date(value).toLocaleDateString('es-CO');
+}
+
+function documentStatusBadge(status: EmployeeDocument['status']): BadgeColor {
+  switch (status) {
+    case 'LOADED':
+      return 'green';
+    case 'REJECTED':
+    case 'EXPIRED':
+      return 'red';
+    case 'NOT_APPLICABLE':
+      return 'gray';
+    default:
+      return 'yellow';
+  }
+}
+
+function documentStatusLabel(status: EmployeeDocument['status']): string {
+  const labels: Record<EmployeeDocument['status'], string> = {
+    PENDING: 'Pendiente',
+    LOADED: 'Cargado',
+    REJECTED: 'Rechazado',
+    EXPIRED: 'Vencido',
+    NOT_APPLICABLE: 'No aplica',
+  };
+  return labels[status];
+}
+
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block">
@@ -176,10 +257,14 @@ export function AdminEmployeeSettings() {
   const toast = useToast();
   const [activeTab, setActiveTab] = useState<SettingsTab>('personal');
   const [employee, setEmployee] = useState<Employee | null>(null);
+  const [documents, setDocuments] = useState<EmployeeDocument[]>([]);
   const [form, setForm] = useState<ProfileForm>(EMPTY_PROFILE_FORM);
   const [isLoading, setIsLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
+  const [savingDocument, setSavingDocument] = useState(false);
+  const [documentInputKey, setDocumentInputKey] = useState(0);
+  const [documentForm, setDocumentForm] = useState({ ...EMPTY_DOCUMENT_FORM });
   const [showPassword, setShowPassword] = useState(false);
   const [passwordForm, setPasswordForm] = useState({
     current_password: '',
@@ -191,9 +276,11 @@ export function AdminEmployeeSettings() {
     async function loadProfile() {
       setIsLoading(true);
       try {
-        const profile = await getMyEmployeeProfile();
-        setEmployee(profile);
-        setForm(employeeToForm(profile));
+        const [profileRes, documentsRes] = await Promise.allSettled([getMyEmployeeProfile(), getMyEmployeeDocuments()]);
+        if (profileRes.status !== 'fulfilled') throw profileRes.reason;
+        setEmployee(profileRes.value);
+        setForm(employeeToForm(profileRes.value));
+        setDocuments(documentsRes.status === 'fulfilled' ? documentsRes.value : []);
       } catch (error) {
         console.error(error);
         toast.error('No se pudo cargar tu configuración');
@@ -214,8 +301,18 @@ export function AdminEmployeeSettings() {
     ];
   }, [employee]);
 
+  const sortedDocuments = useMemo(
+    () => [...documents].sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime()),
+    [documents],
+  );
+
   const setField = <K extends keyof ProfileForm>(field: K, value: ProfileForm[K]) => {
     setForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const resetDocumentForm = () => {
+    setDocumentForm({ ...EMPTY_DOCUMENT_FORM });
+    setDocumentInputKey((current) => current + 1);
   };
 
   const saveProfile = async () => {
@@ -290,6 +387,38 @@ export function AdminEmployeeSettings() {
       toast.error(error instanceof Error ? error.message : 'No se pudo cambiar la contraseña');
     } finally {
       setSavingPassword(false);
+    }
+  };
+
+  const uploadDocument = async () => {
+    if (!documentForm.document_type) {
+      toast.error('Selecciona el tipo de documento');
+      return;
+    }
+    if (!documentForm.file) {
+      toast.error('Selecciona un archivo para subir');
+      return;
+    }
+
+    setSavingDocument(true);
+    try {
+      await createMyEmployeeDocument({
+        document_type: documentForm.document_type,
+        name: documentForm.name.trim() || optionLabel(DOCUMENT_TYPE_OPTIONS, documentForm.document_type),
+        file: documentForm.file,
+        issued_at: optionalDate(documentForm.issued_at),
+        expires_at: optionalDate(documentForm.expires_at),
+        observations: documentForm.observations.trim(),
+      });
+      const refreshed = await getMyEmployeeDocuments();
+      setDocuments(refreshed);
+      resetDocumentForm();
+      toast.success('Documento enviado a tu expediente');
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo subir el documento');
+    } finally {
+      setSavingDocument(false);
     }
   };
 
@@ -401,6 +530,150 @@ export function AdminEmployeeSettings() {
             </label>
           </div>
         );
+      case 'documents':
+        return (
+          <div className="space-y-6">
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {DOCUMENT_TYPE_OPTIONS.map((docType) => {
+                const docs = sortedDocuments.filter((document) => document.document_type === docType.value);
+                const latest = docs[0];
+                const active = documentForm.document_type === docType.value;
+                return (
+                  <button
+                    type="button"
+                    key={docType.value}
+                    onClick={() => {
+                      setDocumentForm((current) => ({
+                        ...current,
+                        document_type: docType.value,
+                        name: docType.label,
+                      }));
+                    }}
+                    className={`text-left border rounded-xl p-3 transition-colors ${
+                      active ? 'border-[#2a4038] bg-[#2a4038]/5' : 'border-gray-200 hover:border-[#2a4038]'
+                    }`}
+                  >
+                    <div className="text-xs font-medium text-gray-900 mb-1.5">
+                      {docType.label}
+                      {REQUIRED_DOCUMENT_TYPES.has(docType.value) && (
+                        <span className="text-red-500 ml-0.5" title="Documento obligatorio" aria-label="Documento obligatorio">*</span>
+                      )}
+                    </div>
+                    <Badge label={latest ? documentStatusLabel(latest.status) : 'Pendiente'} color={documentStatusBadge(latest?.status ?? 'PENDING')} />
+                    {docs.length > 1 && <div className="text-[10px] text-gray-400 mt-2">{docs.length} adjuntos</div>}
+                  </button>
+                );
+              })}
+            </div>
+
+            <p className="text-[11px] text-gray-400">
+              <span className="text-red-500">*</span> Documento obligatorio para completar el expediente.
+            </p>
+
+            <div className="rounded-xl border border-gray-200 p-4 space-y-4">
+              <div className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+                <FileUp size={16} />
+                Subir documento al expediente
+              </div>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <Field label="Tipo de documento">
+                  <select
+                    value={documentForm.document_type}
+                    onChange={(event) => {
+                      const docType = event.target.value as EmployeeDocumentType;
+                      setDocumentForm((current) => ({
+                        ...current,
+                        document_type: docType,
+                        name: optionLabel(DOCUMENT_TYPE_OPTIONS, docType),
+                      }));
+                    }}
+                    className={selectCls}
+                  >
+                    {DOCUMENT_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                </Field>
+                <Field label="Nombre">
+                  <input
+                    value={documentForm.name}
+                    onChange={(event) => setDocumentForm((current) => ({ ...current, name: event.target.value }))}
+                    className={inputCls}
+                  />
+                </Field>
+                <Field label={documentForm.document_type === 'ID_COPY' ? 'Fecha de expedición' : 'Fecha del documento'}>
+                  <input
+                    type="date"
+                    value={documentForm.issued_at}
+                    onChange={(event) => setDocumentForm((current) => ({ ...current, issued_at: event.target.value }))}
+                    className={inputCls}
+                  />
+                </Field>
+                <Field label="Fecha de vencimiento">
+                  <input
+                    type="date"
+                    value={documentForm.expires_at}
+                    onChange={(event) => setDocumentForm((current) => ({ ...current, expires_at: event.target.value }))}
+                    className={inputCls}
+                  />
+                </Field>
+                <label className="block sm:col-span-2">
+                  <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Archivo</span>
+                  <input
+                    key={documentInputKey}
+                    type="file"
+                    onChange={(event) => setDocumentForm((current) => ({ ...current, file: event.target.files?.[0] ?? null }))}
+                    className={inputCls}
+                  />
+                </label>
+                <label className="block sm:col-span-2">
+                  <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Observaciones</span>
+                  <textarea
+                    value={documentForm.observations}
+                    onChange={(event) => setDocumentForm((current) => ({ ...current, observations: event.target.value }))}
+                    rows={3}
+                    className={`${inputCls} resize-none`}
+                  />
+                </label>
+              </div>
+              <button
+                type="button"
+                onClick={() => void uploadDocument()}
+                disabled={savingDocument}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#2a4038] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#3d5c4e] disabled:opacity-50"
+              >
+                <FileUp size={14} />
+                {savingDocument ? 'Subiendo...' : 'Subir documento'}
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {sortedDocuments.map((document) => (
+                <div key={document.id} className="flex flex-col gap-3 rounded-xl border border-gray-100 p-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-gray-900 truncate">{document.name}</div>
+                    <div className="text-xs text-gray-400">
+                      {optionLabel(DOCUMENT_TYPE_OPTIONS, document.document_type)} · Subido: {parseDate(document.uploaded_at)} · Vence: {parseDate(document.expires_at)}
+                    </div>
+                    {document.observations && <div className="text-xs text-gray-500 mt-1 line-clamp-2">{document.observations}</div>}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {document.file && (
+                      <a
+                        href={document.file}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50"
+                      >
+                        Ver archivo
+                      </a>
+                    )}
+                    <Badge label={documentStatusLabel(document.status)} color={documentStatusBadge(document.status)} />
+                  </div>
+                </div>
+              ))}
+              {sortedDocuments.length === 0 && <EmptyState title="Sin documentos cargados todavía." />}
+            </div>
+          </div>
+        );
       case 'security':
         return (
           <div className="max-w-xl space-y-4">
@@ -460,9 +733,9 @@ export function AdminEmployeeSettings() {
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between mb-6">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Configuración</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Actualiza tu información personal, seguridad social, datos bancarios, emergencia y contraseña.</p>
+          <p className="text-xs text-gray-500 mt-0.5">Actualiza tu información personal, documentos, seguridad social, datos bancarios, emergencia y contraseña.</p>
         </div>
-        {activeTab !== 'security' && (
+        {activeTab !== 'security' && activeTab !== 'documents' && (
           <button
             type="button"
             onClick={() => void saveProfile()}
