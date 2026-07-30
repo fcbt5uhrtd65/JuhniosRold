@@ -815,14 +815,12 @@ def render_packaging_control_pdf(control):
         ("REALIZADO POR", _employee_name(control.label_performed_by)),
         ("VERIFICADO POR", _employee_name(control.label_verified_by)),
     ]
-    if control.label_sample_file:
-        img = _load_image_flowable(control.label_sample_file, 55 * mm, 32 * mm)
-        left = field_grid(label_fields, col_count=2, col_widths=[CONTENT_W * 0.35] * 2)
-        right = [img] if img else [P("Sin foto de etiqueta testigo.", S_EMPTY)]
-        story.append(Table([[left, right]], colWidths=[CONTENT_W * 0.68, CONTENT_W * 0.32],
-                            style=TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0)])))
-    else:
-        story.append(field_grid(label_fields, col_count=2))
+    img = _load_image_flowable(control.label_sample_file, 55 * mm, 32 * mm) if control.label_sample_file else None
+    left = field_grid(label_fields, col_count=2, col_widths=[CONTENT_W * 0.35] * 2)
+    right = [img] if img else [P("Sin foto.", _style("no_photo3", size=8.2, color=MUTED, italic=True, align=TA_CENTER))]
+    story.append(Table([[left, right]], colWidths=[CONTENT_W * 0.68, CONTENT_W * 0.32],
+                        style=TableStyle([("VALIGN", (0, 0), (0, 0), "TOP"), ("VALIGN", (1, 0), (1, 0), "MIDDLE"),
+                                           ("LEFTPADDING", (0, 0), (-1, -1), 0)])))
     story.append(Spacer(1, 10))
 
     story.append(section_title("Loteado inicial y final"))
@@ -1196,14 +1194,12 @@ def render_full_batch_dossier_pdf(batch, *, include_attachments=True, include_ph
             ("REALIZADO POR", _employee_name(packaging_control.label_performed_by)),
             ("VERIFICADO POR", _employee_name(packaging_control.label_verified_by)),
         ]
-        if include_photos and packaging_control.label_sample_file:
-            img = _load_image_flowable(packaging_control.label_sample_file, 50 * mm, 30 * mm)
-            left = field_grid(label_fields, col_count=2, col_widths=[CONTENT_W * 0.34] * 2)
-            right = [img] if img else [P("Sin foto.", S_EMPTY)]
-            story.append(Table([[left, right]], colWidths=[CONTENT_W * 0.68, CONTENT_W * 0.32],
-                                style=TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0)])))
-        else:
-            story.append(field_grid(label_fields, col_count=2))
+        img = _load_image_flowable(packaging_control.label_sample_file, 50 * mm, 30 * mm) if include_photos and packaging_control.label_sample_file else None
+        left = field_grid(label_fields, col_count=2, col_widths=[CONTENT_W * 0.34] * 2)
+        right = [img] if img else [P("Sin foto.", _style("no_photo4", size=8.2, color=MUTED, italic=True, align=TA_CENTER))]
+        story.append(Table([[left, right]], colWidths=[CONTENT_W * 0.68, CONTENT_W * 0.32],
+                            style=TableStyle([("VALIGN", (0, 0), (0, 0), "TOP"), ("VALIGN", (1, 0), (1, 0), "MIDDLE"),
+                                               ("LEFTPADDING", (0, 0), (-1, -1), 0)])))
         story.append(Spacer(1, 10))
 
         story.append(section_title("Loteado inicial y final"))
