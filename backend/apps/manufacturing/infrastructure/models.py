@@ -554,6 +554,19 @@ class LineClearance(BaseModel):
 
     class Meta(BaseModel.Meta):
         ordering = ("-created_at",)
+        constraints = [
+            # No se restringe (batch, phase) en general porque un despeje
+            # rechazado debe poder reintentarse con un registro nuevo (flujo
+            # GMP normal de corrección), pero dos despejes PENDING/APPROVED
+            # simultáneos para la misma fase permitirían que uno quede
+            # rechazado y otro aprobado, dejando pasar la liberación pese al
+            # rechazo (ReleaseBatch solo revisa que no haya rechazados).
+            models.UniqueConstraint(
+                fields=("batch", "phase"),
+                condition=models.Q(status__in=("PENDING", "APPROVED")),
+                name="unique_active_line_clearance_per_phase",
+            ),
+        ]
 
 
 class LineClearanceCriterion(BaseModel):

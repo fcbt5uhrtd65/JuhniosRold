@@ -392,6 +392,13 @@ class Stage:
 
 
 def ensure_batch(code, formula, output_item, unit_un, location, employee, *, status, notes, planned=100, actual=98):
+    """Crea el lote demo en DRAFT y lo transiciona al estado objetivo usando
+    ChangeBatchStatus (el mismo use case que usa la aplicación real), en vez
+    de asignar Batch.status directo con un mapeo de ProductionOrder.status
+    propio y duplicado. Así el seed no puede divergir de la regla de negocio
+    real ni dejar BatchStatusHistory/ProductionOrder.status desincronizados."""
+    from apps.manufacturing.application.use_cases import ChangeBatchStatus
+
     today = timezone.localdate()
     area = upsert(Area, {"code": "DEMO-MFG-AREA"}, {"name": "Area demo produccion", "is_active": True})
     line = upsert(
@@ -399,15 +406,6 @@ def ensure_batch(code, formula, output_item, unit_un, location, employee, *, sta
         {"code": "DEMO-MFG-LINEA"},
         {"name": "Linea demo de fabricacion", "area": area, "is_active": True},
     )
-
-    order_status_map = {
-        Batch.Status.DRAFT: ProductionOrder.Status.PENDING,
-        Batch.Status.MANUFACTURING: ProductionOrder.Status.IN_PROGRESS,
-        Batch.Status.PENDING_DOCUMENTS: ProductionOrder.Status.IN_PROGRESS,
-        Batch.Status.REJECTED: ProductionOrder.Status.CLOSED,
-        Batch.Status.RELEASED: ProductionOrder.Status.CLOSED,
-    }
-    order_status = order_status_map.get(status, ProductionOrder.Status.IN_PROGRESS)
 
     production_order = ProductionOrder.objects.filter(batch_code=code).first()
     order_fields = {
@@ -421,7 +419,6 @@ def ensure_batch(code, formula, output_item, unit_un, location, employee, *, sta
         "responsible": "Teo Produccion Demo",
         "is_dispensed": status != Batch.Status.DRAFT,
         "is_output_received": status in Batch.TERMINAL_STATUSES,
-        "status": order_status,
         "notes": f"Orden demo ({code}) creada por seed_manufacturing_demo.",
     }
     if production_order is None:
@@ -435,7 +432,7 @@ def ensure_batch(code, formula, output_item, unit_un, location, employee, *, sta
         Batch,
         {"production_order": production_order},
         {
-            "status": status,
+            "status": Batch.Status.DRAFT,
             "area": area,
             "production_line": line,
             "production_manager": employee,
@@ -447,14 +444,19 @@ def ensure_batch(code, formula, output_item, unit_un, location, employee, *, sta
             "created_by": None,
         },
     )
+    if not BatchStatusHistory.objects.filter(batch=batch).exists():
+        BatchStatusHistory.objects.create(
+            batch=batch, previous_status="", new_status=Batch.Status.DRAFT,
+            changed_by=None, reason=f"Seed demo {code}", observation="Lote demo creado en borrador.",
+        )
 
-    BatchStatusHistory.objects.get_or_create(
-        batch=batch,
-        previous_status="",
-        new_status=status,
-        reason=f"Seed demo {code}",
-        defaults={"changed_by": None, "observation": f"Lote demo precargado en estado {status}."},
-    )
+    if status != Batch.Status.DRAFT and batch.status != status:
+        ChangeBatchStatus().execute(
+            batch, status, None, reason=f"Seed demo {code}",
+            observation=f"Lote demo precargado en estado {status}.",
+            _allow_release=(status == Batch.Status.RELEASED),
+        )
+        batch.refresh_from_db()
     return batch, area, line
 
 
@@ -967,6 +969,14 @@ def ensure_release(batch, unit_un, location, employee, *, condition=BatchRelease
 # ── Orquestación de cada escenario ──────────────────────────────────────────
 
 def build_scenario(code, stage, formula, master, employee, quality_employee, raw_batches):
+    """Cada escenario avanza el lote solo hasta el punto real de su historia
+    (el estado intermedio correspondiente a los datos que existen en ese
+    momento), y solo al final aplica la transición terminal (RELEASED/
+    REJECTED) vía ChangeBatchStatus — igual que haría un usuario real, en vez
+    de fijar el estado terminal desde el principio antes de que existan los
+    registros que lo justifiquen (certificado de análisis, release, etc.)."""
+    from apps.manufacturing.application.use_cases import ChangeBatchStatus
+
     output_item, _raw_materials, packaging_materials, unit_un, location, _supplier = master
 
     notes_by_stage = {
@@ -977,18 +987,21 @@ def build_scenario(code, stage, formula, master, employee, quality_employee, raw
         Stage.PENDING_DOCS: "Lote demo con proceso fisico completo pero checklist documental incompleto.",
         Stage.COMPLETE: "Lote demo completo para probar expediente, controles y PDF (con fotos y firmas reales).",
     }
-    status_by_stage = {
+    # Estado intermedio real en el que queda el lote mientras se cargan sus
+    # datos (nunca un estado terminal aquí: ese se aplica al final del
+    # escenario, cuando ya existen los registros que lo sustentan).
+    intermediate_status_by_stage = {
         Stage.DRAFT: Batch.Status.DRAFT,
         Stage.IN_PROCESS: Batch.Status.MANUFACTURING,
         Stage.DEVIATION: Batch.Status.PENDING_DOCUMENTS,
-        Stage.REJECTED: Batch.Status.REJECTED,
+        Stage.REJECTED: Batch.Status.PENDING_DOCUMENTS,
         Stage.PENDING_DOCS: Batch.Status.PENDING_DOCUMENTS,
-        Stage.COMPLETE: Batch.Status.RELEASED,
+        Stage.COMPLETE: Batch.Status.PENDING_DOCUMENTS,
     }
 
     batch, area, line = ensure_batch(
         code, formula, output_item, unit_un, location, employee,
-        status=status_by_stage[stage], notes=notes_by_stage[stage],
+        status=intermediate_status_by_stage[stage], notes=notes_by_stage[stage],
     )
 
     if stage == Stage.DRAFT:
@@ -1019,8 +1032,21 @@ def build_scenario(code, stage, formula, master, employee, quality_employee, raw
     if stage == Stage.PENDING_DOCS:
         return batch
 
-    condition = BatchRelease.Condition.REJECTED if stage == Stage.REJECTED else BatchRelease.Condition.RELEASED
-    ensure_release(batch, unit_un, location, quality_employee, condition=condition)
+    if stage == Stage.REJECTED:
+        ensure_release(batch, unit_un, location, quality_employee, condition=BatchRelease.Condition.REJECTED)
+        if batch.status != Batch.Status.REJECTED:
+            ChangeBatchStatus().execute(
+                batch, Batch.Status.REJECTED, None, reason=f"Seed demo {code}",
+                observation="Lote demo rechazado: no cumple especificación de pH.",
+            )
+        return batch
+
+    ensure_release(batch, unit_un, location, quality_employee, condition=BatchRelease.Condition.RELEASED)
+    if batch.status != Batch.Status.RELEASED:
+        ChangeBatchStatus().execute(
+            batch, Batch.Status.RELEASED, None, reason=f"Seed demo {code}",
+            observation="Lote demo liberado para pruebas funcionales.", _allow_release=True,
+        )
     return batch
 
 

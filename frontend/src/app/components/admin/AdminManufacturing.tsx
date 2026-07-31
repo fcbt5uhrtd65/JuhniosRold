@@ -1267,7 +1267,9 @@ function GeneralTab({
       <Card className="p-5">
         <div className="flex items-center justify-between mb-4">
           <p className="text-sm font-semibold text-gray-900">Datos de la orden</p>
-          <SecondaryButton onClick={() => setShowStatusModal(true)}>Cambiar estado</SecondaryButton>
+          {!batch.is_terminal && (
+            <SecondaryButton onClick={() => setShowStatusModal(true)}>Cambiar estado</SecondaryButton>
+          )}
         </div>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <SectionField label="Orden de producción" value={batch.production_order_number} />
@@ -1293,10 +1295,15 @@ function GeneralTab({
           <label className="block">
             <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Nuevo estado</span>
             <select value={nextStatus} onChange={(e) => setNextStatus(e.target.value as BatchStatus)} className={selectCls}>
-              {Object.entries(STATUS_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>{label}</option>
-              ))}
+              {Object.entries(STATUS_LABELS)
+                .filter(([value]) => value !== 'RELEASED')
+                .map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
             </select>
+            <span className="block text-[11px] text-gray-400 mt-1">
+              Para liberar el lote usa la pestaña "Liberación", que valida certificado de análisis, hermeticidad, peso/volumen y documentos.
+            </span>
           </label>
           <label className="block">
             <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Motivo</span>
