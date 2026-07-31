@@ -119,11 +119,15 @@ def _notify(batch, notification_type, title, message, employee=None):
 class ChangeBatchStatus:
     """Transición de estado del expediente de lote, con registro de historial.
 
-    No valida aquí las reglas de negocio de cada fase (documentos pendientes,
-    controles de calidad, etc.) porque esos módulos todavía no existen en el
-    sistema — ver plan entregado. Solo aplica la regla ya definida: un lote en
-    estado terminal (liberado, rechazado, cerrado, cancelado) no puede cambiar
-    de estado sin reabrir explícitamente.
+    Solo aplica la regla general: un lote en estado terminal (liberado,
+    rechazado, cerrado, cancelado) no puede cambiar de estado sin reabrir
+    explícitamente. No valida aquí las condiciones de negocio específicas de
+    cada fase intermedia (eso vive en cada use case de la fase: ApproveLineClearance,
+    CloseDispensingOrder, etc.), pero SÍ impide llegar a RELEASED por esta vía
+    genérica: liberar un lote exige pasar por ReleaseBatch, que valida
+    certificado de análisis, hermeticidad, peso/volumen y checklist documental
+    antes de aprobar. Sin este guard, este endpoint era un bypass completo de
+    esas validaciones GMP (bastaba con llamarlo con status=RELEASED).
     """
 
     # Batch.status (GMP, 17 valores) gobierna la UI unificada de producción;
@@ -139,11 +143,16 @@ class ChangeBatchStatus:
         Batch.Status.CANCELLED: "VOIDED",
     }
 
-    def execute(self, batch: Batch, new_status: str, actor, reason: str = "", observation: str = "", evidence=None):
+    def execute(self, batch: Batch, new_status: str, actor, reason: str = "", observation: str = "", evidence=None, _allow_release=False):
         if batch.is_terminal:
             raise BusinessRuleViolation("El lote ya se encuentra en un estado terminal y no puede modificarse.")
         if new_status not in Batch.Status.values:
             raise BusinessRuleViolation("Estado de lote no válido.")
+        if new_status == Batch.Status.RELEASED and not _allow_release:
+            raise BusinessRuleViolation(
+                "Un lote no puede liberarse por cambio de estado directo: usa la acción de liberación, "
+                "que valida certificado de análisis, hermeticidad, peso/volumen y documentos obligatorios."
+            )
 
         previous_status = batch.status
         batch.status = new_status
@@ -490,16 +499,20 @@ class ApproveLineClearance:
             raise BusinessRuleViolation("No se puede aprobar el despeje: hay criterios que no cumplen.")
 
         if approve:
-            cleaning_records = clearance.batch.cleaning_records.all()
+            # Filtrado por la misma fase del despeje: una limpieza vencida o
+            # rechazada de otra fase (p. ej. acondicionamiento) no debe
+            # bloquear ni enmascarar la aprobación de esta fase (p. ej.
+            # dispensación), y viceversa.
+            cleaning_records = clearance.batch.cleaning_records.filter(phase=clearance.phase)
             expired = [record for record in cleaning_records if record.is_expired]
             if expired:
                 raise BusinessRuleViolation(
-                    "No se puede aprobar el despeje: hay una limpieza vencida registrada para este lote. Registra una nueva limpieza."
+                    "No se puede aprobar el despeje: hay una limpieza vencida registrada para esta fase. Registra una nueva limpieza."
                 )
             rejected = cleaning_records.filter(result=CleaningRecord.Result.REJECTED)
             if rejected.exists():
                 raise BusinessRuleViolation(
-                    "No se puede aprobar el despeje: hay una limpieza de área o equipo rechazada para este lote."
+                    "No se puede aprobar el despeje: hay una limpieza de área o equipo rechazada para esta fase."
                 )
 
         clearance.status = LineClearance.Status.APPROVED if approve else LineClearance.Status.REJECTED
@@ -662,7 +675,7 @@ class ReleaseBatch:
                 **({"quality_signature": quality_signature} if quality_signature else {}),
             },
         )
-        ChangeBatchStatus().execute(batch, Batch.Status.RELEASED, actor, reason="Lote liberado")
+        ChangeBatchStatus().execute(batch, Batch.Status.RELEASED, actor, reason="Lote liberado", _allow_release=True)
         _notify(
             batch,
             StaffNotification.NotificationType.BATCH_RELEASED,
