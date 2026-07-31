@@ -10,6 +10,7 @@ from .views import (
     EmployeeWorkScheduleViewSet,
     HRNotificationViewSet,
     PayrollLegalParameterViewSet,
+    PayrollPeriodViewSet,
     PayrollViewSet,
     PerformanceReviewViewSet,
     PublicHolidayViewSet,
@@ -29,6 +30,7 @@ router.register("documents", EmployeeDocumentViewSet)
 router.register("notifications", HRNotificationViewSet)
 router.register("holidays", PublicHolidayViewSet)
 router.register("payroll-legal-parameters", PayrollLegalParameterViewSet)
+router.register("payroll-periods", PayrollPeriodViewSet)
 router.register("work-schedules", EmployeeWorkScheduleViewSet)
 router.register("biometric-devices", BiometricDeviceViewSet)
 router.register("biometric-ids", EmployeeBiometricIdViewSet)

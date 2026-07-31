@@ -327,6 +327,46 @@ class VacationRequestHistory(BaseModel):
         ordering = ("-created_at",)
 
 
+class PayrollPeriod(BaseModel):
+    """Contenedor quincenal del que cuelgan los Payroll individuales por
+    empleado. Un período se genera una vez y todos los Payroll de esa
+    quincena se calculan/recalculan a partir de él."""
+
+    class Status(models.TextChoices):
+        OPEN = "OPEN", "Abierto"
+        CALCULATED = "CALCULATED", "Calculado"
+        APPROVED = "APPROVED", "Aprobado"
+        PAID = "PAID", "Pagado"
+        CLOSED = "CLOSED", "Cerrado"
+
+    period_start = models.DateField()
+    period_end = models.DateField()
+    label = models.CharField(max_length=40, blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.OPEN)
+    calculated_at = models.DateTimeField(null=True, blank=True)
+    calculated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="calculated_payroll_periods"
+    )
+    approved_at = models.DateTimeField(null=True, blank=True)
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_payroll_periods"
+    )
+    paid_at = models.DateTimeField(null=True, blank=True)
+    paid_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="paid_payroll_periods"
+    )
+    notes = models.TextField(blank=True)
+
+    class Meta(BaseModel.Meta):
+        ordering = ("-period_start",)
+        constraints = [
+            models.UniqueConstraint(fields=("period_start", "period_end"), name="unique_payroll_period_range"),
+        ]
+
+    def __str__(self):
+        return self.label or f"Período {self.period_start} - {self.period_end}"
+
+
 class Payroll(BaseModel):
     class Status(models.TextChoices):
         DRAFT = "DRAFT", "Borrador"
@@ -342,16 +382,60 @@ class Payroll(BaseModel):
     net_salary = models.DecimalField(max_digits=14, decimal_places=2)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
 
+    # Campos del motor de nómina quincenal (aditivos — Payroll ya existía
+    # como CRUD manual; estos campos permiten que period_start/period_end
+    # (que se mantienen, por compatibilidad con quien ya lea Payroll directo)
+    # queden sincronizados con PayrollPeriod cuando se calcula automáticamente).
+    period = models.ForeignKey(PayrollPeriod, on_delete=models.CASCADE, related_name="payrolls", null=True, blank=True)
+    payslip_number = models.CharField(max_length=30, unique=True, null=True, blank=True)
+    worked_days = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    ordinary_hours = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    overtime_hours = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    transport_allowance = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    health_deduction = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    pension_deduction = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    gross_earnings = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    total_deductions = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_payrolls"
+    )
+    approved_at = models.DateTimeField(null=True, blank=True)
+    paid_at = models.DateTimeField(null=True, blank=True)
+    payment_reference = models.CharField(max_length=100, blank=True)
+    signature = models.FileField(
+        upload_to="hr/payroll/signatures/",
+        blank=True,
+        validators=[FileExtensionValidator(allowed_extensions=("png", "jpg", "jpeg"))],
+    )
+
+    def __str__(self):
+        return self.payslip_number or f"Nómina {self.employee} ({self.period_start} - {self.period_end})"
+
 
 class PayrollItem(BaseModel):
     class Type(models.TextChoices):
         EARNING = "EARNING", "Devengado"
         DEDUCTION = "DEDUCTION", "Deducción"
 
+    class Source(models.TextChoices):
+        MANUAL = "MANUAL", "Manual"
+        ATTENDANCE = "ATTENDANCE", "Cálculo de asistencia/horas"
+        VACATION_REQUEST = "VACATION_REQUEST", "Solicitud (vacaciones/incapacidad/permiso)"
+        LOAN_INSTALLMENT = "LOAN_INSTALLMENT", "Cuota de préstamo"
+        SYSTEM = "SYSTEM", "Concepto legal calculado (salud, pensión, aux. transporte)"
+
     payroll = models.ForeignKey(Payroll, on_delete=models.CASCADE, related_name="items")
     item_type = models.CharField(max_length=20, choices=Type.choices)
     concept = models.CharField(max_length=150)
     amount = models.DecimalField(max_digits=14, decimal_places=2)
+
+    # Trazabilidad de origen (aditivo) — concept_code es un string corto y
+    # estable para agrupar/filtrar/reportar sin forzar un catálogo rígido.
+    source = models.CharField(max_length=20, choices=Source.choices, default=Source.MANUAL)
+    source_vacation_request = models.ForeignKey(
+        "VacationRequest", on_delete=models.SET_NULL, null=True, blank=True, related_name="payroll_items"
+    )
+    concept_code = models.CharField(max_length=40, blank=True)
 
 
 class PerformanceReview(BaseModel):

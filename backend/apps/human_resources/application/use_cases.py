@@ -17,14 +17,37 @@ from ..infrastructure.models import (
     EmployeeWorkScheduleDay,
     OvertimeShift,
     Payroll,
+    PayrollItem,
+    PayrollLegalParameter,
+    PayrollPeriod,
     PublicHoliday,
     RawBiometricPunch,
     VacationRequest,
     VacationRequestApprovalStep,
     VacationRequestHistory,
+    get_schedule_for,
+)
+from ..infrastructure.overtime_pay import classify_shift
+from ..infrastructure.payroll_engine import (
+    daily_rate_for,
+    health_deduction_for,
+    hourly_rate_for,
+    pension_deduction_for,
+    resolve_base_salary,
+    transport_allowance_for,
 )
 
 BIOMETRIC_DEDUP_WINDOW_MINUTES = 1
+RECHARGE_LABEL_TO_CONCEPT_CODE = {
+    "Ordinaria diurna": "ORDINARY_DAY",
+    "Ordinaria nocturna": "ORDINARY_NIGHT",
+    "Dominical diurna ordinaria": "ORDINARY_DAY_REST",
+    "Dominical nocturna ordinaria": "ORDINARY_NIGHT_REST",
+    "Extra diurna": "OVERTIME_DAY",
+    "Extra nocturna": "OVERTIME_NIGHT",
+    "Extra diurna dominical": "OVERTIME_DAY_REST",
+    "Extra nocturna dominical": "OVERTIME_NIGHT_REST",
+}
 
 
 class RegisterCheckIn:
@@ -773,3 +796,493 @@ class CorrectAttendance:
             "is_manually_corrected", "corrected_by", "corrected_at", "correction_reason", "updated_at",
         ))
         return attendance
+
+
+class CreatePayrollPeriod:
+    """Crea un período quincenal de nómina. La periodicidad exacta (15 días)
+    es una convención de negocio, no una restricción dura de fechas de
+    calendario — no se valida la duración exacta, solo que no se solape con
+    un período ya existente."""
+
+    def execute(self, *, period_start, period_end, actor=None, label=""):
+        if isinstance(period_start, str):
+            period_start = datetime.strptime(period_start, "%Y-%m-%d").date()
+        if isinstance(period_end, str):
+            period_end = datetime.strptime(period_end, "%Y-%m-%d").date()
+        if period_end <= period_start:
+            raise BusinessRuleViolation("La fecha de fin debe ser posterior a la fecha de inicio.")
+
+        overlapping = PayrollPeriod.objects.filter(
+            period_start__lte=period_end, period_end__gte=period_start
+        ).exists()
+        if overlapping:
+            raise BusinessRuleViolation("Ya existe un período de nómina que se solapa con ese rango de fechas.")
+
+        return PayrollPeriod.objects.create(
+            period_start=period_start,
+            period_end=period_end,
+            label=label or f"{period_start:%Y-%m-%d} a {period_end:%Y-%m-%d}",
+        )
+
+
+class CalculateEmployeePayrollForPeriod:
+    """El corazón del motor de nómina: calcula la liquidación quincenal de
+    UN empleado, día por día, combinando:
+      - el horario esperado vigente de ese empleado (EmployeeWorkSchedule),
+      - la asistencia consolidada de cada día (Attendance),
+      - el catálogo de festivos del período (PublicHoliday),
+      - las novedades aprobadas dentro del período (VacationRequest: vacaciones,
+        incapacidades, permisos no remunerados, préstamos, horas extra).
+
+    Regla de horas extra (confirmada explícitamente): el tiempo trabajado
+    de más detectado por marcación (biométrico o manual) NUNCA genera
+    devengado de horas extra automáticamente — solo se registra como
+    informativo. Las horas extra que sí se pagan son las de
+    VacationRequest(request_type=OVERTIME, status=APPROVED) con sus
+    OvertimeShift dentro del período. Esto evita pagar de más por errores de
+    marcación o quedarse tarde sin autorización.
+
+    Recalculo idempotente: borra los PayrollItem con source != MANUAL del
+    cálculo anterior de ese empleado/período antes de regenerar, preservando
+    cualquier ajuste manual que RRHH haya añadido a mano."""
+
+    @transaction.atomic
+    def execute(self, *, period, employee, actor=None):
+        if period.status not in (PayrollPeriod.Status.OPEN, PayrollPeriod.Status.CALCULATED):
+            raise BusinessRuleViolation("Solo se puede calcular un período que esté Abierto o ya Calculado.")
+
+        legal_parameter = PayrollLegalParameter.objects.filter(year=period.period_start.year).first()
+        base_salary = resolve_base_salary(employee, period.period_start)
+        hourly_rate = hourly_rate_for(employee, period.period_start, legal_parameter)
+
+        holiday_dates = frozenset(
+            PublicHoliday.objects.filter(
+                is_active=True, civil_date__gte=period.period_start, civil_date__lte=period.period_end
+            ).values_list("civil_date", flat=True)
+        )
+
+        payroll, _ = Payroll.objects.update_or_create(
+            employee=employee,
+            period=period,
+            defaults={
+                "period_start": period.period_start,
+                "period_end": period.period_end,
+                "base_salary": base_salary,
+                "status": Payroll.Status.DRAFT,
+            },
+        )
+        # Recálculo idempotente: se conservan los ajustes manuales que RRHH
+        # haya agregado a mano, se descartan los que el motor generó antes.
+        payroll.items.exclude(source=PayrollItem.Source.MANUAL).delete()
+
+        recharge_minutes = self._accumulate_recharge_minutes(employee, period, holiday_dates)
+        worked_days, ordinary_minutes = self._count_worked_days(employee, period)
+
+        new_items = []
+        for (label, surcharge_pct), minutes in recharge_minutes.items():
+            if minutes <= 0:
+                continue
+            hours = Decimal(minutes) / Decimal(60)
+            amount = (hourly_rate * (Decimal(100) + surcharge_pct) / Decimal(100) * hours).quantize(Decimal("0.01"))
+            if amount <= 0:
+                continue
+            new_items.append(PayrollItem(
+                payroll=payroll,
+                item_type=PayrollItem.Type.EARNING,
+                concept=f"{label} ({100 + surcharge_pct:.0f}%)",
+                amount=amount,
+                source=PayrollItem.Source.ATTENDANCE,
+                concept_code=RECHARGE_LABEL_TO_CONCEPT_CODE.get(label, "OTHER_HOURS"),
+            ))
+
+        overtime_amount, overtime_hours = self._approved_overtime_items(payroll, employee, period, hourly_rate, holiday_dates, new_items)
+        new_items.extend(self._vacation_request_items(payroll, employee, period, actor))
+
+        transport = transport_allowance_for(employee, legal_parameter) if legal_parameter else Decimal("0")
+        if transport > 0:
+            new_items.append(PayrollItem(
+                payroll=payroll, item_type=PayrollItem.Type.EARNING, concept="Auxilio de transporte",
+                amount=transport, source=PayrollItem.Source.SYSTEM, concept_code="TRANSPORT_ALLOWANCE",
+            ))
+
+        health = health_deduction_for(base_salary, legal_parameter) if legal_parameter else Decimal("0")
+        if health > 0:
+            new_items.append(PayrollItem(
+                payroll=payroll, item_type=PayrollItem.Type.DEDUCTION, concept="Salud (empleado)",
+                amount=health, source=PayrollItem.Source.SYSTEM, concept_code="HEALTH",
+            ))
+
+        pension = pension_deduction_for(base_salary, legal_parameter) if legal_parameter else Decimal("0")
+        if pension > 0:
+            new_items.append(PayrollItem(
+                payroll=payroll, item_type=PayrollItem.Type.DEDUCTION, concept="Pensión (empleado)",
+                amount=pension, source=PayrollItem.Source.SYSTEM, concept_code="PENSION",
+            ))
+
+        PayrollItem.objects.bulk_create(new_items)
+
+        all_items = list(payroll.items.all())
+        gross = sum((i.amount for i in all_items if i.item_type == PayrollItem.Type.EARNING), Decimal("0"))
+        deductions_total = sum((i.amount for i in all_items if i.item_type == PayrollItem.Type.DEDUCTION), Decimal("0"))
+
+        payroll.worked_days = worked_days
+        payroll.ordinary_hours = (Decimal(ordinary_minutes) / Decimal(60)).quantize(Decimal("0.01"))
+        payroll.overtime_hours = overtime_hours
+        payroll.transport_allowance = transport
+        payroll.health_deduction = health
+        payroll.pension_deduction = pension
+        payroll.gross_earnings = gross
+        payroll.total_deductions = deductions_total
+        payroll.bonuses = sum(
+            (i.amount for i in all_items if i.item_type == PayrollItem.Type.EARNING and i.source == PayrollItem.Source.MANUAL),
+            Decimal("0"),
+        )
+        payroll.deductions = deductions_total
+        payroll.net_salary = (base_salary + gross - deductions_total).quantize(Decimal("0.01"))
+        if not payroll.payslip_number:
+            payroll.payslip_number = self._generate_payslip_number(period)
+        payroll.save()
+        return payroll
+
+    def _accumulate_recharge_minutes(self, employee, period, holiday_dates) -> dict:
+        """Recorre cada día del período con asistencia consolidada y acumula
+        minutos por (label, surcharge_pct) usando classify_shift — solo para
+        el tramo que cabe dentro del horario esperado del día (ordinario);
+        el exceso se cuenta aparte como informativo, no se paga aquí."""
+        totals: dict[tuple, int] = {}
+        cursor = period.period_start
+        while cursor <= period.period_end:
+            attendance = Attendance.objects.filter(employee=employee, date=cursor).first()
+            if attendance and attendance.check_in and attendance.check_out:
+                schedule = get_schedule_for(employee, cursor)
+                expected_minutes = schedule.expected_minutes_for(cursor.weekday()) if schedule else 0
+
+                segments = self._work_segments(attendance)
+                worked_minutes_seen = 0
+                for seg_start, seg_end in segments:
+                    seg_minutes = int((seg_end - seg_start).total_seconds() // 60)
+                    if seg_minutes <= 0:
+                        continue
+                    remaining_ordinary = max(expected_minutes - worked_minutes_seen, 0)
+                    if remaining_ordinary <= 0:
+                        worked_minutes_seen += seg_minutes
+                        continue
+                    ordinary_end_offset = min(remaining_ordinary, seg_minutes)
+                    ordinary_seg_end = seg_start + timedelta(minutes=ordinary_end_offset)
+                    for label, pct, minutes in self._classify_range(seg_start, ordinary_seg_end, holiday_dates, is_extra=False):
+                        key = (label, pct)
+                        totals[key] = totals.get(key, 0) + minutes
+                    worked_minutes_seen += seg_minutes
+            cursor += timedelta(days=1)
+        return totals
+
+    def _work_segments(self, attendance) -> list:
+        """[(inicio, fin)] de tramos trabajados de un Attendance consolidado,
+        excluyendo el descanso si está registrado."""
+        if attendance.break_start and attendance.break_end:
+            return [
+                (attendance.check_in, attendance.break_start),
+                (attendance.break_end, attendance.check_out),
+            ]
+        return [(attendance.check_in, attendance.check_out)]
+
+    def _classify_range(self, start_dt, end_dt, holiday_dates, is_extra):
+        segments = classify_shift(start_dt, end_dt, is_extra=is_extra, holiday_dates=holiday_dates)
+        return [(seg["label"], seg["surcharge_pct"], seg["minutes"]) for seg in segments]
+
+    def _count_worked_days(self, employee, period) -> tuple:
+        worked_days = 0
+        ordinary_minutes = 0
+        cursor = period.period_start
+        while cursor <= period.period_end:
+            attendance = Attendance.objects.filter(employee=employee, date=cursor).first()
+            if attendance and attendance.check_in and attendance.check_out:
+                worked_days += 1
+                segments = self._work_segments(attendance)
+                for seg_start, seg_end in segments:
+                    ordinary_minutes += max(int((seg_end - seg_start).total_seconds() // 60), 0)
+            cursor += timedelta(days=1)
+        return worked_days, ordinary_minutes
+
+    def _approved_overtime_items(self, payroll, employee, period, hourly_rate, holiday_dates, new_items) -> tuple:
+        """Genera devengados de horas extra SOLO a partir de solicitudes
+        formales aprobadas — nunca a partir de exceso de marcación cruda."""
+        overtime_requests = VacationRequest.objects.filter(
+            employee=employee,
+            request_type=VacationRequest.RequestType.OVERTIME,
+            status__in=(VacationRequest.Status.APPROVED, VacationRequest.Status.FINALIZED),
+            start_date__lte=period.period_end,
+            end_date__gte=period.period_start,
+        ).prefetch_related("overtime_shifts")
+
+        totals: dict[tuple, int] = {}
+        total_minutes = 0
+        for request in overtime_requests:
+            for shift in request.overtime_shifts.all():
+                if shift.date < period.period_start or shift.date > period.period_end:
+                    continue
+                shift_start = datetime.combine(shift.date, shift.start_time)
+                shift_end = datetime.combine(shift.date, shift.end_time)
+                for label, pct, minutes in self._classify_range(shift_start, shift_end, holiday_dates, is_extra=True):
+                    key = (label, pct)
+                    totals[key] = totals.get(key, 0) + minutes
+                    total_minutes += minutes
+
+        overtime_amount = Decimal("0")
+        for (label, pct), minutes in totals.items():
+            if minutes <= 0:
+                continue
+            hours = Decimal(minutes) / Decimal(60)
+            amount = (hourly_rate * (Decimal(100) + pct) / Decimal(100) * hours).quantize(Decimal("0.01"))
+            if amount <= 0:
+                continue
+            overtime_amount += amount
+            new_items.append(PayrollItem(
+                payroll=payroll,
+                item_type=PayrollItem.Type.EARNING,
+                concept=f"{label} ({100 + pct:.0f}%)",
+                amount=amount,
+                source=PayrollItem.Source.ATTENDANCE,
+                concept_code=RECHARGE_LABEL_TO_CONCEPT_CODE.get(label, "OTHER_HOURS"),
+            ))
+
+        overtime_hours = (Decimal(total_minutes) / Decimal(60)).quantize(Decimal("0.01"))
+        return overtime_amount, overtime_hours
+
+    def _vacation_request_items(self, payroll, employee, period, actor) -> list:
+        """Novedades de VacationRequest aprobadas del período: vacaciones
+        remuneradas, permisos no remunerados, incapacidades (informativas),
+        y cuotas de préstamo pendientes."""
+        items: list[PayrollItem] = []
+        requests = VacationRequest.objects.filter(
+            employee=employee,
+            status__in=(VacationRequest.Status.APPROVED, VacationRequest.Status.FINALIZED),
+            start_date__lte=period.period_end,
+            end_date__gte=period.period_start,
+        )
+
+        for request in requests:
+            overlap_start = max(request.start_date, period.period_start)
+            overlap_end = min(request.end_date, period.period_end)
+            overlap_days = (overlap_end - overlap_start).days + 1
+            if overlap_days <= 0:
+                continue
+
+            if request.request_type == VacationRequest.RequestType.VACATION:
+                if request.is_remunerated is not True:
+                    continue
+                daily_rate = daily_rate_for(employee, overlap_start)
+                items.append(PayrollItem(
+                    payroll=payroll,
+                    item_type=PayrollItem.Type.EARNING,
+                    concept=f"Vacaciones ({overlap_days} día(s))",
+                    amount=(daily_rate * overlap_days).quantize(Decimal("0.01")),
+                    source=PayrollItem.Source.VACATION_REQUEST,
+                    source_vacation_request=request,
+                    concept_code="VACATION_PAY",
+                ))
+            elif request.request_type == VacationRequest.RequestType.INCAPACITY:
+                items.append(PayrollItem(
+                    payroll=payroll,
+                    item_type=PayrollItem.Type.EARNING,
+                    concept=f"Incapacidad ({overlap_days} día(s)) — requiere verificación manual del régimen aplicable",
+                    amount=Decimal("0"),
+                    source=PayrollItem.Source.VACATION_REQUEST,
+                    source_vacation_request=request,
+                    concept_code="INCAPACITY_DAYS",
+                ))
+            elif (
+                request.request_type == VacationRequest.RequestType.PERMISSION
+                and request.subtype == VacationRequest.RequestSubtype.UNPAID
+            ):
+                daily_rate = daily_rate_for(employee, overlap_start)
+                items.append(PayrollItem(
+                    payroll=payroll,
+                    item_type=PayrollItem.Type.DEDUCTION,
+                    concept=f"Permiso no remunerado ({overlap_days} día(s))",
+                    amount=(daily_rate * overlap_days).quantize(Decimal("0.01")),
+                    source=PayrollItem.Source.VACATION_REQUEST,
+                    source_vacation_request=request,
+                    concept_code="UNPAID_LEAVE",
+                ))
+            elif request.request_type == VacationRequest.RequestType.LOAN:
+                installment = self._loan_installment_due(request, period)
+                if installment > 0:
+                    items.append(PayrollItem(
+                        payroll=payroll,
+                        item_type=PayrollItem.Type.DEDUCTION,
+                        concept=f"Cuota préstamo {request.loan_expense_number or request.request_number}",
+                        amount=installment,
+                        source=PayrollItem.Source.LOAN_INSTALLMENT,
+                        source_vacation_request=request,
+                        concept_code="LOAN_INSTALLMENT",
+                    ))
+        return items
+
+    def _loan_installment_due(self, loan_request, period) -> Decimal:
+        approved_amount = loan_request.loan_approved_amount or loan_request.loan_amount
+        installments_count = loan_request.loan_installments_count
+        if not approved_amount or not installments_count:
+            return Decimal("0")
+
+        installments_paid = PayrollItem.objects.filter(
+            source=PayrollItem.Source.LOAN_INSTALLMENT,
+            source_vacation_request=loan_request,
+        ).exclude(payroll__period=period).count()
+        if installments_paid >= installments_count:
+            return Decimal("0")
+
+        if loan_request.loan_frequency == VacationRequest.LoanFrequency.MONTHLY:
+            # Solo se descuenta en la quincena que contiene el día 1 del mes
+            # (primera quincena) — evita descontar dos veces en el mismo mes
+            # cuando la nómina es quincenal pero el préstamo es mensual.
+            if period.period_start.day > 15:
+                return Decimal("0")
+
+        return (Decimal(approved_amount) / Decimal(installments_count)).quantize(Decimal("0.01"))
+
+    def _generate_payslip_number(self, period) -> str:
+        prefix = f"NOM-{period.period_start:%Y%m}"
+        next_number = Payroll.all_objects.filter(payslip_number__startswith=f"{prefix}-").count() + 1
+        while True:
+            candidate = f"{prefix}-{next_number:04d}"
+            if not Payroll.all_objects.filter(payslip_number=candidate).exists():
+                return candidate
+            next_number += 1
+
+
+class CalculatePayrollPeriod:
+    """Calcula la nómina de todos los empleados activos de un período,
+    acumulando errores por empleado sin abortar todo el período — un
+    empleado con datos incompletos no debe bloquear a los demás."""
+
+    @transaction.atomic
+    def execute(self, *, period, actor=None, employee_queryset=None):
+        from apps.employees.infrastructure.models import Employee
+
+        if employee_queryset is None:
+            employee_queryset = Employee.objects.filter(status=Employee.Status.ACTIVE)
+
+        errors = []
+        calculated = 0
+        for employee in employee_queryset:
+            try:
+                CalculateEmployeePayrollForPeriod().execute(period=period, employee=employee, actor=actor)
+                calculated += 1
+            except BusinessRuleViolation as exc:
+                errors.append({"employee_id": str(employee.id), "employee": str(employee), "error": str(exc)})
+
+        period.status = PayrollPeriod.Status.CALCULATED
+        period.calculated_at = timezone.now()
+        period.calculated_by = actor if getattr(actor, "is_authenticated", False) else None
+        period.save(update_fields=("status", "calculated_at", "calculated_by", "updated_at"))
+        return {"period": period, "calculated": calculated, "errors": errors}
+
+
+class ApprovePayrollPeriod:
+    """Aprueba un período completo, tras validar (acumulando errores, mismo
+    patrón que ReleaseBatch en manufacturing) que no queden ambigüedades
+    pendientes: ninguna VacationRequest de vacaciones con is_remunerated=None
+    sin resolver dentro del período, y que exista al menos un Payroll
+    calculado."""
+
+    @transaction.atomic
+    def execute(self, *, period, actor=None):
+        errors = []
+        payrolls = list(period.payrolls.all())
+        if not payrolls:
+            errors.append("El período no tiene ninguna nómina calculada todavía.")
+
+        pending_remuneration = VacationRequest.objects.filter(
+            request_type=VacationRequest.RequestType.VACATION,
+            status__in=(VacationRequest.Status.APPROVED, VacationRequest.Status.FINALIZED),
+            is_remunerated__isnull=True,
+            start_date__lte=period.period_end,
+            end_date__gte=period.period_start,
+        )
+        if pending_remuneration.exists():
+            errors.append(
+                "Hay solicitudes de vacaciones dentro del período sin definir si son remuneradas. "
+                "Resuélvelas antes de aprobar el período."
+            )
+
+        for payroll in payrolls:
+            if payroll.net_salary < 0:
+                errors.append(f"La nómina de {payroll.employee} tiene salario neto negativo sin justificar.")
+
+        if errors:
+            raise BusinessRuleViolation(" ".join(errors))
+
+        for payroll in payrolls:
+            payroll.status = Payroll.Status.APPROVED
+            payroll.approved_by = actor if getattr(actor, "is_authenticated", False) else None
+            payroll.approved_at = timezone.now()
+            payroll.save(update_fields=("status", "approved_by", "approved_at", "updated_at"))
+
+        period.status = PayrollPeriod.Status.APPROVED
+        period.approved_at = timezone.now()
+        period.approved_by = actor if getattr(actor, "is_authenticated", False) else None
+        period.save(update_fields=("status", "approved_at", "approved_by", "updated_at"))
+        return period
+
+
+class MarkPayrollPeriodAsPaid:
+    """Marca un período aprobado como pagado. Requiere el mismo permiso de
+    edición de nómina que calcular/aprobar (confirmado: no se separa un rol
+    de Tesorería aparte para esto, a diferencia de préstamos)."""
+
+    @transaction.atomic
+    def execute(self, *, period, actor=None, payment_reference=""):
+        if period.status != PayrollPeriod.Status.APPROVED:
+            raise BusinessRuleViolation("Solo se puede marcar como pagado un período que ya esté Aprobado.")
+
+        now = timezone.now()
+        for payroll in period.payrolls.all():
+            payroll.status = Payroll.Status.PAID
+            payroll.paid_at = now
+            payroll.payment_reference = payment_reference
+            payroll.save(update_fields=("status", "paid_at", "payment_reference", "updated_at"))
+
+        period.status = PayrollPeriod.Status.PAID
+        period.paid_at = now
+        period.paid_by = actor if getattr(actor, "is_authenticated", False) else None
+        period.save(update_fields=("status", "paid_at", "paid_by", "updated_at"))
+        return period
+
+
+class AddManualPayrollItem:
+    """Ajuste manual (bono, descuento puntual no cubierto por el motor) —
+    solo permitido mientras la nómina siga en borrador."""
+
+    def execute(self, *, payroll, item_type, concept, amount, actor=None, concept_code=""):
+        if payroll.status != Payroll.Status.DRAFT:
+            raise BusinessRuleViolation("Solo se pueden agregar ítems manuales a una nómina en borrador.")
+        if item_type not in (PayrollItem.Type.EARNING, PayrollItem.Type.DEDUCTION):
+            raise BusinessRuleViolation("Tipo de ítem inválido.")
+        if not concept or not concept.strip():
+            raise BusinessRuleViolation("Debes indicar el concepto.")
+        try:
+            amount = Decimal(str(amount))
+        except Exception as exc:
+            raise BusinessRuleViolation("El monto no es válido.") from exc
+        if amount <= 0:
+            raise BusinessRuleViolation("El monto debe ser mayor que cero.")
+
+        item = PayrollItem.objects.create(
+            payroll=payroll,
+            item_type=item_type,
+            concept=concept,
+            amount=amount,
+            source=PayrollItem.Source.MANUAL,
+            concept_code=concept_code,
+        )
+
+        all_items = list(payroll.items.all())
+        gross = sum((i.amount for i in all_items if i.item_type == PayrollItem.Type.EARNING), Decimal("0"))
+        deductions_total = sum((i.amount for i in all_items if i.item_type == PayrollItem.Type.DEDUCTION), Decimal("0"))
+        payroll.gross_earnings = gross
+        payroll.total_deductions = deductions_total
+        payroll.deductions = deductions_total
+        payroll.net_salary = (payroll.base_salary + gross - deductions_total).quantize(Decimal("0.01"))
+        payroll.save(update_fields=("gross_earnings", "total_deductions", "deductions", "net_salary", "updated_at"))
+        return item

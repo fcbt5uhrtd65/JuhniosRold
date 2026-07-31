@@ -17,6 +17,7 @@ from .models import (
     Payroll,
     PayrollItem,
     PayrollLegalParameter,
+    PayrollPeriod,
     PerformanceReview,
     PublicHoliday,
     RawBiometricPunch,
@@ -212,10 +213,27 @@ class PayrollItemSerializer(serializers.ModelSerializer):
 
 class PayrollSerializer(serializers.ModelSerializer):
     items = PayrollItemSerializer(many=True, read_only=True)
+    employee_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Payroll
         fields = "__all__"
+
+    def get_employee_name(self, obj):
+        employee = obj.employee
+        return f"{employee.first_name} {employee.last_name}".strip() or employee.employee_code
+
+
+class PayrollPeriodSerializer(serializers.ModelSerializer):
+    payrolls = PayrollSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = PayrollPeriod
+        fields = "__all__"
+        read_only_fields = (
+            "status", "calculated_at", "calculated_by", "approved_at",
+            "approved_by", "paid_at", "paid_by",
+        )
 
 
 class PerformanceReviewSerializer(serializers.ModelSerializer):
