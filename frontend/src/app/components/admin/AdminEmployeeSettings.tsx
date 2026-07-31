@@ -13,9 +13,11 @@ import {
 } from '../../services/employees.service';
 import {
   createMyEmployeeDocument,
+  getMyActiveWorkSchedule,
   getMyEmployeeDocuments,
   type EmployeeDocument,
   type EmployeeDocumentType,
+  type EmployeeWorkSchedule,
 } from '../../services/human-resources.service';
 import {
   ARL_OPTIONS,
@@ -120,6 +122,8 @@ const DOCUMENT_TYPE_OPTIONS: Array<{ value: EmployeeDocumentType; label: string 
   { value: 'WORK_CERTIFICATE', label: 'Certificados laborales' },
   { value: 'OTHER', label: 'Otros documentos' },
 ];
+
+const WEEKDAY_LABELS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
 const REQUIRED_DOCUMENT_TYPES = new Set<EmployeeDocumentType>([
   'ID_COPY',
@@ -272,15 +276,22 @@ export function AdminEmployeeSettings() {
     user_password_confirm: '',
   });
 
+  const [workSchedule, setWorkSchedule] = useState<EmployeeWorkSchedule | null>(null);
+
   useEffect(() => {
     async function loadProfile() {
       setIsLoading(true);
       try {
-        const [profileRes, documentsRes] = await Promise.allSettled([getMyEmployeeProfile(), getMyEmployeeDocuments()]);
+        const [profileRes, documentsRes, scheduleRes] = await Promise.allSettled([
+          getMyEmployeeProfile(),
+          getMyEmployeeDocuments(),
+          getMyActiveWorkSchedule(),
+        ]);
         if (profileRes.status !== 'fulfilled') throw profileRes.reason;
         setEmployee(profileRes.value);
         setForm(employeeToForm(profileRes.value));
         setDocuments(documentsRes.status === 'fulfilled' ? documentsRes.value : []);
+        setWorkSchedule(scheduleRes.status === 'fulfilled' ? scheduleRes.value : null);
       } catch (error) {
         console.error(error);
         toast.error('No se pudo cargar tu configuración');
@@ -792,6 +803,33 @@ export function AdminEmployeeSettings() {
                 </div>
               ))}
             </dl>
+          </Card>
+
+          <Card className="p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-3">Horario asignado</p>
+            {workSchedule ? (
+              <>
+                <p className="text-[10px] text-gray-400 mb-2">Vigente desde {new Date(`${workSchedule.start_date}T00:00:00`).toLocaleDateString('es-CO')}</p>
+                <div className="space-y-1">
+                  {WEEKDAY_LABELS.map((label, weekday) => {
+                    const day = workSchedule.days.find((d) => d.weekday === weekday);
+                    return (
+                      <div key={weekday} className="flex items-center justify-between text-[11px]">
+                        <span className="text-gray-500">{label}</span>
+                        {day ? (
+                          <span className="font-mono text-gray-800">{day.expected_start_time.slice(0, 5)} - {day.expected_end_time.slice(0, 5)}</span>
+                        ) : (
+                          <span className="text-gray-300">-</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-[10px] text-gray-400 mt-3">Este horario lo define RRHH. Si necesitas cambiarlo, usa "Solicitar cambio de horario" en Mis solicitudes.</p>
+              </>
+            ) : (
+              <p className="text-xs text-gray-400">Aún no tienes un horario asignado.</p>
+            )}
           </Card>
         </div>
 

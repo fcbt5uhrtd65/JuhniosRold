@@ -259,6 +259,7 @@ export interface VacationRequest {
   loan_installments_count: number | null;
   loan_expense_number: string;
   loan_requester_signature: string | null;
+  requested_work_schedule_template: string | null;
   is_remunerated: boolean | null;
   remuneration_decided_by: string | null;
   remuneration_decided_at: string | null;
@@ -580,6 +581,7 @@ export interface VacationRequestPayload {
   loan_frequency?: LoanFrequency | '';
   loan_installments_count?: number | null;
   loan_requester_signature?: File | null;
+  requested_work_schedule_template?: string | null;
 }
 
 export interface PayrollPayload {
@@ -1190,6 +1192,15 @@ export async function setEmployeeWorkSchedule(payload: {
   throw new Error(res.message);
 }
 
+/** Horario activo del empleado autenticado — solo lectura, se muestra en su
+ * perfil (información laboral). No hay forma de editarlo desde aquí: solo
+ * RRHH (set-for-employee) o una solicitud de "Cambio de horario" aprobada
+ * lo modifican. */
+export async function getMyActiveWorkSchedule(): Promise<EmployeeWorkSchedule | null> {
+  const res = await api.get<EmployeeWorkSchedule | null>(`${WORK_SCHEDULES_PATH}me/`);
+  return res.data ?? null;
+}
+
 // ---- Work schedule templates ----
 type ScheduleDayPayload = Array<{
   weekday: number;
@@ -1202,6 +1213,14 @@ type ScheduleDayPayload = Array<{
 export async function getWorkScheduleTemplates(): Promise<WorkScheduleTemplate[]> {
   const res = await api.get<WorkScheduleTemplate[] | PaginatedResponse<WorkScheduleTemplate>>(WORK_SCHEDULE_TEMPLATES_PATH);
   return normalizeListResponse(res.data).data;
+}
+
+/** Catálogo de plantillas visible para cualquier empleado autenticado (no
+ * requiere el permiso de nómina) — se usa al elegir qué horario pedir en
+ * una solicitud de "Cambio de horario". */
+export async function getWorkScheduleTemplatesForEmployee(): Promise<WorkScheduleTemplate[]> {
+  const res = await api.get<WorkScheduleTemplate[]>(`${WORK_SCHEDULE_TEMPLATES_PATH}me/`);
+  return res.data ?? [];
 }
 
 export async function createWorkScheduleTemplate(payload: {

@@ -3,6 +3,7 @@ import {
   BadgeCheck,
   Briefcase,
   CalendarClock,
+  CalendarCog,
   Check,
   CheckCircle2,
   ChevronRight,
@@ -32,6 +33,7 @@ import {
   deleteVacationRequest,
   getMyVacationRequests,
   getTeamVacationRequests,
+  getWorkScheduleTemplatesForEmployee,
   openVacationRequestPdf,
   rejectVacationRequest,
   type LoanFrequency,
@@ -39,6 +41,7 @@ import {
   type VacationRequest,
   type VacationRequestStatus,
   type VacationRequestType,
+  type WorkScheduleTemplate,
 } from '../../services/human-resources.service';
 import { Card, KpiCard, Badge, type BadgeColor, LoadingState, EmptyState, Modal, inputCls, selectCls } from './AdminUI';
 import { Pagination } from './Pagination';
@@ -66,8 +69,14 @@ const LOAN_FREQUENCY_LABELS: Record<LoanFrequency, string> = {
 type RequestPeriodMode = 'SINGLE_DAY' | 'DATE_RANGE';
 type RequestTimeMode = 'FULL_DAY' | 'FROM_TIME' | 'TIME_RANGE';
 
+// 'SCHEDULE_CHANGE' es una pseudo-categoría solo de UI: en el backend se
+// guarda como request_type=OTHER + subtype=SCHEDULE_CHANGE (ver
+// ResolveVacationRequestByRole), que es lo que dispara la aplicación
+// automática del horario al aprobar. No es un VacationRequestType real.
+type FormRequestType = VacationRequestType | 'SCHEDULE_CHANGE';
+
 interface VacationFormState {
-  request_type: VacationRequestType;
+  request_type: FormRequestType;
   period_mode: RequestPeriodMode;
   time_mode: RequestTimeMode;
   single_date: string;
@@ -85,6 +94,8 @@ interface VacationFormState {
   loan_concept: string;
   loan_frequency: LoanFrequency | '';
   loan_installments_count: string;
+  requested_work_schedule_template: string;
+  schedule_change_start_date: string;
 }
 
 const EMPTY_FORM: VacationFormState = {
@@ -106,6 +117,8 @@ const EMPTY_FORM: VacationFormState = {
   loan_concept: '',
   loan_frequency: '',
   loan_installments_count: '',
+  requested_work_schedule_template: '',
+  schedule_change_start_date: '',
 };
 
 function formatDate(value: string): string {
@@ -306,14 +319,16 @@ export function AdminEmployeePortal() {
   const [teamDecisionRequest, setTeamDecisionRequest] = useState<{ request: VacationRequest; decision: 'approve' | 'reject' } | null>(null);
   const [teamDecisionComment, setTeamDecisionComment] = useState('');
   const [teamDecisionSignature, setTeamDecisionSignature] = useState<File | null>(null);
+  const [scheduleTemplates, setScheduleTemplates] = useState<WorkScheduleTemplate[]>([]);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [employeesRes, requestsRes, teamRequestsRes] = await Promise.allSettled([
+      const [employeesRes, requestsRes, teamRequestsRes, templatesRes] = await Promise.allSettled([
         getEmployees({ limit: 200 }),
         getMyVacationRequests({ limit: 200 }),
         getTeamVacationRequests({ limit: 200 }),
+        getWorkScheduleTemplatesForEmployee(),
       ]);
 
       if (employeesRes.status === 'fulfilled') {
@@ -328,6 +343,10 @@ export function AdminEmployeePortal() {
 
       if (teamRequestsRes.status === 'fulfilled') {
         setTeamRequests(teamRequestsRes.value.data);
+      }
+
+      if (templatesRes.status === 'fulfilled') {
+        setScheduleTemplates(templatesRes.value);
       }
     } catch (error) {
       console.error(error);
@@ -497,6 +516,43 @@ export function AdminEmployeePortal() {
     }
   };
 
+  const handleSubmitScheduleChange = async () => {
+    if (!employeeProfile) {
+      toast.error('Tu usuario no tiene un perfil de empleado asociado');
+      return;
+    }
+    if (!form.requested_work_schedule_template) {
+      toast.error('Selecciona el horario que quieres solicitar');
+      return;
+    }
+    if (!form.schedule_change_start_date) {
+      toast.error('Indica desde cuándo quieres que aplique el nuevo horario');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await createMyVacationRequest({
+        request_type: 'OTHER',
+        subtype: 'SCHEDULE_CHANGE',
+        start_date: form.schedule_change_start_date,
+        end_date: form.schedule_change_start_date,
+        is_full_day: true,
+        requested_work_schedule_template: form.requested_work_schedule_template,
+        reason: form.reason,
+        support_document: form.support_document,
+      });
+      toast.success('Solicitud de cambio de horario enviada a RRHH');
+      setForm(EMPTY_FORM);
+      await loadData();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo crear la solicitud');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (form.request_type === 'OVERTIME') {
@@ -505,6 +561,10 @@ export function AdminEmployeePortal() {
     }
     if (form.request_type === 'LOAN') {
       await handleSubmitLoan();
+      return;
+    }
+    if (form.request_type === 'SCHEDULE_CHANGE') {
+      await handleSubmitScheduleChange();
       return;
     }
     if (!employeeProfile) {
@@ -813,10 +873,66 @@ export function AdminEmployeePortal() {
                     </button>
                   );
                 })}
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, request_type: 'SCHEDULE_CHANGE' })}
+                  className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-medium transition-colors ${
+                    form.request_type === 'SCHEDULE_CHANGE'
+                      ? 'border-[#2a4038] bg-[#2a4038]/5 text-[#2a4038]'
+                      : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  <CalendarCog size={14} className={form.request_type === 'SCHEDULE_CHANGE' ? 'text-[#2a4038]' : 'text-gray-400'} />
+                  Cambio de horario
+                </button>
               </div>
             </div>
 
-            {form.request_type === 'LOAN' ? (
+            {form.request_type === 'SCHEDULE_CHANGE' ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Horario que solicitas</label>
+                  {scheduleTemplates.length === 0 ? (
+                    <p className="text-xs text-gray-400 border border-dashed border-gray-200 rounded-lg p-3">
+                      RRHH todavía no ha creado plantillas de horario disponibles.
+                    </p>
+                  ) : (
+                    <select
+                      value={form.requested_work_schedule_template}
+                      onChange={(event) => setForm({ ...form, requested_work_schedule_template: event.target.value })}
+                      className={selectCls}
+                    >
+                      <option value="">Selecciona un horario...</option>
+                      {scheduleTemplates.map((template) => (
+                        <option key={template.id} value={template.id}>{template.name}</option>
+                      ))}
+                    </select>
+                  )}
+                  {form.requested_work_schedule_template && (
+                    <div className="mt-2 space-y-0.5 border border-gray-100 rounded-lg p-2.5">
+                      {scheduleTemplates
+                        .find((t) => t.id === form.requested_work_schedule_template)
+                        ?.days.map((day) => (
+                          <div key={day.id} className="flex items-center justify-between text-[11px] text-gray-600">
+                            <span>{['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'][day.weekday]}</span>
+                            <span className="font-mono">{day.expected_start_time.slice(0, 5)} - {day.expected_end_time.slice(0, 5)}</span>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Desde cuándo</label>
+                  <input
+                    type="date"
+                    value={form.schedule_change_start_date}
+                    onChange={(event) => setForm({ ...form, schedule_change_start_date: event.target.value })}
+                    className={inputCls}
+                  />
+                </div>
+                <p className="text-[11px] text-gray-400">Si se aprueba, el nuevo horario se aplica automáticamente en tu perfil y en el cálculo de nómina — no necesitas hacer nada más.</p>
+              </div>
+            ) : form.request_type === 'LOAN' ? (
               <div className="space-y-4">
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div>

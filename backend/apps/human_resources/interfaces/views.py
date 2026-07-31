@@ -62,6 +62,7 @@ from ..infrastructure.models import (
     VacationRequestHistory,
     WorkScheduleTemplate,
     get_attendance_intelligence_settings,
+    get_schedule_for,
 )
 from ..infrastructure.request_excel import render_requests_xlsx
 from ..infrastructure.request_list_pdf import render_request_list_pdf
@@ -1115,6 +1116,19 @@ class WorkScheduleTemplateViewSet(HumanResourcesBaseViewSet):
     filterset_fields = ("is_active",)
     http_method_names = ("get", "post", "patch", "head", "options")
 
+    def get_permissions(self):
+        if self.action == "me":
+            return (IsAuthenticated(),)
+        return super().get_permissions()
+
+    @action(detail=False, methods=("get",), url_path="me")
+    def me(self, request):
+        """Catálogo de plantillas activas visible para cualquier empleado
+        autenticado (no requiere permiso de nómina) — se usa al elegir qué
+        horario pedir en una solicitud de 'Cambio de horario'."""
+        templates = self.get_queryset()
+        return Response(self.get_serializer(templates, many=True).data)
+
     def create(self, request, *args, **kwargs):
         try:
             template = CreateWorkScheduleTemplate().execute(
@@ -1170,6 +1184,28 @@ class EmployeeWorkScheduleViewSet(HumanResourcesBaseViewSet):
     queryset = EmployeeWorkSchedule.objects.select_related("employee").prefetch_related("days")
     serializer_class = EmployeeWorkScheduleSerializer
     filterset_fields = ("employee", "is_active")
+
+    def get_permissions(self):
+        if self.action == "me":
+            return (IsAuthenticated(),)
+        return super().get_permissions()
+
+    @action(detail=False, methods=("get",), url_path="me")
+    def me(self, request):
+        """El horario asignado es solo lectura para el propio empleado — se
+        ve reflejado en su perfil (info laboral), pero solo RRHH puede
+        cambiarlo (vía set-for-employee) o el propio empleado solicitándolo
+        formalmente por 'Cambio de horario' (ver VacationRequest)."""
+        employee = getattr(request.user, "employee_profile", None)
+        if not employee:
+            return Response(
+                {"detail": "Tu usuario no tiene un perfil de empleado asociado."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        schedule = get_schedule_for(employee, timezone.localdate())
+        if not schedule:
+            return Response(None)
+        return Response(self.get_serializer(schedule).data)
 
     @action(detail=False, methods=("post",), url_path="set-for-employee")
     def set_for_employee(self, request):

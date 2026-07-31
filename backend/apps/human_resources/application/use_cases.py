@@ -396,6 +396,24 @@ class ResolveVacationRequestByRole:
         update_fields += ["reviewed_by", "reviewed_at"]
         vacation.save(update_fields=update_fields)
 
+        # Efecto secundario de "Cambio de horario": solo cuando la solicitud queda
+        # efectivamente Aprobada (no en PENDING_ADMIN, que es un estado intermedio),
+        # se aplica automáticamente la plantilla elegida por el empleado — mismo
+        # espíritu que loan_approved_amount arriba, el cambio vive dentro del propio
+        # flujo de aprobación en vez de requerir un paso manual aparte en Nómina.
+        if (
+            vacation.subtype == VacationRequest.RequestSubtype.SCHEDULE_CHANGE
+            and vacation.status == VacationRequest.Status.APPROVED
+            and vacation.requested_work_schedule_template_id
+        ):
+            ApplyWorkScheduleTemplate().execute(
+                template=vacation.requested_work_schedule_template,
+                employee_ids=[vacation.employee_id],
+                start_date=vacation.start_date,
+                actor=reviewer,
+                notes=f"Aplicado automáticamente al aprobar solicitud {vacation.request_number or vacation.id}.",
+            )
+
         step_code = (
             VacationRequestApprovalStep.Step.FINAL
             if role == "ADMIN"
