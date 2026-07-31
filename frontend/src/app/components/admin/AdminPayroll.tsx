@@ -6,11 +6,14 @@ import {
   CheckCircle2,
   Clock3,
   Fingerprint,
+  Pencil,
   Plus,
   UploadCloud,
+  Users,
 } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import {
+  ActionsMenu,
   Badge,
   type BadgeColor,
   Card,
@@ -20,6 +23,7 @@ import {
   Modal,
   PageHeader,
   PrimaryButton,
+  SearchBarAdmin,
   SecondaryButton,
   TabBar,
   inputCls,
@@ -53,6 +57,7 @@ import {
   setEmployeeWorkSchedule,
   updateAttendanceIntelligenceSettings,
   updatePayrollLegalParameter,
+  updateWorkScheduleTemplate,
   uploadBiometricFile,
   type Attendance,
   type AttendanceIntelligenceSettings,
@@ -452,20 +457,39 @@ function NewPeriodModal({ open, onClose, onCreated }: { open: boolean; onClose: 
 
 /* ───────────────────────── Horarios ───────────────────────── */
 
+const TEMPLATE_ACCENTS = [
+  { dot: 'bg-blue-500', ring: 'border-blue-100' },
+  { dot: 'bg-orange-500', ring: 'border-orange-100' },
+  { dot: 'bg-violet-500', ring: 'border-violet-100' },
+  { dot: 'bg-emerald-500', ring: 'border-emerald-100' },
+  { dot: 'bg-rose-500', ring: 'border-rose-100' },
+  { dot: 'bg-amber-500', ring: 'border-amber-100' },
+];
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  return (parts[0][0] + (parts[1]?.[0] ?? '')).toUpperCase();
+}
+
 function SchedulesSection({ employees, employeeById }: { employees: Employee[]; employeeById: Map<string, Employee> }) {
   const toast = useToast();
   const [schedules, setSchedules] = useState<EmployeeWorkSchedule[]>([]);
   const [templates, setTemplates] = useState<WorkScheduleTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [reassignEmployeeId, setReassignEmployeeId] = useState<string | undefined>(undefined);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<WorkScheduleTemplate | null>(null);
   const [applyingTemplate, setApplyingTemplate] = useState<WorkScheduleTemplate | null>(null);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const [schedulesRes, templatesRes] = await Promise.allSettled([
-        getEmployeeWorkSchedules({ is_active: true }),
+        getEmployeeWorkSchedules(),
         getWorkScheduleTemplates(),
       ]);
       if (schedulesRes.status === 'fulfilled') setSchedules(schedulesRes.value);
@@ -482,77 +506,176 @@ function SchedulesSection({ employees, employeeById }: { employees: Employee[]; 
     void load();
   }, [load]);
 
+  const templateEmployeeCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const schedule of schedules) {
+      if (!schedule.source_template || !schedule.is_active) continue;
+      counts.set(schedule.source_template, (counts.get(schedule.source_template) ?? 0) + 1);
+    }
+    return counts;
+  }, [schedules]);
+
+  const templateNameById = useMemo(() => new Map(templates.map((t) => [t.id, t.name])), [templates]);
+
+  const filteredSchedules = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return schedules.filter((schedule) => {
+      if (statusFilter === 'ACTIVE' && !schedule.is_active) return false;
+      if (statusFilter === 'INACTIVE' && schedule.is_active) return false;
+      if (!term) return true;
+      const employee = employeeById.get(schedule.employee);
+      const name = employee ? employeeName(employee).toLowerCase() : '';
+      return name.includes(term);
+    });
+  }, [schedules, statusFilter, search, employeeById]);
+
   if (loading) return <LoadingState label="Cargando horarios..." />;
 
   return (
     <div className="space-y-4">
       <Card className="p-5">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-1">
           <div>
             <p className="text-sm font-semibold text-gray-900">Plantillas de horario</p>
-            <p className="text-[11px] text-gray-500">Crea un patrón una vez (ej. "Turno mañana 7:00-16:30") y aplícalo a varios empleados a la vez.</p>
+            <p className="text-[11px] text-gray-500">Crea y administra plantillas para asignarlas fácilmente.</p>
           </div>
-          <SecondaryButton onClick={() => setShowTemplateModal(true)} icon={<Plus size={13} />}>Nueva plantilla</SecondaryButton>
+          <PrimaryButton onClick={() => { setEditingTemplate(null); setShowTemplateModal(true); }} icon={<Plus size={14} />}>
+            Nueva plantilla
+          </PrimaryButton>
         </div>
+
         {templates.length === 0 ? (
-          <EmptyState title="Sin plantillas todavía" description="Crea una plantilla para asignar el mismo horario a varios empleados en un solo paso." />
+          <div className="pt-3">
+            <EmptyState title="Sin plantillas todavía" description="Crea una plantilla para asignar el mismo horario a varios empleados en un solo paso." />
+          </div>
         ) : (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {templates.map((template) => (
-              <div key={template.id} className="border border-gray-100 rounded-xl p-3">
-                <p className="text-xs font-semibold text-gray-900 mb-1">{template.name}</p>
-                {template.description && <p className="text-[11px] text-gray-400 mb-2">{template.description}</p>}
-                <div className="space-y-0.5 mb-3">
-                  {template.days.map((day) => (
-                    <div key={day.id} className="flex items-center justify-between text-[11px] text-gray-600">
-                      <span>{WEEKDAY_LABELS[day.weekday]}</span>
-                      <span>{day.expected_start_time.slice(0, 5)} - {day.expected_end_time.slice(0, 5)}</span>
+          <>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mt-4">
+              {templates.map((template, index) => {
+                const accent = TEMPLATE_ACCENTS[index % TEMPLATE_ACCENTS.length];
+                const employeeCount = templateEmployeeCounts.get(template.id) ?? 0;
+                return (
+                  <div key={template.id} className={`border ${accent.ring} rounded-2xl p-4 flex flex-col`}>
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <span className={`h-2 w-2 rounded-full ${accent.dot}`} />
+                        <p className="text-xs font-semibold text-gray-900">{template.name}</p>
+                      </div>
+                      <ActionsMenu
+                        items={[
+                          { label: 'Editar plantilla', icon: Pencil, onClick: () => { setEditingTemplate(template); setShowTemplateModal(true); } },
+                          { label: 'Aplicar a empleados', icon: Users, onClick: () => setApplyingTemplate(template) },
+                        ]}
+                      />
                     </div>
-                  ))}
+                    {template.description && <p className="text-[11px] text-gray-400 -mt-2 mb-2">{template.description}</p>}
+                    <div className="space-y-1 mb-3 flex-1">
+                      {template.days.map((day) => (
+                        <div key={day.id} className="flex items-center justify-between text-[11px] text-gray-600">
+                          <span>{WEEKDAY_LABELS[day.weekday]}</span>
+                          <span className="font-mono">{day.expected_start_time.slice(0, 5)} - {day.expected_end_time.slice(0, 5)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-1.5 text-[11px] text-gray-400 pt-2 border-t border-gray-50">
+                      <Users size={12} />
+                      Aplicada a {employeeCount} empleado{employeeCount === 1 ? '' : 's'}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="text-[11px] text-gray-400 mt-4 flex items-center gap-1.5">
+              <CalendarDays size={12} />
+              Consejo: crea plantillas reutilizables para ahorrar tiempo en la asignación de horarios.
+            </p>
+          </>
+        )}
+      </Card>
+
+      <Card className="p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div>
+            <p className="text-sm font-semibold text-gray-900">Empleados y horarios asignados</p>
+            <p className="text-[11px] text-gray-500">Cada empleado necesita un horario esperado para calcular horas ordinarias/extra correctamente.</p>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="w-52">
+              <SearchBarAdmin value={search} onChange={setSearch} placeholder="Buscar empleado..." />
+            </div>
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)} className={`${selectCls} w-auto`}>
+              <option value="ALL">Todos los estados</option>
+              <option value="ACTIVE">Activos</option>
+              <option value="INACTIVE">Inactivos</option>
+            </select>
+            <SecondaryButton onClick={() => { setReassignEmployeeId(undefined); setShowModal(true); }} icon={<Plus size={13} />}>Asignar horario</SecondaryButton>
+          </div>
+        </div>
+
+        {filteredSchedules.length === 0 ? (
+          <EmptyState
+            title={schedules.length === 0 ? 'Sin horarios asignados' : 'Sin resultados'}
+            description={schedules.length === 0 ? 'Asigna un horario individual o aplica una plantilla a varios empleados.' : 'Ajusta la búsqueda o el filtro de estado.'}
+          />
+        ) : (
+          <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
+            {filteredSchedules.map((schedule) => {
+              const employee = employeeById.get(schedule.employee);
+              return (
+                <div key={schedule.id} className="border border-gray-100 rounded-2xl p-4">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="h-9 w-9 rounded-full bg-[#2a4038]/10 text-[#2a4038] flex items-center justify-center text-[11px] font-bold shrink-0">
+                        {initials(employeeName(employee))}
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-gray-900">{employeeName(employee)}</p>
+                        <p className="text-[10px] text-gray-400">Vigente {formatDate(schedule.start_date)}</p>
+                      </div>
+                    </div>
+                    <ActionsMenu
+                      items={[
+                        { label: 'Reasignar horario', icon: Pencil, onClick: () => { setReassignEmployeeId(schedule.employee); setShowModal(true); } },
+                      ]}
+                    />
+                  </div>
+
+                  {schedule.source_template && templateNameById.has(schedule.source_template) && (
+                    <div className="mb-2">
+                      <Badge label={templateNameById.get(schedule.source_template) as string} color="blue" />
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-7 gap-1 mb-3">
+                    {WEEKDAY_LABELS.map((label, weekday) => {
+                      const day = schedule.days.find((d) => d.weekday === weekday);
+                      return (
+                        <div key={weekday} className="text-center">
+                          <p className="text-[9px] font-bold uppercase text-gray-400 mb-1">{label.slice(0, 3)}</p>
+                          {day ? (
+                            <p className="text-[9px] font-mono text-gray-600 leading-tight">
+                              {day.expected_start_time.slice(0, 5)}<br />{day.expected_end_time.slice(0, 5)}
+                            </p>
+                          ) : (
+                            <p className="text-[9px] text-gray-300">-</p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <Badge label={schedule.is_active ? 'Activo' : 'Inactivo'} color={schedule.is_active ? 'green' : 'gray'} />
                 </div>
-                <div className="w-full">
-                  <SecondaryButton onClick={() => setApplyingTemplate(template)}>
-                    Aplicar a empleados
-                  </SecondaryButton>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </Card>
 
-      <div className="flex justify-end">
-        <PrimaryButton onClick={() => setShowModal(true)} icon={<Plus size={14} />}>Asignar horario individual</PrimaryButton>
-      </div>
-
-      {schedules.length === 0 ? (
-        <EmptyState title="Sin horarios asignados" description="Cada empleado necesita un horario esperado para calcular horas ordinarias/extra correctamente." />
-      ) : (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {schedules.map((schedule) => (
-            <Card key={schedule.id} className="p-4">
-              <p className="text-xs font-semibold text-gray-900 mb-1">{employeeName(employeeById.get(schedule.employee))}</p>
-              <p className="text-[11px] text-gray-400 mb-3">Vigente desde {formatDate(schedule.start_date)}</p>
-              <div className="space-y-1">
-                {schedule.days.length === 0 ? (
-                  <p className="text-xs text-gray-400">Sin franjas configuradas.</p>
-                ) : (
-                  schedule.days.map((day) => (
-                    <div key={day.id} className="flex items-center justify-between text-[11px] text-gray-600">
-                      <span>{WEEKDAY_LABELS[day.weekday]}</span>
-                      <span>{day.expected_start_time.slice(0, 5)} - {day.expected_end_time.slice(0, 5)}</span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </Card>
-          ))}
-        </div>
-      )}
-
       <NewScheduleModal
         open={showModal}
         employees={employees}
+        initialEmployeeId={reassignEmployeeId}
         onClose={() => setShowModal(false)}
         onCreated={async () => {
           setShowModal(false);
@@ -561,9 +684,11 @@ function SchedulesSection({ employees, employeeById }: { employees: Employee[]; 
       />
       <NewTemplateModal
         open={showTemplateModal}
+        editing={editingTemplate}
         onClose={() => setShowTemplateModal(false)}
         onCreated={async () => {
           setShowTemplateModal(false);
+          setEditingTemplate(null);
           await load();
         }}
       />
@@ -596,11 +721,13 @@ function defaultWeekdayForm(): ScheduleDayForm[] {
 function NewScheduleModal({
   open,
   employees,
+  initialEmployeeId,
   onClose,
   onCreated,
 }: {
   open: boolean;
   employees: Employee[];
+  initialEmployeeId?: string;
   onClose: () => void;
   onCreated: () => Promise<void>;
 }) {
@@ -612,11 +739,11 @@ function NewScheduleModal({
 
   useEffect(() => {
     if (open) {
-      setEmployeeId('');
+      setEmployeeId(initialEmployeeId ?? '');
       setStartDate('');
       setDays(defaultWeekdayForm());
     }
-  }, [open]);
+  }, [open, initialEmployeeId]);
 
   const updateDay = (weekday: number, patch: Partial<ScheduleDayForm>) => {
     setDays((current) => current.map((d) => (d.weekday === weekday ? { ...d, ...patch } : d)));
@@ -710,20 +837,46 @@ function NewScheduleModal({
   );
 }
 
-function NewTemplateModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => Promise<void> }) {
+function NewTemplateModal({
+  open,
+  editing,
+  onClose,
+  onCreated,
+}: {
+  open: boolean;
+  editing?: WorkScheduleTemplate | null;
+  onClose: () => void;
+  onCreated: () => Promise<void>;
+}) {
   const toast = useToast();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [days, setDays] = useState<ScheduleDayForm[]>(defaultWeekdayForm());
   const [saving, setSaving] = useState(false);
+  const isEditing = Boolean(editing);
 
   useEffect(() => {
-    if (open) {
+    if (!open) return;
+    if (editing) {
+      setName(editing.name);
+      setDescription(editing.description ?? '');
+      setDays(
+        WEEKDAY_LABELS.map((_, weekday) => {
+          const match = editing.days.find((d) => d.weekday === weekday);
+          return {
+            weekday,
+            expectedStart: match ? match.expected_start_time.slice(0, 5) : '08:00',
+            expectedEnd: match ? match.expected_end_time.slice(0, 5) : '17:00',
+            enabled: Boolean(match),
+          };
+        }),
+      );
+    } else {
       setName('');
       setDescription('');
       setDays(defaultWeekdayForm());
     }
-  }, [open]);
+  }, [open, editing]);
 
   const updateDay = (weekday: number, patch: Partial<ScheduleDayForm>) => {
     setDays((current) => current.map((d) => (d.weekday === weekday ? { ...d, ...patch } : d)));
@@ -741,7 +894,7 @@ function NewTemplateModal({ open, onClose, onCreated }: { open: boolean; onClose
     }
     setSaving(true);
     try {
-      await createWorkScheduleTemplate({
+      const payload = {
         name: name.trim(),
         description: description.trim(),
         days: activeDays.map((d) => ({
@@ -749,19 +902,25 @@ function NewTemplateModal({ open, onClose, onCreated }: { open: boolean; onClose
           expected_start_time: d.expectedStart,
           expected_end_time: d.expectedEnd,
         })),
-      });
-      toast.success('Plantilla creada');
+      };
+      if (editing) {
+        await updateWorkScheduleTemplate(editing.id, payload);
+        toast.success('Plantilla actualizada');
+      } else {
+        await createWorkScheduleTemplate(payload);
+        toast.success('Plantilla creada');
+      }
       await onCreated();
     } catch (error) {
       console.error(error);
-      toast.error(describeApiError(error, 'No se pudo crear la plantilla'));
+      toast.error(describeApiError(error, 'No se pudo guardar la plantilla'));
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <Modal title="Nueva plantilla de horario" open={open} onClose={onClose} wide>
+    <Modal title={isEditing ? 'Editar plantilla de horario' : 'Nueva plantilla de horario'} open={open} onClose={onClose} wide>
       <div className="space-y-4">
         <div className="grid sm:grid-cols-2 gap-3">
           <label className="block">
@@ -804,7 +963,7 @@ function NewTemplateModal({ open, onClose, onCreated }: { open: boolean; onClose
         <div className="flex justify-end gap-2 pt-2">
           <SecondaryButton onClick={onClose}>Cancelar</SecondaryButton>
           <PrimaryButton onClick={() => void handleSubmit()} disabled={saving}>
-            {saving ? 'Guardando...' : 'Crear plantilla'}
+            {saving ? 'Guardando...' : isEditing ? 'Guardar cambios' : 'Crear plantilla'}
           </PrimaryButton>
         </div>
       </div>

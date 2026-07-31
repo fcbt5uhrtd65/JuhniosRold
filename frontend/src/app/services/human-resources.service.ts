@@ -410,6 +410,7 @@ export interface EmployeeWorkScheduleDay {
 export interface EmployeeWorkSchedule {
   id: string;
   employee: string;
+  source_template: string | null;
   start_date: string;
   end_date: string | null;
   is_active: boolean;
