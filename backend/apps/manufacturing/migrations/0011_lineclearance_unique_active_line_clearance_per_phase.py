@@ -7,7 +7,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('employees', '0009_employee_signature_updated_at'),
-        ('manufacturing', '0007_alter_batchlotmarking_options'),
+        ('manufacturing', '0010_production_control_signers'),
     ]
 
     operations = [
