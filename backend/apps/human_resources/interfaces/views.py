@@ -24,12 +24,14 @@ from shared.domain.exceptions import BusinessRuleViolation
 
 from ..application.use_cases import (
     AddManualPayrollItem,
+    ApplyWorkScheduleTemplate,
     ApprovePayrollPeriod,
     CalculatePayrollPeriod,
     ConsolidateAttendanceFromPunches,
     CorrectAttendance,
     CreateOvertimeRequestWithShifts,
     CreatePayrollPeriod,
+    CreateWorkScheduleTemplate,
     DefineRequestRemuneration,
     GenerateYearHolidays,
     ImportBiometricFile,
@@ -38,9 +40,11 @@ from ..application.use_cases import (
     RegisterCheckOut,
     ResolveVacationRequestByRole,
     SetEmployeeWorkSchedule,
+    UpdateWorkScheduleTemplate,
 )
 from ..infrastructure.models import (
     Attendance,
+    AttendanceIntelligenceSettings,
     BiometricDevice,
     BiometricImportBatch,
     EmployeeBiometricId,
@@ -56,11 +60,14 @@ from ..infrastructure.models import (
     VacationRequestApprovalStep,
     VacationRequestAttachment,
     VacationRequestHistory,
+    WorkScheduleTemplate,
+    get_attendance_intelligence_settings,
 )
 from ..infrastructure.request_excel import render_requests_xlsx
 from ..infrastructure.request_list_pdf import render_request_list_pdf
 from ..infrastructure.request_pdf import render_request_pdf
 from ..infrastructure.serializers import (
+    AttendanceIntelligenceSettingsSerializer,
     AttendanceSerializer,
     BiometricDeviceSerializer,
     BiometricImportBatchSerializer,
@@ -77,6 +84,7 @@ from ..infrastructure.serializers import (
     RawBiometricPunchSerializer,
     VacationRequestAttachmentSerializer,
     VacationRequestSerializer,
+    WorkScheduleTemplateSerializer,
 )
 
 
@@ -996,6 +1004,50 @@ class PayrollLegalParameterViewSet(HumanResourcesBaseViewSet):
     filterset_fields = ("year",)
 
 
+class AttendanceIntelligenceSettingsViewSet(HumanResourcesBaseViewSet):
+    """Configuración operativa (no legal) de cómo se interpretan las
+    marcaciones del reloj biométrico. Se maneja como singleton: @action
+    current siempre devuelve una fila (creando la de defaults si RRHH nunca
+    configuró nada), y guardar la actualiza en vez de acumular filas viejas."""
+
+    required_component = "human_resources.biometric_import"
+    queryset = AttendanceIntelligenceSettings.objects.filter(is_active=True)
+    serializer_class = AttendanceIntelligenceSettingsSerializer
+    http_method_names = ("get", "post", "head", "options")
+
+    @action(detail=False, methods=("get", "post"), url_path="current")
+    def current(self, request):
+        settings_row = AttendanceIntelligenceSettings.objects.filter(is_active=True).order_by("-created_at").first()
+        if request.method == "GET":
+            if not settings_row:
+                return Response(AttendanceIntelligenceSettingsSerializer(get_attendance_intelligence_settings()).data)
+            return Response(self.get_serializer(settings_row).data)
+
+        duplicate_window = request.data.get("duplicate_punch_window_minutes")
+        proximity_window = request.data.get("schedule_proximity_minutes")
+        try:
+            duplicate_window = int(duplicate_window) if duplicate_window is not None else None
+            proximity_window = int(proximity_window) if proximity_window is not None else None
+        except (TypeError, ValueError):
+            return Response({"detail": "Los minutos deben ser números enteros."}, status=status.HTTP_400_BAD_REQUEST)
+        if (duplicate_window is not None and duplicate_window <= 0) or (proximity_window is not None and proximity_window <= 0):
+            return Response({"detail": "Los minutos deben ser mayores a cero."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if settings_row:
+            if duplicate_window is not None:
+                settings_row.duplicate_punch_window_minutes = duplicate_window
+            if proximity_window is not None:
+                settings_row.schedule_proximity_minutes = proximity_window
+            settings_row.save(update_fields=("duplicate_punch_window_minutes", "schedule_proximity_minutes", "updated_at"))
+        else:
+            settings_row = AttendanceIntelligenceSettings.objects.create(
+                duplicate_punch_window_minutes=duplicate_window or 15,
+                schedule_proximity_minutes=proximity_window or 120,
+            )
+        self._audit("update_attendance_intelligence_settings", settings_row)
+        return Response(self.get_serializer(settings_row).data)
+
+
 class PayrollPeriodViewSet(HumanResourcesBaseViewSet):
     required_component = "human_resources.payroll"
     queryset = PayrollPeriod.objects.all().prefetch_related("payrolls__items", "payrolls__employee")
@@ -1051,6 +1103,67 @@ class PayrollPeriodViewSet(HumanResourcesBaseViewSet):
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         self._audit("mark_paid", period)
         return Response(self.get_serializer(period).data)
+
+
+class WorkScheduleTemplateViewSet(HumanResourcesBaseViewSet):
+    """Catálogo de plantillas de horario reutilizables (ej. "Turno mañana
+    7:00-16:30"). Se crean/editan aquí y se aplican a empleados vía
+    @action apply, en vez de recapturar las franjas horario por horario."""
+
+    queryset = WorkScheduleTemplate.objects.filter(is_active=True).prefetch_related("days")
+    serializer_class = WorkScheduleTemplateSerializer
+    filterset_fields = ("is_active",)
+    http_method_names = ("get", "post", "patch", "head", "options")
+
+    def create(self, request, *args, **kwargs):
+        try:
+            template = CreateWorkScheduleTemplate().execute(
+                name=request.data.get("name"),
+                days_data=request.data.get("days") or [],
+                actor=request.user,
+                description=request.data.get("description", ""),
+            )
+        except BusinessRuleViolation as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        self._audit("create_template", template)
+        return Response(self.get_serializer(template).data, status=status.HTTP_201_CREATED)
+
+    def partial_update(self, request, *args, **kwargs):
+        template = self.get_object()
+        try:
+            template = UpdateWorkScheduleTemplate().execute(
+                template=template,
+                days_data=request.data.get("days"),
+                name=request.data.get("name"),
+                description=request.data.get("description"),
+            )
+        except BusinessRuleViolation as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        self._audit("update_template", template)
+        return Response(self.get_serializer(template).data)
+
+    @action(detail=True, methods=("post",), url_path="apply")
+    def apply(self, request, pk=None):
+        template = self.get_object()
+        employee_ids = request.data.get("employee_ids") or []
+        start_date = request.data.get("start_date")
+        if not start_date:
+            return Response({"detail": "Debes indicar la fecha de inicio."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            result = ApplyWorkScheduleTemplate().execute(
+                template=template,
+                employee_ids=employee_ids,
+                start_date=start_date,
+                actor=request.user,
+                notes=request.data.get("notes", ""),
+            )
+        except BusinessRuleViolation as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        self._audit("apply_template", template)
+        return Response({
+            "applied": len(result["applied"]),
+            "errors": result["errors"],
+        })
 
 
 class EmployeeWorkScheduleViewSet(HumanResourcesBaseViewSet):
@@ -1128,6 +1241,33 @@ class BiometricImportBatchViewSet(HumanResourcesBaseViewSet):
         batch = self.get_object()
         punches = batch.punches.filter(matched_employee__isnull=True).order_by("biometric_code", "punched_at")
         return Response(RawBiometricPunchSerializer(punches, many=True).data)
+
+    @action(detail=False, methods=("get",), url_path="unmatched-codes")
+    def unmatched_codes(self, request):
+        """Agrega, a través de todos los lotes recientes, los códigos del
+        reloj que aparecieron sin empleado asociado — para que el mapeo se
+        haga viendo directamente qué código llegó y cuántas veces, en vez de
+        escribirlo a ciegas."""
+        punches = (
+            RawBiometricPunch.objects
+            .filter(matched_employee__isnull=True)
+            .select_related("device")
+            .order_by("biometric_code", "-punched_at")
+        )
+        summary: dict[str, dict] = {}
+        for punch in punches:
+            entry = summary.setdefault(punch.biometric_code, {
+                "biometric_code": punch.biometric_code,
+                "occurrences": 0,
+                "last_seen": punch.punched_at,
+                "device": punch.device_id,
+                "device_name": punch.device.name if punch.device_id else None,
+            })
+            entry["occurrences"] += 1
+            if punch.punched_at > entry["last_seen"]:
+                entry["last_seen"] = punch.punched_at
+        results = sorted(summary.values(), key=lambda e: e["last_seen"], reverse=True)
+        return Response(results)
 
     @action(detail=True, methods=("post",), url_path="consolidate")
     def consolidate(self, request, pk=None):

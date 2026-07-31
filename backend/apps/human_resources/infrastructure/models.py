@@ -544,11 +544,64 @@ class PayrollLegalParameter(BaseModel):
     pension_employee_pct = models.DecimalField(max_digits=5, decimal_places=2, default=4)
     monthly_hours_divisor_default = models.DecimalField(max_digits=6, decimal_places=2, default=230)
 
+    # Porcentajes de recargo de horas, editables por año. Se dejan nullable a
+    # propósito: si un año no tiene un valor explícito aquí, el motor usa el
+    # default legal vigente calculado en overtime_pay.py (que ya modela el
+    # escalonamiento 2025/2026/2027 de la reforma laboral, ej. recargo
+    # dominical 90% desde jul-2026 y 100% desde jul-2027). Solo si RRHH edita
+    # el valor de un año específico, ese valor fijo reemplaza al default
+    # calculado para ese año — así una ley nueva no rompe años ya definidos.
+    night_ordinary_surcharge_pct = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    day_extra_surcharge_pct = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    night_extra_surcharge_pct = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    sunday_holiday_surcharge_pct = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+
     class Meta(BaseModel.Meta):
         ordering = ("-year",)
 
     def __str__(self):
         return f"Parámetros legales {self.year}"
+
+
+class WorkScheduleTemplate(BaseModel):
+    """Plantilla de horario reutilizable (ej. "Turno mañana 7:00-16:30"),
+    con sus franjas por día. Se define una vez y se aplica a múltiples
+    empleados a la vez (ver ApplyWorkScheduleTemplate), en vez de tener que
+    recapturar las mismas franjas manualmente por cada empleado — cubre el
+    caso normal de que varios empleados compartan patrón de horario."""
+
+    name = models.CharField(max_length=80)
+    description = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+
+    class Meta(BaseModel.Meta):
+        ordering = ("name",)
+
+    def __str__(self):
+        return self.name
+
+
+class WorkScheduleTemplateDay(BaseModel):
+    """Una franja horaria dentro de una WorkScheduleTemplate, por día de la
+    semana. Mismo modelo de slots que EmployeeWorkScheduleDay para admitir
+    jornada partida."""
+
+    template = models.ForeignKey(WorkScheduleTemplate, on_delete=models.CASCADE, related_name="days")
+    weekday = models.PositiveSmallIntegerField()
+    slot = models.PositiveSmallIntegerField(default=1)
+    expected_start_time = models.TimeField()
+    expected_end_time = models.TimeField()
+    is_working_day = models.BooleanField(default=True)
+
+    class Meta(BaseModel.Meta):
+        ordering = ("weekday", "slot")
+        constraints = [
+            models.UniqueConstraint(fields=("template", "weekday", "slot"), name="unique_template_weekday_slot"),
+        ]
+
+    def __str__(self):
+        return f"{self.template} - día {self.weekday} slot {self.slot}"
 
 
 class EmployeeWorkSchedule(BaseModel):
@@ -560,6 +613,10 @@ class EmployeeWorkSchedule(BaseModel):
     No se reutiliza WorkDay (catálogo compartido de días de la semana, sin
     horas de entrada/salida y sin vigencia por empleado) porque los horarios
     son distintos por empleado y cambian en el tiempo."""
+
+    source_template = models.ForeignKey(
+        WorkScheduleTemplate, on_delete=models.SET_NULL, null=True, blank=True, related_name="applied_schedules",
+    )
 
     employee = models.ForeignKey("employees.Employee", on_delete=models.CASCADE, related_name="work_schedules")
     start_date = models.DateField()
@@ -643,6 +700,46 @@ class BiometricDevice(BaseModel):
 
     def __str__(self):
         return self.name
+
+
+class AttendanceIntelligenceSettings(BaseModel):
+    """Parámetros operativos (no legales) que afinan cómo se interpretan las
+    marcaciones del reloj biométrico — editable por RRHH sin tocar código.
+    Se espera una sola fila activa (configuración global); si hay más de una,
+    se usa la más reciente (mismo patrón de "toma la más reciente" que
+    get_schedule_for)."""
+
+    duplicate_punch_window_minutes = models.PositiveIntegerField(
+        default=15,
+        help_text="Marcaciones del mismo empleado separadas por menos de este tiempo se consideran "
+                   "el mismo evento repetido por error (ej. marcó, creyó que falló, volvió a marcar) "
+                   "y se colapsan en una sola en vez de contarse como entrada+salida real.",
+    )
+    schedule_proximity_minutes = models.PositiveIntegerField(
+        default=120,
+        help_text="Al inferir qué marcación es entrada y cuál es salida en un día con marcaciones "
+                   "atípicas (1, 3, 5+), se prioriza la que caiga dentro de esta cercanía al horario "
+                   "esperado del empleado, en vez de asumir ciegamente 'antes/después de mediodía'.",
+    )
+    is_active = models.BooleanField(default=True)
+
+    class Meta(BaseModel.Meta):
+        ordering = ("-created_at",)
+        verbose_name = "Configuración de inteligencia de asistencia"
+        verbose_name_plural = "Configuraciones de inteligencia de asistencia"
+
+    def __str__(self):
+        return f"Config. asistencia (dedup {self.duplicate_punch_window_minutes}min)"
+
+
+def get_attendance_intelligence_settings():
+    """Devuelve la configuración activa más reciente, o defaults razonables
+    si RRHH todavía no ha configurado nada — el sistema funciona de
+    inmediato sin necesitar que alguien lo configure primero."""
+    settings_row = AttendanceIntelligenceSettings.objects.filter(is_active=True).order_by("-created_at").first()
+    if settings_row:
+        return settings_row
+    return AttendanceIntelligenceSettings(duplicate_punch_window_minutes=15, schedule_proximity_minutes=120)
 
 
 class EmployeeBiometricId(BaseModel):

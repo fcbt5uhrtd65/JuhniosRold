@@ -15,13 +15,38 @@ datos opacos: se conservan tal cual como texto, sin interpretarlas.
 Función pura, sin dependencia de Django models — el resultado se usa para
 crear RawBiometricPunch en el caso de uso ImportBiometricFile."""
 
+import re
 from datetime import datetime
 from io import IOBase
+
+# Distintos modelos/firmwares de reloj biométrico exportan la fecha/hora en
+# formatos ligeramente distintos (con/sin segundos, separador '/' en vez de
+# '-', año al final). Se intentan en orden hasta que uno funcione, en vez de
+# asumir un único formato rígido — así una exportación de otro equipo no
+# tumba la importación completa.
+_TIMESTAMP_FORMATS = (
+    "%Y-%m-%d %H:%M:%S",
+    "%Y-%m-%d %H:%M",
+    "%Y/%m/%d %H:%M:%S",
+    "%d/%m/%Y %H:%M:%S",
+    "%d-%m-%Y %H:%M:%S",
+)
+
+_MULTI_SPACE_RE = re.compile(r" {2,}")
 
 
 class BiometricFileParseError(Exception):
     """Error irrecuperable al parsear el archivo (formato completamente
     inválido, no simplemente filas sueltas mal formadas)."""
+
+
+def _parse_timestamp(raw: str):
+    for fmt in _TIMESTAMP_FORMATS:
+        try:
+            return datetime.strptime(raw, fmt)
+        except ValueError:
+            continue
+    return None
 
 
 def _decode(raw_content) -> str:
@@ -58,6 +83,10 @@ def parse_biometric_file(file_obj) -> list[dict]:
 
         columns = stripped.split("\t")
         if len(columns) < 2:
+            # Algunas exportaciones usan espacios múltiples en vez de tabs reales.
+            columns = _MULTI_SPACE_RE.split(stripped.strip())
+
+        if len(columns) < 2:
             rows.append({
                 "line_number": line_number,
                 "raw_line": stripped,
@@ -67,10 +96,13 @@ def parse_biometric_file(file_obj) -> list[dict]:
 
         biometric_code = columns[0].strip()
         timestamp_raw = columns[1].strip()
+        if len(columns) >= 3 and re.match(r"^\d{2}:\d{2}(:\d{2})?$", columns[2].strip()):
+            # Fecha y hora en columnas separadas ("2021-12-24" \t "18:02:38").
+            timestamp_raw = f"{timestamp_raw} {columns[2].strip()}"
+            columns = [columns[0], timestamp_raw] + columns[3:]
 
-        try:
-            punched_at = datetime.strptime(timestamp_raw, "%Y-%m-%d %H:%M:%S")
-        except ValueError:
+        punched_at = _parse_timestamp(timestamp_raw)
+        if punched_at is None:
             rows.append({
                 "line_number": line_number,
                 "raw_line": stripped,

@@ -2,6 +2,7 @@ from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
+    AttendanceIntelligenceSettingsViewSet,
     AttendanceViewSet,
     BiometricDeviceViewSet,
     BiometricImportBatchViewSet,
@@ -17,6 +18,7 @@ from .views import (
     VacationRequestAttachmentViewSet,
     VacationRequestPdfView,
     VacationRequestViewSet,
+    WorkScheduleTemplateViewSet,
 )
 
 router = DefaultRouter()
@@ -31,10 +33,12 @@ router.register("notifications", HRNotificationViewSet)
 router.register("holidays", PublicHolidayViewSet)
 router.register("payroll-legal-parameters", PayrollLegalParameterViewSet)
 router.register("payroll-periods", PayrollPeriodViewSet)
+router.register("work-schedule-templates", WorkScheduleTemplateViewSet)
 router.register("work-schedules", EmployeeWorkScheduleViewSet)
 router.register("biometric-devices", BiometricDeviceViewSet)
 router.register("biometric-ids", EmployeeBiometricIdViewSet)
 router.register("biometric-imports", BiometricImportBatchViewSet)
+router.register("attendance-intelligence-settings", AttendanceIntelligenceSettingsViewSet)
 
 urlpatterns = [
     path("requests/<uuid:pk>/pdf/", VacationRequestPdfView.as_view(), name="vacation-request-pdf"),

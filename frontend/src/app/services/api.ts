@@ -59,6 +59,16 @@ function createTimeoutSignal(ms: number): { signal: AbortSignal; clear: () => vo
   };
 }
 
+const DEFAULT_TIMEOUT_MS = 15_000;
+
+// Operaciones pesadas (subida/procesamiento de archivos, cálculo de nómina) necesitan
+// más margen que una petición normal antes de que el AbortController interno las corte.
+export const LONG_REQUEST_TIMEOUT_MS = 120_000;
+
+export function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
+}
+
 // ---- API Response type ----
 export interface ApiResponse<T = unknown> {
   success: boolean;
@@ -287,6 +297,7 @@ export async function apiRequest<T>(
   endpoint: string,
   options: RequestInit = {},
   retry = true,
+  timeoutMs: number = DEFAULT_TIMEOUT_MS,
 ): Promise<ApiResponse<T>> {
   const url = `${API_BASE_URL}${endpoint}`;
   const isAuthenticationRequest =
@@ -320,8 +331,8 @@ export async function apiRequest<T>(
 
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  // Use caller's signal or create a 15s timeout
-  const ownTimeout = !options.signal ? createTimeoutSignal(15_000) : null;
+  // Use caller's signal or create a timeout (default 15s, overridable per-request)
+  const ownTimeout = !options.signal ? createTimeoutSignal(timeoutMs) : null;
   const signal = options.signal ?? ownTimeout!.signal;
 
   let res: Response;
@@ -334,7 +345,7 @@ export async function apiRequest<T>(
   // Refresh only expired authenticated sessions. A rejected login must not be retried.
   if (res.status === 401 && retry && !isAuthenticationRequest) {
     const newToken = await refreshAccessToken();
-    if (newToken) return apiRequest<T>(endpoint, options, false);
+    if (newToken) return apiRequest<T>(endpoint, options, false, timeoutMs);
     clearTokens();
     notifyAuthSessionInvalidated('unauthorized');
     throw new AuthSessionError();
@@ -422,20 +433,20 @@ function prepareBody(body: unknown): BodyInit {
 
 // ---- Convenience helpers ----
 export const api = {
-  get: <T>(endpoint: string, signal?: AbortSignal) =>
-    apiRequest<T>(endpoint, { method: 'GET', ...(signal ? { signal } : {}) }),
+  get: <T>(endpoint: string, signal?: AbortSignal, timeoutMs?: number) =>
+    apiRequest<T>(endpoint, { method: 'GET', ...(signal ? { signal } : {}) }, true, timeoutMs),
 
-  post: <T>(endpoint: string, body: unknown) =>
-    apiRequest<T>(endpoint, { method: 'POST', body: prepareBody(body) }),
+  post: <T>(endpoint: string, body: unknown, timeoutMs?: number) =>
+    apiRequest<T>(endpoint, { method: 'POST', body: prepareBody(body) }, true, timeoutMs),
 
-  patch: <T>(endpoint: string, body: unknown) =>
-    apiRequest<T>(endpoint, { method: 'PATCH', body: prepareBody(body) }),
+  patch: <T>(endpoint: string, body: unknown, timeoutMs?: number) =>
+    apiRequest<T>(endpoint, { method: 'PATCH', body: prepareBody(body) }, true, timeoutMs),
 
-  put: <T>(endpoint: string, body: unknown) =>
-    apiRequest<T>(endpoint, { method: 'PUT', body: prepareBody(body) }),
+  put: <T>(endpoint: string, body: unknown, timeoutMs?: number) =>
+    apiRequest<T>(endpoint, { method: 'PUT', body: prepareBody(body) }, true, timeoutMs),
 
-  delete: <T>(endpoint: string) =>
-    apiRequest<T>(endpoint, { method: 'DELETE' }),
+  delete: <T>(endpoint: string, timeoutMs?: number) =>
+    apiRequest<T>(endpoint, { method: 'DELETE' }, true, timeoutMs),
 };
 
 export const publicApi = {

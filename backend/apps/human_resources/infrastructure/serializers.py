@@ -7,6 +7,7 @@ from apps.notifications.infrastructure.models import StaffNotification
 
 from .models import (
     Attendance,
+    AttendanceIntelligenceSettings,
     BiometricDevice,
     BiometricImportBatch,
     EmployeeBiometricId,
@@ -25,6 +26,8 @@ from .models import (
     VacationRequestApprovalStep,
     VacationRequestAttachment,
     VacationRequestHistory,
+    WorkScheduleTemplate,
+    WorkScheduleTemplateDay,
 )
 
 ALLOWED_SUPPORT_CONTENT_TYPES = {
@@ -304,6 +307,28 @@ class PayrollLegalParameterSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
+class AttendanceIntelligenceSettingsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AttendanceIntelligenceSettings
+        fields = "__all__"
+
+
+class WorkScheduleTemplateDaySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WorkScheduleTemplateDay
+        fields = "__all__"
+        read_only_fields = ("template",)
+
+
+class WorkScheduleTemplateSerializer(serializers.ModelSerializer):
+    days = WorkScheduleTemplateDaySerializer(many=True, read_only=True)
+
+    class Meta:
+        model = WorkScheduleTemplate
+        fields = "__all__"
+        read_only_fields = ("created_by",)
+
+
 class EmployeeWorkScheduleDaySerializer(serializers.ModelSerializer):
     class Meta:
         model = EmployeeWorkScheduleDay
@@ -317,7 +342,7 @@ class EmployeeWorkScheduleSerializer(serializers.ModelSerializer):
     class Meta:
         model = EmployeeWorkSchedule
         fields = "__all__"
-        read_only_fields = ("created_by",)
+        read_only_fields = ("created_by", "source_template")
 
 
 class BiometricDeviceSerializer(serializers.ModelSerializer):

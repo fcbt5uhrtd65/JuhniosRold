@@ -25,9 +25,12 @@ from ..infrastructure.models import (
     VacationRequest,
     VacationRequestApprovalStep,
     VacationRequestHistory,
+    WorkScheduleTemplate,
+    WorkScheduleTemplateDay,
+    get_attendance_intelligence_settings,
     get_schedule_for,
 )
-from ..infrastructure.overtime_pay import classify_shift
+from ..infrastructure.overtime_pay import SurchargeRates, classify_shift
 from ..infrastructure.payroll_engine import (
     daily_rate_for,
     health_deduction_for,
@@ -37,7 +40,6 @@ from ..infrastructure.payroll_engine import (
     transport_allowance_for,
 )
 
-BIOMETRIC_DEDUP_WINDOW_MINUTES = 1
 RECHARGE_LABEL_TO_CONCEPT_CODE = {
     "Ordinaria diurna": "ORDINARY_DAY",
     "Ordinaria nocturna": "ORDINARY_NIGHT",
@@ -483,6 +485,41 @@ class GenerateYearHolidays:
         return created
 
 
+def _parse_schedule_days(days_data) -> list[dict]:
+    """Valida y normaliza una lista de franjas horarias (weekday, horas,
+    slot opcional) — compartido entre horarios individuales y plantillas
+    para que ambos apliquen exactamente las mismas reglas."""
+    if not days_data:
+        raise BusinessRuleViolation("Debes indicar al menos un día de horario.")
+
+    parsed_days = []
+    for entry in days_data:
+        weekday = entry.get("weekday")
+        start_time = entry.get("expected_start_time")
+        end_time = entry.get("expected_end_time")
+        if weekday is None or not (0 <= int(weekday) <= 6):
+            raise BusinessRuleViolation("Día de la semana inválido (debe ser 0=lunes..6=domingo).")
+        if not start_time or not end_time:
+            raise BusinessRuleViolation("Cada franja requiere hora de inicio y hora de fin.")
+        try:
+            if isinstance(start_time, str):
+                start_time = datetime.strptime(start_time[:5], "%H:%M").time()
+            if isinstance(end_time, str):
+                end_time = datetime.strptime(end_time[:5], "%H:%M").time()
+        except (TypeError, ValueError) as exc:
+            raise BusinessRuleViolation("Cada franja debe tener horas HH:MM válidas.") from exc
+        if end_time <= start_time:
+            raise BusinessRuleViolation("La hora de fin debe ser posterior a la hora de inicio en cada franja.")
+        parsed_days.append({
+            "weekday": int(weekday),
+            "slot": int(entry.get("slot", 1)),
+            "expected_start_time": start_time,
+            "expected_end_time": end_time,
+            "is_working_day": entry.get("is_working_day", True),
+        })
+    return parsed_days
+
+
 class SetEmployeeWorkSchedule:
     """Reemplaza el horario vigente de un empleado a partir de una fecha:
     cierra (end_date = start_date - 1 día) cualquier EmployeeWorkSchedule
@@ -491,41 +528,14 @@ class SetEmployeeWorkSchedule:
     (vigencia por rango de fechas, nunca se borra el horario anterior)."""
 
     @transaction.atomic
-    def execute(self, *, employee, start_date, days_data, actor=None, notes=""):
-        if not days_data:
-            raise BusinessRuleViolation("Debes indicar al menos un día de horario.")
-
+    def execute(self, *, employee, start_date, days_data, actor=None, notes="", source_template=None):
         try:
             if isinstance(start_date, str):
                 start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
         except (TypeError, ValueError) as exc:
             raise BusinessRuleViolation("La fecha de inicio debe tener formato YYYY-MM-DD.") from exc
 
-        parsed_days = []
-        for entry in days_data:
-            weekday = entry.get("weekday")
-            start_time = entry.get("expected_start_time")
-            end_time = entry.get("expected_end_time")
-            if weekday is None or not (0 <= int(weekday) <= 6):
-                raise BusinessRuleViolation("Día de la semana inválido (debe ser 0=lunes..6=domingo).")
-            if not start_time or not end_time:
-                raise BusinessRuleViolation("Cada franja requiere hora de inicio y hora de fin.")
-            try:
-                if isinstance(start_time, str):
-                    start_time = datetime.strptime(start_time[:5], "%H:%M").time()
-                if isinstance(end_time, str):
-                    end_time = datetime.strptime(end_time[:5], "%H:%M").time()
-            except (TypeError, ValueError) as exc:
-                raise BusinessRuleViolation("Cada franja debe tener horas HH:MM válidas.") from exc
-            if end_time <= start_time:
-                raise BusinessRuleViolation("La hora de fin debe ser posterior a la hora de inicio en cada franja.")
-            parsed_days.append({
-                "weekday": int(weekday),
-                "slot": int(entry.get("slot", 1)),
-                "expected_start_time": start_time,
-                "expected_end_time": end_time,
-                "is_working_day": entry.get("is_working_day", True),
-            })
+        parsed_days = _parse_schedule_days(days_data)
 
         overlapping = EmployeeWorkSchedule.objects.filter(
             employee=employee, is_active=True
@@ -547,11 +557,104 @@ class SetEmployeeWorkSchedule:
             start_date=start_date,
             created_by=actor if getattr(actor, "is_authenticated", False) else None,
             notes=notes,
+            source_template=source_template,
         )
         EmployeeWorkScheduleDay.objects.bulk_create([
             EmployeeWorkScheduleDay(schedule=schedule, **entry) for entry in parsed_days
         ])
         return schedule
+
+
+class CreateWorkScheduleTemplate:
+    """Crea una plantilla de horario reutilizable con sus franjas por día.
+    No toca ningún horario de empleado — es solo el catálogo."""
+
+    @transaction.atomic
+    def execute(self, *, name, days_data, actor=None, description=""):
+        if not name or not name.strip():
+            raise BusinessRuleViolation("La plantilla necesita un nombre.")
+        parsed_days = _parse_schedule_days(days_data)
+
+        template = WorkScheduleTemplate.objects.create(
+            name=name.strip(),
+            description=description,
+            created_by=actor if getattr(actor, "is_authenticated", False) else None,
+        )
+        WorkScheduleTemplateDay.objects.bulk_create([
+            WorkScheduleTemplateDay(template=template, **entry) for entry in parsed_days
+        ])
+        return template
+
+
+class UpdateWorkScheduleTemplate:
+    """Reemplaza nombre/descripción y franjas de una plantilla existente.
+    No afecta horarios ya aplicados a empleados (EmployeeWorkSchedule copia
+    las franjas al momento de aplicar, no las referencia en vivo)."""
+
+    @transaction.atomic
+    def execute(self, *, template, days_data=None, name=None, description=None):
+        if name is not None:
+            if not name.strip():
+                raise BusinessRuleViolation("La plantilla necesita un nombre.")
+            template.name = name.strip()
+        if description is not None:
+            template.description = description
+        template.save(update_fields=("name", "description", "updated_at"))
+
+        if days_data is not None:
+            parsed_days = _parse_schedule_days(days_data)
+            template.days.all().delete()
+            WorkScheduleTemplateDay.objects.bulk_create([
+                WorkScheduleTemplateDay(template=template, **entry) for entry in parsed_days
+            ])
+        return template
+
+
+class ApplyWorkScheduleTemplate:
+    """Aplica una plantilla de horario a varios empleados a la vez, a partir
+    de una fecha común — reutiliza SetEmployeeWorkSchedule por cada empleado
+    (misma regla de cierre de vigencia anterior). Acumula errores por
+    empleado sin abortar la aplicación completa, mismo patrón que
+    CalculatePayrollPeriod."""
+
+    @transaction.atomic
+    def execute(self, *, template, employee_ids, start_date, actor=None, notes=""):
+        from apps.employees.infrastructure.models import Employee
+
+        if not employee_ids:
+            raise BusinessRuleViolation("Selecciona al menos un empleado.")
+
+        days_data = [
+            {
+                "weekday": day.weekday,
+                "slot": day.slot,
+                "expected_start_time": day.expected_start_time,
+                "expected_end_time": day.expected_end_time,
+                "is_working_day": day.is_working_day,
+            }
+            for day in template.days.all()
+        ]
+        if not days_data:
+            raise BusinessRuleViolation("La plantilla no tiene franjas configuradas.")
+
+        applied = []
+        errors = []
+        for employee in Employee.objects.filter(id__in=employee_ids):
+            try:
+                with transaction.atomic():
+                    schedule = SetEmployeeWorkSchedule().execute(
+                        employee=employee,
+                        start_date=start_date,
+                        days_data=days_data,
+                        actor=actor,
+                        notes=notes,
+                        source_template=template,
+                    )
+                applied.append(schedule)
+            except BusinessRuleViolation as exc:
+                errors.append({"employee_id": str(employee.id), "employee": str(employee), "error": str(exc)})
+
+        return {"applied": applied, "errors": errors}
 
 
 class ImportBiometricFile:
@@ -582,17 +685,15 @@ class ImportBiometricFile:
             batch.save(update_fields=("status", "error_log", "updated_at"))
             raise BusinessRuleViolation(f"No se pudo procesar el archivo: {exc}") from exc
 
-        active_mappings = {
-            mapping.biometric_code: mapping.employee_id
-            for mapping in EmployeeBiometricId.objects.filter(is_active=True, device=device)
-        }
-
         error_lines = [row for row in rows if "error" in row]
         valid_rows = [row for row in rows if "error" not in row]
 
+        codes_in_file = {row["biometric_code"] for row in valid_rows}
+        mapping_resolver = self._build_mapping_resolver(codes_in_file, device)
+
         punches = []
         for row in valid_rows:
-            employee_id = active_mappings.get(row["biometric_code"])
+            employee_id = mapping_resolver(row["biometric_code"], row["punched_at"].date())
             punches.append(RawBiometricPunch(
                 device=device,
                 biometric_code=row["biometric_code"],
@@ -605,7 +706,7 @@ class ImportBiometricFile:
                 import_batch=batch,
                 matched_employee_id=employee_id,
             ))
-        created_punches = RawBiometricPunch.objects.bulk_create(punches)
+        created_punches = RawBiometricPunch.objects.bulk_create(punches, batch_size=500)
 
         duplicate_count = self._mark_duplicates(created_punches)
 
@@ -628,18 +729,69 @@ class ImportBiometricFile:
         ))
         return batch
 
+    def _build_mapping_resolver(self, codes: set, device):
+        """Resuelve código biométrico + fecha -> employee_id.
+
+        El código del reloj es el identificador real; el dispositivo es
+        metadato opcional. Si se filtrara estrictamente por `device`, subir
+        un archivo sin elegir dispositivo (o con uno distinto al usado al
+        crear los mapeos) dejaría todas las marcaciones sin empleado aunque
+        el mapeo exista — por eso se cargan los mapeos del código sin
+        filtrar por device, y solo se usa `device` para desempatar cuando el
+        mismo código está mapeado a más de un empleado (p. ej. dos sedes con
+        relojes distintos reutilizando numeración). Se respeta la vigencia
+        (valid_from/valid_to) contra la fecha real de cada marcación, ya que
+        un código puede reasignarse a otro empleado con el tiempo."""
+        if not codes:
+            return lambda code, punch_date: None
+
+        candidates = (
+            EmployeeBiometricId.objects
+            .filter(is_active=True, biometric_code__in=codes)
+            .order_by("biometric_code")
+        )
+        by_code: dict[str, list] = {}
+        for mapping in candidates:
+            by_code.setdefault(mapping.biometric_code, []).append(mapping)
+
+        def resolve(code: str, punch_date):
+            mappings = by_code.get(code)
+            if not mappings:
+                return None
+
+            valid = [
+                m for m in mappings
+                if m.valid_from <= punch_date and (m.valid_to is None or punch_date <= m.valid_to)
+            ]
+            if not valid:
+                return None
+
+            if device is not None:
+                same_device = [m for m in valid if m.device_id == device.id]
+                if same_device:
+                    valid = same_device
+
+            employee_ids = {m.employee_id for m in valid}
+            if len(employee_ids) != 1:
+                return None  # ambiguo (varios empleados posibles) — no se adivina
+            return employee_ids.pop()
+
+        return resolve
+
     def _mark_duplicates(self, punches) -> int:
         """Agrupa por empleado resuelto y marca como duplicadas las
-        marcaciones consecutivas separadas por menos de
-        BIOMETRIC_DEDUP_WINDOW_MINUTES, conservando la primera de cada grupo
-        como canónica. No borra ninguna fila."""
+        marcaciones consecutivas separadas por menos de la ventana
+        configurada en AttendanceIntelligenceSettings (default 15 min),
+        conservando la primera de cada grupo como canónica. No borra ninguna
+        fila — cubre el caso de "marqué, creí que falló, volví a marcar"."""
         by_employee: dict[str, list] = {}
         for punch in punches:
             if not punch.matched_employee_id:
                 continue
             by_employee.setdefault(punch.matched_employee_id, []).append(punch)
 
-        window = timedelta(minutes=BIOMETRIC_DEDUP_WINDOW_MINUTES)
+        settings_row = get_attendance_intelligence_settings()
+        window = timedelta(minutes=settings_row.duplicate_punch_window_minutes)
         duplicate_count = 0
         to_update = []
         for employee_punches in by_employee.values():
@@ -664,15 +816,24 @@ class ConsolidateAttendanceFromPunches:
     (empleado, fecha) e infiere entrada/salida/descansos, creando o
     actualizando la fila Attendance consolidada de ese día.
 
-    Regla de inferencia (deliberadamente simple y editable a mano después,
-    dado que las marcaciones olvidadas/incompletas son el caso esperado, no
-    la excepción):
+    Regla de inferencia (dado que las marcaciones olvidadas/incompletas son
+    el caso esperado, no la excepción):
+      - Antes de aplicar cualquier regla de conteo, se colapsan marcaciones
+        del mismo día que caigan ambas dentro de la ventana de proximidad al
+        horario esperado (ver AttendanceIntelligenceSettings) — cubre "marqué,
+        pensé que había fallado, y volví a marcar" cuando la reimportación ya
+        pasó la ventana de deduplicación fina de ImportBiometricFile.
       - 2 marcaciones: la más temprana = check_in, la más tardía = check_out.
       - 4 marcaciones: 1a=check_in, 2a=break_start, 3a=break_end, 4a=check_out.
-      - 1 marcación: se infiere por hora (antes/después de mediodía), pero
-        siempre queda has_incomplete_marks=True (inferencia débil).
-      - 3 o más de 4: 1a=check_in, última=check_out, sin forzar descansos
-        intermedios, has_incomplete_marks=True.
+      - 1 marcación: se compara contra el horario esperado del empleado ese
+        día (EmployeeWorkSchedule) para decidir si es entrada o salida —
+        importante porque cada empleado puede tener un patrón distinto (ej.
+        7:30-16:00 vs. 7:00-16:30); si no hay horario configurado, se cae al
+        criterio simple antes/después de mediodía. Siempre queda
+        has_incomplete_marks=True (inferencia débil, requiere revisión).
+      - 3 o más de 4 (tras el colapso por proximidad): 1a=check_in,
+        última=check_out, sin forzar descansos intermedios,
+        has_incomplete_marks=True.
 
     Si el Attendance del día ya fue corregido manualmente
     (is_manually_corrected=True), NO se sobreescribe — la corrección humana
@@ -681,9 +842,9 @@ class ConsolidateAttendanceFromPunches:
     @transaction.atomic
     def execute(self, *, import_batch, actor=None):
         punches = list(
-            import_batch.punches.filter(is_duplicate=False, matched_employee__isnull=False).order_by(
-                "matched_employee_id", "punched_at"
-            )
+            import_batch.punches.filter(is_duplicate=False, matched_employee__isnull=False)
+            .select_related("matched_employee")
+            .order_by("matched_employee_id", "punched_at")
         )
 
         by_employee_day: dict[tuple, list] = {}
@@ -691,10 +852,14 @@ class ConsolidateAttendanceFromPunches:
             key = (punch.matched_employee_id, punch.punched_at.date())
             by_employee_day.setdefault(key, []).append(punch)
 
+        settings_row = get_attendance_intelligence_settings()
+        proximity_window = timedelta(minutes=settings_row.schedule_proximity_minutes)
+
         created = 0
         updated = 0
         skipped_corrected = 0
         incomplete = 0
+        employees_cache: dict[str, object] = {}
 
         for (employee_id, day), day_punches in by_employee_day.items():
             day_punches.sort(key=lambda p: p.punched_at)
@@ -703,7 +868,13 @@ class ConsolidateAttendanceFromPunches:
                 skipped_corrected += 1
                 continue
 
-            values = self._infer_attendance(day_punches)
+            if employee_id not in employees_cache:
+                employees_cache[employee_id] = day_punches[0].matched_employee
+            employee = employees_cache[employee_id]
+            schedule = get_schedule_for(employee, day)
+
+            day_punches = self._collapse_near_schedule_duplicates(day_punches, schedule, day, proximity_window)
+            values = self._infer_attendance(day_punches, schedule, day)
             if values["has_incomplete_marks"]:
                 incomplete += 1
 
@@ -732,7 +903,50 @@ class ConsolidateAttendanceFromPunches:
             "incomplete": incomplete,
         }
 
-    def _infer_attendance(self, day_punches) -> dict:
+    def _expected_times(self, schedule, day):
+        """(hora_entrada_esperada, hora_salida_esperada) del día, o (None, None)
+        si no hay horario configurado o el día no tiene franjas activas."""
+        if not schedule:
+            return None, None
+        day_slots = [d for d in schedule.days.all() if d.weekday == day.weekday() and d.is_working_day]
+        if not day_slots:
+            return None, None
+        day_slots.sort(key=lambda d: d.expected_start_time)
+        return day_slots[0].expected_start_time, day_slots[-1].expected_end_time
+
+    def _collapse_near_schedule_duplicates(self, day_punches, schedule, day, proximity_window):
+        """Colapsa marcaciones consecutivas que caen dentro de la misma
+        ventana de proximidad al horario esperado (ambas "cerca de la
+        entrada" o ambas "cerca de la salida") — la marcación repetida por
+        error humano suele estar minutos después de la real, ya fuera del
+        rango fino de ImportBiometricFile pero claramente pegada al mismo
+        punto del horario, no a un evento distinto del día."""
+        expected_start, expected_end = self._expected_times(schedule, day)
+        if not expected_start or len(day_punches) < 2:
+            return day_punches
+
+        def nearest_anchor_offset(punch_dt):
+            start_dt = datetime.combine(day, expected_start)
+            end_dt = datetime.combine(day, expected_end) if expected_end else None
+            offsets = [abs(punch_dt - start_dt)]
+            if end_dt:
+                offsets.append(abs(punch_dt - end_dt))
+            return min(offsets)
+
+        collapsed = [day_punches[0]]
+        for punch in day_punches[1:]:
+            previous = collapsed[-1]
+            close_to_each_other = (punch.punched_at - previous.punched_at) <= proximity_window
+            both_near_same_anchor = (
+                nearest_anchor_offset(previous.punched_at) <= proximity_window
+                and nearest_anchor_offset(punch.punched_at) <= proximity_window
+            )
+            if close_to_each_other and both_near_same_anchor:
+                continue  # se descarta la repetida, se conserva la primera vista de ese punto
+            collapsed.append(punch)
+        return collapsed
+
+    def _infer_attendance(self, day_punches, schedule=None, day=None) -> dict:
         count = len(day_punches)
         times = [p.punched_at for p in day_punches]
 
@@ -750,14 +964,21 @@ class ConsolidateAttendanceFromPunches:
             }
         if count == 1:
             only = times[0]
-            is_morning = only.hour < 12
+            expected_start, expected_end = self._expected_times(schedule, day) if day else (None, None)
+            if expected_start and expected_end:
+                start_dt = datetime.combine(day, expected_start)
+                end_dt = datetime.combine(day, expected_end)
+                is_closer_to_start = abs(only - start_dt) <= abs(only - end_dt)
+            else:
+                is_closer_to_start = only.hour < 12
             return {
-                "check_in": only if is_morning else None,
-                "check_out": only if not is_morning else None,
+                "check_in": only if is_closer_to_start else None,
+                "check_out": only if not is_closer_to_start else None,
                 "break_start": None, "break_end": None,
                 "has_incomplete_marks": True,
             }
-        # 3, o 5+: se guarda primera/última sin forzar descansos intermedios.
+        # 3, o 5+ (tras colapsar duplicados cercanos al horario): 1a=check_in,
+        # última=check_out, sin forzar descansos intermedios.
         return {
             "check_in": times[0], "check_out": times[-1],
             "break_start": None, "break_end": None,
@@ -860,6 +1081,12 @@ class CalculateEmployeePayrollForPeriod:
                 is_active=True, civil_date__gte=period.period_start, civil_date__lte=period.period_end
             ).values_list("civil_date", flat=True)
         )
+        rates = SurchargeRates(
+            night_ordinary_pct=legal_parameter.night_ordinary_surcharge_pct if legal_parameter else None,
+            day_extra_pct=legal_parameter.day_extra_surcharge_pct if legal_parameter else None,
+            night_extra_pct=legal_parameter.night_extra_surcharge_pct if legal_parameter else None,
+            sunday_holiday_pct=legal_parameter.sunday_holiday_surcharge_pct if legal_parameter else None,
+        )
 
         payroll, _ = Payroll.objects.update_or_create(
             employee=employee,
@@ -875,7 +1102,7 @@ class CalculateEmployeePayrollForPeriod:
         # haya agregado a mano, se descartan los que el motor generó antes.
         payroll.items.exclude(source=PayrollItem.Source.MANUAL).delete()
 
-        recharge_minutes = self._accumulate_recharge_minutes(employee, period, holiday_dates)
+        recharge_minutes = self._accumulate_recharge_minutes(employee, period, holiday_dates, rates)
         worked_days, ordinary_minutes = self._count_worked_days(employee, period)
 
         new_items = []
@@ -895,7 +1122,7 @@ class CalculateEmployeePayrollForPeriod:
                 concept_code=RECHARGE_LABEL_TO_CONCEPT_CODE.get(label, "OTHER_HOURS"),
             ))
 
-        overtime_amount, overtime_hours = self._approved_overtime_items(payroll, employee, period, hourly_rate, holiday_dates, new_items)
+        overtime_amount, overtime_hours = self._approved_overtime_items(payroll, employee, period, hourly_rate, holiday_dates, new_items, rates)
         new_items.extend(self._vacation_request_items(payroll, employee, period, actor))
 
         transport = transport_allowance_for(employee, legal_parameter) if legal_parameter else Decimal("0")
@@ -944,7 +1171,7 @@ class CalculateEmployeePayrollForPeriod:
         payroll.save()
         return payroll
 
-    def _accumulate_recharge_minutes(self, employee, period, holiday_dates) -> dict:
+    def _accumulate_recharge_minutes(self, employee, period, holiday_dates, rates=None) -> dict:
         """Recorre cada día del período con asistencia consolidada y acumula
         minutos por (label, surcharge_pct) usando classify_shift — solo para
         el tramo que cabe dentro del horario esperado del día (ordinario);
@@ -969,7 +1196,7 @@ class CalculateEmployeePayrollForPeriod:
                         continue
                     ordinary_end_offset = min(remaining_ordinary, seg_minutes)
                     ordinary_seg_end = seg_start + timedelta(minutes=ordinary_end_offset)
-                    for label, pct, minutes in self._classify_range(seg_start, ordinary_seg_end, holiday_dates, is_extra=False):
+                    for label, pct, minutes in self._classify_range(seg_start, ordinary_seg_end, holiday_dates, is_extra=False, rates=rates):
                         key = (label, pct)
                         totals[key] = totals.get(key, 0) + minutes
                     worked_minutes_seen += seg_minutes
@@ -986,8 +1213,8 @@ class CalculateEmployeePayrollForPeriod:
             ]
         return [(attendance.check_in, attendance.check_out)]
 
-    def _classify_range(self, start_dt, end_dt, holiday_dates, is_extra):
-        segments = classify_shift(start_dt, end_dt, is_extra=is_extra, holiday_dates=holiday_dates)
+    def _classify_range(self, start_dt, end_dt, holiday_dates, is_extra, rates=None):
+        segments = classify_shift(start_dt, end_dt, is_extra=is_extra, holiday_dates=holiday_dates, rates=rates)
         return [(seg["label"], seg["surcharge_pct"], seg["minutes"]) for seg in segments]
 
     def _count_worked_days(self, employee, period) -> tuple:
@@ -1004,7 +1231,7 @@ class CalculateEmployeePayrollForPeriod:
             cursor += timedelta(days=1)
         return worked_days, ordinary_minutes
 
-    def _approved_overtime_items(self, payroll, employee, period, hourly_rate, holiday_dates, new_items) -> tuple:
+    def _approved_overtime_items(self, payroll, employee, period, hourly_rate, holiday_dates, new_items, rates=None) -> tuple:
         """Genera devengados de horas extra SOLO a partir de solicitudes
         formales aprobadas — nunca a partir de exceso de marcación cruda."""
         overtime_requests = VacationRequest.objects.filter(
@@ -1023,7 +1250,7 @@ class CalculateEmployeePayrollForPeriod:
                     continue
                 shift_start = datetime.combine(shift.date, shift.start_time)
                 shift_end = datetime.combine(shift.date, shift.end_time)
-                for label, pct, minutes in self._classify_range(shift_start, shift_end, holiday_dates, is_extra=True):
+                for label, pct, minutes in self._classify_range(shift_start, shift_end, holiday_dates, is_extra=True, rates=rates):
                     key = (label, pct)
                     totals[key] = totals.get(key, 0) + minutes
                     total_minutes += minutes

@@ -56,8 +56,35 @@ def _split_points(day: date) -> list[time]:
     return sorted(points)
 
 
+class SurchargeRates:
+    """Porcentajes de recargo, con override opcional por concepto. Si un
+    campo queda en None, se usa el default legal vigente calculado por fecha
+    (incluyendo el escalonamiento 2025/2026/2027 del recargo dominical) —
+    exactamente el comportamiento anterior a esta clase. Pasar valores
+    explícitos (típicamente desde PayrollLegalParameter) los reemplaza para
+    ese cálculo puntual, sin tocar el default de otros años/llamadores."""
+
+    __slots__ = ("night_ordinary_pct", "day_extra_pct", "night_extra_pct", "sunday_holiday_pct")
+
+    def __init__(
+        self,
+        night_ordinary_pct: Decimal | None = None,
+        day_extra_pct: Decimal | None = None,
+        night_extra_pct: Decimal | None = None,
+        sunday_holiday_pct: Decimal | None = None,
+    ):
+        self.night_ordinary_pct = night_ordinary_pct
+        self.day_extra_pct = day_extra_pct
+        self.night_extra_pct = night_extra_pct
+        self.sunday_holiday_pct = sunday_holiday_pct
+
+
 def _classify_segment(
-    day: date, segment_start: time, is_extra: bool, holiday_dates: frozenset[date] | None = None
+    day: date,
+    segment_start: time,
+    is_extra: bool,
+    holiday_dates: frozenset[date] | None = None,
+    rates: SurchargeRates | None = None,
 ) -> tuple[str, Decimal, bool]:
     """Clasifica un segmento horario (que no cruza medianoche ni un punto de
     corte diurno/nocturno) y devuelve (etiqueta, porcentaje total de recargo,
@@ -68,34 +95,52 @@ def _classify_segment(
     recibe el mismo recargo que un domingo, así que se trata como día de
     descanso obligatorio igual que domingo. Si no se pasa (o es None), el
     comportamiento es idéntico al de antes de este parámetro: solo domingo
-    cuenta como día de descanso."""
+    cuenta como día de descanso.
+
+    ``rates`` (opcional) permite sobreescribir los porcentajes legales por
+    concepto (ver SurchargeRates) — si se omite, o si un campo puntual queda
+    en None, se usan los defaults legales de siempre."""
     night_start = _night_start_for(day)
     is_night = segment_start >= night_start or segment_start < DAY_START
     is_sunday = day.weekday() == 6
     is_holiday = bool(holiday_dates) and day in holiday_dates
     is_rest_day = is_sunday or is_holiday
-    sunday_pct = _sunday_surcharge_pct(day) if is_rest_day else Decimal("0")
+
+    sunday_pct = Decimal("0")
+    if is_rest_day:
+        if rates and rates.sunday_holiday_pct is not None:
+            sunday_pct = rates.sunday_holiday_pct
+        else:
+            sunday_pct = _sunday_surcharge_pct(day)
+
+    night_ordinary_pct = rates.night_ordinary_pct if rates and rates.night_ordinary_pct is not None else Decimal("35")
+    day_extra_pct = rates.day_extra_pct if rates and rates.day_extra_pct is not None else Decimal("25")
+    night_extra_pct = rates.night_extra_pct if rates and rates.night_extra_pct is not None else Decimal("75")
 
     if is_rest_day and sunday_pct > 0:
         if is_extra:
-            pct = sunday_pct + (Decimal("75") if is_night else Decimal("25"))
+            pct = sunday_pct + (night_extra_pct if is_night else day_extra_pct)
             label = "Extra nocturna dominical" if is_night else "Extra diurna dominical"
         else:
-            pct = sunday_pct + (Decimal("35") if is_night else Decimal("0"))
+            pct = sunday_pct + (night_ordinary_pct if is_night else Decimal("0"))
             label = "Dominical nocturna ordinaria" if is_night else "Dominical diurna ordinaria"
         return label, pct, is_night
 
     if is_extra:
-        pct = Decimal("75") if is_night else Decimal("25")
+        pct = night_extra_pct if is_night else day_extra_pct
         label = "Extra nocturna" if is_night else "Extra diurna"
     else:
-        pct = Decimal("35") if is_night else Decimal("0")
+        pct = night_ordinary_pct if is_night else Decimal("0")
         label = "Ordinaria nocturna" if is_night else "Ordinaria diurna"
     return label, pct, is_night
 
 
 def classify_shift(
-    start_dt: datetime, end_dt: datetime, is_extra: bool = True, holiday_dates: frozenset[date] | None = None
+    start_dt: datetime,
+    end_dt: datetime,
+    is_extra: bool = True,
+    holiday_dates: frozenset[date] | None = None,
+    rates: SurchargeRates | None = None,
 ) -> list[dict]:
     """Divide un turno [start_dt, end_dt) en segmentos según los cortes de
     medianoche, 6 a.m. y el inicio nocturno vigente, clasifica cada uno y
@@ -109,6 +154,9 @@ def classify_shift(
     holiday_calendar.py / PublicHoliday. Si se omite, el comportamiento es
     exactamente el de antes de este parámetro (solo domingo cuenta como día
     de descanso obligatorio); los llamadores existentes no necesitan cambiar.
+
+    ``rates`` (opcional) — ver SurchargeRates. Si se omite, los porcentajes
+    son los defaults legales de siempre (cero regresión).
     """
     if end_dt <= start_dt:
         return []
@@ -127,7 +175,7 @@ def classify_shift(
         for seg_start, seg_end in zip(boundaries, boundaries[1:]):
             if seg_end <= seg_start:
                 continue
-            label, pct, is_night = _classify_segment(day, seg_start.time(), is_extra, holiday_dates)
+            label, pct, is_night = _classify_segment(day, seg_start.time(), is_extra, holiday_dates, rates)
             minutes = int((seg_end - seg_start).total_seconds() // 60)
             segments.append({"label": label, "surcharge_pct": pct, "minutes": minutes, "is_night": is_night})
         cursor = chunk_end
@@ -136,11 +184,15 @@ def classify_shift(
 
 
 def hours_breakdown(
-    start_dt: datetime, end_dt: datetime, is_extra: bool = True, holiday_dates: frozenset[date] | None = None
+    start_dt: datetime,
+    end_dt: datetime,
+    is_extra: bool = True,
+    holiday_dates: frozenset[date] | None = None,
+    rates: SurchargeRates | None = None,
 ) -> dict:
     """Total de horas diurnas y nocturnas de un turno (en horas decimales,
     ej. 2.5), más el total general — para columnas separadas del Excel."""
-    segments = classify_shift(start_dt, end_dt, is_extra=is_extra, holiday_dates=holiday_dates)
+    segments = classify_shift(start_dt, end_dt, is_extra=is_extra, holiday_dates=holiday_dates, rates=rates)
     day_minutes = sum(seg["minutes"] for seg in segments if not seg["is_night"])
     night_minutes = sum(seg["minutes"] for seg in segments if seg["is_night"])
     return {
@@ -151,11 +203,15 @@ def hours_breakdown(
 
 
 def summarize_shift(
-    start_dt: datetime, end_dt: datetime, is_extra: bool = True, holiday_dates: frozenset[date] | None = None
+    start_dt: datetime,
+    end_dt: datetime,
+    is_extra: bool = True,
+    holiday_dates: frozenset[date] | None = None,
+    rates: SurchargeRates | None = None,
 ) -> str:
     """Texto legible del desglose de un turno, ej.:
     'Extra diurna 125% (1h 30m); Extra nocturna 175% (1h)'."""
-    segments = classify_shift(start_dt, end_dt, is_extra=is_extra, holiday_dates=holiday_dates)
+    segments = classify_shift(start_dt, end_dt, is_extra=is_extra, holiday_dates=holiday_dates, rates=rates)
     if not segments:
         return "-"
 

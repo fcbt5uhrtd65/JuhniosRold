@@ -26,6 +26,7 @@ import {
   selectCls,
 } from './AdminUI';
 import {
+  applyWorkScheduleTemplate,
   approvePayrollPeriod,
   calculatePayrollPeriod,
   consolidateBiometricBatch,
@@ -34,8 +35,10 @@ import {
   createEmployeeBiometricId,
   createPayrollLegalParameter,
   createPayrollPeriod,
+  createWorkScheduleTemplate,
   deleteEmployeeBiometricId,
   generateYearHolidays,
+  getAttendanceIntelligenceSettings,
   getBiometricDevices,
   getBiometricImportBatches,
   getEmployeeBiometricIds,
@@ -44,11 +47,15 @@ import {
   getPayrollPeriods,
   getPendingCorrectionAttendance,
   getPublicHolidays,
+  getUnmatchedBiometricCodes,
+  getWorkScheduleTemplates,
   markPayrollPeriodPaid,
   setEmployeeWorkSchedule,
+  updateAttendanceIntelligenceSettings,
   updatePayrollLegalParameter,
   uploadBiometricFile,
   type Attendance,
+  type AttendanceIntelligenceSettings,
   type BiometricDevice,
   type BiometricImportBatch,
   type EmployeeBiometricId,
@@ -57,8 +64,11 @@ import {
   type PayrollPeriod,
   type PayrollPeriodStatus,
   type PublicHoliday,
+  type WorkScheduleTemplate,
+  type UnmatchedBiometricCode,
 } from '../../services/human-resources.service';
 import { getEmployees, type Employee } from '../../services/employees.service';
+import { isAbortError } from '../../services/api';
 
 type PayrollSection = 'periods' | 'schedules' | 'biometric' | 'holidays';
 
@@ -123,6 +133,13 @@ function useEmployeeDirectory() {
 function employeeName(employee: Employee | undefined): string {
   if (!employee) return 'Empleado desconocido';
   return `${employee.first_name} ${employee.last_name}`.trim() || employee.employee_code;
+}
+
+function describeApiError(error: unknown, fallback: string): string {
+  if (isAbortError(error)) {
+    return 'La operación está tardando más de lo esperado. Espera un momento y vuelve a intentarlo; si el archivo es muy grande, prueba dividirlo.';
+  }
+  return error instanceof Error ? error.message : fallback;
 }
 
 export function AdminPayroll() {
@@ -191,7 +208,7 @@ function PeriodsSection({ employeeById }: { employeeById: Map<string, Employee> 
       setSelectedPeriod(result.period);
     } catch (error) {
       console.error(error);
-      toast.error(error instanceof Error ? error.message : 'No se pudo calcular el período');
+      toast.error(describeApiError(error, 'No se pudo calcular el período'));
     } finally {
       setBusyAction(null);
     }
@@ -438,14 +455,21 @@ function NewPeriodModal({ open, onClose, onCreated }: { open: boolean; onClose: 
 function SchedulesSection({ employees, employeeById }: { employees: Employee[]; employeeById: Map<string, Employee> }) {
   const toast = useToast();
   const [schedules, setSchedules] = useState<EmployeeWorkSchedule[]>([]);
+  const [templates, setTemplates] = useState<WorkScheduleTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [applyingTemplate, setApplyingTemplate] = useState<WorkScheduleTemplate | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getEmployeeWorkSchedules({ is_active: true });
-      setSchedules(data);
+      const [schedulesRes, templatesRes] = await Promise.allSettled([
+        getEmployeeWorkSchedules({ is_active: true }),
+        getWorkScheduleTemplates(),
+      ]);
+      if (schedulesRes.status === 'fulfilled') setSchedules(schedulesRes.value);
+      if (templatesRes.status === 'fulfilled') setTemplates(templatesRes.value);
     } catch (error) {
       console.error(error);
       toast.error('No se pudieron cargar los horarios');
@@ -462,8 +486,43 @@ function SchedulesSection({ employees, employeeById }: { employees: Employee[]; 
 
   return (
     <div className="space-y-4">
+      <Card className="p-5">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <p className="text-sm font-semibold text-gray-900">Plantillas de horario</p>
+            <p className="text-[11px] text-gray-500">Crea un patrón una vez (ej. "Turno mañana 7:00-16:30") y aplícalo a varios empleados a la vez.</p>
+          </div>
+          <SecondaryButton onClick={() => setShowTemplateModal(true)} icon={<Plus size={13} />}>Nueva plantilla</SecondaryButton>
+        </div>
+        {templates.length === 0 ? (
+          <EmptyState title="Sin plantillas todavía" description="Crea una plantilla para asignar el mismo horario a varios empleados en un solo paso." />
+        ) : (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {templates.map((template) => (
+              <div key={template.id} className="border border-gray-100 rounded-xl p-3">
+                <p className="text-xs font-semibold text-gray-900 mb-1">{template.name}</p>
+                {template.description && <p className="text-[11px] text-gray-400 mb-2">{template.description}</p>}
+                <div className="space-y-0.5 mb-3">
+                  {template.days.map((day) => (
+                    <div key={day.id} className="flex items-center justify-between text-[11px] text-gray-600">
+                      <span>{WEEKDAY_LABELS[day.weekday]}</span>
+                      <span>{day.expected_start_time.slice(0, 5)} - {day.expected_end_time.slice(0, 5)}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="w-full">
+                  <SecondaryButton onClick={() => setApplyingTemplate(template)}>
+                    Aplicar a empleados
+                  </SecondaryButton>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
       <div className="flex justify-end">
-        <PrimaryButton onClick={() => setShowModal(true)} icon={<Plus size={14} />}>Asignar horario</PrimaryButton>
+        <PrimaryButton onClick={() => setShowModal(true)} icon={<Plus size={14} />}>Asignar horario individual</PrimaryButton>
       </div>
 
       {schedules.length === 0 ? (
@@ -500,6 +559,25 @@ function SchedulesSection({ employees, employeeById }: { employees: Employee[]; 
           await load();
         }}
       />
+      <NewTemplateModal
+        open={showTemplateModal}
+        onClose={() => setShowTemplateModal(false)}
+        onCreated={async () => {
+          setShowTemplateModal(false);
+          await load();
+        }}
+      />
+      {applyingTemplate && (
+        <ApplyTemplateModal
+          template={applyingTemplate}
+          employees={employees}
+          onClose={() => setApplyingTemplate(null)}
+          onApplied={async () => {
+            setApplyingTemplate(null);
+            await load();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -569,7 +647,7 @@ function NewScheduleModal({
       await onCreated();
     } catch (error) {
       console.error(error);
-      toast.error(error instanceof Error ? error.message : 'No se pudo asignar el horario');
+      toast.error(describeApiError(error, 'No se pudo asignar el horario'));
     } finally {
       setSaving(false);
     }
@@ -632,6 +710,202 @@ function NewScheduleModal({
   );
 }
 
+function NewTemplateModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => Promise<void> }) {
+  const toast = useToast();
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [days, setDays] = useState<ScheduleDayForm[]>(defaultWeekdayForm());
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setName('');
+      setDescription('');
+      setDays(defaultWeekdayForm());
+    }
+  }, [open]);
+
+  const updateDay = (weekday: number, patch: Partial<ScheduleDayForm>) => {
+    setDays((current) => current.map((d) => (d.weekday === weekday ? { ...d, ...patch } : d)));
+  };
+
+  const handleSubmit = async () => {
+    if (!name.trim()) {
+      toast.warning('Indica un nombre para la plantilla.');
+      return;
+    }
+    const activeDays = days.filter((d) => d.enabled);
+    if (activeDays.length === 0) {
+      toast.warning('Activa al menos un día de la semana.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await createWorkScheduleTemplate({
+        name: name.trim(),
+        description: description.trim(),
+        days: activeDays.map((d) => ({
+          weekday: d.weekday,
+          expected_start_time: d.expectedStart,
+          expected_end_time: d.expectedEnd,
+        })),
+      });
+      toast.success('Plantilla creada');
+      await onCreated();
+    } catch (error) {
+      console.error(error);
+      toast.error(describeApiError(error, 'No se pudo crear la plantilla'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title="Nueva plantilla de horario" open={open} onClose={onClose} wide>
+      <div className="space-y-4">
+        <div className="grid sm:grid-cols-2 gap-3">
+          <label className="block">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Nombre</span>
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ej: Turno mañana 7:00-16:30" className={inputCls} />
+          </label>
+          <label className="block">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Descripción (opcional)</span>
+            <input value={description} onChange={(e) => setDescription(e.target.value)} className={inputCls} />
+          </label>
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Franjas por día</p>
+          {days.map((day) => (
+            <div key={day.weekday} className="flex items-center gap-3 border border-gray-100 rounded-lg p-2.5">
+              <label className="flex items-center gap-2 w-28 text-xs text-gray-700">
+                <input type="checkbox" checked={day.enabled} onChange={(e) => updateDay(day.weekday, { enabled: e.target.checked })} />
+                {WEEKDAY_LABELS[day.weekday]}
+              </label>
+              <input
+                type="time"
+                value={day.expectedStart}
+                disabled={!day.enabled}
+                onChange={(e) => updateDay(day.weekday, { expectedStart: e.target.value })}
+                className={`${inputCls} disabled:opacity-40`}
+              />
+              <span className="text-xs text-gray-400">a</span>
+              <input
+                type="time"
+                value={day.expectedEnd}
+                disabled={!day.enabled}
+                onChange={(e) => updateDay(day.weekday, { expectedEnd: e.target.value })}
+                className={`${inputCls} disabled:opacity-40`}
+              />
+            </div>
+          ))}
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2">
+          <SecondaryButton onClick={onClose}>Cancelar</SecondaryButton>
+          <PrimaryButton onClick={() => void handleSubmit()} disabled={saving}>
+            {saving ? 'Guardando...' : 'Crear plantilla'}
+          </PrimaryButton>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function ApplyTemplateModal({
+  template,
+  employees,
+  onClose,
+  onApplied,
+}: {
+  template: WorkScheduleTemplate;
+  employees: Employee[];
+  onClose: () => void;
+  onApplied: () => Promise<void>;
+}) {
+  const toast = useToast();
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [startDate, setStartDate] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const toggleEmployee = (id: string) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleSubmit = async () => {
+    if (selectedIds.size === 0) {
+      toast.warning('Selecciona al menos un empleado.');
+      return;
+    }
+    if (!startDate) {
+      toast.warning('Indica la fecha de inicio.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const result = await applyWorkScheduleTemplate(template.id, {
+        employee_ids: Array.from(selectedIds),
+        start_date: startDate,
+      });
+      if (result.errors.length > 0) {
+        toast.warning(`Aplicado a ${result.applied} empleado(s), con ${result.errors.length} error(es).`);
+      } else {
+        toast.success(`Horario aplicado a ${result.applied} empleado(s).`);
+      }
+      await onApplied();
+    } catch (error) {
+      console.error(error);
+      toast.error(describeApiError(error, 'No se pudo aplicar la plantilla'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title={`Aplicar "${template.name}" a empleados`} open onClose={onClose} wide>
+      <div className="space-y-4">
+        <label className="block">
+          <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Vigente desde</span>
+          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inputCls} />
+        </label>
+
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500">Empleados ({selectedIds.size} seleccionados)</span>
+            <button
+              type="button"
+              onClick={() => setSelectedIds(selectedIds.size === employees.length ? new Set() : new Set(employees.map((e) => e.id)))}
+              className="text-[11px] text-[#2a4038] font-semibold hover:underline"
+            >
+              {selectedIds.size === employees.length ? 'Deseleccionar todos' : 'Seleccionar todos'}
+            </button>
+          </div>
+          <div className="max-h-64 overflow-y-auto border border-gray-100 rounded-lg divide-y divide-gray-50">
+            {employees.map((employee) => (
+              <label key={employee.id} className="flex items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 cursor-pointer">
+                <input type="checkbox" checked={selectedIds.has(employee.id)} onChange={() => toggleEmployee(employee.id)} />
+                {employeeName(employee)}
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2">
+          <SecondaryButton onClick={onClose}>Cancelar</SecondaryButton>
+          <PrimaryButton onClick={() => void handleSubmit()} disabled={saving}>
+            {saving ? 'Aplicando...' : 'Aplicar a empleados'}
+          </PrimaryButton>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 /* ───────────────────────── Biométrico ───────────────────────── */
 
 function BiometricSection({ employees, employeeById }: { employees: Employee[]; employeeById: Map<string, Employee> }) {
@@ -640,10 +914,14 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
   const [mappings, setMappings] = useState<EmployeeBiometricId[]>([]);
   const [batches, setBatches] = useState<BiometricImportBatch[]>([]);
   const [pending, setPending] = useState<Attendance[]>([]);
+  const [unmatchedCodes, setUnmatchedCodes] = useState<UnmatchedBiometricCode[]>([]);
+  const [intelligenceSettings, setIntelligenceSettings] = useState<AttendanceIntelligenceSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [showMappingModal, setShowMappingModal] = useState(false);
+  const [mappingInitialCode, setMappingInitialCode] = useState<string | undefined>(undefined);
   const [showDeviceModal, setShowDeviceModal] = useState(false);
   const [showCorrectionModal, setShowCorrectionModal] = useState<Attendance | null>(null);
+  const [showIntelligenceModal, setShowIntelligenceModal] = useState(false);
   const [uploadingDevice, setUploadingDevice] = useState('');
   const [uploading, setUploading] = useState(false);
   const [consolidatingId, setConsolidatingId] = useState<string | null>(null);
@@ -651,16 +929,20 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [devicesRes, mappingsRes, batchesRes, pendingRes] = await Promise.allSettled([
+      const [devicesRes, mappingsRes, batchesRes, pendingRes, unmatchedRes, intelligenceRes] = await Promise.allSettled([
         getBiometricDevices(),
         getEmployeeBiometricIds(),
         getBiometricImportBatches(),
         getPendingCorrectionAttendance(),
+        getUnmatchedBiometricCodes(),
+        getAttendanceIntelligenceSettings(),
       ]);
       if (devicesRes.status === 'fulfilled') setDevices(devicesRes.value);
       if (mappingsRes.status === 'fulfilled') setMappings(mappingsRes.value);
       if (batchesRes.status === 'fulfilled') setBatches(batchesRes.value);
       if (pendingRes.status === 'fulfilled') setPending(pendingRes.value);
+      if (unmatchedRes.status === 'fulfilled') setUnmatchedCodes(unmatchedRes.value);
+      if (intelligenceRes.status === 'fulfilled') setIntelligenceSettings(intelligenceRes.value);
     } catch (error) {
       console.error(error);
       toast.error('No se pudo cargar la información biométrica');
@@ -681,7 +963,7 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
       await load();
     } catch (error) {
       console.error(error);
-      toast.error(error instanceof Error ? error.message : 'No se pudo importar el archivo');
+      toast.error(describeApiError(error, 'No se pudo importar el archivo'));
     } finally {
       setUploading(false);
     }
@@ -695,7 +977,7 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
       await load();
     } catch (error) {
       console.error(error);
-      toast.error(error instanceof Error ? error.message : 'No se pudo consolidar la importación');
+      toast.error(describeApiError(error, 'No se pudo consolidar la importación'));
     } finally {
       setConsolidatingId(null);
     }
@@ -716,6 +998,19 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
 
   return (
     <div className="space-y-4">
+      <Card className="p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-gray-900">Inteligencia de marcaciones</p>
+            <p className="text-[11px] text-gray-500 mt-0.5">
+              Marcaciones separadas por menos de <strong>{intelligenceSettings?.duplicate_punch_window_minutes ?? 15} min</strong> se tratan como el mismo evento repetido por error.
+              Con 1 sola marcación en el día, se compara contra el horario esperado del empleado (tolerancia de <strong>{intelligenceSettings?.schedule_proximity_minutes ?? 120} min</strong>) para decidir si fue entrada o salida.
+            </p>
+          </div>
+          <SecondaryButton onClick={() => setShowIntelligenceModal(true)}>Ajustar</SecondaryButton>
+        </div>
+      </Card>
+
       <Card className="p-5">
         <div className="flex items-center justify-between mb-3">
           <p className="text-sm font-semibold text-gray-900">Importar archivo del reloj biométrico</p>
@@ -776,10 +1071,53 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
         )}
       </Card>
 
+      {unmatchedCodes.length > 0 && (
+        <Card className="p-5 border-amber-200 bg-amber-50/40">
+          <div className="mb-3">
+            <p className="text-sm font-semibold text-gray-900">Códigos sin mapear</p>
+            <p className="text-[11px] text-gray-500">Estos códigos llegaron en archivos importados pero no están asociados a ningún empleado. Asígnalos para que sus marcaciones cuenten en la asistencia.</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left text-[10px] uppercase text-gray-400 border-b border-amber-200">
+                  <th className="py-2 pr-3">Código del reloj</th>
+                  <th className="py-2 pr-3">Veces visto</th>
+                  <th className="py-2 pr-3">Última marcación</th>
+                  <th className="py-2 pr-3">Dispositivo</th>
+                  <th className="py-2 pr-3" />
+                </tr>
+              </thead>
+              <tbody>
+                {unmatchedCodes.map((entry) => (
+                  <tr key={entry.biometric_code} className="border-b border-amber-100">
+                    <td className="py-2 pr-3 font-mono font-semibold">{entry.biometric_code}</td>
+                    <td className="py-2 pr-3">{entry.occurrences}</td>
+                    <td className="py-2 pr-3 text-gray-500">{formatDateTime(entry.last_seen)}</td>
+                    <td className="py-2 pr-3 text-gray-500">{entry.device_name || 'Sin especificar'}</td>
+                    <td className="py-2 pr-3 text-right">
+                      <button
+                        onClick={() => {
+                          setMappingInitialCode(entry.biometric_code);
+                          setShowMappingModal(true);
+                        }}
+                        className="text-[#2a4038] font-semibold hover:underline"
+                      >
+                        Asignar empleado
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
       <Card className="p-5">
         <div className="flex items-center justify-between mb-3">
           <p className="text-sm font-semibold text-gray-900">Mapeo de códigos del reloj a empleados</p>
-          <SecondaryButton onClick={() => setShowMappingModal(true)} icon={<Plus size={13} />}>Nuevo mapeo</SecondaryButton>
+          <SecondaryButton onClick={() => { setMappingInitialCode(undefined); setShowMappingModal(true); }} icon={<Plus size={13} />}>Nuevo mapeo</SecondaryButton>
         </div>
         {mappings.length === 0 ? (
           <EmptyState title="Sin mapeos registrados" description="Sin mapeo, las marcaciones del reloj no se pueden asociar a un empleado." />
@@ -838,6 +1176,7 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
         open={showMappingModal}
         employees={employees}
         devices={devices}
+        initialCode={mappingInitialCode}
         onClose={() => setShowMappingModal(false)}
         onCreated={async () => {
           setShowMappingModal(false);
@@ -863,7 +1202,85 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
           }}
         />
       )}
+      <AttendanceIntelligenceModal
+        open={showIntelligenceModal}
+        settings={intelligenceSettings}
+        onClose={() => setShowIntelligenceModal(false)}
+        onSaved={async () => {
+          setShowIntelligenceModal(false);
+          await load();
+        }}
+      />
     </div>
+  );
+}
+
+function AttendanceIntelligenceModal({
+  open,
+  settings,
+  onClose,
+  onSaved,
+}: {
+  open: boolean;
+  settings: AttendanceIntelligenceSettings | null;
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  const toast = useToast();
+  const [duplicateWindow, setDuplicateWindow] = useState('15');
+  const [proximityWindow, setProximityWindow] = useState('120');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setDuplicateWindow(String(settings?.duplicate_punch_window_minutes ?? 15));
+    setProximityWindow(String(settings?.schedule_proximity_minutes ?? 120));
+  }, [open, settings]);
+
+  const handleSubmit = async () => {
+    const duplicateMinutes = Number(duplicateWindow);
+    const proximityMinutes = Number(proximityWindow);
+    if (!duplicateMinutes || duplicateMinutes <= 0 || !proximityMinutes || proximityMinutes <= 0) {
+      toast.warning('Ambos valores deben ser números mayores a cero.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await updateAttendanceIntelligenceSettings({
+        duplicate_punch_window_minutes: duplicateMinutes,
+        schedule_proximity_minutes: proximityMinutes,
+      });
+      toast.success('Configuración guardada');
+      await onSaved();
+    } catch (error) {
+      console.error(error);
+      toast.error(describeApiError(error, 'No se pudo guardar la configuración'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title="Inteligencia de marcaciones" open={open} onClose={onClose}>
+      <div className="space-y-4">
+        <label className="block">
+          <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Ventana de duplicado (minutos)</span>
+          <input type="number" min={1} value={duplicateWindow} onChange={(e) => setDuplicateWindow(e.target.value)} className={inputCls} />
+          <p className="text-[11px] text-gray-400 mt-1">Si un empleado marca dos veces con menos de esta diferencia, se asume que la segunda fue por error (creyó que no había marcado) y se descarta.</p>
+        </label>
+        <label className="block">
+          <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Tolerancia al horario esperado (minutos)</span>
+          <input type="number" min={1} value={proximityWindow} onChange={(e) => setProximityWindow(e.target.value)} className={inputCls} />
+          <p className="text-[11px] text-gray-400 mt-1">Al interpretar un día con marcaciones incompletas, se usa esta cercanía a la hora de entrada/salida esperada del empleado para decidir qué marcación es cuál.</p>
+        </label>
+        <div className="flex justify-end gap-2">
+          <SecondaryButton onClick={onClose}>Cancelar</SecondaryButton>
+          <PrimaryButton onClick={() => void handleSubmit()} disabled={saving}>
+            {saving ? 'Guardando...' : 'Guardar'}
+          </PrimaryButton>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -871,12 +1288,14 @@ function NewBiometricMappingModal({
   open,
   employees,
   devices,
+  initialCode,
   onClose,
   onCreated,
 }: {
   open: boolean;
   employees: Employee[];
   devices: BiometricDevice[];
+  initialCode?: string;
   onClose: () => void;
   onCreated: () => Promise<void>;
 }) {
@@ -890,9 +1309,9 @@ function NewBiometricMappingModal({
     if (open) {
       setEmployeeId('');
       setDeviceId('');
-      setBiometricCode('');
+      setBiometricCode(initialCode ?? '');
     }
-  }, [open]);
+  }, [open, initialCode]);
 
   const handleSubmit = async () => {
     if (!employeeId || !biometricCode.trim()) {
@@ -1188,6 +1607,10 @@ function HolidaysSection() {
             <ParamField label="Salud (empleado)" value={`${currentParameter.health_employee_pct}%`} />
             <ParamField label="Pensión (empleado)" value={`${currentParameter.pension_employee_pct}%`} />
             <ParamField label="Divisor de horas mensual" value={currentParameter.monthly_hours_divisor_default} />
+            <ParamField label="Recargo ordinaria nocturna" value={currentParameter.night_ordinary_surcharge_pct ? `${currentParameter.night_ordinary_surcharge_pct}%` : '35% (default)'} />
+            <ParamField label="Recargo extra diurna" value={currentParameter.day_extra_surcharge_pct ? `${currentParameter.day_extra_surcharge_pct}%` : '25% (default)'} />
+            <ParamField label="Recargo extra nocturna" value={currentParameter.night_extra_surcharge_pct ? `${currentParameter.night_extra_surcharge_pct}%` : '75% (default)'} />
+            <ParamField label="Recargo dominical/festivo" value={currentParameter.sunday_holiday_surcharge_pct ? `${currentParameter.sunday_holiday_surcharge_pct}%` : 'Escalonado por fecha (default)'} />
           </div>
         )}
       </Card>
@@ -1235,6 +1658,10 @@ function LegalParameterModal({
   const [healthPct, setHealthPct] = useState('4');
   const [pensionPct, setPensionPct] = useState('4');
   const [monthlyDivisor, setMonthlyDivisor] = useState('230');
+  const [nightOrdinaryPct, setNightOrdinaryPct] = useState('');
+  const [dayExtraPct, setDayExtraPct] = useState('');
+  const [nightExtraPct, setNightExtraPct] = useState('');
+  const [sundayHolidayPct, setSundayHolidayPct] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -1245,6 +1672,10 @@ function LegalParameterModal({
     setHealthPct(existing?.health_employee_pct ?? '4');
     setPensionPct(existing?.pension_employee_pct ?? '4');
     setMonthlyDivisor(existing?.monthly_hours_divisor_default ?? '230');
+    setNightOrdinaryPct(existing?.night_ordinary_surcharge_pct ?? '');
+    setDayExtraPct(existing?.day_extra_surcharge_pct ?? '');
+    setNightExtraPct(existing?.night_extra_surcharge_pct ?? '');
+    setSundayHolidayPct(existing?.sunday_holiday_surcharge_pct ?? '');
   }, [open, existing]);
 
   const handleSubmit = async () => {
@@ -1254,6 +1685,12 @@ function LegalParameterModal({
     }
     setSaving(true);
     try {
+      const surchargeFields = {
+        night_ordinary_surcharge_pct: nightOrdinaryPct === '' ? null : nightOrdinaryPct,
+        day_extra_surcharge_pct: dayExtraPct === '' ? null : dayExtraPct,
+        night_extra_surcharge_pct: nightExtraPct === '' ? null : nightExtraPct,
+        sunday_holiday_surcharge_pct: sundayHolidayPct === '' ? null : sundayHolidayPct,
+      };
       if (existing) {
         await updatePayrollLegalParameter(existing.id, {
           minimum_wage: minimumWage,
@@ -1262,6 +1699,7 @@ function LegalParameterModal({
           health_employee_pct: healthPct,
           pension_employee_pct: pensionPct,
           monthly_hours_divisor_default: monthlyDivisor,
+          ...surchargeFields,
         });
       } else {
         await createPayrollLegalParameter({
@@ -1272,6 +1710,7 @@ function LegalParameterModal({
           health_employee_pct: healthPct,
           pension_employee_pct: pensionPct,
           monthly_hours_divisor_default: monthlyDivisor,
+          ...surchargeFields,
         });
       }
       toast.success('Parámetros guardados');
@@ -1315,6 +1754,30 @@ function LegalParameterModal({
           <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Divisor de horas mensual</span>
           <input type="number" value={monthlyDivisor} onChange={(e) => setMonthlyDivisor(e.target.value)} className={inputCls} />
         </label>
+
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Recargos de horas (%)</p>
+          <p className="text-[11px] text-gray-400 mb-2">Déjalos vacíos para usar la regla legal vigente por fecha (incluye el recargo dominical escalonado 90% desde jul-2026 y 100% desde jul-2027). Solo edítalos si necesitas fijar un valor distinto para este año específico.</p>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <label className="block">
+              <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Ordinaria nocturna</span>
+              <input type="number" step="0.1" placeholder="35 (default)" value={nightOrdinaryPct} onChange={(e) => setNightOrdinaryPct(e.target.value)} className={inputCls} />
+            </label>
+            <label className="block">
+              <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Extra diurna</span>
+              <input type="number" step="0.1" placeholder="25 (default)" value={dayExtraPct} onChange={(e) => setDayExtraPct(e.target.value)} className={inputCls} />
+            </label>
+            <label className="block">
+              <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Extra nocturna</span>
+              <input type="number" step="0.1" placeholder="75 (default)" value={nightExtraPct} onChange={(e) => setNightExtraPct(e.target.value)} className={inputCls} />
+            </label>
+            <label className="block">
+              <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Dominical/festivo</span>
+              <input type="number" step="0.1" placeholder="Escalonado por fecha" value={sundayHolidayPct} onChange={(e) => setSundayHolidayPct(e.target.value)} className={inputCls} />
+            </label>
+          </div>
+        </div>
+
         <div className="flex justify-end gap-2">
           <SecondaryButton onClick={onClose}>Cancelar</SecondaryButton>
           <PrimaryButton onClick={() => void handleSubmit()} disabled={saving}>

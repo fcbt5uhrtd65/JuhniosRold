@@ -3,7 +3,7 @@
 // Wraps attendance, request, payroll, document and notification APIs.
 // ============================================================
 
-import { api, API_BASE_URL, getAccessToken } from './api';
+import { api, API_BASE_URL, getAccessToken, LONG_REQUEST_TIMEOUT_MS } from './api';
 
 const HR_PATH = '/hr';
 const ATTENDANCE_PATH = `${HR_PATH}/attendance/`;
@@ -15,9 +15,11 @@ const PAYROLL_PERIODS_PATH = `${HR_PATH}/payroll-periods/`;
 const PAYROLL_LEGAL_PARAMETERS_PATH = `${HR_PATH}/payroll-legal-parameters/`;
 const HOLIDAYS_PATH = `${HR_PATH}/holidays/`;
 const WORK_SCHEDULES_PATH = `${HR_PATH}/work-schedules/`;
+const WORK_SCHEDULE_TEMPLATES_PATH = `${HR_PATH}/work-schedule-templates/`;
 const BIOMETRIC_DEVICES_PATH = `${HR_PATH}/biometric-devices/`;
 const BIOMETRIC_IDS_PATH = `${HR_PATH}/biometric-ids/`;
 const BIOMETRIC_IMPORTS_PATH = `${HR_PATH}/biometric-imports/`;
+const ATTENDANCE_INTELLIGENCE_SETTINGS_PATH = `${HR_PATH}/attendance-intelligence-settings/`;
 const PERFORMANCE_REVIEWS_PATH = `${HR_PATH}/performance-reviews/`;
 const DOCUMENTS_PATH = `${HR_PATH}/documents/`;
 const NOTIFICATIONS_PATH = `${HR_PATH}/notifications/`;
@@ -372,6 +374,10 @@ export interface PayrollLegalParameter {
   health_employee_pct: string;
   pension_employee_pct: string;
   monthly_hours_divisor_default: string;
+  night_ordinary_surcharge_pct: string | null;
+  day_extra_surcharge_pct: string | null;
+  night_extra_surcharge_pct: string | null;
+  sunday_holiday_surcharge_pct: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -410,6 +416,28 @@ export interface EmployeeWorkSchedule {
   notes: string;
   created_by: string | null;
   days: EmployeeWorkScheduleDay[];
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface WorkScheduleTemplateDay {
+  id: string;
+  template: string;
+  weekday: number;
+  slot: number;
+  expected_start_time: string;
+  expected_end_time: string;
+  is_working_day: boolean;
+}
+
+export interface WorkScheduleTemplate {
+  id: string;
+  name: string;
+  description: string;
+  is_active: boolean;
+  created_by: string | null;
+  days: WorkScheduleTemplateDay[];
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -1051,7 +1079,7 @@ export async function calculatePayrollPeriod(id: string): Promise<{
     period: PayrollPeriod;
     calculated: number;
     errors: Array<{ employee_id: string; employee: string; error: string }>;
-  }>(`${PAYROLL_PERIODS_PATH}${id}/calculate/`, {});
+  }>(`${PAYROLL_PERIODS_PATH}${id}/calculate/`, {}, LONG_REQUEST_TIMEOUT_MS);
   if (res.data) return res.data;
   throw new Error(res.message);
 }
@@ -1084,6 +1112,10 @@ export async function createPayrollLegalParameter(payload: {
   health_employee_pct?: number | string;
   pension_employee_pct?: number | string;
   monthly_hours_divisor_default?: number | string;
+  night_ordinary_surcharge_pct?: number | string | null;
+  day_extra_surcharge_pct?: number | string | null;
+  night_extra_surcharge_pct?: number | string | null;
+  sunday_holiday_surcharge_pct?: number | string | null;
 }): Promise<PayrollLegalParameter> {
   const res = await api.post<PayrollLegalParameter>(PAYROLL_LEGAL_PARAMETERS_PATH, payload);
   if (res.data) return res.data;
@@ -1099,6 +1131,10 @@ export async function updatePayrollLegalParameter(
     health_employee_pct: number | string;
     pension_employee_pct: number | string;
     monthly_hours_divisor_default: number | string;
+    night_ordinary_surcharge_pct: number | string | null;
+    day_extra_surcharge_pct: number | string | null;
+    night_extra_surcharge_pct: number | string | null;
+    sunday_holiday_surcharge_pct: number | string | null;
   }>,
 ): Promise<PayrollLegalParameter> {
   const res = await api.patch<PayrollLegalParameter>(`${PAYROLL_LEGAL_PARAMETERS_PATH}${id}/`, payload);
@@ -1148,7 +1184,53 @@ export async function setEmployeeWorkSchedule(payload: {
     is_working_day?: boolean;
   }>;
 }): Promise<EmployeeWorkSchedule> {
-  const res = await api.post<EmployeeWorkSchedule>(`${WORK_SCHEDULES_PATH}set-for-employee/`, payload);
+  const res = await api.post<EmployeeWorkSchedule>(`${WORK_SCHEDULES_PATH}set-for-employee/`, payload, LONG_REQUEST_TIMEOUT_MS);
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
+// ---- Work schedule templates ----
+type ScheduleDayPayload = Array<{
+  weekday: number;
+  slot?: number;
+  expected_start_time: string;
+  expected_end_time: string;
+  is_working_day?: boolean;
+}>;
+
+export async function getWorkScheduleTemplates(): Promise<WorkScheduleTemplate[]> {
+  const res = await api.get<WorkScheduleTemplate[] | PaginatedResponse<WorkScheduleTemplate>>(WORK_SCHEDULE_TEMPLATES_PATH);
+  return normalizeListResponse(res.data).data;
+}
+
+export async function createWorkScheduleTemplate(payload: {
+  name: string;
+  description?: string;
+  days: ScheduleDayPayload;
+}): Promise<WorkScheduleTemplate> {
+  const res = await api.post<WorkScheduleTemplate>(WORK_SCHEDULE_TEMPLATES_PATH, payload);
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
+export async function updateWorkScheduleTemplate(
+  id: string,
+  payload: Partial<{ name: string; description: string; days: ScheduleDayPayload }>,
+): Promise<WorkScheduleTemplate> {
+  const res = await api.patch<WorkScheduleTemplate>(`${WORK_SCHEDULE_TEMPLATES_PATH}${id}/`, payload);
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
+export async function applyWorkScheduleTemplate(
+  templateId: string,
+  payload: { employee_ids: string[]; start_date: string; notes?: string },
+): Promise<{ applied: number; errors: Array<{ employee_id: string; employee: string; error: string }> }> {
+  const res = await api.post<{ applied: number; errors: Array<{ employee_id: string; employee: string; error: string }> }>(
+    `${WORK_SCHEDULE_TEMPLATES_PATH}${templateId}/apply/`,
+    payload,
+    LONG_REQUEST_TIMEOUT_MS,
+  );
   if (res.data) return res.data;
   throw new Error(res.message);
 }
@@ -1195,7 +1277,7 @@ export async function uploadBiometricFile(file: File, deviceId?: string): Promis
   const formData = new FormData();
   formData.append('file', file);
   if (deviceId) formData.append('device', deviceId);
-  const res = await api.post<BiometricImportBatch>(`${BIOMETRIC_IMPORTS_PATH}upload/`, formData);
+  const res = await api.post<BiometricImportBatch>(`${BIOMETRIC_IMPORTS_PATH}upload/`, formData, LONG_REQUEST_TIMEOUT_MS);
   if (res.data) return res.data;
   throw new Error(res.message);
 }
@@ -1203,6 +1285,44 @@ export async function uploadBiometricFile(file: File, deviceId?: string): Promis
 export async function getUnmatchedPunches(batchId: string): Promise<RawBiometricPunch[]> {
   const res = await api.get<RawBiometricPunch[]>(`${BIOMETRIC_IMPORTS_PATH}${batchId}/unmatched/`);
   return res.data ?? [];
+}
+
+export interface UnmatchedBiometricCode {
+  biometric_code: string;
+  occurrences: number;
+  last_seen: string;
+  device: string | null;
+  device_name: string | null;
+}
+
+export async function getUnmatchedBiometricCodes(): Promise<UnmatchedBiometricCode[]> {
+  const res = await api.get<UnmatchedBiometricCode[]>(`${BIOMETRIC_IMPORTS_PATH}unmatched-codes/`);
+  return res.data ?? [];
+}
+
+// ---- Attendance intelligence settings ----
+export interface AttendanceIntelligenceSettings {
+  id: string;
+  duplicate_punch_window_minutes: number;
+  schedule_proximity_minutes: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getAttendanceIntelligenceSettings(): Promise<AttendanceIntelligenceSettings> {
+  const res = await api.get<AttendanceIntelligenceSettings>(`${ATTENDANCE_INTELLIGENCE_SETTINGS_PATH}current/`);
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
+export async function updateAttendanceIntelligenceSettings(payload: {
+  duplicate_punch_window_minutes?: number;
+  schedule_proximity_minutes?: number;
+}): Promise<AttendanceIntelligenceSettings> {
+  const res = await api.post<AttendanceIntelligenceSettings>(`${ATTENDANCE_INTELLIGENCE_SETTINGS_PATH}current/`, payload);
+  if (res.data) return res.data;
+  throw new Error(res.message);
 }
 
 export async function consolidateBiometricBatch(batchId: string): Promise<{
@@ -1214,6 +1334,7 @@ export async function consolidateBiometricBatch(batchId: string): Promise<{
   const res = await api.post<{ created: number; updated: number; skipped_corrected: number; incomplete: number }>(
     `${BIOMETRIC_IMPORTS_PATH}${batchId}/consolidate/`,
     {},
+    LONG_REQUEST_TIMEOUT_MS,
   );
   if (res.data) return res.data;
   throw new Error(res.message);
