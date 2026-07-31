@@ -445,6 +445,7 @@ class RawMaterialIdentificationPrint(BaseModel):
     printed_at = models.DateTimeField(auto_now_add=True)
     is_reprint = models.BooleanField(default=False)
     reprint_reason = models.CharField(max_length=255, blank=True)
+    label_photo = evidence_field("manufacturing/dispensing/label-photo/")
     signatures = GenericRelation(Signature)
 
     class Meta(BaseModel.Meta):
@@ -653,11 +654,33 @@ class LineIdentification(BaseModel):
 # ── Control de producción (materiales de acondicionamiento) ────────────────────
 
 class ProductionControl(BaseModel):
+    """Control de producción de materiales de acondicionamiento — vive en la
+    fase de Acondicionamiento (no Fabricación): requiere la conformidad de
+    Bodega (entrega de materiales), un responsable designado, Calidad y el
+    líder de área, cada uno con su propia firma independiente."""
+
     batch = models.OneToOneField(Batch, on_delete=models.CASCADE, related_name="production_control")
     lot_size = models.DecimalField(max_digits=14, decimal_places=3, null=True, blank=True)
     unit = models.ForeignKey("inventory.UnitOfMeasure", on_delete=models.SET_NULL, null=True, blank=True)
     notes = models.TextField(blank=True)
     signatures = GenericRelation(Signature)
+
+    warehouse_signature = signature_field("manufacturing/production-control/signatures/")
+    warehouse_signed_by = models.ForeignKey(
+        "employees.Employee", on_delete=models.SET_NULL, null=True, blank=True, related_name="production_controls_warehouse_signed"
+    )
+    responsible_signature = signature_field("manufacturing/production-control/signatures/")
+    responsible_signed_by = models.ForeignKey(
+        "employees.Employee", on_delete=models.SET_NULL, null=True, blank=True, related_name="production_controls_responsible_signed"
+    )
+    quality_signature = signature_field("manufacturing/production-control/signatures/")
+    quality_signed_by = models.ForeignKey(
+        "employees.Employee", on_delete=models.SET_NULL, null=True, blank=True, related_name="production_controls_quality_signed"
+    )
+    leader_signature = signature_field("manufacturing/production-control/signatures/")
+    leader_signed_by = models.ForeignKey(
+        "employees.Employee", on_delete=models.SET_NULL, null=True, blank=True, related_name="production_controls_leader_signed"
+    )
 
     class Meta(BaseModel.Meta):
         ordering = ("-created_at",)
@@ -842,6 +865,7 @@ class SealIntegrityControl(BaseModel):
         REJECTED = "REJECTED", "Rechazado"
         REPEAT = "REPEAT", "Repetir ensayo"
         PENDING = "PENDING", "Pendiente"
+        NOT_APPLICABLE = "NOT_APPLICABLE", "No aplica"
 
     batch = models.OneToOneField(Batch, on_delete=models.CASCADE, related_name="seal_integrity_control")
     tested_at = models.DateTimeField(null=True, blank=True)
