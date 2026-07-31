@@ -3,10 +3,17 @@ from rest_framework.routers import DefaultRouter
 
 from .views import (
     AttendanceViewSet,
+    BiometricDeviceViewSet,
+    BiometricImportBatchViewSet,
+    EmployeeBiometricIdViewSet,
     EmployeeDocumentViewSet,
+    EmployeeWorkScheduleViewSet,
     HRNotificationViewSet,
+    PayrollLegalParameterViewSet,
+    PayrollPeriodViewSet,
     PayrollViewSet,
     PerformanceReviewViewSet,
+    PublicHolidayViewSet,
     VacationRequestAttachmentViewSet,
     VacationRequestPdfView,
     VacationRequestViewSet,
@@ -21,6 +28,13 @@ router.register("payroll", PayrollViewSet)
 router.register("performance-reviews", PerformanceReviewViewSet)
 router.register("documents", EmployeeDocumentViewSet)
 router.register("notifications", HRNotificationViewSet)
+router.register("holidays", PublicHolidayViewSet)
+router.register("payroll-legal-parameters", PayrollLegalParameterViewSet)
+router.register("payroll-periods", PayrollPeriodViewSet)
+router.register("work-schedules", EmployeeWorkScheduleViewSet)
+router.register("biometric-devices", BiometricDeviceViewSet)
+router.register("biometric-ids", EmployeeBiometricIdViewSet)
+router.register("biometric-imports", BiometricImportBatchViewSet)
 
 urlpatterns = [
     path("requests/<uuid:pk>/pdf/", VacationRequestPdfView.as_view(), name="vacation-request-pdf"),

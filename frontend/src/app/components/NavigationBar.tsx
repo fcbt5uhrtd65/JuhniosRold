@@ -139,19 +139,19 @@ export function NavigationBar({ onLoginClick, variant = 'solid' }: NavigationBar
         className={isTransparent
           ? 'absolute left-0 right-0 z-40 transition-all duration-300'
           : 'fixed left-3 right-3 md:left-5 md:right-5 lg:left-7 lg:right-7 z-40'}
-        style={{ top: isTransparent ? '16px' : '14px' }}
+        style={{ top: isTransparent ? '10px' : '10px' }}
       >
         <div className={
           isTransparent
-            ? `mx-4 md:mx-6 lg:mx-8 px-5 md:px-7 rounded-[16px] transition-all duration-400 bg-white/90 backdrop-blur-md border border-white/40 ${
+            ? `mx-2.5 sm:mx-4 md:mx-6 lg:mx-8 px-3 sm:px-4 md:px-7 rounded-[14px] sm:rounded-[16px] transition-all duration-400 bg-white/92 backdrop-blur-md border border-white/50 ${
                 scrolled ? 'shadow-[0_4px_24px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.06)]'
               }`
             : `bg-white rounded-[20px] transition-shadow duration-300 ${
                 scrolled ? 'shadow-[0_4px_24px_rgba(0,0,0,0.10)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.06)]'
               }`
         }>
-          <div className={isTransparent ? '' : 'px-5 md:px-7 lg:px-9'}>
-            <div className={`flex items-center justify-between gap-4 ${isTransparent ? 'h-[62px]' : 'h-[68px]'}`}>
+          <div className={isTransparent ? '' : 'px-3 sm:px-5 md:px-7 lg:px-9'}>
+            <div className={`flex items-center justify-between gap-2 sm:gap-4 ${isTransparent ? 'h-[54px] sm:h-[62px]' : 'h-[56px] sm:h-[68px]'}`}>
 
               {/* LOGO */}
               <a
@@ -161,12 +161,12 @@ export function NavigationBar({ onLoginClick, variant = 'solid' }: NavigationBar
                   if (window.location.pathname !== '/') { navigateTo('/'); return; }
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
-                className="flex-shrink-0 flex items-center gap-2 cursor-pointer group"
+                className="min-w-0 flex-shrink-0 flex items-center gap-2 cursor-pointer group"
               >
                 <img
                   src={logoImg}
                   alt="Juhnios Rold"
-                  className="h-9 md:h-10 w-auto object-contain opacity-90 group-hover:opacity-100 transition-opacity"
+                  className="h-8 max-w-[96px] sm:h-9 sm:max-w-none md:h-10 w-auto object-contain opacity-90 group-hover:opacity-100 transition-opacity"
                 />
                 <div className="text-[7.5px] tracking-[0.28em] uppercase text-[#8B7355] mt-2.5 font-light hidden sm:block">
                   CUIDADO CAPILAR Y COSMÉTICO
@@ -202,7 +202,7 @@ export function NavigationBar({ onLoginClick, variant = 'solid' }: NavigationBar
               </nav>
 
               {/* DERECHA */}
-              <div className="flex items-center gap-2">
+              <div className="flex flex-shrink-0 items-center gap-1.5 sm:gap-2">
 
                 {/* Buscador */}
                 <div className="hidden md:flex items-center">
@@ -285,7 +285,7 @@ export function NavigationBar({ onLoginClick, variant = 'solid' }: NavigationBar
                 </div>
 
                 {/* Carrito */}
-                <div className="border border-stone-200 rounded-full">
+                <div className="flex h-9 w-9 sm:h-auto sm:w-auto items-center justify-center rounded-full border border-stone-200 bg-white/65">
                   <ShoppingCart onLoginRequired={onLoginClick} />
                 </div>
 
@@ -304,7 +304,7 @@ export function NavigationBar({ onLoginClick, variant = 'solid' }: NavigationBar
                 {/* Hamburguesa mobile */}
                 <button
                   onClick={() => setMenuOpen(true)}
-                  className="lg:hidden flex flex-col gap-[5px] p-2 rounded-full hover:bg-stone-100 transition-colors"
+                  className="lg:hidden flex h-9 w-9 flex-col items-center justify-center gap-[5px] rounded-full hover:bg-stone-100 transition-colors"
                   aria-label="Abrir menú"
                 >
                   <span className="block w-4 h-px bg-stone-700" />

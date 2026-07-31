@@ -11,6 +11,13 @@ const REQUESTS_PATH = `${HR_PATH}/requests/`;
 const VACATIONS_PATH = `${HR_PATH}/vacations/`;
 const REQUEST_ATTACHMENTS_PATH = `${HR_PATH}/request-attachments/`;
 const PAYROLL_PATH = `${HR_PATH}/payroll/`;
+const PAYROLL_PERIODS_PATH = `${HR_PATH}/payroll-periods/`;
+const PAYROLL_LEGAL_PARAMETERS_PATH = `${HR_PATH}/payroll-legal-parameters/`;
+const HOLIDAYS_PATH = `${HR_PATH}/holidays/`;
+const WORK_SCHEDULES_PATH = `${HR_PATH}/work-schedules/`;
+const BIOMETRIC_DEVICES_PATH = `${HR_PATH}/biometric-devices/`;
+const BIOMETRIC_IDS_PATH = `${HR_PATH}/biometric-ids/`;
+const BIOMETRIC_IMPORTS_PATH = `${HR_PATH}/biometric-imports/`;
 const PERFORMANCE_REVIEWS_PATH = `${HR_PATH}/performance-reviews/`;
 const DOCUMENTS_PATH = `${HR_PATH}/documents/`;
 const NOTIFICATIONS_PATH = `${HR_PATH}/notifications/`;
@@ -118,6 +125,11 @@ export type HRRequestSubtype =
   | 'OTHER'
   | '';
 export type PayrollStatus = 'DRAFT' | 'APPROVED' | 'PAID';
+export type PayrollPeriodStatus = 'OPEN' | 'CALCULATED' | 'APPROVED' | 'PAID' | 'CLOSED';
+export type PayrollItemSource = 'MANUAL' | 'ATTENDANCE' | 'VACATION_REQUEST' | 'LOAN_INSTALLMENT' | 'SYSTEM';
+export type BiometricImportStatus = 'PROCESSING' | 'COMPLETED' | 'FAILED';
+export type AttendanceSource = 'MANUAL' | 'BIOMETRIC' | 'MANUAL_CORRECTION';
+export type PublicHolidayKind = 'FIXED' | 'FIXED_MOVED_TO_MONDAY' | 'EASTER_BASED';
 export type EmployeeDocumentType =
   | 'ID_COPY'
   | 'RESUME'
@@ -141,6 +153,15 @@ export interface Attendance {
   check_in: string | null;
   check_out: string | null;
   notes: string;
+  source: AttendanceSource;
+  break_start: string | null;
+  break_end: string | null;
+  raw_punches: string[];
+  is_manually_corrected: boolean;
+  corrected_by: string | null;
+  corrected_at: string | null;
+  correction_reason: string;
+  has_incomplete_marks: boolean;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -283,6 +304,9 @@ export interface PayrollItem {
   item_type: 'EARNING' | 'DEDUCTION';
   concept: string;
   amount: string;
+  source: PayrollItemSource;
+  source_vacation_request: string | null;
+  concept_code: string;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -291,6 +315,8 @@ export interface PayrollItem {
 export interface Payroll {
   id: string;
   employee: string;
+  employee_name?: string;
+  period: string | null;
   period_start: string;
   period_end: string;
   base_salary: string;
@@ -299,6 +325,150 @@ export interface Payroll {
   net_salary: string;
   status: PayrollStatus;
   items: PayrollItem[];
+  payslip_number: string | null;
+  worked_days: string | null;
+  ordinary_hours: string;
+  overtime_hours: string;
+  transport_allowance: string;
+  health_deduction: string;
+  pension_deduction: string;
+  gross_earnings: string;
+  total_deductions: string;
+  approved_by: string | null;
+  approved_at: string | null;
+  paid_at: string | null;
+  payment_reference: string;
+  signature: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface PayrollPeriod {
+  id: string;
+  period_start: string;
+  period_end: string;
+  label: string;
+  status: PayrollPeriodStatus;
+  calculated_at: string | null;
+  calculated_by: string | null;
+  approved_at: string | null;
+  approved_by: string | null;
+  paid_at: string | null;
+  paid_by: string | null;
+  notes: string;
+  payrolls: Payroll[];
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface PayrollLegalParameter {
+  id: string;
+  year: number;
+  minimum_wage: string;
+  transport_allowance_amount: string;
+  transport_allowance_salary_cap_factor: string;
+  health_employee_pct: string;
+  pension_employee_pct: string;
+  monthly_hours_divisor_default: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface PublicHoliday {
+  id: string;
+  year: number;
+  name: string;
+  kind: PublicHolidayKind;
+  civil_date: string;
+  original_date: string | null;
+  is_active: boolean;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface EmployeeWorkScheduleDay {
+  id: string;
+  schedule: string;
+  weekday: number;
+  slot: number;
+  expected_start_time: string;
+  expected_end_time: string;
+  is_working_day: boolean;
+}
+
+export interface EmployeeWorkSchedule {
+  id: string;
+  employee: string;
+  start_date: string;
+  end_date: string | null;
+  is_active: boolean;
+  notes: string;
+  created_by: string | null;
+  days: EmployeeWorkScheduleDay[];
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface BiometricDevice {
+  id: string;
+  name: string;
+  location: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface EmployeeBiometricId {
+  id: string;
+  employee: string;
+  device: string | null;
+  biometric_code: string;
+  is_active: boolean;
+  valid_from: string;
+  valid_to: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface RawBiometricPunch {
+  id: string;
+  device: string | null;
+  biometric_code: string;
+  punched_at: string;
+  raw_col3: string;
+  raw_col4: string;
+  raw_col5: string;
+  raw_col6: string;
+  raw_line: string;
+  import_batch: string;
+  matched_employee: string | null;
+  is_duplicate: boolean;
+  duplicate_of: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface BiometricImportBatch {
+  id: string;
+  file: string | null;
+  device: string | null;
+  uploaded_by: string | null;
+  status: BiometricImportStatus;
+  total_rows: number;
+  matched_rows: number;
+  unmatched_rows: number;
+  duplicate_rows: number;
+  error_log: string;
+  processed_at: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -822,6 +992,247 @@ export async function updatePayroll(id: string, payload: Partial<PayrollPayload>
   const res = await api.patch<Payroll>(`${PAYROLL_PATH}${id}/`, payload);
   if (res.data) return res.data;
   throw new Error(res.message);
+}
+
+export async function getMyPayrolls(params?: { page?: number; limit?: number }): Promise<{
+  data: Payroll[];
+  total: number;
+  next: string | null;
+  previous: string | null;
+}> {
+  const query = buildQuery({ page: params?.page, page_size: params?.limit });
+  const res = await api.get<Payroll[] | PaginatedResponse<Payroll>>(`${PAYROLL_PATH}me/${query}`);
+  return normalizeListResponse(res.data);
+}
+
+export async function addPayrollItem(
+  payrollId: string,
+  payload: { item_type: 'EARNING' | 'DEDUCTION'; concept: string; amount: number | string; concept_code?: string },
+): Promise<Payroll> {
+  const res = await api.post<Payroll>(`${PAYROLL_PATH}${payrollId}/add-item/`, payload);
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
+// ---- Payroll periods ----
+export async function getPayrollPeriods(params?: { page?: number; limit?: number; status?: PayrollPeriodStatus }): Promise<{
+  data: PayrollPeriod[];
+  total: number;
+  next: string | null;
+  previous: string | null;
+}> {
+  const query = buildQuery({ page: params?.page, page_size: params?.limit, status: params?.status });
+  const res = await api.get<PayrollPeriod[] | PaginatedResponse<PayrollPeriod>>(`${PAYROLL_PERIODS_PATH}${query}`);
+  return normalizeListResponse(res.data);
+}
+
+export async function getPayrollPeriod(id: string): Promise<PayrollPeriod> {
+  const res = await api.get<PayrollPeriod>(`${PAYROLL_PERIODS_PATH}${id}/`);
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
+export async function createPayrollPeriod(payload: {
+  period_start: string;
+  period_end: string;
+  label?: string;
+}): Promise<PayrollPeriod> {
+  const res = await api.post<PayrollPeriod>(`${PAYROLL_PERIODS_PATH}create-period/`, payload);
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
+export async function calculatePayrollPeriod(id: string): Promise<{
+  period: PayrollPeriod;
+  calculated: number;
+  errors: Array<{ employee_id: string; employee: string; error: string }>;
+}> {
+  const res = await api.post<{
+    period: PayrollPeriod;
+    calculated: number;
+    errors: Array<{ employee_id: string; employee: string; error: string }>;
+  }>(`${PAYROLL_PERIODS_PATH}${id}/calculate/`, {});
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
+export async function approvePayrollPeriod(id: string): Promise<PayrollPeriod> {
+  const res = await api.post<PayrollPeriod>(`${PAYROLL_PERIODS_PATH}${id}/approve/`, {});
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
+export async function markPayrollPeriodPaid(id: string, paymentReference?: string): Promise<PayrollPeriod> {
+  const res = await api.post<PayrollPeriod>(`${PAYROLL_PERIODS_PATH}${id}/mark-paid/`, {
+    payment_reference: paymentReference || '',
+  });
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
+// ---- Payroll legal parameters ----
+export async function getPayrollLegalParameters(): Promise<PayrollLegalParameter[]> {
+  const res = await api.get<PayrollLegalParameter[] | PaginatedResponse<PayrollLegalParameter>>(PAYROLL_LEGAL_PARAMETERS_PATH);
+  return normalizeListResponse(res.data).data;
+}
+
+export async function createPayrollLegalParameter(payload: {
+  year: number;
+  minimum_wage: number | string;
+  transport_allowance_amount: number | string;
+  transport_allowance_salary_cap_factor?: number | string;
+  health_employee_pct?: number | string;
+  pension_employee_pct?: number | string;
+  monthly_hours_divisor_default?: number | string;
+}): Promise<PayrollLegalParameter> {
+  const res = await api.post<PayrollLegalParameter>(PAYROLL_LEGAL_PARAMETERS_PATH, payload);
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
+export async function updatePayrollLegalParameter(
+  id: string,
+  payload: Partial<{
+    minimum_wage: number | string;
+    transport_allowance_amount: number | string;
+    transport_allowance_salary_cap_factor: number | string;
+    health_employee_pct: number | string;
+    pension_employee_pct: number | string;
+    monthly_hours_divisor_default: number | string;
+  }>,
+): Promise<PayrollLegalParameter> {
+  const res = await api.patch<PayrollLegalParameter>(`${PAYROLL_LEGAL_PARAMETERS_PATH}${id}/`, payload);
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
+// ---- Public holidays ----
+export async function getPublicHolidays(params?: { year?: number }): Promise<PublicHoliday[]> {
+  const query = buildQuery({ year: params?.year });
+  const res = await api.get<PublicHoliday[] | PaginatedResponse<PublicHoliday>>(`${HOLIDAYS_PATH}${query}`);
+  return normalizeListResponse(res.data).data;
+}
+
+export async function generateYearHolidays(year: number): Promise<PublicHoliday[]> {
+  const res = await api.post<PublicHoliday[]>(`${HOLIDAYS_PATH}generate-year/`, { year });
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
+export async function updatePublicHoliday(id: string, payload: Partial<PublicHoliday>): Promise<PublicHoliday> {
+  const res = await api.patch<PublicHoliday>(`${HOLIDAYS_PATH}${id}/`, payload);
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
+export async function deletePublicHoliday(id: string): Promise<void> {
+  await api.delete(`${HOLIDAYS_PATH}${id}/`);
+}
+
+// ---- Employee work schedules ----
+export async function getEmployeeWorkSchedules(params?: { employee?: string; is_active?: boolean }): Promise<EmployeeWorkSchedule[]> {
+  const query = buildQuery({ employee: params?.employee, is_active: params?.is_active });
+  const res = await api.get<EmployeeWorkSchedule[] | PaginatedResponse<EmployeeWorkSchedule>>(`${WORK_SCHEDULES_PATH}${query}`);
+  return normalizeListResponse(res.data).data;
+}
+
+export async function setEmployeeWorkSchedule(payload: {
+  employee: string;
+  start_date: string;
+  notes?: string;
+  days: Array<{
+    weekday: number;
+    slot?: number;
+    expected_start_time: string;
+    expected_end_time: string;
+    is_working_day?: boolean;
+  }>;
+}): Promise<EmployeeWorkSchedule> {
+  const res = await api.post<EmployeeWorkSchedule>(`${WORK_SCHEDULES_PATH}set-for-employee/`, payload);
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
+// ---- Biometric devices & mapping ----
+export async function getBiometricDevices(): Promise<BiometricDevice[]> {
+  const res = await api.get<BiometricDevice[] | PaginatedResponse<BiometricDevice>>(BIOMETRIC_DEVICES_PATH);
+  return normalizeListResponse(res.data).data;
+}
+
+export async function createBiometricDevice(payload: { name: string; location?: string }): Promise<BiometricDevice> {
+  const res = await api.post<BiometricDevice>(BIOMETRIC_DEVICES_PATH, payload);
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
+export async function getEmployeeBiometricIds(params?: { employee?: string }): Promise<EmployeeBiometricId[]> {
+  const query = buildQuery({ employee: params?.employee });
+  const res = await api.get<EmployeeBiometricId[] | PaginatedResponse<EmployeeBiometricId>>(`${BIOMETRIC_IDS_PATH}${query}`);
+  return normalizeListResponse(res.data).data;
+}
+
+export async function createEmployeeBiometricId(payload: {
+  employee: string;
+  biometric_code: string;
+  device?: string | null;
+}): Promise<EmployeeBiometricId> {
+  const res = await api.post<EmployeeBiometricId>(BIOMETRIC_IDS_PATH, payload);
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
+export async function deleteEmployeeBiometricId(id: string): Promise<void> {
+  await api.delete(`${BIOMETRIC_IDS_PATH}${id}/`);
+}
+
+// ---- Biometric imports ----
+export async function getBiometricImportBatches(): Promise<BiometricImportBatch[]> {
+  const res = await api.get<BiometricImportBatch[] | PaginatedResponse<BiometricImportBatch>>(BIOMETRIC_IMPORTS_PATH);
+  return normalizeListResponse(res.data).data;
+}
+
+export async function uploadBiometricFile(file: File, deviceId?: string): Promise<BiometricImportBatch> {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (deviceId) formData.append('device', deviceId);
+  const res = await api.post<BiometricImportBatch>(`${BIOMETRIC_IMPORTS_PATH}upload/`, formData);
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
+export async function getUnmatchedPunches(batchId: string): Promise<RawBiometricPunch[]> {
+  const res = await api.get<RawBiometricPunch[]>(`${BIOMETRIC_IMPORTS_PATH}${batchId}/unmatched/`);
+  return res.data ?? [];
+}
+
+export async function consolidateBiometricBatch(batchId: string): Promise<{
+  created: number;
+  updated: number;
+  skipped_corrected: number;
+  incomplete: number;
+}> {
+  const res = await api.post<{ created: number; updated: number; skipped_corrected: number; incomplete: number }>(
+    `${BIOMETRIC_IMPORTS_PATH}${batchId}/consolidate/`,
+    {},
+  );
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
+// ---- Attendance correction ----
+export async function correctAttendance(
+  id: string,
+  payload: { check_in?: string | null; check_out?: string | null; break_start?: string | null; break_end?: string | null; reason: string },
+): Promise<Attendance> {
+  const res = await api.post<Attendance>(`${ATTENDANCE_PATH}${id}/correct/`, payload);
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
+export async function getPendingCorrectionAttendance(params?: { employee?: string; date_from?: string; date_to?: string }): Promise<Attendance[]> {
+  const query = buildQuery({ employee: params?.employee, date_from: params?.date_from, date_to: params?.date_to });
+  const res = await api.get<Attendance[] | PaginatedResponse<Attendance>>(`${ATTENDANCE_PATH}pending-correction/${query}`);
+  return normalizeListResponse(res.data).data;
 }
 
 // ---- Performance reviews ----

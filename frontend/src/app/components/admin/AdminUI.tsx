@@ -64,9 +64,9 @@ export function PrimaryButton({ children, onClick, type, disabled, icon }: { chi
   );
 }
 
-export function SecondaryButton({ children, onClick, type, icon }: { children: ReactNode; onClick?: () => void; type?: 'button' | 'submit'; icon?: ReactNode }) {
+export function SecondaryButton({ children, onClick, type, disabled, icon }: { children: ReactNode; onClick?: () => void; type?: 'button' | 'submit'; disabled?: boolean; icon?: ReactNode }) {
   return (
-    <button type={type ?? 'button'} onClick={onClick} className="flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+    <button type={type ?? 'button'} onClick={onClick} disabled={disabled} className="flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
       {icon}{children}
     </button>
   );

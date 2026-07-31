@@ -9,11 +9,31 @@ from shared.infrastructure.models import BaseModel
 
 
 class Attendance(BaseModel):
+    class Source(models.TextChoices):
+        MANUAL = "MANUAL", "Registro manual (check-in/out)"
+        BIOMETRIC = "BIOMETRIC", "Importado del biométrico"
+        MANUAL_CORRECTION = "MANUAL_CORRECTION", "Corregido manualmente por RRHH"
+
     employee = models.ForeignKey("employees.Employee", on_delete=models.CASCADE, related_name="attendance")
     date = models.DateField()
     check_in = models.DateTimeField(null=True, blank=True)
     check_out = models.DateTimeField(null=True, blank=True)
     notes = models.TextField(blank=True)
+
+    # Campos de asistencia biométrica (aditivos — todas las filas creadas por
+    # el flujo manual existente (RegisterCheckIn/RegisterCheckOut) siguen
+    # funcionando igual, con source=MANUAL por defecto).
+    source = models.CharField(max_length=20, choices=Source.choices, default=Source.MANUAL)
+    break_start = models.DateTimeField(null=True, blank=True)
+    break_end = models.DateTimeField(null=True, blank=True)
+    raw_punches = models.ManyToManyField("RawBiometricPunch", blank=True, related_name="attendances")
+    is_manually_corrected = models.BooleanField(default=False)
+    corrected_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="corrected_attendances"
+    )
+    corrected_at = models.DateTimeField(null=True, blank=True)
+    correction_reason = models.TextField(blank=True)
+    has_incomplete_marks = models.BooleanField(default=False)
 
     class Meta:
         constraints = [
@@ -307,6 +327,46 @@ class VacationRequestHistory(BaseModel):
         ordering = ("-created_at",)
 
 
+class PayrollPeriod(BaseModel):
+    """Contenedor quincenal del que cuelgan los Payroll individuales por
+    empleado. Un período se genera una vez y todos los Payroll de esa
+    quincena se calculan/recalculan a partir de él."""
+
+    class Status(models.TextChoices):
+        OPEN = "OPEN", "Abierto"
+        CALCULATED = "CALCULATED", "Calculado"
+        APPROVED = "APPROVED", "Aprobado"
+        PAID = "PAID", "Pagado"
+        CLOSED = "CLOSED", "Cerrado"
+
+    period_start = models.DateField()
+    period_end = models.DateField()
+    label = models.CharField(max_length=40, blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.OPEN)
+    calculated_at = models.DateTimeField(null=True, blank=True)
+    calculated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="calculated_payroll_periods"
+    )
+    approved_at = models.DateTimeField(null=True, blank=True)
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_payroll_periods"
+    )
+    paid_at = models.DateTimeField(null=True, blank=True)
+    paid_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="paid_payroll_periods"
+    )
+    notes = models.TextField(blank=True)
+
+    class Meta(BaseModel.Meta):
+        ordering = ("-period_start",)
+        constraints = [
+            models.UniqueConstraint(fields=("period_start", "period_end"), name="unique_payroll_period_range"),
+        ]
+
+    def __str__(self):
+        return self.label or f"Período {self.period_start} - {self.period_end}"
+
+
 class Payroll(BaseModel):
     class Status(models.TextChoices):
         DRAFT = "DRAFT", "Borrador"
@@ -322,16 +382,60 @@ class Payroll(BaseModel):
     net_salary = models.DecimalField(max_digits=14, decimal_places=2)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
 
+    # Campos del motor de nómina quincenal (aditivos — Payroll ya existía
+    # como CRUD manual; estos campos permiten que period_start/period_end
+    # (que se mantienen, por compatibilidad con quien ya lea Payroll directo)
+    # queden sincronizados con PayrollPeriod cuando se calcula automáticamente).
+    period = models.ForeignKey(PayrollPeriod, on_delete=models.CASCADE, related_name="payrolls", null=True, blank=True)
+    payslip_number = models.CharField(max_length=30, unique=True, null=True, blank=True)
+    worked_days = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    ordinary_hours = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    overtime_hours = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    transport_allowance = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    health_deduction = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    pension_deduction = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    gross_earnings = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    total_deductions = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_payrolls"
+    )
+    approved_at = models.DateTimeField(null=True, blank=True)
+    paid_at = models.DateTimeField(null=True, blank=True)
+    payment_reference = models.CharField(max_length=100, blank=True)
+    signature = models.FileField(
+        upload_to="hr/payroll/signatures/",
+        blank=True,
+        validators=[FileExtensionValidator(allowed_extensions=("png", "jpg", "jpeg"))],
+    )
+
+    def __str__(self):
+        return self.payslip_number or f"Nómina {self.employee} ({self.period_start} - {self.period_end})"
+
 
 class PayrollItem(BaseModel):
     class Type(models.TextChoices):
         EARNING = "EARNING", "Devengado"
         DEDUCTION = "DEDUCTION", "Deducción"
 
+    class Source(models.TextChoices):
+        MANUAL = "MANUAL", "Manual"
+        ATTENDANCE = "ATTENDANCE", "Cálculo de asistencia/horas"
+        VACATION_REQUEST = "VACATION_REQUEST", "Solicitud (vacaciones/incapacidad/permiso)"
+        LOAN_INSTALLMENT = "LOAN_INSTALLMENT", "Cuota de préstamo"
+        SYSTEM = "SYSTEM", "Concepto legal calculado (salud, pensión, aux. transporte)"
+
     payroll = models.ForeignKey(Payroll, on_delete=models.CASCADE, related_name="items")
     item_type = models.CharField(max_length=20, choices=Type.choices)
     concept = models.CharField(max_length=150)
     amount = models.DecimalField(max_digits=14, decimal_places=2)
+
+    # Trazabilidad de origen (aditivo) — concept_code es un string corto y
+    # estable para agrupar/filtrar/reportar sin forzar un catálogo rígido.
+    source = models.CharField(max_length=20, choices=Source.choices, default=Source.MANUAL)
+    source_vacation_request = models.ForeignKey(
+        "VacationRequest", on_delete=models.SET_NULL, null=True, blank=True, related_name="payroll_items"
+    )
+    concept_code = models.CharField(max_length=40, blank=True)
 
 
 class PerformanceReview(BaseModel):
@@ -394,3 +498,233 @@ class EmployeeDocument(BaseModel):
 
     def __str__(self):
         return f"{self.employee} - {self.get_document_type_display()}"
+
+
+class PublicHoliday(BaseModel):
+    """Catálogo editable de festivos colombianos, por año. Se guarda con la
+    fecha ya resuelta (traslado al lunes de la Ley Emiliani ya aplicado si
+    corresponde) para no depender de recalcular la regla en cada consulta —
+    la legislación laboral colombiana ya ha cambiado varias veces (ver
+    overtime_pay.py), así que el catálogo real vive en esta tabla, editable,
+    no hardcodeado en Python."""
+
+    class Kind(models.TextChoices):
+        FIXED = "FIXED", "Fecha fija"
+        FIXED_MOVED_TO_MONDAY = "FIXED_MOVED_TO_MONDAY", "Fecha fija trasladada al lunes (Ley Emiliani)"
+        EASTER_BASED = "EASTER_BASED", "Basado en Semana Santa"
+
+    year = models.PositiveIntegerField()
+    name = models.CharField(max_length=120)
+    kind = models.CharField(max_length=30, choices=Kind.choices)
+    civil_date = models.DateField()
+    original_date = models.DateField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    notes = models.TextField(blank=True)
+
+    class Meta(BaseModel.Meta):
+        ordering = ("civil_date",)
+        constraints = [
+            models.UniqueConstraint(fields=("year", "civil_date"), name="unique_public_holiday_per_date"),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.civil_date})"
+
+
+class PayrollLegalParameter(BaseModel):
+    """Parámetros legales que cambian cada año (SMMLV, auxilio de transporte,
+    porcentajes de salud/pensión a cargo del empleado) — mismo espíritu que
+    PublicHoliday: editable por año, no hardcodeado en Python."""
+
+    year = models.PositiveIntegerField(unique=True)
+    minimum_wage = models.DecimalField(max_digits=14, decimal_places=2)
+    transport_allowance_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    transport_allowance_salary_cap_factor = models.DecimalField(max_digits=5, decimal_places=2, default=2)
+    health_employee_pct = models.DecimalField(max_digits=5, decimal_places=2, default=4)
+    pension_employee_pct = models.DecimalField(max_digits=5, decimal_places=2, default=4)
+    monthly_hours_divisor_default = models.DecimalField(max_digits=6, decimal_places=2, default=230)
+
+    class Meta(BaseModel.Meta):
+        ordering = ("-year",)
+
+    def __str__(self):
+        return f"Parámetros legales {self.year}"
+
+
+class EmployeeWorkSchedule(BaseModel):
+    """Cabecera de un horario vigente para un empleado, con rango de
+    vigencia. Cuando el horario de un empleado cambia, se cierra la vigencia
+    anterior (end_date) y se crea una nueva cabecera — mismo patrón que
+    EmployeeSalaryHistory/EmployeePositionHistory en apps.employees.
+
+    No se reutiliza WorkDay (catálogo compartido de días de la semana, sin
+    horas de entrada/salida y sin vigencia por empleado) porque los horarios
+    son distintos por empleado y cambian en el tiempo."""
+
+    employee = models.ForeignKey("employees.Employee", on_delete=models.CASCADE, related_name="work_schedules")
+    start_date = models.DateField()
+    end_date = models.DateField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    notes = models.TextField(blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+
+    class Meta(BaseModel.Meta):
+        ordering = ("-start_date",)
+
+    def __str__(self):
+        return f"Horario de {self.employee} desde {self.start_date}"
+
+    def expected_minutes_for(self, weekday: int) -> int:
+        """Suma de minutos esperados para un día de la semana (0=lunes..6=domingo),
+        sumando todas las franjas (permite jornada partida con descanso)."""
+        total = 0
+        for day in self.days.all():
+            if day.weekday != weekday or not day.is_working_day:
+                continue
+            start = day.expected_start_time
+            end = day.expected_end_time
+            minutes = (end.hour * 60 + end.minute) - (start.hour * 60 + start.minute)
+            if minutes > 0:
+                total += minutes
+        return total
+
+
+class EmployeeWorkScheduleDay(BaseModel):
+    """Una franja horaria esperada dentro de un EmployeeWorkSchedule, por día
+    de la semana. Se permite más de una fila por día (slot) para modelar
+    jornada partida (ej. 8:00-12:00 y 13:00-17:00 con descanso de almuerzo)."""
+
+    schedule = models.ForeignKey(EmployeeWorkSchedule, on_delete=models.CASCADE, related_name="days")
+    weekday = models.PositiveSmallIntegerField()
+    slot = models.PositiveSmallIntegerField(default=1)
+    expected_start_time = models.TimeField()
+    expected_end_time = models.TimeField()
+    is_working_day = models.BooleanField(default=True)
+
+    class Meta(BaseModel.Meta):
+        ordering = ("weekday", "slot")
+        constraints = [
+            models.UniqueConstraint(fields=("schedule", "weekday", "slot"), name="unique_schedule_weekday_slot"),
+        ]
+
+    def __str__(self):
+        return f"{self.schedule} - día {self.weekday} slot {self.slot}"
+
+
+def get_schedule_for(employee, reference_date):
+    """Devuelve el EmployeeWorkSchedule vigente para un empleado en una fecha
+    dada, o None si no hay ninguno configurado. Si hay solapes accidentales
+    (no deberían darse si SetEmployeeWorkSchedule cierra correctamente el
+    horario anterior), toma el más reciente por start_date."""
+    return (
+        EmployeeWorkSchedule.objects.filter(
+            employee=employee,
+            is_active=True,
+            start_date__lte=reference_date,
+        )
+        .filter(models.Q(end_date__isnull=True) | models.Q(end_date__gte=reference_date))
+        .order_by("-start_date")
+        .prefetch_related("days")
+        .first()
+    )
+
+
+class BiometricDevice(BaseModel):
+    """Reloj biométrico del que se importan marcaciones. Opcional pero
+    recomendado: si en el futuro hay más de un dispositivo (varias sedes),
+    permite distinguir el origen del archivo importado."""
+
+    name = models.CharField(max_length=120)
+    location = models.CharField(max_length=150, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta(BaseModel.Meta):
+        ordering = ("name",)
+
+    def __str__(self):
+        return self.name
+
+
+class EmployeeBiometricId(BaseModel):
+    """Mapeo entre el código numérico interno del reloj biométrico (ej. '610',
+    '15', '51' — NO es el employee_code del sistema) y el empleado real. Un
+    empleado puede tener más de un código a lo largo del tiempo (ej. si se
+    reasigna el número en el reloj), pero un código activo de un dispositivo
+    debe apuntar a un único empleado para evitar ambigüedad al importar."""
+
+    employee = models.ForeignKey("employees.Employee", on_delete=models.CASCADE, related_name="biometric_ids")
+    device = models.ForeignKey(BiometricDevice, on_delete=models.CASCADE, related_name="employee_mappings", null=True, blank=True)
+    biometric_code = models.CharField(max_length=30)
+    is_active = models.BooleanField(default=True)
+    valid_from = models.DateField(default=timezone.localdate)
+    valid_to = models.DateField(null=True, blank=True)
+
+    class Meta(BaseModel.Meta):
+        ordering = ("employee", "-valid_from")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("device", "biometric_code"),
+                condition=models.Q(is_active=True, deleted_at__isnull=True),
+                name="unique_active_biometric_code_per_device",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.biometric_code} -> {self.employee}"
+
+
+class BiometricImportBatch(BaseModel):
+    """Un 'lote de carga': un archivo del reloj biométrico subido en un
+    momento dado. Permite auditar quién subió qué y cuándo, y revisar el
+    resultado de una carga completa antes de consolidarla en asistencia."""
+
+    class Status(models.TextChoices):
+        PROCESSING = "PROCESSING", "Procesando"
+        COMPLETED = "COMPLETED", "Completado"
+        FAILED = "FAILED", "Falló"
+
+    file = models.FileField(upload_to="hr/biometric/imports/")
+    device = models.ForeignKey(BiometricDevice, on_delete=models.SET_NULL, null=True, blank=True, related_name="import_batches")
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PROCESSING)
+    total_rows = models.PositiveIntegerField(default=0)
+    matched_rows = models.PositiveIntegerField(default=0)
+    unmatched_rows = models.PositiveIntegerField(default=0)
+    duplicate_rows = models.PositiveIntegerField(default=0)
+    error_log = models.TextField(blank=True)
+    processed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta(BaseModel.Meta):
+        ordering = ("-created_at",)
+
+    def __str__(self):
+        return f"Importación biométrica {self.created_at:%Y-%m-%d %H:%M}"
+
+
+class RawBiometricPunch(BaseModel):
+    """Guarda exactamente lo que trae cada fila del archivo plano del reloj
+    biométrico, sin interpretar. Las columnas 3-6 son de significado
+    desconocido: se guardan tal cual llegan (como texto) para no perder
+    información aunque hoy no se sepa qué representan."""
+
+    device = models.ForeignKey(BiometricDevice, on_delete=models.SET_NULL, null=True, blank=True, related_name="raw_punches")
+    biometric_code = models.CharField(max_length=30)
+    punched_at = models.DateTimeField()
+    raw_col3 = models.CharField(max_length=50, blank=True)
+    raw_col4 = models.CharField(max_length=50, blank=True)
+    raw_col5 = models.CharField(max_length=50, blank=True)
+    raw_col6 = models.CharField(max_length=50, blank=True)
+    raw_line = models.TextField(blank=True)
+    import_batch = models.ForeignKey(BiometricImportBatch, on_delete=models.CASCADE, related_name="punches")
+    matched_employee = models.ForeignKey(
+        "employees.Employee", on_delete=models.SET_NULL, null=True, blank=True, related_name="raw_biometric_punches"
+    )
+    is_duplicate = models.BooleanField(default=False)
+    duplicate_of = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="duplicates")
+
+    class Meta(BaseModel.Meta):
+        ordering = ("matched_employee", "punched_at")
+        indexes = [models.Index(fields=("matched_employee", "punched_at"))]
+
+    def __str__(self):
+        return f"{self.biometric_code} - {self.punched_at}"

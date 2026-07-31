@@ -254,8 +254,18 @@ class ProductionOrder(BaseModel):
 
     def save(self, *args, **kwargs):
         if not self.number:
-            self.number = f"OP-{uuid.uuid4().hex[:10].upper()}"
+            self.number = self.generate_number()
         super().save(*args, **kwargs)
+
+    @classmethod
+    def generate_number(cls):
+        prefix = "OP"
+        next_number = cls.all_objects.filter(number__startswith=f"{prefix}-").count() + 1
+        while True:
+            number = f"{prefix}-{next_number:05d}"
+            if not cls.all_objects.filter(number=number).exists():
+                return number
+            next_number += 1
 
 
 # ── Conversión ────────────────────────────────────────────────────────────

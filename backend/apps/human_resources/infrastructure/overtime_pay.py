@@ -56,16 +56,27 @@ def _split_points(day: date) -> list[time]:
     return sorted(points)
 
 
-def _classify_segment(day: date, segment_start: time, is_extra: bool) -> tuple[str, Decimal, bool]:
+def _classify_segment(
+    day: date, segment_start: time, is_extra: bool, holiday_dates: frozenset[date] | None = None
+) -> tuple[str, Decimal, bool]:
     """Clasifica un segmento horario (que no cruza medianoche ni un punto de
     corte diurno/nocturno) y devuelve (etiqueta, porcentaje total de recargo,
-    es_nocturno)."""
+    es_nocturno).
+
+    ``holiday_dates`` es un conjunto opcional de fechas festivas (ver
+    holiday_calendar.py / PublicHoliday). En Colombia un festivo entre semana
+    recibe el mismo recargo que un domingo, así que se trata como día de
+    descanso obligatorio igual que domingo. Si no se pasa (o es None), el
+    comportamiento es idéntico al de antes de este parámetro: solo domingo
+    cuenta como día de descanso."""
     night_start = _night_start_for(day)
     is_night = segment_start >= night_start or segment_start < DAY_START
     is_sunday = day.weekday() == 6
-    sunday_pct = _sunday_surcharge_pct(day) if is_sunday else Decimal("0")
+    is_holiday = bool(holiday_dates) and day in holiday_dates
+    is_rest_day = is_sunday or is_holiday
+    sunday_pct = _sunday_surcharge_pct(day) if is_rest_day else Decimal("0")
 
-    if is_sunday and sunday_pct > 0:
+    if is_rest_day and sunday_pct > 0:
         if is_extra:
             pct = sunday_pct + (Decimal("75") if is_night else Decimal("25"))
             label = "Extra nocturna dominical" if is_night else "Extra diurna dominical"
@@ -83,7 +94,9 @@ def _classify_segment(day: date, segment_start: time, is_extra: bool) -> tuple[s
     return label, pct, is_night
 
 
-def classify_shift(start_dt: datetime, end_dt: datetime, is_extra: bool = True) -> list[dict]:
+def classify_shift(
+    start_dt: datetime, end_dt: datetime, is_extra: bool = True, holiday_dates: frozenset[date] | None = None
+) -> list[dict]:
     """Divide un turno [start_dt, end_dt) en segmentos según los cortes de
     medianoche, 6 a.m. y el inicio nocturno vigente, clasifica cada uno y
     devuelve la lista de segmentos con sus minutos y % de recargo.
@@ -91,6 +104,11 @@ def classify_shift(start_dt: datetime, end_dt: datetime, is_extra: bool = True) 
     ``is_extra`` indica si todo el turno se considera hora extra (por defecto,
     ya que esta función se usa sobre solicitudes de tipo Horas Extra); para
     horas ordinarias con recargo nocturno/dominical se puede pasar False.
+
+    ``holiday_dates`` (opcional) es un conjunto de fechas festivas — ver
+    holiday_calendar.py / PublicHoliday. Si se omite, el comportamiento es
+    exactamente el de antes de este parámetro (solo domingo cuenta como día
+    de descanso obligatorio); los llamadores existentes no necesitan cambiar.
     """
     if end_dt <= start_dt:
         return []
@@ -109,7 +127,7 @@ def classify_shift(start_dt: datetime, end_dt: datetime, is_extra: bool = True) 
         for seg_start, seg_end in zip(boundaries, boundaries[1:]):
             if seg_end <= seg_start:
                 continue
-            label, pct, is_night = _classify_segment(day, seg_start.time(), is_extra)
+            label, pct, is_night = _classify_segment(day, seg_start.time(), is_extra, holiday_dates)
             minutes = int((seg_end - seg_start).total_seconds() // 60)
             segments.append({"label": label, "surcharge_pct": pct, "minutes": minutes, "is_night": is_night})
         cursor = chunk_end
@@ -117,10 +135,12 @@ def classify_shift(start_dt: datetime, end_dt: datetime, is_extra: bool = True) 
     return segments
 
 
-def hours_breakdown(start_dt: datetime, end_dt: datetime, is_extra: bool = True) -> dict:
+def hours_breakdown(
+    start_dt: datetime, end_dt: datetime, is_extra: bool = True, holiday_dates: frozenset[date] | None = None
+) -> dict:
     """Total de horas diurnas y nocturnas de un turno (en horas decimales,
     ej. 2.5), más el total general — para columnas separadas del Excel."""
-    segments = classify_shift(start_dt, end_dt, is_extra=is_extra)
+    segments = classify_shift(start_dt, end_dt, is_extra=is_extra, holiday_dates=holiday_dates)
     day_minutes = sum(seg["minutes"] for seg in segments if not seg["is_night"])
     night_minutes = sum(seg["minutes"] for seg in segments if seg["is_night"])
     return {
@@ -130,10 +150,12 @@ def hours_breakdown(start_dt: datetime, end_dt: datetime, is_extra: bool = True)
     }
 
 
-def summarize_shift(start_dt: datetime, end_dt: datetime, is_extra: bool = True) -> str:
+def summarize_shift(
+    start_dt: datetime, end_dt: datetime, is_extra: bool = True, holiday_dates: frozenset[date] | None = None
+) -> str:
     """Texto legible del desglose de un turno, ej.:
     'Extra diurna 125% (1h 30m); Extra nocturna 175% (1h)'."""
-    segments = classify_shift(start_dt, end_dt, is_extra=is_extra)
+    segments = classify_shift(start_dt, end_dt, is_extra=is_extra, holiday_dates=holiday_dates)
     if not segments:
         return "-"
 

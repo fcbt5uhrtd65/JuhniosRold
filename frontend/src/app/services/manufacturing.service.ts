@@ -192,6 +192,7 @@ export interface RawMaterialIdentificationPrintRecord {
   printed_at: string;
   is_reprint: boolean;
   reprint_reason: string;
+  label_photo: string | null;
 }
 
 export interface DispensingOrderRecord {
@@ -337,6 +338,14 @@ export interface ProductionControlRecord {
   unit: UUID | null;
   notes: string;
   materials: ProductionControlMaterialRecord[];
+  warehouse_signature: string | null;
+  warehouse_signed_by: UUID | null;
+  responsible_signature: string | null;
+  responsible_signed_by: UUID | null;
+  quality_signature: string | null;
+  quality_signed_by: UUID | null;
+  leader_signature: string | null;
+  leader_signed_by: UUID | null;
 }
 
 export interface FillingParticipantRecord {
@@ -435,7 +444,7 @@ export interface SealIntegrityControlRecord {
   performed_by: UUID | null;
   verified_by: UUID | null;
   observations: string;
-  overall_result: 'APPROVED' | 'REJECTED' | 'REPEAT' | 'PENDING';
+  overall_result: 'APPROVED' | 'REJECTED' | 'REPEAT' | 'PENDING' | 'NOT_APPLICABLE';
   samples: SealIntegritySampleRecord[];
 }
 
@@ -466,6 +475,8 @@ export interface PackagingControlRecord {
   label_material_batch: string;
   label_result: ResultStatus | '';
   label_observations: string;
+  label_performed_by: UUID | null;
+  label_verified_by: UUID | null;
   units_per_display: number | null;
   displays_per_box: number | null;
   units_per_box: number | null;
@@ -752,8 +763,21 @@ export async function createRawMaterialIdentificationPrint(input: {
   dispensing_line: string;
   is_reprint?: boolean;
   reprint_reason?: string;
+  label_photo?: File | null;
 }): Promise<RawMaterialIdentificationPrintRecord> {
-  const { data } = await api.post<RawMaterialIdentificationPrintRecord>(`${BASE}/raw-material-identification-prints/`, input);
+  const { label_photo, ...rest } = input;
+  const body: FormData | typeof rest = label_photo
+    ? (() => {
+        const formData = new FormData();
+        Object.entries(rest).forEach(([key, value]) => {
+          if (value === null || value === undefined) return;
+          formData.append(key, String(value));
+        });
+        formData.append('label_photo', label_photo);
+        return formData;
+      })()
+    : rest;
+  const { data } = await api.post<RawMaterialIdentificationPrintRecord>(`${BASE}/raw-material-identification-prints/`, body);
   return data as RawMaterialIdentificationPrintRecord;
 }
 
@@ -813,6 +837,20 @@ export async function getProductionControl(batchId: string): Promise<ProductionC
 
 export async function exportProductionControl(id: string, batchCode: string): Promise<void> {
   await downloadBlob(`${BASE}/production-controls/${id}/export/`, `control-produccion-${batchCode}.pdf`);
+}
+
+export type ProductionControlSigner = 'warehouse' | 'responsible' | 'quality' | 'leader';
+
+export async function signProductionControl(
+  id: string,
+  signer: ProductionControlSigner,
+  input: { signature: File; signed_by?: string | null },
+): Promise<ProductionControlRecord> {
+  const formData = new FormData();
+  formData.append(`${signer}_signature`, input.signature);
+  if (input.signed_by) formData.append(`${signer}_signed_by`, input.signed_by);
+  const { data } = await api.patch<ProductionControlRecord>(`${BASE}/production-controls/${id}/`, formData);
+  return data as ProductionControlRecord;
 }
 
 // ── Control de llenado ───────────────────────────────────────────────────────
@@ -1209,6 +1247,7 @@ export async function createSealIntegrityControl(input: {
   time_seconds?: number | null;
   performed_by?: string | null;
   verified_by?: string | null;
+  overall_result?: 'APPROVED' | 'REJECTED' | 'REPEAT' | 'PENDING' | 'NOT_APPLICABLE';
 }): Promise<SealIntegrityControlRecord> {
   const { data } = await api.post<SealIntegrityControlRecord>(`${BASE}/seal-integrity-controls/`, input);
   return data as SealIntegrityControlRecord;
@@ -1243,6 +1282,35 @@ export async function createPackagingControl(input: {
   rejection_reasons?: string;
 }): Promise<PackagingControlRecord> {
   const { data } = await api.post<PackagingControlRecord>(`${BASE}/packaging-controls/`, input);
+  return data as PackagingControlRecord;
+}
+
+export async function updatePackagingControlLabel(
+  id: string,
+  input: {
+    label_code?: string;
+    artwork_version?: string;
+    label_material_batch?: string;
+    label_result?: ResultStatus;
+    label_observations?: string;
+    label_performed_by?: string | null;
+    label_verified_by?: string | null;
+    label_sample_file?: File | null;
+  },
+): Promise<PackagingControlRecord> {
+  const { label_sample_file, ...rest } = input;
+  const body: FormData | typeof rest = label_sample_file
+    ? (() => {
+        const formData = new FormData();
+        Object.entries(rest).forEach(([key, value]) => {
+          if (value === null || value === undefined) return;
+          formData.append(key, String(value));
+        });
+        formData.append('label_sample_file', label_sample_file);
+        return formData;
+      })()
+    : rest;
+  const { data } = await api.patch<PackagingControlRecord>(`${BASE}/packaging-controls/${id}/`, body);
   return data as PackagingControlRecord;
 }
 

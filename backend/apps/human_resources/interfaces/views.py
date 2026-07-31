@@ -1,7 +1,7 @@
 import json
 from decimal import Decimal, InvalidOperation
 
-from django.db.models import Count, Sum
+from django.db.models import Count, Q, Sum
 from django.db.models.functions import TruncMonth
 from django.http import FileResponse
 from django.shortcuts import get_object_or_404
@@ -15,6 +15,7 @@ from django.utils import timezone
 
 from shared.interfaces.viewsets import SoftDeleteModelViewSet
 
+from apps.audit.application.services import AuditService
 from apps.employees.infrastructure.models import Employee
 from apps.identity.interfaces.permissions import HasComponentAccess
 from apps.notifications.infrastructure.models import StaffNotification
@@ -22,17 +23,35 @@ from apps.notifications.infrastructure.models import StaffNotification
 from shared.domain.exceptions import BusinessRuleViolation
 
 from ..application.use_cases import (
+    AddManualPayrollItem,
+    ApprovePayrollPeriod,
+    CalculatePayrollPeriod,
+    ConsolidateAttendanceFromPunches,
+    CorrectAttendance,
     CreateOvertimeRequestWithShifts,
+    CreatePayrollPeriod,
     DefineRequestRemuneration,
+    GenerateYearHolidays,
+    ImportBiometricFile,
+    MarkPayrollPeriodAsPaid,
     RegisterCheckIn,
     RegisterCheckOut,
     ResolveVacationRequestByRole,
+    SetEmployeeWorkSchedule,
 )
 from ..infrastructure.models import (
     Attendance,
+    BiometricDevice,
+    BiometricImportBatch,
+    EmployeeBiometricId,
     EmployeeDocument,
+    EmployeeWorkSchedule,
     Payroll,
+    PayrollLegalParameter,
+    PayrollPeriod,
     PerformanceReview,
+    PublicHoliday,
+    RawBiometricPunch,
     VacationRequest,
     VacationRequestApprovalStep,
     VacationRequestAttachment,
@@ -43,14 +62,60 @@ from ..infrastructure.request_list_pdf import render_request_list_pdf
 from ..infrastructure.request_pdf import render_request_pdf
 from ..infrastructure.serializers import (
     AttendanceSerializer,
+    BiometricDeviceSerializer,
+    BiometricImportBatchSerializer,
+    EmployeeBiometricIdSerializer,
     EmployeeDocumentSerializer,
     EmployeeSelfServiceDocumentSerializer,
+    EmployeeWorkScheduleSerializer,
     HRNotificationSerializer,
+    PayrollLegalParameterSerializer,
+    PayrollPeriodSerializer,
     PayrollSerializer,
     PerformanceReviewSerializer,
+    PublicHolidaySerializer,
+    RawBiometricPunchSerializer,
     VacationRequestAttachmentSerializer,
     VacationRequestSerializer,
 )
+
+
+class HumanResourcesBaseViewSet(SoftDeleteModelViewSet):
+    """Base compartida para los ViewSets nuevos del módulo de nómina, con el
+    mismo patrón de auditoría ya usado por ManufacturingBaseViewSet. Los
+    ViewSets de RRHH ya existentes (AttendanceViewSet, VacationRequestViewSet,
+    PayrollViewSet, etc.) se dejan tal cual, sin migrarlos a esta base, para
+    no arriesgar flujos ya probados."""
+
+    permission_classes = (HasComponentAccess,)
+    required_component = "human_resources.payroll"
+
+    def get_permissions(self):
+        self.required_component_action = "view" if self.action in {"list", "retrieve"} else "edit"
+        return super().get_permissions()
+
+    def _audit(self, action_name, instance):
+        request = self.request
+        AuditService.record(
+            actor=request.user,
+            module="human_resources",
+            action=action_name,
+            ip_address=request.META.get("REMOTE_ADDR"),
+            resource_type=instance.__class__.__name__,
+            resource_id=instance.pk,
+        )
+
+    def perform_create(self, serializer):
+        super().perform_create(serializer)
+        self._audit("create", serializer.instance)
+
+    def perform_update(self, serializer):
+        super().perform_update(serializer)
+        self._audit("update", serializer.instance)
+
+    def perform_destroy(self, instance):
+        super().perform_destroy(instance)
+        self._audit("delete", instance)
 
 
 class AttendanceViewSet(SoftDeleteModelViewSet):
@@ -60,8 +125,19 @@ class AttendanceViewSet(SoftDeleteModelViewSet):
     required_component = "human_resources.management"
     filterset_fields = ("employee", "date")
 
+    # La corrección manual de asistencia (marcaciones olvidadas/incompletas
+    # del biométrico) vive bajo el mismo permiso que la importación
+    # biométrica, no bajo la gestión general de RRHH — es el mismo flujo
+    # operativo, aunque el resto de este ViewSet (CRUD normal, check-in/out
+    # manual) siga usando human_resources.management sin cambios.
+    _biometric_actions = {"correct", "pending_correction"}
+
     def get_permissions(self):
-        self.required_component_action = "view" if self.action in {"list", "retrieve"} else "edit"
+        if self.action in self._biometric_actions:
+            self.required_component = "human_resources.biometric_import"
+        else:
+            self.required_component = "human_resources.management"
+        self.required_component_action = "view" if self.action in {"list", "retrieve", "pending_correction"} else "edit"
         return super().get_permissions()
 
     @action(detail=False, methods=("post",), url_path="check-in")
@@ -73,6 +149,43 @@ class AttendanceViewSet(SoftDeleteModelViewSet):
     def check_out(self, request):
         employee = Employee.objects.get(id=request.data["employee_id"])
         return Response(self.get_serializer(RegisterCheckOut().execute(employee)).data)
+
+    @action(detail=True, methods=("post",), url_path="correct")
+    def correct(self, request, pk=None):
+        attendance = self.get_object()
+        try:
+            attendance = CorrectAttendance().execute(
+                attendance=attendance,
+                check_in=request.data.get("check_in") or None,
+                check_out=request.data.get("check_out") or None,
+                break_start=request.data.get("break_start") or None,
+                break_end=request.data.get("break_end") or None,
+                reason=request.data.get("reason", ""),
+                actor=request.user,
+            )
+        except BusinessRuleViolation as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(self.get_serializer(attendance).data)
+
+    @action(detail=False, methods=("get",), url_path="pending-correction")
+    def pending_correction(self, request):
+        queryset = self.get_queryset().filter(
+            Q(has_incomplete_marks=True) | Q(check_in__isnull=True) | Q(check_out__isnull=True)
+        ).order_by("-date")
+        employee_id = request.query_params.get("employee")
+        if employee_id:
+            queryset = queryset.filter(employee_id=employee_id)
+        date_from = request.query_params.get("date_from")
+        if date_from:
+            queryset = queryset.filter(date__gte=date_from)
+        date_to = request.query_params.get("date_to")
+        if date_to:
+            queryset = queryset.filter(date__lte=date_to)
+        page = self.paginate_queryset(queryset)
+        serializer = self.get_serializer(page if page is not None else queryset, many=True)
+        if page is not None:
+            return self.get_paginated_response(serializer.data)
+        return Response(serializer.data)
 
 
 class VacationRequestViewSet(SoftDeleteModelViewSet):
@@ -719,15 +832,54 @@ class VacationRequestAttachmentViewSet(SoftDeleteModelViewSet):
 
 
 class PayrollViewSet(SoftDeleteModelViewSet):
-    queryset = Payroll.objects.select_related("employee").prefetch_related("items")
+    queryset = Payroll.objects.select_related("employee", "period").prefetch_related("items")
     serializer_class = PayrollSerializer
     permission_classes = (HasComponentAccess,)
-    required_component = "human_resources.management"
-    filterset_fields = ("employee", "status")
+    required_component = "human_resources.payroll"
+    filterset_fields = ("employee", "status", "period")
 
     def get_permissions(self):
-        self.required_component_action = "view" if self.action in {"list", "retrieve"} else "edit"
+        if self.action == "me":
+            return (IsAuthenticated(),)
+        self.required_component_action = "view" if self.action in {"list", "retrieve", "pdf"} else "edit"
         return super().get_permissions()
+
+    def _audit(self, action_name, instance):
+        AuditService.record(
+            actor=self.request.user, module="human_resources", action=action_name,
+            ip_address=self.request.META.get("REMOTE_ADDR"),
+            resource_type=instance.__class__.__name__, resource_id=instance.pk,
+        )
+
+    @action(detail=False, methods=("get",), url_path="me")
+    def me(self, request):
+        employee = getattr(request.user, "employee_profile", None)
+        if not employee:
+            raise NotFound("Tu usuario no tiene un perfil de empleado asociado.")
+        payrolls = self.get_queryset().filter(employee=employee, status__in=(Payroll.Status.APPROVED, Payroll.Status.PAID))
+        page = self.paginate_queryset(payrolls)
+        serializer = self.get_serializer(page if page is not None else payrolls, many=True)
+        if page is not None:
+            return self.get_paginated_response(serializer.data)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=("post",), url_path="add-item")
+    def add_item(self, request, pk=None):
+        payroll = self.get_object()
+        try:
+            AddManualPayrollItem().execute(
+                payroll=payroll,
+                item_type=request.data.get("item_type"),
+                concept=request.data.get("concept", ""),
+                amount=request.data.get("amount"),
+                actor=request.user,
+                concept_code=request.data.get("concept_code", ""),
+            )
+        except BusinessRuleViolation as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        payroll.refresh_from_db()
+        self._audit("add_item", payroll)
+        return Response(self.get_serializer(payroll).data)
 
 
 class PerformanceReviewViewSet(SoftDeleteModelViewSet):
@@ -819,6 +971,170 @@ class HRNotificationViewSet(SoftDeleteModelViewSet):
         notification.status = StaffNotification.Status.READ
         notification.save(update_fields=("status", "updated_at"))
         return Response(self.get_serializer(notification).data)
+
+
+class PublicHolidayViewSet(HumanResourcesBaseViewSet):
+    queryset = PublicHoliday.objects.all()
+    serializer_class = PublicHolidaySerializer
+    filterset_fields = ("year", "kind", "is_active")
+
+    @action(detail=False, methods=("post",), url_path="generate-year")
+    def generate_year(self, request):
+        year = request.data.get("year")
+        if not year:
+            return Response({"detail": "Debes indicar el año."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            created = GenerateYearHolidays().execute(year=int(year), actor=request.user)
+        except (BusinessRuleViolation, ValueError, TypeError) as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(self.get_serializer(created, many=True).data)
+
+
+class PayrollLegalParameterViewSet(HumanResourcesBaseViewSet):
+    queryset = PayrollLegalParameter.objects.all()
+    serializer_class = PayrollLegalParameterSerializer
+    filterset_fields = ("year",)
+
+
+class PayrollPeriodViewSet(HumanResourcesBaseViewSet):
+    required_component = "human_resources.payroll"
+    queryset = PayrollPeriod.objects.all().prefetch_related("payrolls__items", "payrolls__employee")
+    serializer_class = PayrollPeriodSerializer
+    filterset_fields = ("status",)
+
+    @action(detail=False, methods=("post",), url_path="create-period")
+    def create_period(self, request):
+        try:
+            period = CreatePayrollPeriod().execute(
+                period_start=request.data.get("period_start"),
+                period_end=request.data.get("period_end"),
+                actor=request.user,
+                label=request.data.get("label", ""),
+            )
+        except BusinessRuleViolation as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        self._audit("create", period)
+        return Response(self.get_serializer(period).data)
+
+    @action(detail=True, methods=("post",), url_path="calculate")
+    def calculate(self, request, pk=None):
+        period = self.get_object()
+        try:
+            result = CalculatePayrollPeriod().execute(period=period, actor=request.user)
+        except BusinessRuleViolation as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        self._audit("calculate", period)
+        return Response({
+            "period": self.get_serializer(result["period"]).data,
+            "calculated": result["calculated"],
+            "errors": result["errors"],
+        })
+
+    @action(detail=True, methods=("post",), url_path="approve")
+    def approve(self, request, pk=None):
+        period = self.get_object()
+        try:
+            period = ApprovePayrollPeriod().execute(period=period, actor=request.user)
+        except BusinessRuleViolation as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        self._audit("approve", period)
+        return Response(self.get_serializer(period).data)
+
+    @action(detail=True, methods=("post",), url_path="mark-paid")
+    def mark_paid(self, request, pk=None):
+        period = self.get_object()
+        try:
+            period = MarkPayrollPeriodAsPaid().execute(
+                period=period, actor=request.user, payment_reference=request.data.get("payment_reference", "")
+            )
+        except BusinessRuleViolation as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        self._audit("mark_paid", period)
+        return Response(self.get_serializer(period).data)
+
+
+class EmployeeWorkScheduleViewSet(HumanResourcesBaseViewSet):
+    queryset = EmployeeWorkSchedule.objects.select_related("employee").prefetch_related("days")
+    serializer_class = EmployeeWorkScheduleSerializer
+    filterset_fields = ("employee", "is_active")
+
+    @action(detail=False, methods=("post",), url_path="set-for-employee")
+    def set_for_employee(self, request):
+        employee_id = request.data.get("employee")
+        start_date = request.data.get("start_date")
+        days_data = request.data.get("days")
+        if not employee_id or not start_date or not days_data:
+            return Response(
+                {"detail": "Debes indicar empleado, fecha de inicio y al menos un día de horario."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        employee = Employee.objects.filter(id=employee_id).first()
+        if not employee:
+            return Response({"detail": "Empleado no encontrado."}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            schedule = SetEmployeeWorkSchedule().execute(
+                employee=employee,
+                start_date=start_date,
+                days_data=days_data,
+                actor=request.user,
+                notes=request.data.get("notes", ""),
+            )
+        except BusinessRuleViolation as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        self._audit("set_schedule", schedule)
+        return Response(self.get_serializer(schedule).data)
+
+
+class BiometricDeviceViewSet(HumanResourcesBaseViewSet):
+    required_component = "human_resources.biometric_import"
+    queryset = BiometricDevice.objects.all()
+    serializer_class = BiometricDeviceSerializer
+
+
+class EmployeeBiometricIdViewSet(HumanResourcesBaseViewSet):
+    required_component = "human_resources.biometric_import"
+    queryset = EmployeeBiometricId.objects.select_related("employee", "device")
+    serializer_class = EmployeeBiometricIdSerializer
+    filterset_fields = ("employee", "device", "is_active")
+
+
+class BiometricImportBatchViewSet(HumanResourcesBaseViewSet):
+    """Append-only: un lote de importación no se edita ni se borra desde la
+    API genérica, solo se sube (upload) y se consulta. La consolidación en
+    Attendance se dispara aparte (@action consolidate)."""
+
+    required_component = "human_resources.biometric_import"
+    queryset = BiometricImportBatch.objects.select_related("uploaded_by", "device").prefetch_related("punches")
+    serializer_class = BiometricImportBatchSerializer
+    filterset_fields = ("status", "device")
+    http_method_names = ("get", "post", "head", "options")
+
+    @action(detail=False, methods=("post",), url_path="upload")
+    def upload(self, request):
+        uploaded_file = request.FILES.get("file")
+        if not uploaded_file:
+            return Response({"detail": "Debes adjuntar el archivo del reloj biométrico."}, status=status.HTTP_400_BAD_REQUEST)
+        device_id = request.data.get("device")
+        device = BiometricDevice.objects.filter(id=device_id).first() if device_id else None
+        try:
+            batch = ImportBiometricFile().execute(file=uploaded_file, actor=request.user, device=device)
+        except BusinessRuleViolation as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        self._audit("upload", batch)
+        return Response(self.get_serializer(batch).data)
+
+    @action(detail=True, methods=("get",), url_path="unmatched")
+    def unmatched(self, request, pk=None):
+        batch = self.get_object()
+        punches = batch.punches.filter(matched_employee__isnull=True).order_by("biometric_code", "punched_at")
+        return Response(RawBiometricPunchSerializer(punches, many=True).data)
+
+    @action(detail=True, methods=("post",), url_path="consolidate")
+    def consolidate(self, request, pk=None):
+        batch = self.get_object()
+        summary = ConsolidateAttendanceFromPunches().execute(import_batch=batch, actor=request.user)
+        self._audit("consolidate", batch)
+        return Response(summary)
 
 
 class VacationRequestPdfView(APIView):

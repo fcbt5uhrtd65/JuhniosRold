@@ -98,7 +98,9 @@ import {
   recordWeightVolumeSample,
   rejectLineClearance,
   releaseBatch,
+  signProductionControl,
   startBatch,
+  updatePackagingControlLabel,
   verifyDispensingLine,
   weighDispensingLine,
   type AnalysisCertificateRecord,
@@ -117,6 +119,7 @@ import {
   type MicrobiologyAnalysisRecord,
   type PackagingControlRecord,
   type ProductionControlRecord,
+  type ProductionControlSigner,
   type ProductionLineRecord,
   type RawMaterialIdentificationPrintRecord,
   type ResultStatus,
@@ -392,6 +395,15 @@ const BATCHING_FLOW_EXAMPLE = {
     'Procedimiento formal de autorizacion para fuera de tolerancia.',
   ],
 };
+
+function getMediaUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return parsed.pathname + parsed.search;
+  } catch {
+    return url;
+  }
+}
 
 function statusBadgeColor(status: BatchStatus): BadgeColor {
   if (status === 'RELEASED') return 'green';
@@ -1196,8 +1208,8 @@ function BatchDetail({
       {activeTab === 'dispensing' && <DispensingTab batch={batch} employeeById={employeeById} />}
       {activeTab === 'manufacturing' && <ManufacturingTab batch={batch} employeeById={employeeById} />}
       {activeTab === 'bulk_quality' && <BulkQualityTab batch={batch} />}
-      {activeTab === 'filling' && <FillingTab batch={batch} />}
-      {activeTab === 'packaging' && <PackagingTab batch={batch} />}
+      {activeTab === 'filling' && <FillingTab batch={batch} employeeById={employeeById} />}
+      {activeTab === 'packaging' && <PackagingTab batch={batch} employeeById={employeeById} employees={Array.from(employeeById.values())} />}
       {activeTab === 'final_quality' && <FinalQualityTab batch={batch} />}
       {activeTab === 'documents' && <DocumentsTab batch={batch} />}
       {activeTab === 'release' && <ReleaseTab batch={batch} employeeById={employeeById} onRefresh={onRefresh} />}
@@ -1228,6 +1240,72 @@ function SectionField({ label, value }: { label: string; value: string }) {
       <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-0.5">{label}</p>
       <p className="text-sm text-gray-800">{value}</p>
     </div>
+  );
+}
+
+function LineIdentificationSection({ batch }: { batch: BatchRecord }) {
+  const [lineIdentification, setLineIdentification] = useState<LineIdentificationRecord | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [showLineModal, setShowLineModal] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setLineIdentification(await getLineIdentification(batch.id));
+    } finally {
+      setLoading(false);
+    }
+  }, [batch.id]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const handleExport = async () => {
+    if (!lineIdentification) return;
+    try {
+      await exportLineIdentification(lineIdentification.id, batch.batch_code || batch.production_order_number);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  if (loading) return null;
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-sm font-semibold text-gray-900">Identificación de línea</p>
+        {lineIdentification ? (
+          <SecondaryButton onClick={() => void handleExport()} icon={<FileDown size={13} />}>Exportar</SecondaryButton>
+        ) : (
+          <SecondaryButton onClick={() => setShowLineModal(true)} icon={<Plus size={13} />}>Registrar</SecondaryButton>
+        )}
+      </div>
+      {lineIdentification ? (
+        <>
+          <div className="grid sm:grid-cols-2 gap-4 mb-3">
+            <SectionField label="Área" value={lineIdentification.area_name || 'Sin asignar'} />
+            <SectionField label="Línea" value={lineIdentification.production_line_name || 'Sin asignar'} />
+            <SectionField label="Colocada" value={formatDateTime(lineIdentification.placed_at)} />
+            <SectionField label="Retirada" value={formatDateTime(lineIdentification.removed_at)} />
+          </div>
+          <SignatureBlock resourcePath="line-identifications" resourceId={lineIdentification.id} role="RESPONSIBLE" label="Colocada por" />
+        </>
+      ) : (
+        <EmptyState title="Sin identificación de línea registrada" />
+      )}
+
+      <NewLineIdentificationModal
+        open={showLineModal}
+        batchId={batch.id}
+        onClose={() => setShowLineModal(false)}
+        onCreated={async () => {
+          setShowLineModal(false);
+          await load();
+        }}
+      />
+    </Card>
   );
 }
 
@@ -1289,6 +1367,8 @@ function GeneralTab({
           </div>
         )}
       </Card>
+
+      <LineIdentificationSection batch={batch} />
 
       <Modal title="Cambiar estado del lote" open={showStatusModal} onClose={() => setShowStatusModal(false)}>
         <div className="space-y-4">
@@ -1390,103 +1470,116 @@ function DispensingTab({ batch, employeeById }: { batch: BatchRecord; employeeBy
   };
 
   if (loading) return <LoadingState label="Cargando dispensación..." />;
-  if (!order) return <EmptyState title="Sin orden de dispensación registrada para este lote" />;
+  if (!order) {
+    return (
+      <div className="space-y-4">
+        <Card className="p-5">
+          <EmptyState title="Sin orden de dispensación registrada para este lote" />
+        </Card>
+        <PhaseClearanceAndCleaningSection batch={batch} phase="DISPENSING" phaseLabel="Dispensación" />
+      </div>
+    );
+  }
 
   return (
-    <Card className="p-5">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <p className="text-sm font-semibold text-gray-900">Orden de dispensación</p>
-          <p className="text-xs text-gray-400">
-            Responsable: {getEmployeeName(employeeById.get(order.responsible ?? ''))} · Verificador: {getEmployeeName(employeeById.get(order.verifier ?? ''))}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Badge label={order.status} color={order.status === 'COMPLETED' ? 'green' : 'yellow'} />
-          <SecondaryButton onClick={() => void handleExport()} icon={<FileDown size={13} />}>Exportar</SecondaryButton>
-        </div>
-      </div>
-
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="text-left text-[10px] uppercase text-gray-400 border-b border-gray-100">
-              <th className="py-2 pr-3">#</th>
-              <th className="py-2 pr-3">Materia prima</th>
-              <th className="py-2 pr-3">Teórica</th>
-              <th className="py-2 pr-3">Pesada</th>
-              <th className="py-2 pr-3">Desv. %</th>
-              <th className="py-2 pr-3">Estado</th>
-              <th className="py-2 pr-3">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {order.lines.map((line) => (
-              <tr key={line.id} className="border-b border-gray-50">
-                <td className="py-2 pr-3">{line.sequence}</td>
-                <td className="py-2 pr-3">{line.item_name || line.item}</td>
-                <td className="py-2 pr-3">{line.theoretical_quantity}</td>
-                <td className="py-2 pr-3">{line.net_weight ?? '-'}</td>
-                <td className={`py-2 pr-3 ${line.is_within_tolerance === false ? 'text-red-600 font-semibold' : ''}`}>
-                  {line.deviation_percentage !== null ? `${line.deviation_percentage.toFixed(2)}%` : '-'}
-                </td>
-                <td className="py-2 pr-3">
-                  <Badge label={line.status} color={line.status === 'VERIFIED' || line.status === 'CLOSED' ? 'green' : 'yellow'} />
-                </td>
-                <td className="py-2 pr-3">
-                  <div className="flex items-center gap-2">
-                    {line.status === 'PENDING' && (
-                      <button onClick={() => setWeighModalLineId(line.id)} className="text-[#2a4038] hover:underline">Pesar</button>
-                    )}
-                    {line.status === 'WEIGHED' && (
-                      <button onClick={() => void handleVerify(line.id)} className="text-[#2a4038] hover:underline">Verificar</button>
-                    )}
-                    {line.status !== 'PENDING' && (
-                      <button
-                        onClick={() => setIdentificationLine(line)}
-                        className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700"
-                        title="Identificación de materia prima"
-                      >
-                        <Printer size={13} />
-                      </button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <Modal title="Registrar pesada" open={Boolean(weighModalLineId)} onClose={() => setWeighModalLineId(null)}>
-        <div className="space-y-4">
-          <label className="block">
-            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Tara</span>
-            <input type="number" step="0.001" value={tare} onChange={(e) => setTare(e.target.value)} className={inputCls} />
-          </label>
-          <label className="block">
-            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Peso bruto</span>
-            <input type="number" step="0.001" value={grossWeight} onChange={(e) => setGrossWeight(e.target.value)} className={inputCls} />
-          </label>
-          <label className="block">
-            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Recipiente</span>
-            <input value={container} onChange={(e) => setContainer(e.target.value)} className={inputCls} />
-          </label>
-          <div className="flex justify-end gap-2">
-            <SecondaryButton onClick={() => setWeighModalLineId(null)}>Cancelar</SecondaryButton>
-            <PrimaryButton onClick={() => void handleWeigh()}>Guardar pesada</PrimaryButton>
+    <div className="space-y-4">
+      <Card className="p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <p className="text-sm font-semibold text-gray-900">Orden de dispensación</p>
+            <p className="text-xs text-gray-400">
+              Responsable: {getEmployeeName(employeeById.get(order.responsible ?? ''))} · Verificador: {getEmployeeName(employeeById.get(order.verifier ?? ''))}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge label={order.status} color={order.status === 'COMPLETED' ? 'green' : 'yellow'} />
+            <SecondaryButton onClick={() => void handleExport()} icon={<FileDown size={13} />}>Exportar</SecondaryButton>
           </div>
         </div>
-      </Modal>
 
-      {identificationLine && (
-        <RawMaterialIdentificationModal
-          line={identificationLine}
-          batch={batch}
-          onClose={() => setIdentificationLine(null)}
-        />
-      )}
-    </Card>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-left text-[10px] uppercase text-gray-400 border-b border-gray-100">
+                <th className="py-2 pr-3">#</th>
+                <th className="py-2 pr-3">Materia prima</th>
+                <th className="py-2 pr-3">Teórica</th>
+                <th className="py-2 pr-3">Pesada</th>
+                <th className="py-2 pr-3">Desv. %</th>
+                <th className="py-2 pr-3">Estado</th>
+                <th className="py-2 pr-3">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {order.lines.map((line) => (
+                <tr key={line.id} className="border-b border-gray-50">
+                  <td className="py-2 pr-3">{line.sequence}</td>
+                  <td className="py-2 pr-3">{line.item_name || line.item}</td>
+                  <td className="py-2 pr-3">{line.theoretical_quantity}</td>
+                  <td className="py-2 pr-3">{line.net_weight ?? '-'}</td>
+                  <td className={`py-2 pr-3 ${line.is_within_tolerance === false ? 'text-red-600 font-semibold' : ''}`}>
+                    {line.deviation_percentage !== null ? `${line.deviation_percentage.toFixed(2)}%` : '-'}
+                  </td>
+                  <td className="py-2 pr-3">
+                    <Badge label={line.status} color={line.status === 'VERIFIED' || line.status === 'CLOSED' ? 'green' : 'yellow'} />
+                  </td>
+                  <td className="py-2 pr-3">
+                    <div className="flex items-center gap-2">
+                      {line.status === 'PENDING' && (
+                        <button onClick={() => setWeighModalLineId(line.id)} className="text-[#2a4038] hover:underline">Pesar</button>
+                      )}
+                      {line.status === 'WEIGHED' && (
+                        <button onClick={() => void handleVerify(line.id)} className="text-[#2a4038] hover:underline">Verificar</button>
+                      )}
+                      {line.status !== 'PENDING' && (
+                        <button
+                          onClick={() => setIdentificationLine(line)}
+                          className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700"
+                          title="Identificación de materia prima"
+                        >
+                          <Printer size={13} />
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <Modal title="Registrar pesada" open={Boolean(weighModalLineId)} onClose={() => setWeighModalLineId(null)}>
+          <div className="space-y-4">
+            <label className="block">
+              <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Tara</span>
+              <input type="number" step="0.001" value={tare} onChange={(e) => setTare(e.target.value)} className={inputCls} />
+            </label>
+            <label className="block">
+              <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Peso bruto</span>
+              <input type="number" step="0.001" value={grossWeight} onChange={(e) => setGrossWeight(e.target.value)} className={inputCls} />
+            </label>
+            <label className="block">
+              <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Recipiente</span>
+              <input value={container} onChange={(e) => setContainer(e.target.value)} className={inputCls} />
+            </label>
+            <div className="flex justify-end gap-2">
+              <SecondaryButton onClick={() => setWeighModalLineId(null)}>Cancelar</SecondaryButton>
+              <PrimaryButton onClick={() => void handleWeigh()}>Guardar pesada</PrimaryButton>
+            </div>
+          </div>
+        </Modal>
+
+        {identificationLine && (
+          <RawMaterialIdentificationModal
+            line={identificationLine}
+            batch={batch}
+            onClose={() => setIdentificationLine(null)}
+          />
+        )}
+      </Card>
+
+      <PhaseClearanceAndCleaningSection batch={batch} phase="DISPENSING" phaseLabel="Dispensación" />
+    </div>
   );
 }
 
@@ -1503,6 +1596,7 @@ function RawMaterialIdentificationModal({
   const [prints, setPrints] = useState<RawMaterialIdentificationPrintRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [reprintReason, setReprintReason] = useState('');
+  const [labelPhoto, setLabelPhoto] = useState<File | null>(null);
   const [printing, setPrinting] = useState(false);
 
   const load = useCallback(async () => {
@@ -1528,16 +1622,22 @@ function RawMaterialIdentificationModal({
       toast.warning('Indica el motivo de la reimpresión.');
       return;
     }
+    if (!labelPhoto) {
+      toast.warning('Adjunta la foto del rótulo de la materia prima antes de continuar.');
+      return;
+    }
     setPrinting(true);
     try {
       const created = await createRawMaterialIdentificationPrint({
         dispensing_line: line.id,
         is_reprint: hasPrinted,
         reprint_reason: hasPrinted ? reprintReason : '',
+        label_photo: labelPhoto,
       });
       await exportRawMaterialIdentification(created.id, batch.batch_code || batch.production_order_number);
       toast.success(hasPrinted ? 'Reimpresión registrada' : 'Identificación impresa');
       setReprintReason('');
+      setLabelPhoto(null);
       await load();
     } catch (error) {
       console.error(error);
@@ -1568,15 +1668,38 @@ function RawMaterialIdentificationModal({
           ) : prints.length === 0 ? (
             <p className="text-xs text-gray-400">Aún no se ha impreso esta identificación.</p>
           ) : (
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               {prints.map((entry) => (
-                <div key={entry.id} className="flex items-center justify-between text-xs border-b border-gray-50 pb-1.5">
-                  <span>{entry.is_reprint ? `Reimpresión — ${entry.reprint_reason || 'sin motivo'}` : 'Impresión original'}</span>
+                <div key={entry.id} className="flex items-center justify-between gap-3 text-xs border-b border-gray-50 pb-2">
+                  <div className="flex items-center gap-2">
+                    {entry.label_photo && (
+                      <img
+                        src={getMediaUrl(entry.label_photo)}
+                        alt="Rótulo de materia prima"
+                        className="h-10 w-10 object-cover rounded border border-gray-200"
+                      />
+                    )}
+                    <span>{entry.is_reprint ? `Reimpresión — ${entry.reprint_reason || 'sin motivo'}` : 'Impresión original'}</span>
+                  </div>
                   <span className="text-gray-400">{formatDateTime(entry.printed_at)}</span>
                 </div>
               ))}
             </div>
           )}
+        </div>
+
+        <div className="pt-3 border-t border-gray-100">
+          <p className="text-xs font-semibold text-gray-700 mb-2">Paso 2 · Foto del rótulo de la materia prima</p>
+          <label className="block">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Foto del rótulo</span>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => setLabelPhoto(e.target.files?.[0] ?? null)}
+              className={inputCls}
+            />
+            <p className="text-[11px] text-gray-400 mt-1">Requerida para imprimir o reimprimir la identificación.</p>
+          </label>
         </div>
 
         {hasPrinted && (
@@ -1601,29 +1724,22 @@ function ManufacturingTab({ batch, employeeById }: { batch: BatchRecord; employe
   const toast = useToast();
   const [clearances, setClearances] = useState<LineClearanceRecord[]>([]);
   const [cleanings, setCleanings] = useState<CleaningRecordRecord[]>([]);
-  const [lineIdentification, setLineIdentification] = useState<LineIdentificationRecord | null>(null);
   const [steps, setSteps] = useState<ManufacturingStepExecutionRecord[]>([]);
-  const [productionControl, setProductionControl] = useState<ProductionControlRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [showClearanceModal, setShowClearanceModal] = useState(false);
   const [showCleaningModal, setShowCleaningModal] = useState(false);
-  const [showLineModal, setShowLineModal] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [clearancesRes, cleaningsRes, lineRes, stepsRes, controlRes] = await Promise.allSettled([
+      const [clearancesRes, cleaningsRes, stepsRes] = await Promise.allSettled([
         getLineClearances(batch.id),
         getCleaningRecords(batch.id),
-        getLineIdentification(batch.id),
         getManufacturingStepExecutions(batch.id),
-        getProductionControl(batch.id),
       ]);
-      if (clearancesRes.status === 'fulfilled') setClearances(clearancesRes.value);
-      if (cleaningsRes.status === 'fulfilled') setCleanings(cleaningsRes.value);
-      if (lineRes.status === 'fulfilled') setLineIdentification(lineRes.value);
+      if (clearancesRes.status === 'fulfilled') setClearances(clearancesRes.value.filter((c) => c.phase === 'MANUFACTURING'));
+      if (cleaningsRes.status === 'fulfilled') setCleanings(cleaningsRes.value.filter((c) => c.phase === 'MANUFACTURING'));
       if (stepsRes.status === 'fulfilled') setSteps(stepsRes.value);
-      if (controlRes.status === 'fulfilled') setProductionControl(controlRes.value);
     } catch {
       toast.error('No se pudo cargar la información de fabricación');
     } finally {
@@ -1639,7 +1755,7 @@ function ManufacturingTab({ batch, employeeById }: { batch: BatchRecord; employe
     try {
       await approveLineClearance(id);
       toast.success('Despeje aprobado');
-      setClearances(await getLineClearances(batch.id));
+      await load();
     } catch (error) {
       console.error(error);
       toast.error(error instanceof Error ? error.message : 'No se pudo aprobar el despeje');
@@ -1650,7 +1766,7 @@ function ManufacturingTab({ batch, employeeById }: { batch: BatchRecord; employe
     try {
       await rejectLineClearance(id);
       toast.info('Despeje rechazado');
-      setClearances(await getLineClearances(batch.id));
+      await load();
     } catch (error) {
       console.error(error);
       toast.error('No se pudo rechazar el despeje');
@@ -1675,32 +1791,12 @@ function ManufacturingTab({ batch, employeeById }: { batch: BatchRecord; employe
     }
   };
 
-  const handleExportLineIdentification = async () => {
-    if (!lineIdentification) return;
-    try {
-      await exportLineIdentification(lineIdentification.id, batch.batch_code || batch.production_order_number);
-    } catch (error) {
-      console.error(error);
-      toast.error('No se pudo exportar la identificación de línea');
-    }
-  };
-
   const handleExportSteps = async () => {
     try {
       await exportManufacturingSteps(batch.id, batch.batch_code || batch.production_order_number);
     } catch (error) {
       console.error(error);
       toast.error('No se pudo exportar las instrucciones de fabricación');
-    }
-  };
-
-  const handleExportProductionControl = async () => {
-    if (!productionControl) return;
-    try {
-      await exportProductionControl(productionControl.id, batch.batch_code || batch.production_order_number);
-    } catch (error) {
-      console.error(error);
-      toast.error('No se pudo exportar el control de producción');
     }
   };
 
@@ -1788,30 +1884,6 @@ function ManufacturingTab({ batch, employeeById }: { batch: BatchRecord; employe
 
       <Card className="p-5">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-sm font-semibold text-gray-900">Identificación de línea</p>
-          {lineIdentification ? (
-            <SecondaryButton onClick={() => void handleExportLineIdentification()} icon={<FileDown size={13} />}>Exportar</SecondaryButton>
-          ) : (
-            <SecondaryButton onClick={() => setShowLineModal(true)} icon={<Plus size={13} />}>Registrar</SecondaryButton>
-          )}
-        </div>
-        {lineIdentification ? (
-          <>
-            <div className="grid sm:grid-cols-2 gap-4 mb-3">
-              <SectionField label="Área" value={lineIdentification.area_name || 'Sin asignar'} />
-              <SectionField label="Línea" value={lineIdentification.production_line_name || 'Sin asignar'} />
-              <SectionField label="Colocada" value={formatDateTime(lineIdentification.placed_at)} />
-              <SectionField label="Retirada" value={formatDateTime(lineIdentification.removed_at)} />
-            </div>
-            <SignatureBlock resourcePath="line-identifications" resourceId={lineIdentification.id} role="RESPONSIBLE" label="Colocada por" />
-          </>
-        ) : (
-          <EmptyState title="Sin identificación de línea registrada" />
-        )}
-      </Card>
-
-      <Card className="p-5">
-        <div className="flex items-center justify-between mb-3">
           <p className="text-sm font-semibold text-gray-900">Instrucciones de fabricación</p>
           {steps.length > 0 && (
             <SecondaryButton onClick={() => void handleExportSteps()} icon={<FileDown size={13} />}>Exportar</SecondaryButton>
@@ -1849,55 +1921,6 @@ function ManufacturingTab({ batch, employeeById }: { batch: BatchRecord; employe
         )}
       </Card>
 
-      <Card className="p-5">
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-sm font-semibold text-gray-900">Control de producción (materiales de acondicionamiento)</p>
-          {productionControl && (
-            <SecondaryButton onClick={() => void handleExportProductionControl()} icon={<FileDown size={13} />}>Exportar</SecondaryButton>
-          )}
-        </div>
-        {!productionControl || productionControl.materials.length === 0 ? (
-          <EmptyState title="Sin materiales registrados" />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="text-left text-[10px] uppercase text-gray-400 border-b border-gray-100">
-                  <th className="py-2 pr-3">Material</th>
-                  <th className="py-2 pr-3">Entregado</th>
-                  <th className="py-2 pr-3">Consumido</th>
-                  <th className="py-2 pr-3">Buenas</th>
-                  <th className="py-2 pr-3">Malas proceso</th>
-                  <th className="py-2 pr-3">Malas fábrica</th>
-                  <th className="py-2 pr-3">Diferencia</th>
-                </tr>
-              </thead>
-              <tbody>
-                {productionControl.materials.map((material) => (
-                  <tr key={material.id} className="border-b border-gray-50">
-                    <td className="py-2 pr-3">{material.item}</td>
-                    <td className="py-2 pr-3">{material.delivered_quantity}</td>
-                    <td className="py-2 pr-3">{material.consumed_quantity}</td>
-                    <td className="py-2 pr-3">{material.good_units}</td>
-                    <td className="py-2 pr-3">{material.process_rejects}</td>
-                    <td className="py-2 pr-3">{material.factory_rejects}</td>
-                    <td className={`py-2 pr-3 ${Number(material.reconciliation_difference) !== 0 ? 'text-amber-600 font-semibold' : ''}`}>
-                      {material.reconciliation_difference}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {productionControl && (
-          <div className="grid sm:grid-cols-2 gap-2 mt-4 pt-3 border-t border-gray-100">
-            <SignatureBlock resourcePath="production-controls" resourceId={productionControl.id} role="RESPONSIBLE" label="Entregado por" />
-            <SignatureBlock resourcePath="production-controls" resourceId={productionControl.id} role="VERIFIER" label="Recibido por" />
-          </div>
-        )}
-      </Card>
-
       <NewLineClearanceModal
         open={showClearanceModal}
         batchId={batch.id}
@@ -1916,15 +1939,6 @@ function ManufacturingTab({ batch, employeeById }: { batch: BatchRecord; employe
           await load();
         }}
       />
-      <NewLineIdentificationModal
-        open={showLineModal}
-        batchId={batch.id}
-        onClose={() => setShowLineModal(false)}
-        onCreated={async () => {
-          setShowLineModal(false);
-          await load();
-        }}
-      />
     </div>
   );
 }
@@ -1932,17 +1946,19 @@ function ManufacturingTab({ batch, employeeById }: { batch: BatchRecord; employe
 function NewLineClearanceModal({
   open,
   batchId,
+  defaultPhase,
   onClose,
   onCreated,
 }: {
   open: boolean;
   batchId: string;
+  defaultPhase?: 'DISPENSING' | 'MANUFACTURING' | 'FILLING' | 'PACKAGING';
   onClose: () => void;
   onCreated: () => Promise<void>;
 }) {
   const toast = useToast();
   const { areas, productionLines } = useAreasAndLines();
-  const [phase, setPhase] = useState<'DISPENSING' | 'MANUFACTURING' | 'FILLING' | 'PACKAGING'>('MANUFACTURING');
+  const [phase, setPhase] = useState<'DISPENSING' | 'MANUFACTURING' | 'FILLING' | 'PACKAGING'>(defaultPhase ?? 'MANUFACTURING');
   const [area, setArea] = useState('');
   const [productionLine, setProductionLine] = useState('');
   const [previousProduct, setPreviousProduct] = useState('');
@@ -2033,17 +2049,19 @@ function NewLineClearanceModal({
 function NewCleaningRecordModal({
   open,
   batchId,
+  defaultPhase,
   onClose,
   onCreated,
 }: {
   open: boolean;
   batchId: string;
+  defaultPhase?: 'DISPENSING' | 'MANUFACTURING' | 'FILLING' | 'PACKAGING';
   onClose: () => void;
   onCreated: () => Promise<void>;
 }) {
   const toast = useToast();
   const [recordType, setRecordType] = useState<'AREA' | 'EQUIPMENT'>('AREA');
-  const [phase, setPhase] = useState<'DISPENSING' | 'MANUFACTURING' | 'FILLING' | 'PACKAGING'>('MANUFACTURING');
+  const [phase, setPhase] = useState<'DISPENSING' | 'MANUFACTURING' | 'FILLING' | 'PACKAGING'>(defaultPhase ?? 'MANUFACTURING');
   const [area, setArea] = useState('');
   const [equipment, setEquipment] = useState('');
   const [equipmentCode, setEquipmentCode] = useState('');
@@ -2229,18 +2247,14 @@ function NewLineIdentificationModal({
 function BulkQualityTab({ batch }: { batch: BatchRecord }) {
   const toast = useToast();
   const [certificate, setCertificate] = useState<AnalysisCertificateRecord | null>(null);
-  const [microbiology, setMicrobiology] = useState<MicrobiologyAnalysisRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [showCertificateModal, setShowCertificateModal] = useState(false);
-  const [showMicrobiologyModal, setShowMicrobiologyModal] = useState(false);
   const [loadingFromSpec, setLoadingFromSpec] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [certRes, microRes] = await Promise.allSettled([getAnalysisCertificate(batch.id), getMicrobiologyAnalysis(batch.id)]);
-      if (certRes.status === 'fulfilled') setCertificate(certRes.value);
-      if (microRes.status === 'fulfilled') setMicrobiology(microRes.value);
+      setCertificate(await getAnalysisCertificate(batch.id));
     } finally {
       setLoading(false);
     }
@@ -2257,16 +2271,6 @@ function BulkQualityTab({ batch }: { batch: BatchRecord }) {
     } catch (error) {
       console.error(error);
       toast.error('No se pudo exportar el certificado');
-    }
-  };
-
-  const handleExportMicrobiology = async () => {
-    if (!microbiology) return;
-    try {
-      await exportMicrobiologyAnalysis(microbiology.id, batch.batch_code || batch.production_order_number);
-    } catch (error) {
-      console.error(error);
-      toast.error('No se pudo exportar el análisis microbiológico');
     }
   };
 
@@ -2356,45 +2360,12 @@ function BulkQualityTab({ batch }: { batch: BatchRecord }) {
         )}
       </Card>
 
-      <Card className="p-5">
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-sm font-semibold text-gray-900">Análisis microbiológico</p>
-          {microbiology ? (
-            <SecondaryButton onClick={() => void handleExportMicrobiology()} icon={<FileDown size={13} />}>Exportar</SecondaryButton>
-          ) : (
-            <SecondaryButton onClick={() => setShowMicrobiologyModal(true)} icon={<Plus size={13} />}>Nuevo análisis</SecondaryButton>
-          )}
-        </div>
-        {!microbiology ? (
-          <EmptyState title="Sin análisis microbiológico registrado" />
-        ) : (
-          <>
-            <div className="grid sm:grid-cols-2 gap-4 mb-3">
-              <SectionField label="Laboratorio" value={microbiology.laboratory || '-'} />
-              <SectionField label="N.º informe" value={microbiology.report_number || '-'} />
-              <SectionField label="Resultado general" value={microbiology.overall_result} />
-              <SectionField label="Fecha de aprobación" value={formatDate(microbiology.approved_at)} />
-            </div>
-            <SignatureBlock resourcePath="microbiology-analyses" resourceId={microbiology.id} role="RESPONSIBLE" label="Aprobado por" />
-          </>
-        )}
-      </Card>
-
       <NewAnalysisCertificateModal
         open={showCertificateModal}
         batchId={batch.id}
         onClose={() => setShowCertificateModal(false)}
         onCreated={async () => {
           setShowCertificateModal(false);
-          await load();
-        }}
-      />
-      <NewMicrobiologyAnalysisModal
-        open={showMicrobiologyModal}
-        batchId={batch.id}
-        onClose={() => setShowMicrobiologyModal(false)}
-        onCreated={async () => {
-          setShowMicrobiologyModal(false);
           await load();
         }}
       />
@@ -2522,145 +2493,189 @@ function NewMicrobiologyAnalysisModal({
   );
 }
 
-function FillingTab({ batch }: { batch: BatchRecord }) {
+function PhaseClearanceAndCleaningSection({
+  batch,
+  phase,
+  phaseLabel,
+}: {
+  batch: BatchRecord;
+  phase: 'DISPENSING' | 'MANUFACTURING' | 'FILLING' | 'PACKAGING';
+  phaseLabel: string;
+}) {
   const toast = useToast();
-  const { productionLines } = useAreasAndLines();
-  const [control, setControl] = useState<FillingControlRecord | null>(null);
+  const [clearances, setClearances] = useState<LineClearanceRecord[]>([]);
+  const [cleanings, setCleanings] = useState<CleaningRecordRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
-  const [productionLine, setProductionLine] = useState('');
-  const [equipment, setEquipment] = useState('');
-  const [plannedQuantity, setPlannedQuantity] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [showClearanceModal, setShowClearanceModal] = useState(false);
+  const [showCleaningModal, setShowCleaningModal] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setControl(await getFillingControl(batch.id));
+      const [clearancesRes, cleaningsRes] = await Promise.allSettled([
+        getLineClearances(batch.id),
+        getCleaningRecords(batch.id),
+      ]);
+      if (clearancesRes.status === 'fulfilled') {
+        setClearances(clearancesRes.value.filter((c) => c.phase === phase));
+      }
+      if (cleaningsRes.status === 'fulfilled') {
+        setCleanings(cleaningsRes.value.filter((c) => c.phase === phase));
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error(`No se pudo cargar despeje/limpieza de ${phaseLabel.toLowerCase()}`);
     } finally {
       setLoading(false);
     }
-  }, [batch.id]);
+  }, [batch.id, phase, phaseLabel, toast]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const handleCreate = async () => {
-    setSaving(true);
+  const handleApprove = async (id: string) => {
     try {
-      await createFillingControl({
-        batch: batch.id,
-        production_line: productionLine || null,
-        equipment,
-        started_at: new Date().toISOString(),
-        planned_quantity: plannedQuantity ? Number(plannedQuantity) : null,
-      });
-      toast.success('Control de llenado creado');
-      setShowModal(false);
+      await approveLineClearance(id);
+      toast.success('Despeje aprobado');
       await load();
     } catch (error) {
       console.error(error);
-      toast.error(error instanceof Error ? error.message : 'No se pudo crear el control de llenado');
-    } finally {
-      setSaving(false);
+      toast.error(error instanceof Error ? error.message : 'No se pudo aprobar el despeje');
     }
   };
 
-  if (loading) return <LoadingState label="Cargando llenado..." />;
-
-  if (!control) {
-    return (
-      <Card className="p-5">
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-sm font-semibold text-gray-900">Control de llenado</p>
-          <SecondaryButton onClick={() => setShowModal(true)} icon={<Plus size={13} />}>Nuevo control</SecondaryButton>
-        </div>
-        <EmptyState title="Sin control de llenado registrado" />
-
-        <Modal title="Nuevo control de llenado" open={showModal} onClose={() => setShowModal(false)}>
-          <div className="space-y-4">
-            <label className="block">
-              <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Línea</span>
-              <select value={productionLine} onChange={(e) => setProductionLine(e.target.value)} className={selectCls}>
-                <option value="">Sin asignar</option>
-                {productionLines.map((line) => (
-                  <option key={line.id} value={line.id}>{line.name}</option>
-                ))}
-              </select>
-            </label>
-            <label className="block">
-              <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Equipo</span>
-              <input value={equipment} onChange={(e) => setEquipment(e.target.value)} className={inputCls} />
-            </label>
-            <label className="block">
-              <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Cantidad programada</span>
-              <input type="number" value={plannedQuantity} onChange={(e) => setPlannedQuantity(e.target.value)} className={inputCls} />
-            </label>
-            <div className="flex justify-end gap-2">
-              <SecondaryButton onClick={() => setShowModal(false)}>Cancelar</SecondaryButton>
-              <PrimaryButton onClick={() => void handleCreate()} disabled={saving}>
-                {saving ? 'Guardando...' : 'Crear control'}
-              </PrimaryButton>
-            </div>
-          </div>
-        </Modal>
-      </Card>
-    );
-  }
-
-  const handleExport = async () => {
+  const handleReject = async (id: string) => {
     try {
-      await exportFillingControl(control.id, batch.batch_code || batch.production_order_number);
+      await rejectLineClearance(id);
+      toast.info('Despeje rechazado');
+      await load();
     } catch (error) {
       console.error(error);
-      toast.error('No se pudo exportar el control de llenado');
+      toast.error('No se pudo rechazar el despeje');
     }
   };
 
+  const handleExportClearance = async (clearance: LineClearanceRecord) => {
+    try {
+      await exportLineClearance(clearance.id, batch.batch_code || batch.production_order_number);
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo exportar el despeje');
+    }
+  };
+
+  const handleExportCleaning = async (record: CleaningRecordRecord) => {
+    try {
+      await exportCleaningRecord(record.id, batch.batch_code || batch.production_order_number);
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo exportar la limpieza');
+    }
+  };
+
+  if (loading) return null;
+
   return (
-    <Card className="p-5">
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-sm font-semibold text-gray-900">Control de llenado</p>
-        <SecondaryButton onClick={() => void handleExport()} icon={<FileDown size={13} />}>Exportar</SecondaryButton>
-      </div>
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-        <SectionField label="Línea" value={control.production_line_name || '-'} />
-        <SectionField label="Programado" value={control.planned_quantity ?? '-'} />
-        <SectionField label="Producido" value={control.produced_quantity} />
-        <SectionField label="Rendimiento" value={control.yield_percentage !== null ? `${control.yield_percentage.toFixed(1)}%` : '-'} />
-      </div>
-      <p className="text-xs font-semibold text-gray-700 mb-2">Personal participante</p>
-      <div className="space-y-1.5">
-        {control.participants.length === 0 ? (
-          <p className="text-xs text-gray-400">Sin personal registrado.</p>
+    <>
+      <Card className="p-5">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-sm font-semibold text-gray-900">Despeje de línea ({phaseLabel.toLowerCase()})</p>
+          <SecondaryButton onClick={() => setShowClearanceModal(true)} icon={<Plus size={13} />}>Nuevo despeje</SecondaryButton>
+        </div>
+        {clearances.length === 0 ? (
+          <EmptyState title="Sin despejes registrados" />
         ) : (
-          control.participants.map((participant) => (
-            <div key={participant.id} className="flex items-center justify-between text-xs border-b border-gray-50 pb-1.5">
-              <span>{participant.activity || participant.role}</span>
-              <span className="text-gray-400">{formatDateTime(participant.check_in)} - {formatDateTime(participant.check_out)}</span>
-            </div>
-          ))
+          <div className="space-y-2">
+            {clearances.map((clearance) => (
+              <div key={clearance.id} className="flex items-center justify-between gap-3 border border-gray-100 rounded-lg p-3">
+                <div>
+                  <p className="text-xs font-semibold text-gray-900">Área: {clearance.area_name || '-'}</p>
+                  <p className="text-[11px] text-gray-400">{formatDateTime(clearance.cleared_at)}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge label={clearance.status} color={clearance.status === 'APPROVED' ? 'green' : clearance.status === 'REJECTED' ? 'red' : 'yellow'} />
+                  {clearance.status === 'PENDING' && (
+                    <>
+                      <button onClick={() => void handleApprove(clearance.id)} className="text-xs text-emerald-600 hover:underline">Aprobar</button>
+                      <button onClick={() => void handleReject(clearance.id)} className="text-xs text-red-500 hover:underline">Rechazar</button>
+                    </>
+                  )}
+                  <button onClick={() => void handleExportClearance(clearance)} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50">
+                    <FileDown size={12} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
-      </div>
-      <div className="grid sm:grid-cols-2 gap-2 mt-4 pt-3 border-t border-gray-100">
-        <SignatureBlock resourcePath="filling-controls" resourceId={control.id} role="RESPONSIBLE" label="Responsable" />
-        <SignatureBlock resourcePath="filling-controls" resourceId={control.id} role="VERIFIER" label="Verificador" />
-      </div>
-    </Card>
+      </Card>
+
+      <Card className="p-5">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-sm font-semibold text-gray-900">Limpieza de áreas y equipos ({phaseLabel.toLowerCase()})</p>
+          <SecondaryButton onClick={() => setShowCleaningModal(true)} icon={<Plus size={13} />}>Nueva limpieza</SecondaryButton>
+        </div>
+        {cleanings.length === 0 ? (
+          <EmptyState title="Sin registros de limpieza" />
+        ) : (
+          <div className="space-y-2">
+            {cleanings.map((record) => (
+              <div key={record.id} className="border border-gray-100 rounded-lg p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-900">{record.record_type === 'AREA' ? record.area : record.equipment}</p>
+                    <p className="text-[11px] text-gray-400">Sanitizante: {record.sanitizer || '-'} · {formatDateTime(record.cleaned_at)}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {record.is_expired && <Badge label="Vencida" color="red" />}
+                    {record.result && <Badge label={record.result} color={record.result === 'APPROVED' ? 'green' : 'red'} />}
+                    <button onClick={() => void handleExportCleaning(record)} className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50 hover:text-gray-700 transition-colors" title="Exportar">
+                      <FileDown size={12} />
+                    </button>
+                  </div>
+                </div>
+                <div className="grid sm:grid-cols-2 gap-2 mt-2 pt-2 border-t border-gray-50">
+                  <SignatureBlock resourcePath="cleaning-records" resourceId={record.id} role="RESPONSIBLE" label="Realizado por" />
+                  <SignatureBlock resourcePath="cleaning-records" resourceId={record.id} role="VERIFIER" label="Verificado por" />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <NewLineClearanceModal
+        open={showClearanceModal}
+        batchId={batch.id}
+        defaultPhase={phase}
+        onClose={() => setShowClearanceModal(false)}
+        onCreated={async () => {
+          setShowClearanceModal(false);
+          await load();
+        }}
+      />
+      <NewCleaningRecordModal
+        open={showCleaningModal}
+        batchId={batch.id}
+        defaultPhase={phase}
+        onClose={() => setShowCleaningModal(false)}
+        onCreated={async () => {
+          setShowCleaningModal(false);
+          await load();
+        }}
+      />
+    </>
   );
 }
 
-function PackagingTab({ batch }: { batch: BatchRecord }) {
+function FillingSealAndWeightSection({ batch }: { batch: BatchRecord }) {
   const toast = useToast();
-  const [control, setControl] = useState<PackagingControlRecord | null>(null);
   const [seal, setSeal] = useState<SealIntegrityControlRecord | null>(null);
   const [weight, setWeight] = useState<WeightVolumeControlRecord | null>(null);
   const [loading, setLoading] = useState(true);
-  const [showPackagingModal, setShowPackagingModal] = useState(false);
   const [showSealModal, setShowSealModal] = useState(false);
   const [showWeightModal, setShowWeightModal] = useState(false);
-  const [showLotMarkingModal, setShowLotMarkingModal] = useState(false);
   const [sampleForm, setSampleForm] = useState({ sampleNumber: '', grossWeight: '', tare: '' });
   const [savingSample, setSavingSample] = useState(false);
   const [authorizing, setAuthorizing] = useState(false);
@@ -2668,12 +2683,10 @@ function PackagingTab({ batch }: { batch: BatchRecord }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [packagingRes, sealRes, weightRes] = await Promise.allSettled([
-        getPackagingControl(batch.id),
+      const [sealRes, weightRes] = await Promise.allSettled([
         getSealIntegrityControl(batch.id),
         getWeightVolumeControl(batch.id),
       ]);
-      if (packagingRes.status === 'fulfilled') setControl(packagingRes.value);
       if (sealRes.status === 'fulfilled') setSeal(sealRes.value);
       if (weightRes.status === 'fulfilled') setWeight(weightRes.value);
     } finally {
@@ -2723,16 +2736,6 @@ function PackagingTab({ batch }: { batch: BatchRecord }) {
     }
   };
 
-  const handleExportPackaging = async () => {
-    if (!control) return;
-    try {
-      await exportPackagingControl(control.id, batch.batch_code || batch.production_order_number);
-    } catch (error) {
-      console.error(error);
-      toast.error('No se pudo exportar el control de acondicionamiento');
-    }
-  };
-
   const handleExportSeal = async () => {
     if (!seal) return;
     try {
@@ -2753,10 +2756,552 @@ function PackagingTab({ batch }: { batch: BatchRecord }) {
     }
   };
 
+  if (loading) return null;
+
+  return (
+    <div className="grid sm:grid-cols-2 gap-4">
+      <Card className="p-5">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <p className="text-sm font-semibold text-gray-900">Control de hermeticidad</p>
+            <p className="text-[11px] text-gray-400">No todos los productos requieren esta prueba.</p>
+          </div>
+          {seal ? (
+            <SecondaryButton onClick={() => void handleExportSeal()} icon={<FileDown size={13} />}>Exportar</SecondaryButton>
+          ) : (
+            <SecondaryButton onClick={() => setShowSealModal(true)} icon={<Plus size={13} />}>Nuevo</SecondaryButton>
+          )}
+        </div>
+        {!seal ? <EmptyState title="Sin registro" description="Puedes marcar 'No aplica' si el producto no requiere prueba de hermeticidad." /> : (
+          <div className="space-y-2">
+            <Badge
+              label={seal.overall_result === 'NOT_APPLICABLE' ? 'No aplica' : seal.overall_result}
+              color={seal.overall_result === 'APPROVED' ? 'green' : seal.overall_result === 'REJECTED' ? 'red' : seal.overall_result === 'NOT_APPLICABLE' ? 'gray' : 'yellow'}
+            />
+            {seal.overall_result !== 'NOT_APPLICABLE' && (
+              <>
+                <SectionField label="Presión (bar)" value={seal.pressure_bar ?? '-'} />
+                <SectionField label="Tiempo (s)" value={String(seal.time_seconds ?? '-')} />
+              </>
+            )}
+            <SignatureBlock resourcePath="seal-integrity-controls" resourceId={seal.id} role="RESPONSIBLE" label="Realizado por" />
+            <SignatureBlock resourcePath="seal-integrity-controls" resourceId={seal.id} role="VERIFIER" label="Verificado por" />
+          </div>
+        )}
+      </Card>
+      <Card className="p-5">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-sm font-semibold text-gray-900">Control de peso o volumen</p>
+          {weight ? (
+            <SecondaryButton onClick={() => void handleExportWeight()} icon={<FileDown size={13} />}>Exportar</SecondaryButton>
+          ) : (
+            <SecondaryButton onClick={() => setShowWeightModal(true)} icon={<Plus size={13} />}>Nuevo</SecondaryButton>
+          )}
+        </div>
+        {!weight ? <EmptyState title="Sin registro" /> : (
+          <div className="space-y-3">
+            <Badge label={weight.overall_result} color={weight.overall_result === 'APPROVED' ? 'green' : weight.overall_result === 'REJECTED' ? 'red' : 'yellow'} />
+            <SectionField label="Límite inferior" value={weight.lower_limit ?? '-'} />
+            <SectionField label="Límite superior" value={weight.upper_limit ?? '-'} />
+            <p className="text-xs text-gray-400">{weight.samples.length} muestra(s) registradas</p>
+
+            {weight.overall_result === 'REJECTED' && !weight.resumed_authorized_by && (
+              <div className="bg-red-50 border border-red-100 rounded-lg p-3">
+                <p className="text-xs font-semibold text-red-700 mb-2">Bloqueado por muestra fuera de especificación</p>
+                <SecondaryButton onClick={() => void handleAuthorizeResume()} disabled={authorizing}>
+                  {authorizing ? 'Autorizando...' : 'Autorizar reanudación'}
+                </SecondaryButton>
+              </div>
+            )}
+
+            <div className="grid grid-cols-3 gap-2 pt-2 border-t border-gray-100">
+              <input
+                type="number"
+                placeholder="N° muestra"
+                value={sampleForm.sampleNumber}
+                onChange={(e) => setSampleForm((f) => ({ ...f, sampleNumber: e.target.value }))}
+                className={inputCls}
+              />
+              <input
+                type="number"
+                placeholder="Peso bruto"
+                value={sampleForm.grossWeight}
+                onChange={(e) => setSampleForm((f) => ({ ...f, grossWeight: e.target.value }))}
+                className={inputCls}
+              />
+              <input
+                type="number"
+                placeholder="Tara"
+                value={sampleForm.tare}
+                onChange={(e) => setSampleForm((f) => ({ ...f, tare: e.target.value }))}
+                className={inputCls}
+              />
+            </div>
+            <SecondaryButton
+              onClick={() => void handleRecordSample()}
+              disabled={savingSample || (weight.overall_result === 'REJECTED' && !weight.resumed_authorized_by)}
+              icon={<Plus size={13} />}
+            >
+              {savingSample ? 'Registrando...' : 'Registrar muestra'}
+            </SecondaryButton>
+            <SignatureBlock resourcePath="weight-volume-controls" resourceId={weight.id} role="RESPONSIBLE" label="Realizado por" />
+            <SignatureBlock resourcePath="weight-volume-controls" resourceId={weight.id} role="VERIFIER" label="Verificado por" />
+          </div>
+        )}
+      </Card>
+
+      <NewSealIntegrityControlModal
+        open={showSealModal}
+        batchId={batch.id}
+        onClose={() => setShowSealModal(false)}
+        onCreated={async () => {
+          setShowSealModal(false);
+          await load();
+        }}
+      />
+      <NewWeightVolumeControlModal
+        open={showWeightModal}
+        batchId={batch.id}
+        onClose={() => setShowWeightModal(false)}
+        onCreated={async () => {
+          setShowWeightModal(false);
+          await load();
+        }}
+      />
+    </div>
+  );
+}
+
+function FillingTab({ batch, employeeById }: { batch: BatchRecord; employeeById: Map<string, Employee> }) {
+  const toast = useToast();
+  const { productionLines } = useAreasAndLines();
+  const [control, setControl] = useState<FillingControlRecord | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [productionLine, setProductionLine] = useState('');
+  const [equipment, setEquipment] = useState('');
+  const [plannedQuantity, setPlannedQuantity] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setControl(await getFillingControl(batch.id));
+    } finally {
+      setLoading(false);
+    }
+  }, [batch.id]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const handleCreate = async () => {
+    setSaving(true);
+    try {
+      await createFillingControl({
+        batch: batch.id,
+        production_line: productionLine || null,
+        equipment,
+        started_at: new Date().toISOString(),
+        planned_quantity: plannedQuantity ? Number(plannedQuantity) : null,
+      });
+      toast.success('Control de llenado creado');
+      setShowModal(false);
+      await load();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo crear el control de llenado');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleExport = async () => {
+    if (!control) return;
+    try {
+      await exportFillingControl(control.id, batch.batch_code || batch.production_order_number);
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo exportar el control de llenado');
+    }
+  };
+
+  if (loading) return <LoadingState label="Cargando llenado..." />;
+
+  return (
+    <div className="space-y-4">
+      <Card className="p-5">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-sm font-semibold text-gray-900">Control de llenado</p>
+          {control ? (
+            <SecondaryButton onClick={() => void handleExport()} icon={<FileDown size={13} />}>Exportar</SecondaryButton>
+          ) : (
+            <SecondaryButton onClick={() => setShowModal(true)} icon={<Plus size={13} />}>Nuevo control</SecondaryButton>
+          )}
+        </div>
+        {!control ? (
+          <EmptyState title="Sin control de llenado registrado" />
+        ) : (
+          <>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+              <SectionField label="Línea" value={control.production_line_name || '-'} />
+              <SectionField label="Programado" value={control.planned_quantity ?? '-'} />
+              <SectionField label="Producido" value={control.produced_quantity} />
+              <SectionField label="Rendimiento" value={control.yield_percentage !== null ? `${control.yield_percentage.toFixed(1)}%` : '-'} />
+            </div>
+            <p className="text-xs font-semibold text-gray-700 mb-2">Personal participante</p>
+            <div className="space-y-1.5">
+              {control.participants.length === 0 ? (
+                <p className="text-xs text-gray-400">Sin personal registrado.</p>
+              ) : (
+                control.participants.map((participant) => (
+                  <div key={participant.id} className="flex items-center justify-between text-xs border-b border-gray-50 pb-1.5">
+                    <span>{participant.activity || participant.role}</span>
+                    <span className="text-gray-400">{formatDateTime(participant.check_in)} - {formatDateTime(participant.check_out)}</span>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="grid sm:grid-cols-2 gap-2 mt-4 pt-3 border-t border-gray-100">
+              <SignatureBlock resourcePath="filling-controls" resourceId={control.id} role="RESPONSIBLE" label="Responsable" />
+              <SignatureBlock resourcePath="filling-controls" resourceId={control.id} role="VERIFIER" label="Verificador" />
+            </div>
+          </>
+        )}
+
+        <Modal title="Nuevo control de llenado" open={showModal} onClose={() => setShowModal(false)}>
+          <div className="space-y-4">
+            <label className="block">
+              <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Línea</span>
+              <select value={productionLine} onChange={(e) => setProductionLine(e.target.value)} className={selectCls}>
+                <option value="">Sin asignar</option>
+                {productionLines.map((line) => (
+                  <option key={line.id} value={line.id}>{line.name}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Equipo</span>
+              <input value={equipment} onChange={(e) => setEquipment(e.target.value)} className={inputCls} />
+            </label>
+            <label className="block">
+              <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Cantidad programada</span>
+              <input type="number" value={plannedQuantity} onChange={(e) => setPlannedQuantity(e.target.value)} className={inputCls} />
+            </label>
+            <div className="flex justify-end gap-2">
+              <SecondaryButton onClick={() => setShowModal(false)}>Cancelar</SecondaryButton>
+              <PrimaryButton onClick={() => void handleCreate()} disabled={saving}>
+                {saving ? 'Guardando...' : 'Crear control'}
+              </PrimaryButton>
+            </div>
+          </div>
+        </Modal>
+      </Card>
+
+      <PhaseClearanceAndCleaningSection batch={batch} phase="FILLING" phaseLabel="Llenado" />
+      <FillingSealAndWeightSection batch={batch} />
+    </div>
+  );
+}
+
+function ProductionControlSection({
+  batch,
+  employeeById,
+  employees,
+}: {
+  batch: BatchRecord;
+  employeeById: Map<string, Employee>;
+  employees: Employee[];
+}) {
+  const toast = useToast();
+  const [control, setControl] = useState<ProductionControlRecord | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setControl(await getProductionControl(batch.id));
+    } finally {
+      setLoading(false);
+    }
+  }, [batch.id]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const handleExport = async () => {
+    if (!control) return;
+    try {
+      await exportProductionControl(control.id, batch.batch_code || batch.production_order_number);
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo exportar el control de producción');
+    }
+  };
+
+  if (loading) return null;
+  if (!control) return null;
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-sm font-semibold text-gray-900">Control de producción (materiales de acondicionamiento)</p>
+        {control.materials.length > 0 && (
+          <SecondaryButton onClick={() => void handleExport()} icon={<FileDown size={13} />}>Exportar</SecondaryButton>
+        )}
+      </div>
+      {control.materials.length === 0 ? (
+        <EmptyState title="Sin materiales registrados" />
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-left text-[10px] uppercase text-gray-400 border-b border-gray-100">
+                <th className="py-2 pr-3">Material</th>
+                <th className="py-2 pr-3">Entregado</th>
+                <th className="py-2 pr-3">Consumido</th>
+                <th className="py-2 pr-3">Buenas</th>
+                <th className="py-2 pr-3">Malas proceso</th>
+                <th className="py-2 pr-3">Malas fábrica</th>
+                <th className="py-2 pr-3">Diferencia</th>
+              </tr>
+            </thead>
+            <tbody>
+              {control.materials.map((material) => (
+                <tr key={material.id} className="border-b border-gray-50">
+                  <td className="py-2 pr-3">{material.item}</td>
+                  <td className="py-2 pr-3">{material.delivered_quantity}</td>
+                  <td className="py-2 pr-3">{material.consumed_quantity}</td>
+                  <td className="py-2 pr-3">{material.good_units}</td>
+                  <td className="py-2 pr-3">{material.process_rejects}</td>
+                  <td className="py-2 pr-3">{material.factory_rejects}</td>
+                  <td className={`py-2 pr-3 ${Number(material.reconciliation_difference) !== 0 ? 'text-amber-600 font-semibold' : ''}`}>
+                    {material.reconciliation_difference}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-4 pt-3 border-t border-gray-100">
+        <ProductionControlSignerBlock
+          control={control}
+          signer="warehouse"
+          label="Bodega"
+          signature={control.warehouse_signature}
+          signedBy={control.warehouse_signed_by}
+          employeeById={employeeById}
+          employees={employees}
+          onSigned={load}
+        />
+        <ProductionControlSignerBlock
+          control={control}
+          signer="responsible"
+          label="Responsable"
+          signature={control.responsible_signature}
+          signedBy={control.responsible_signed_by}
+          employeeById={employeeById}
+          employees={employees}
+          onSigned={load}
+        />
+        <ProductionControlSignerBlock
+          control={control}
+          signer="quality"
+          label="Calidad"
+          signature={control.quality_signature}
+          signedBy={control.quality_signed_by}
+          employeeById={employeeById}
+          employees={employees}
+          onSigned={load}
+        />
+        <ProductionControlSignerBlock
+          control={control}
+          signer="leader"
+          label="Líder de área"
+          signature={control.leader_signature}
+          signedBy={control.leader_signed_by}
+          employeeById={employeeById}
+          employees={employees}
+          onSigned={load}
+        />
+      </div>
+    </Card>
+  );
+}
+
+function ProductionControlSignerBlock({
+  control,
+  signer,
+  label,
+  signature,
+  signedBy,
+  employeeById,
+  employees,
+  onSigned,
+}: {
+  control: ProductionControlRecord;
+  signer: ProductionControlSigner;
+  label: string;
+  signature: string | null;
+  signedBy: string | null;
+  employeeById: Map<string, Employee>;
+  employees: Employee[];
+  onSigned: () => Promise<void>;
+}) {
+  const toast = useToast();
+  const [showModal, setShowModal] = useState(false);
+  const [employeeId, setEmployeeId] = useState(signedBy ?? '');
+  const [file, setFile] = useState<File | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!file) {
+      toast.warning('Dibuja o carga una firma primero.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await signProductionControl(control.id, signer, { signature: file, signed_by: employeeId || null });
+      toast.success('Firma registrada');
+      setShowModal(false);
+      setFile(null);
+      await onSigned();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo registrar la firma');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="border border-gray-100 rounded-lg p-3">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-xs font-semibold text-gray-700">{label}</p>
+        <button onClick={() => setShowModal(true)} className="text-xs text-[#2a4038] font-semibold hover:underline">
+          {signature ? 'Reemplazar' : 'Firmar'}
+        </button>
+      </div>
+      {signature ? (
+        <div className="flex items-center gap-2">
+          <img src={getMediaUrl(signature)} alt={`Firma ${label}`} className="h-10 border border-gray-200 rounded bg-white" />
+          <span className="text-[11px] text-gray-400">{getEmployeeName(employeeById.get(signedBy ?? ''))}</span>
+        </div>
+      ) : (
+        <p className="text-[11px] text-gray-400">Sin firma registrada.</p>
+      )}
+
+      <Modal title={`Firma — ${label}`} open={showModal} onClose={() => setShowModal(false)}>
+        <div className="space-y-4">
+          <label className="block">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Empleado</span>
+            <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className={selectCls}>
+              <option value="">Sin asignar</option>
+              {employees.map((employee) => (
+                <option key={employee.id} value={employee.id}>{getEmployeeName(employee)}</option>
+              ))}
+            </select>
+          </label>
+          <SignaturePad label={`Firma de ${label}`} onChange={setFile} />
+          <div className="flex justify-end gap-2">
+            <SecondaryButton onClick={() => setShowModal(false)}>Cancelar</SecondaryButton>
+            <PrimaryButton onClick={() => void handleSubmit()} disabled={saving || !file}>
+              {saving ? 'Guardando...' : 'Confirmar firma'}
+            </PrimaryButton>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+function PackagingTab({
+  batch,
+  employeeById,
+  employees,
+}: {
+  batch: BatchRecord;
+  employeeById: Map<string, Employee>;
+  employees: Employee[];
+}) {
+  const toast = useToast();
+  const [control, setControl] = useState<PackagingControlRecord | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [showPackagingModal, setShowPackagingModal] = useState(false);
+  const [showLotMarkingModal, setShowLotMarkingModal] = useState(false);
+  const [showLabelModal, setShowLabelModal] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setControl(await getPackagingControl(batch.id));
+    } finally {
+      setLoading(false);
+    }
+  }, [batch.id]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const handleExportPackaging = async () => {
+    if (!control) return;
+    try {
+      await exportPackagingControl(control.id, batch.batch_code || batch.production_order_number);
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo exportar el control de acondicionamiento');
+    }
+  };
+
   if (loading) return <LoadingState label="Cargando acondicionamiento..." />;
 
   return (
     <div className="space-y-4">
+      {control && (
+        <Card className="p-5">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-semibold text-gray-900">Etiqueta testigo</p>
+            <SecondaryButton onClick={() => setShowLabelModal(true)} icon={<Plus size={13} />}>
+              {control.label_code || control.label_sample_file ? 'Editar' : 'Registrar'}
+            </SecondaryButton>
+          </div>
+          {!control.label_code && !control.label_sample_file ? (
+            <EmptyState title="Sin etiqueta testigo registrada" />
+          ) : (
+            <div className="grid sm:grid-cols-[1fr_auto] gap-4">
+              <div className="grid sm:grid-cols-2 gap-4">
+                <SectionField label="Código de etiqueta" value={control.label_code || '-'} />
+                <SectionField label="Versión del arte" value={control.artwork_version || '-'} />
+                <SectionField label="Lote del material" value={control.label_material_batch || '-'} />
+                <SectionField label="Resultado" value={control.label_result || '-'} />
+                {control.label_observations && (
+                  <div className="sm:col-span-2">
+                    <SectionField label="Observaciones" value={control.label_observations} />
+                  </div>
+                )}
+              </div>
+              {control.label_sample_file && (
+                <img
+                  src={getMediaUrl(control.label_sample_file)}
+                  alt="Etiqueta testigo"
+                  className="h-24 w-24 object-cover rounded-lg border border-gray-200"
+                />
+              )}
+            </div>
+          )}
+          {(control.label_performed_by || control.label_verified_by) && (
+            <div className="grid sm:grid-cols-2 gap-4 mt-4 pt-3 border-t border-gray-100">
+              <SectionField label="Realizado por" value={getEmployeeName(employeeById.get(control.label_performed_by ?? ''))} />
+              <SectionField label="Verificado por" value={getEmployeeName(employeeById.get(control.label_verified_by ?? ''))} />
+            </div>
+          )}
+        </Card>
+      )}
+
       <Card className="p-5">
         <div className="flex items-center justify-between mb-3">
           <p className="text-sm font-semibold text-gray-900">Control de acondicionamiento</p>
@@ -2811,87 +3356,7 @@ function PackagingTab({ batch }: { batch: BatchRecord }) {
         )}
       </Card>
 
-      <div className="grid sm:grid-cols-2 gap-4">
-        <Card className="p-5">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-semibold text-gray-900">Control de hermeticidad</p>
-            {seal ? (
-              <SecondaryButton onClick={() => void handleExportSeal()} icon={<FileDown size={13} />}>Exportar</SecondaryButton>
-            ) : (
-              <SecondaryButton onClick={() => setShowSealModal(true)} icon={<Plus size={13} />}>Nuevo</SecondaryButton>
-            )}
-          </div>
-          {!seal ? <EmptyState title="Sin registro" /> : (
-            <div className="space-y-2">
-              <Badge label={seal.overall_result} color={seal.overall_result === 'APPROVED' ? 'green' : seal.overall_result === 'REJECTED' ? 'red' : 'yellow'} />
-              <SectionField label="Presión (bar)" value={seal.pressure_bar ?? '-'} />
-              <SectionField label="Tiempo (s)" value={String(seal.time_seconds ?? '-')} />
-              <SignatureBlock resourcePath="seal-integrity-controls" resourceId={seal.id} role="RESPONSIBLE" label="Realizado por" />
-              <SignatureBlock resourcePath="seal-integrity-controls" resourceId={seal.id} role="VERIFIER" label="Verificado por" />
-            </div>
-          )}
-        </Card>
-        <Card className="p-5">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-semibold text-gray-900">Control de peso o volumen</p>
-            {weight ? (
-              <SecondaryButton onClick={() => void handleExportWeight()} icon={<FileDown size={13} />}>Exportar</SecondaryButton>
-            ) : (
-              <SecondaryButton onClick={() => setShowWeightModal(true)} icon={<Plus size={13} />}>Nuevo</SecondaryButton>
-            )}
-          </div>
-          {!weight ? <EmptyState title="Sin registro" /> : (
-            <div className="space-y-3">
-              <Badge label={weight.overall_result} color={weight.overall_result === 'APPROVED' ? 'green' : weight.overall_result === 'REJECTED' ? 'red' : 'yellow'} />
-              <SectionField label="Límite inferior" value={weight.lower_limit ?? '-'} />
-              <SectionField label="Límite superior" value={weight.upper_limit ?? '-'} />
-              <p className="text-xs text-gray-400">{weight.samples.length} muestra(s) registradas</p>
-
-              {weight.overall_result === 'REJECTED' && !weight.resumed_authorized_by && (
-                <div className="bg-red-50 border border-red-100 rounded-lg p-3">
-                  <p className="text-xs font-semibold text-red-700 mb-2">Bloqueado por muestra fuera de especificación</p>
-                  <SecondaryButton onClick={() => void handleAuthorizeResume()} disabled={authorizing}>
-                    {authorizing ? 'Autorizando...' : 'Autorizar reanudación'}
-                  </SecondaryButton>
-                </div>
-              )}
-
-              <div className="grid grid-cols-3 gap-2 pt-2 border-t border-gray-100">
-                <input
-                  type="number"
-                  placeholder="N° muestra"
-                  value={sampleForm.sampleNumber}
-                  onChange={(e) => setSampleForm((f) => ({ ...f, sampleNumber: e.target.value }))}
-                  className={inputCls}
-                />
-                <input
-                  type="number"
-                  placeholder="Peso bruto"
-                  value={sampleForm.grossWeight}
-                  onChange={(e) => setSampleForm((f) => ({ ...f, grossWeight: e.target.value }))}
-                  className={inputCls}
-                />
-                <input
-                  type="number"
-                  placeholder="Tara"
-                  value={sampleForm.tare}
-                  onChange={(e) => setSampleForm((f) => ({ ...f, tare: e.target.value }))}
-                  className={inputCls}
-                />
-              </div>
-              <SecondaryButton
-                onClick={() => void handleRecordSample()}
-                disabled={savingSample || (weight.overall_result === 'REJECTED' && !weight.resumed_authorized_by)}
-                icon={<Plus size={13} />}
-              >
-                {savingSample ? 'Registrando...' : 'Registrar muestra'}
-              </SecondaryButton>
-              <SignatureBlock resourcePath="weight-volume-controls" resourceId={weight.id} role="RESPONSIBLE" label="Realizado por" />
-              <SignatureBlock resourcePath="weight-volume-controls" resourceId={weight.id} role="VERIFIER" label="Verificado por" />
-            </div>
-          )}
-        </Card>
-      </div>
+      <ProductionControlSection batch={batch} employeeById={employeeById} employees={employees} />
 
       <NewPackagingControlModal
         open={showPackagingModal}
@@ -2899,24 +3364,6 @@ function PackagingTab({ batch }: { batch: BatchRecord }) {
         onClose={() => setShowPackagingModal(false)}
         onCreated={async () => {
           setShowPackagingModal(false);
-          await load();
-        }}
-      />
-      <NewSealIntegrityControlModal
-        open={showSealModal}
-        batchId={batch.id}
-        onClose={() => setShowSealModal(false)}
-        onCreated={async () => {
-          setShowSealModal(false);
-          await load();
-        }}
-      />
-      <NewWeightVolumeControlModal
-        open={showWeightModal}
-        batchId={batch.id}
-        onClose={() => setShowWeightModal(false)}
-        onCreated={async () => {
-          setShowWeightModal(false);
           await load();
         }}
       />
@@ -2931,7 +3378,148 @@ function PackagingTab({ batch }: { batch: BatchRecord }) {
           }}
         />
       )}
+      {control && (
+        <LabelSampleModal
+          open={showLabelModal}
+          control={control}
+          employees={employees}
+          onClose={() => setShowLabelModal(false)}
+          onSaved={async () => {
+            setShowLabelModal(false);
+            await load();
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+function LabelSampleModal({
+  open,
+  control,
+  employees,
+  onClose,
+  onSaved,
+}: {
+  open: boolean;
+  control: PackagingControlRecord;
+  employees: Employee[];
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  const toast = useToast();
+  const [labelCode, setLabelCode] = useState(control.label_code);
+  const [artworkVersion, setArtworkVersion] = useState(control.artwork_version);
+  const [labelMaterialBatch, setLabelMaterialBatch] = useState(control.label_material_batch);
+  const [labelResult, setLabelResult] = useState<ResultStatus | ''>(control.label_result);
+  const [observations, setObservations] = useState(control.label_observations);
+  const [performedBy, setPerformedBy] = useState(control.label_performed_by ?? '');
+  const [verifiedBy, setVerifiedBy] = useState(control.label_verified_by ?? '');
+  const [file, setFile] = useState<File | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setLabelCode(control.label_code);
+    setArtworkVersion(control.artwork_version);
+    setLabelMaterialBatch(control.label_material_batch);
+    setLabelResult(control.label_result);
+    setObservations(control.label_observations);
+    setPerformedBy(control.label_performed_by ?? '');
+    setVerifiedBy(control.label_verified_by ?? '');
+    setFile(null);
+  }, [open, control]);
+
+  const handleSubmit = async () => {
+    setSaving(true);
+    try {
+      await updatePackagingControlLabel(control.id, {
+        label_code: labelCode,
+        artwork_version: artworkVersion,
+        label_material_batch: labelMaterialBatch,
+        label_result: labelResult || undefined,
+        label_observations: observations,
+        label_performed_by: performedBy || null,
+        label_verified_by: verifiedBy || null,
+        label_sample_file: file,
+      });
+      toast.success('Etiqueta testigo registrada');
+      await onSaved();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo registrar la etiqueta testigo');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title="Etiqueta testigo" open={open} onClose={onClose} wide>
+      <div className="space-y-4">
+        <div className="grid sm:grid-cols-2 gap-3">
+          <label className="block">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Código de etiqueta</span>
+            <input value={labelCode} onChange={(e) => setLabelCode(e.target.value)} className={inputCls} />
+          </label>
+          <label className="block">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Versión del arte</span>
+            <input value={artworkVersion} onChange={(e) => setArtworkVersion(e.target.value)} className={inputCls} />
+          </label>
+        </div>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <label className="block">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Lote del material</span>
+            <input value={labelMaterialBatch} onChange={(e) => setLabelMaterialBatch(e.target.value)} className={inputCls} />
+          </label>
+          <label className="block">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Resultado</span>
+            <select value={labelResult} onChange={(e) => setLabelResult(e.target.value as ResultStatus | '')} className={selectCls}>
+              <option value="">Sin definir</option>
+              <option value="YES">Cumple</option>
+              <option value="NO">No cumple</option>
+              <option value="NOT_APPLICABLE">No aplica</option>
+            </select>
+          </label>
+        </div>
+        <label className="block">
+          <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Observaciones</span>
+          <textarea value={observations} onChange={(e) => setObservations(e.target.value)} rows={2} className={`${inputCls} resize-none`} />
+        </label>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <label className="block">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Realizado por</span>
+            <select value={performedBy} onChange={(e) => setPerformedBy(e.target.value)} className={selectCls}>
+              <option value="">Sin asignar</option>
+              {employees.map((employee) => (
+                <option key={employee.id} value={employee.id}>{`${employee.first_name} ${employee.last_name}`.trim()}</option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Verificado por</span>
+            <select value={verifiedBy} onChange={(e) => setVerifiedBy(e.target.value)} className={selectCls}>
+              <option value="">Sin asignar</option>
+              {employees.map((employee) => (
+                <option key={employee.id} value={employee.id}>{`${employee.first_name} ${employee.last_name}`.trim()}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <label className="block">
+          <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Foto de la etiqueta</span>
+          <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className={inputCls} />
+          {control.label_sample_file && !file && (
+            <p className="text-[11px] text-gray-400 mt-1">Ya hay una foto guardada; sube una nueva solo si quieres reemplazarla.</p>
+          )}
+        </label>
+        <div className="flex justify-end gap-2">
+          <SecondaryButton onClick={onClose}>Cancelar</SecondaryButton>
+          <PrimaryButton onClick={() => void handleSubmit()} disabled={saving}>
+            {saving ? 'Guardando...' : 'Guardar etiqueta testigo'}
+          </PrimaryButton>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -3090,6 +3678,7 @@ function NewSealIntegrityControlModal({
   onCreated: () => Promise<void>;
 }) {
   const toast = useToast();
+  const [notApplicable, setNotApplicable] = useState(false);
   const [equipment, setEquipment] = useState('');
   const [pressureBar, setPressureBar] = useState('');
   const [timeSeconds, setTimeSeconds] = useState('');
@@ -3100,10 +3689,11 @@ function NewSealIntegrityControlModal({
     try {
       await createSealIntegrityControl({
         batch: batchId,
-        tested_at: new Date().toISOString(),
-        equipment,
-        pressure_bar: pressureBar ? Number(pressureBar) : null,
-        time_seconds: timeSeconds ? Number(timeSeconds) : null,
+        tested_at: notApplicable ? null : new Date().toISOString(),
+        equipment: notApplicable ? '' : equipment,
+        pressure_bar: notApplicable || !pressureBar ? null : Number(pressureBar),
+        time_seconds: notApplicable || !timeSeconds ? null : Number(timeSeconds),
+        overall_result: notApplicable ? 'NOT_APPLICABLE' : undefined,
       });
       toast.success('Control de hermeticidad creado');
       await onCreated();
@@ -3118,20 +3708,28 @@ function NewSealIntegrityControlModal({
   return (
     <Modal title="Nuevo control de hermeticidad" open={open} onClose={onClose}>
       <div className="space-y-4">
-        <label className="block">
-          <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Equipo</span>
-          <input value={equipment} onChange={(e) => setEquipment(e.target.value)} className={inputCls} />
+        <label className="flex items-center gap-2 text-xs text-gray-700">
+          <input type="checkbox" checked={notApplicable} onChange={(e) => setNotApplicable(e.target.checked)} />
+          Este producto no requiere prueba de hermeticidad (No aplica)
         </label>
-        <div className="grid grid-cols-2 gap-3">
-          <label className="block">
-            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Presión (bar)</span>
-            <input type="number" step="0.01" value={pressureBar} onChange={(e) => setPressureBar(e.target.value)} className={inputCls} />
-          </label>
-          <label className="block">
-            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Tiempo (segundos)</span>
-            <input type="number" value={timeSeconds} onChange={(e) => setTimeSeconds(e.target.value)} className={inputCls} />
-          </label>
-        </div>
+        {!notApplicable && (
+          <>
+            <label className="block">
+              <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Equipo</span>
+              <input value={equipment} onChange={(e) => setEquipment(e.target.value)} className={inputCls} />
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Presión (bar)</span>
+                <input type="number" step="0.01" value={pressureBar} onChange={(e) => setPressureBar(e.target.value)} className={inputCls} />
+              </label>
+              <label className="block">
+                <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Tiempo (segundos)</span>
+                <input type="number" value={timeSeconds} onChange={(e) => setTimeSeconds(e.target.value)} className={inputCls} />
+              </label>
+            </div>
+          </>
+        )}
         <div className="flex justify-end gap-2">
           <SecondaryButton onClick={onClose}>Cancelar</SecondaryButton>
           <PrimaryButton onClick={() => void handleSubmit()} disabled={saving}>
@@ -3293,6 +3891,173 @@ function DocumentsTab({ batch }: { batch: BatchRecord }) {
   );
 }
 
+type ReleaseChecklistStatus = 'ok' | 'warning' | 'blocked' | 'loading';
+
+function ReleaseChecklistItem({ label, status, detail }: { label: string; status: ReleaseChecklistStatus; detail: string }) {
+  const iconColor = status === 'ok' ? 'text-emerald-600 bg-emerald-50' : status === 'warning' ? 'text-amber-600 bg-amber-50' : status === 'blocked' ? 'text-red-600 bg-red-50' : 'text-gray-400 bg-gray-50';
+  const Icon = status === 'ok' ? CheckCircle2 : status === 'blocked' ? AlertTriangle : Gauge;
+  return (
+    <div className="flex items-start gap-3 border border-gray-100 rounded-lg p-3">
+      <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${iconColor}`}>
+        <Icon size={14} />
+      </div>
+      <div className="min-w-0">
+        <p className="text-xs font-semibold text-gray-900">{label}</p>
+        <p className="text-[11px] text-gray-400 break-words">{detail}</p>
+      </div>
+    </div>
+  );
+}
+
+function ReleaseChecklist({ batch }: { batch: BatchRecord }) {
+  const [certificate, setCertificate] = useState<AnalysisCertificateRecord | null>(null);
+  const [microbiology, setMicrobiology] = useState<MicrobiologyAnalysisRecord | null>(null);
+  const [weight, setWeight] = useState<WeightVolumeControlRecord | null>(null);
+  const [seal, setSeal] = useState<SealIntegrityControlRecord | null>(null);
+  const [clearances, setClearances] = useState<LineClearanceRecord[]>([]);
+  const [docsSummary, setDocsSummary] = useState<DocumentChecklistSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    void (async () => {
+      setLoading(true);
+      const [certRes, microRes, weightRes, sealRes, clearancesRes, docsRes] = await Promise.allSettled([
+        getAnalysisCertificate(batch.id),
+        getMicrobiologyAnalysis(batch.id),
+        getWeightVolumeControl(batch.id),
+        getSealIntegrityControl(batch.id),
+        getLineClearances(batch.id),
+        getDocumentChecklistSummary(batch.id),
+      ]);
+      if (certRes.status === 'fulfilled') setCertificate(certRes.value);
+      if (microRes.status === 'fulfilled') setMicrobiology(microRes.value);
+      if (weightRes.status === 'fulfilled') setWeight(weightRes.value);
+      if (sealRes.status === 'fulfilled') setSeal(sealRes.value);
+      if (clearancesRes.status === 'fulfilled') setClearances(clearancesRes.value);
+      if (docsRes.status === 'fulfilled') setDocsSummary(docsRes.value);
+      setLoading(false);
+    })();
+  }, [batch.id]);
+
+  if (loading) return <LoadingState label="Verificando expediente..." />;
+
+  const pendingClearances = clearances.filter((c) => c.status === 'PENDING').length;
+  const rejectedClearances = clearances.filter((c) => c.status === 'REJECTED').length;
+
+  const items: Array<{ label: string; status: ReleaseChecklistStatus; detail: string }> = [
+    {
+      label: 'Certificado de análisis',
+      status: !certificate ? 'blocked' : certificate.concept === 'APPROVED' ? 'ok' : certificate.concept === 'REJECTED' ? 'blocked' : 'warning',
+      detail: !certificate ? 'Sin certificado registrado' : certificate.concept === 'APPROVED' ? 'Aprobado' : certificate.concept === 'REJECTED' ? 'Rechazado' : certificate.concept,
+    },
+    {
+      label: 'Análisis microbiológico',
+      status: !microbiology ? 'warning' : microbiology.overall_result === 'APPROVED' ? 'ok' : microbiology.overall_result === 'REJECTED' ? 'blocked' : 'warning',
+      detail: !microbiology ? 'Sin análisis registrado' : microbiology.overall_result,
+    },
+    {
+      label: 'Control de peso o volumen',
+      status: !weight ? 'warning' : weight.overall_result === 'APPROVED' ? 'ok' : weight.overall_result === 'REJECTED' ? 'blocked' : 'warning',
+      detail: !weight ? 'Sin registro' : weight.overall_result,
+    },
+    {
+      label: 'Control de hermeticidad',
+      status: !seal ? 'warning' : seal.overall_result === 'APPROVED' || seal.overall_result === 'NOT_APPLICABLE' ? 'ok' : seal.overall_result === 'REJECTED' ? 'blocked' : 'warning',
+      detail: !seal ? 'Sin registro' : seal.overall_result === 'NOT_APPLICABLE' ? 'No aplica' : seal.overall_result,
+    },
+    {
+      label: 'Despejes de línea',
+      status: rejectedClearances > 0 ? 'blocked' : pendingClearances > 0 ? 'warning' : clearances.length === 0 ? 'warning' : 'ok',
+      detail: clearances.length === 0 ? 'Sin despejes registrados' : `${clearances.length - pendingClearances - rejectedClearances} aprobado(s), ${pendingClearances} pendiente(s), ${rejectedClearances} rechazado(s)`,
+    },
+    {
+      label: 'Documentos del expediente',
+      status: !docsSummary ? 'warning' : docsSummary.rejected > 0 ? 'blocked' : docsSummary.completion_percentage >= 100 ? 'ok' : 'warning',
+      detail: !docsSummary ? 'Sin información' : `${docsSummary.completion_percentage}% completado (${docsSummary.pending} pendiente(s))`,
+    },
+  ];
+
+  return (
+    <Card className="p-5">
+      <p className="text-sm font-semibold text-gray-900 mb-1">Checklist previo a liberación</p>
+      <p className="text-[11px] text-gray-400 mb-3">Se verifica automáticamente antes de permitir la liberación del lote.</p>
+      <div className="grid sm:grid-cols-2 gap-2.5">
+        {items.map((item) => (
+          <ReleaseChecklistItem key={item.label} {...item} />
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function ReleaseMicrobiologySection({ batch }: { batch: BatchRecord }) {
+  const toast = useToast();
+  const [microbiology, setMicrobiology] = useState<MicrobiologyAnalysisRecord | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setMicrobiology(await getMicrobiologyAnalysis(batch.id));
+    } finally {
+      setLoading(false);
+    }
+  }, [batch.id]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const handleExport = async () => {
+    if (!microbiology) return;
+    try {
+      await exportMicrobiologyAnalysis(microbiology.id, batch.batch_code || batch.production_order_number);
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo exportar el análisis microbiológico');
+    }
+  };
+
+  if (loading) return null;
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-sm font-semibold text-gray-900">Análisis microbiológico</p>
+        {microbiology ? (
+          <SecondaryButton onClick={() => void handleExport()} icon={<FileDown size={13} />}>Exportar</SecondaryButton>
+        ) : (
+          <SecondaryButton onClick={() => setShowModal(true)} icon={<Plus size={13} />}>Nuevo análisis</SecondaryButton>
+        )}
+      </div>
+      {!microbiology ? (
+        <EmptyState title="Sin análisis microbiológico registrado" />
+      ) : (
+        <>
+          <div className="grid sm:grid-cols-2 gap-4 mb-3">
+            <SectionField label="Laboratorio" value={microbiology.laboratory || '-'} />
+            <SectionField label="N.º informe" value={microbiology.report_number || '-'} />
+            <SectionField label="Resultado general" value={microbiology.overall_result} />
+            <SectionField label="Fecha de aprobación" value={formatDate(microbiology.approved_at)} />
+          </div>
+          <SignatureBlock resourcePath="microbiology-analyses" resourceId={microbiology.id} role="RESPONSIBLE" label="Aprobado por" />
+        </>
+      )}
+
+      <NewMicrobiologyAnalysisModal
+        open={showModal}
+        batchId={batch.id}
+        onClose={() => setShowModal(false)}
+        onCreated={async () => {
+          setShowModal(false);
+          await load();
+        }}
+      />
+    </Card>
+  );
+}
+
 function ReleaseTab({
   batch,
   employeeById,
@@ -3364,73 +4129,75 @@ function ReleaseTab({
 
   if (loading) return <LoadingState label="Cargando liberación..." />;
 
-  if (!release) {
-    return (
-      <Card className="p-5">
-        <p className="text-sm font-semibold text-gray-900 mb-3">Liberación de producto terminado</p>
-        <p className="text-xs text-gray-500 mb-4">
-          Antes de liberar se validan automáticamente: certificado de análisis aprobado, microbiología, peso/volumen, hermeticidad,
-          despejes de línea y documentos obligatorios del expediente.
-        </p>
-        <PrimaryButton onClick={() => setShowReleaseModal(true)}>Liberar lote</PrimaryButton>
-
-        <Modal title="Liberar lote" open={showReleaseModal} onClose={() => setShowReleaseModal(false)} wide>
-          <div className="space-y-4">
-            <div className="grid sm:grid-cols-3 gap-3">
-              <label className="block">
-                <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Cantidad liberada</span>
-                <input type="number" value={releasedQuantity} onChange={(e) => setReleasedQuantity(e.target.value)} className={inputCls} />
-              </label>
-              <label className="block">
-                <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Cantidad retenida</span>
-                <input type="number" value={retainedQuantity} onChange={(e) => setRetainedQuantity(e.target.value)} className={inputCls} />
-              </label>
-              <label className="block">
-                <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Cantidad rechazada</span>
-                <input type="number" value={rejectedQuantity} onChange={(e) => setRejectedQuantity(e.target.value)} className={inputCls} />
-              </label>
-            </div>
-            <label className="block">
-              <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Condición</span>
-              <select value={condition} onChange={(e) => setCondition(e.target.value as typeof condition)} className={selectCls}>
-                <option value="RELEASED">Liberado</option>
-                <option value="CONDITIONAL">Liberado condicional</option>
-                <option value="REJECTED">Rechazado</option>
-              </select>
-            </label>
-            <label className="block">
-              <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Observaciones</span>
-              <textarea value={observations} onChange={(e) => setObservations(e.target.value)} rows={3} className={`${inputCls} resize-none`} />
-            </label>
-            <SignaturePad label="Firma de Calidad" onChange={setSignatureFile} />
-            <div className="flex justify-end gap-2 pt-2">
-              <SecondaryButton onClick={() => setShowReleaseModal(false)}>Cancelar</SecondaryButton>
-              <PrimaryButton onClick={() => void handleRelease()} disabled={saving}>
-                {saving ? 'Liberando...' : 'Confirmar liberación'}
-              </PrimaryButton>
-            </div>
-          </div>
-        </Modal>
-      </Card>
-    );
-  }
-
   return (
-    <Card className="p-5">
-      <div className="flex items-center justify-between mb-4">
-        <p className="text-sm font-semibold text-gray-900">Liberación de producto terminado</p>
-        <SecondaryButton onClick={() => void handleExport()} icon={<FileDown size={13} />}>Exportar</SecondaryButton>
-      </div>
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <SectionField label="Cantidad liberada" value={release.released_quantity} />
-        <SectionField label="Cantidad retenida" value={release.retained_quantity} />
-        <SectionField label="Cantidad rechazada" value={release.rejected_quantity} />
-        <SectionField label="Condición" value={release.condition} />
-        <SectionField label="Liberado por Calidad" value={getEmployeeName(employeeById.get(release.released_by_quality ?? ''))} />
-        <SectionField label="Aprobado por Director Técnico" value={getEmployeeName(employeeById.get(release.approved_by_technical_director ?? ''))} />
-        <SectionField label="Fecha de liberación" value={formatDateTime(release.released_at)} />
-      </div>
-    </Card>
+    <div className="space-y-4">
+      <ReleaseChecklist batch={batch} />
+      <ReleaseMicrobiologySection batch={batch} />
+
+      {!release ? (
+        <Card className="p-5">
+          <p className="text-sm font-semibold text-gray-900 mb-3">Liberación de producto terminado</p>
+          <p className="text-xs text-gray-500 mb-4">
+            Revisa el checklist antes de liberar — el sistema también valida automáticamente al confirmar.
+          </p>
+          <PrimaryButton onClick={() => setShowReleaseModal(true)}>Liberar lote</PrimaryButton>
+
+          <Modal title="Liberar lote" open={showReleaseModal} onClose={() => setShowReleaseModal(false)} wide>
+            <div className="space-y-4">
+              <div className="grid sm:grid-cols-3 gap-3">
+                <label className="block">
+                  <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Cantidad liberada</span>
+                  <input type="number" value={releasedQuantity} onChange={(e) => setReleasedQuantity(e.target.value)} className={inputCls} />
+                </label>
+                <label className="block">
+                  <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Cantidad retenida</span>
+                  <input type="number" value={retainedQuantity} onChange={(e) => setRetainedQuantity(e.target.value)} className={inputCls} />
+                </label>
+                <label className="block">
+                  <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Cantidad rechazada</span>
+                  <input type="number" value={rejectedQuantity} onChange={(e) => setRejectedQuantity(e.target.value)} className={inputCls} />
+                </label>
+              </div>
+              <label className="block">
+                <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Condición</span>
+                <select value={condition} onChange={(e) => setCondition(e.target.value as typeof condition)} className={selectCls}>
+                  <option value="RELEASED">Liberado</option>
+                  <option value="CONDITIONAL">Liberado condicional</option>
+                  <option value="REJECTED">Rechazado</option>
+                </select>
+              </label>
+              <label className="block">
+                <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Observaciones</span>
+                <textarea value={observations} onChange={(e) => setObservations(e.target.value)} rows={3} className={`${inputCls} resize-none`} />
+              </label>
+              <SignaturePad label="Firma de Calidad" onChange={setSignatureFile} />
+              <div className="flex justify-end gap-2 pt-2">
+                <SecondaryButton onClick={() => setShowReleaseModal(false)}>Cancelar</SecondaryButton>
+                <PrimaryButton onClick={() => void handleRelease()} disabled={saving}>
+                  {saving ? 'Liberando...' : 'Confirmar liberación'}
+                </PrimaryButton>
+              </div>
+            </div>
+          </Modal>
+        </Card>
+      ) : (
+        <Card className="p-5">
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm font-semibold text-gray-900">Liberación de producto terminado</p>
+            <SecondaryButton onClick={() => void handleExport()} icon={<FileDown size={13} />}>Exportar</SecondaryButton>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <SectionField label="Cantidad liberada" value={release.released_quantity} />
+            <SectionField label="Cantidad retenida" value={release.retained_quantity} />
+            <SectionField label="Cantidad rechazada" value={release.rejected_quantity} />
+            <SectionField label="Condición" value={release.condition} />
+            <SectionField label="Liberado por Calidad" value={getEmployeeName(employeeById.get(release.released_by_quality ?? ''))} />
+            <SectionField label="Aprobado por Director Técnico" value={getEmployeeName(employeeById.get(release.approved_by_technical_director ?? ''))} />
+            <SectionField label="Fecha de liberación" value={formatDateTime(release.released_at)} />
+          </div>
+        </Card>
+      )}
+    </div>
   );
 }
 

@@ -74,8 +74,8 @@ export function Hero({ onLoginClick }: HeroProps = {}) {
 
   return (
     <section
-      className="relative overflow-hidden rounded-[20px] mx-3 md:mx-5 lg:mx-7"
-      style={{ height: 'min(100vh, 680px)', minHeight: 480, marginTop: 14 }}
+      className="relative mx-3 aspect-[1920/800] overflow-hidden rounded-[20px] bg-[#F7F1EA] md:mx-5 md:aspect-auto md:h-[min(100vh,680px)] md:min-h-[480px] lg:mx-7"
+      style={{ marginTop: 14 }}
     >
       {/* Fondo: rota entre las imágenes del banner */}
       <AnimatePresence initial={false} mode="sync">
@@ -87,7 +87,7 @@ export function Hero({ onLoginClick }: HeroProps = {}) {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.8, ease: 'easeInOut' }}
-          className="absolute inset-0 w-full h-full object-cover"
+          className="absolute inset-0 h-full w-full object-cover object-center"
           loading="eager"
           decoding="async"
         />
@@ -115,13 +115,13 @@ export function Hero({ onLoginClick }: HeroProps = {}) {
       <motion.div
         initial={{ opacity: 0, scale: 0.8, rotate: -10 }} animate={{ opacity: 1, scale: 1, rotate: 0 }}
         transition={{ delay: 0.6, duration: 0.7, type: 'spring', stiffness: 120 }}
-        className="absolute bottom-12 right-8 md:right-10 z-30"
+        className="absolute bottom-12 right-8 z-30 hidden sm:block md:right-10"
       >
         <CircleSeal />
       </motion.div>
 
       {/* Puntos de navegación */}
-      <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2">
+      <div className="absolute bottom-3 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 md:bottom-5">
         {SLIDES.map((slide, i) => (
           <button
             key={slide.id}

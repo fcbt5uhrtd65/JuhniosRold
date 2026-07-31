@@ -46,7 +46,7 @@ import {
 import { SearchBar } from './SearchBar';
 import { Pagination } from './Pagination';
 import { SignaturePad } from './SignaturePad';
-import { CalendarChip, CalendarMoreChip, CalendarMonthNav, MonthCalendar, toDateKey, type CalendarChipColor } from './HRCalendar';
+import { CalendarChip, CalendarMoreChip, CalendarMonthNav, MonthCalendar, getMonthGrid, toDateKey, type CalendarChipColor } from './HRCalendar';
 import { OrgChart, buildOrgForest } from './OrgChart';
 import { Badge, type BadgeColor, Card, Table, Th, Td, Modal, EmptyState, LoadingState, inputCls, selectCls, ActionsMenu, actionsCellCls } from './AdminUI';
 import { ComboWithOtherInput } from './ComboWithOtherInput';
@@ -750,6 +750,261 @@ async function exportFilteredEmployeesPdf({
   pdf.save(`${slugifyFilename(`empleados-${filters.join('-') || 'todos'}`)}.pdf`);
 }
 
+type CalendarRequestEvent = { request: VacationRequest; employee: Employee | undefined };
+type PdfRgb = [number, number, number];
+
+const REQUEST_TYPE_PDF_COLORS: Record<VacationRequestType, { fill: PdfRgb; stroke: PdfRgb; text: PdfRgb }> = {
+  PERMISSION: { fill: [255, 247, 199], stroke: [245, 158, 11], text: [120, 53, 15] },
+  OVERTIME: { fill: [219, 234, 254], stroke: [37, 99, 235], text: [30, 64, 175] },
+  VACATION: { fill: [209, 250, 229], stroke: [16, 185, 129], text: [6, 95, 70] },
+  LEAVE: { fill: [237, 233, 254], stroke: [124, 58, 237], text: [91, 33, 182] },
+  INCAPACITY: { fill: [254, 226, 226], stroke: [239, 68, 68], text: [153, 27, 27] },
+  LOAN: { fill: [252, 231, 243], stroke: [219, 39, 119], text: [157, 23, 77] },
+  OTHER: { fill: [243, 244, 246], stroke: [107, 114, 128], text: [55, 65, 81] },
+};
+
+function getCalendarPdfEventLabel(event: CalendarRequestEvent, dateKey: string): string {
+  const { request, employee } = event;
+  const employeeName = employee ? getEmployeeName(employee) : 'Empleado';
+  const typeLabel = getRequestTypeLabel(request.request_type);
+
+  if (request.request_type === 'OVERTIME') {
+    const shifts = request.overtime_shifts?.filter((item) => item.date === dateKey) ?? [];
+    if (shifts.length > 0) {
+      const shiftsLabel = shifts
+        .map((shift) => `${formatTime(shift.start_time)} a ${formatTime(shift.end_time)} (${Number(shift.hours_count ?? 0).toFixed(1)} h)`)
+        .join(' | ');
+      return `${employeeName} - ${typeLabel}: ${shiftsLabel}`;
+    }
+    return `${employeeName} - ${typeLabel}: ${Number(request.hours_count ?? 0).toFixed(1)} h`;
+  }
+
+  if (!request.is_full_day && (request.start_time || request.end_time)) {
+    return `${employeeName} - ${typeLabel}: ${formatTime(request.start_time)} a ${formatTime(request.end_time)}`;
+  }
+
+  if (request.is_full_day) {
+    return `${employeeName} - ${typeLabel}: jornada completa`;
+  }
+
+  return `${employeeName} - ${typeLabel}`;
+}
+
+function getCalendarPdfDetailLines(event: CalendarRequestEvent, dateKey: string): string[] {
+  const { request, employee } = event;
+  const lines = [
+    getCalendarPdfEventLabel(event, dateKey),
+    `Estado: ${requestStatusLabel(request.status)}${request.request_number ? ` | No. ${request.request_number}` : ''}`,
+  ];
+  const subtype = request.subtype ? getRequestSubtypeLabel(request.subtype) : '';
+  if (subtype) lines.push(`Subtipo: ${subtype}`);
+  if (request.reason) lines.push(`Motivo: ${request.reason}`);
+  if (request.description) lines.push(`Descripcion: ${request.description}`);
+  if (request.observations) lines.push(`Observaciones: ${request.observations}`);
+  if (employee) lines.push(`Empleado ID: ${employee.employee_code || employee.document_number || employee.id}`);
+  return lines;
+}
+
+function getCalendarPdfEventShortLabel(event: CalendarRequestEvent): string {
+  const { request, employee } = event;
+  const employeeName = employee ? getEmployeeName(employee) : 'Empleado';
+  const typeLabel = getRequestTypeLabel(request.request_type);
+  return `${employeeName} - ${typeLabel}`;
+}
+
+async function exportRequestsCalendarPdf({
+  month,
+  eventsByDay,
+  typeFilterLabel,
+  departmentFilterLabel,
+}: {
+  month: Date;
+  eventsByDay: Map<string, CalendarRequestEvent[]>;
+  typeFilterLabel: string;
+  departmentFilterLabel: string;
+}): Promise<void> {
+  const { default: jsPDF } = await import('jspdf');
+  const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const pageWidth = 297;
+  const pageHeight = 210;
+  const margin = 8;
+  const headerHeight = 16;
+  const metaY = headerHeight + 5;
+  const legendY = headerHeight + 8.5;
+  const weekHeaderY = headerHeight + 14.5;
+  const gridTop = weekHeaderY + 5;
+  const cellWidth = (pageWidth - margin * 2) / 7;
+  const cellHeight = (pageHeight - gridTop - margin) / 6;
+  const weekdays = ['Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab', 'Dom'];
+  const days = getMonthGrid(month);
+  const monthLabel = month.toLocaleDateString('es-CO', { month: 'long', year: 'numeric' });
+  const totalEvents = [...eventsByDay.values()].reduce((sum, dayEvents) => sum + dayEvents.length, 0);
+
+  const drawHeader = (title: string, pageNumber: number) => {
+    pdf.setFillColor(42, 64, 56);
+    pdf.rect(0, 0, pageWidth, headerHeight, 'F');
+    pdf.setTextColor(255, 255, 255);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(11);
+    pdf.text(title, margin, 7);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(7.5);
+    pdf.text(new Date().toLocaleString('es-CO'), pageWidth - margin, 6, { align: 'right' });
+    pdf.text(`Pagina ${pageNumber}`, pageWidth - margin, 11, { align: 'right' });
+  };
+
+  const drawLegend = () => {
+    pdf.setTextColor(75, 85, 99);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(7);
+    pdf.text(`Filtros: ${typeFilterLabel} | ${departmentFilterLabel} | Eventos: ${totalEvents}`, margin, metaY);
+
+    const legendItems: VacationRequestType[] = ['PERMISSION', 'OVERTIME', 'VACATION', 'LEAVE', 'INCAPACITY', 'LOAN', 'OTHER'];
+    let legendX = margin;
+    for (const type of legendItems) {
+      const colors = REQUEST_TYPE_PDF_COLORS[type];
+      pdf.setFillColor(...colors.fill);
+      pdf.setDrawColor(...colors.stroke);
+      pdf.rect(legendX, legendY, 3.2, 2.6, 'FD');
+      pdf.setTextColor(...colors.text);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(6.2);
+      pdf.text(getRequestTypeLabel(type), legendX + 4.4, legendY + 2.1);
+      legendX += Math.max(19, pdf.getTextWidth(getRequestTypeLabel(type)) + 9);
+    }
+  };
+
+  const drawMonthChrome = (pageTitle: string, pageNumber: number) => {
+    drawHeader(pageTitle, pageNumber);
+    drawLegend();
+    weekdays.forEach((label, index) => {
+      const x = margin + index * cellWidth;
+      pdf.setFillColor(245, 247, 246);
+      pdf.setDrawColor(229, 231, 235);
+      pdf.rect(x, weekHeaderY, cellWidth, 5, 'FD');
+      pdf.setTextColor(75, 85, 99);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(6.5);
+      pdf.text(label, x + cellWidth / 2, weekHeaderY + 3.5, { align: 'center' });
+    });
+
+    days.forEach((date, index) => {
+      const row = Math.floor(index / 7);
+      const col = index % 7;
+      const x = margin + col * cellWidth;
+      const y = gridTop + row * cellHeight;
+      const inMonth = date.getMonth() === month.getMonth();
+      pdf.setFillColor(inMonth ? 255 : 249, inMonth ? 255 : 250, inMonth ? 255 : 251);
+      pdf.setDrawColor(229, 231, 235);
+      pdf.rect(x, y, cellWidth, cellHeight, 'FD');
+      pdf.setTextColor(inMonth ? 31 : 180, inMonth ? 41 : 188, inMonth ? 55 : 197);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(6.2);
+      pdf.text(`${date.getDate()}`, x + 1.3, y + 3.5);
+    });
+  };
+
+  // Toda la grilla del mes se dibuja en UNA sola pagina; si algun dia no
+  // alcanza a mostrar todos sus eventos, se agrega "+N mas" y el detalle
+  // completo de esos desbordes se imprime en paginas adicionales de lista.
+  const overflowByDay = new Map<string, CalendarRequestEvent[]>();
+
+  drawMonthChrome(`Calendario RRHH - ${monthLabel}`, 1);
+
+  if (totalEvents === 0) {
+    pdf.setTextColor(75, 85, 99);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(9);
+    pdf.text('No hay novedades para los filtros seleccionados.', margin, gridTop + 10);
+  } else {
+    const lineHeight = 1.9;
+    const chipGap = 0.5;
+    const dateLabelHeight = 4.2;
+
+    days.forEach((date, dayIndex) => {
+      const row = Math.floor(dayIndex / 7);
+      const col = dayIndex % 7;
+      const key = toDateKey(date);
+      const events = eventsByDay.get(key) ?? [];
+      if (events.length === 0) return;
+
+      const x = margin + col * cellWidth;
+      const y = gridTop + row * cellHeight;
+      const maxY = y + cellHeight - 1.2;
+      let eventY = y + dateLabelHeight;
+
+      for (let eventIndex = 0; eventIndex < events.length; eventIndex += 1) {
+        const remaining = events.length - eventIndex;
+        const isLastSlot = eventY + lineHeight > maxY - (remaining > 1 ? lineHeight : 0);
+        if (isLastSlot && remaining > 1) {
+          const overflowEvents = events.slice(eventIndex);
+          overflowByDay.set(key, overflowEvents);
+          pdf.setTextColor(55, 65, 81);
+          pdf.setFont('helvetica', 'bold');
+          pdf.setFontSize(4.8);
+          pdf.text(`+${overflowEvents.length} mas`, x + 1.3, eventY);
+          break;
+        }
+
+        const event = events[eventIndex];
+        const colors = REQUEST_TYPE_PDF_COLORS[event.request.request_type];
+        const label = getCalendarPdfEventShortLabel(event);
+        const line = pdf.getTextWidth(label) > cellWidth - 3
+          ? (pdf.splitTextToSize(label, cellWidth - 3) as string[])[0]
+          : label;
+
+        pdf.setFillColor(...colors.fill);
+        pdf.setDrawColor(...colors.stroke);
+        pdf.rect(x + 0.8, eventY - 1.7, 1.3, lineHeight, 'F');
+        pdf.setTextColor(...colors.text);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(4.6);
+        pdf.text(line, x + 2.6, eventY - 0.4);
+        eventY += lineHeight + chipGap;
+
+        if (eventY > maxY && eventIndex + 1 < events.length) {
+          const overflowEvents = events.slice(eventIndex + 1);
+          overflowByDay.set(key, overflowEvents);
+          break;
+        }
+      }
+    });
+  }
+
+  if (overflowByDay.size > 0) {
+    const detailLineHeight = 4.2;
+    const linesPerPage = Math.floor((pageHeight - gridTop - margin) / detailLineHeight);
+    const detailEntries: { key: string; event: CalendarRequestEvent }[] = [];
+    for (const [key, events] of overflowByDay.entries()) {
+      for (const event of events) detailEntries.push({ key, event });
+    }
+
+    let entryIndex = 0;
+    let detailPage = 0;
+    while (entryIndex < detailEntries.length) {
+      pdf.addPage();
+      detailPage += 1;
+      drawHeader(`Calendario RRHH - ${monthLabel} - detalle adicional ${detailPage}`, 1 + detailPage);
+      let y = gridTop;
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(8.5);
+      for (let count = 0; count < linesPerPage && entryIndex < detailEntries.length; count += 1, entryIndex += 1) {
+        const { key, event } = detailEntries[entryIndex];
+        const colors = REQUEST_TYPE_PDF_COLORS[event.request.request_type];
+        const dateLabel = new Date(`${key}T00:00:00`).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' });
+        pdf.setFillColor(...colors.fill);
+        pdf.setDrawColor(...colors.stroke);
+        pdf.rect(margin, y - 3, 2.6, 3.4, 'FD');
+        pdf.setTextColor(31, 41, 55);
+        pdf.text(`${dateLabel}  ${getCalendarPdfEventLabel(event, key)}`, margin + 5, y);
+        y += detailLineHeight;
+      }
+    }
+  }
+
+  pdf.save(`${slugifyFilename(`calendario-rrhh-${monthLabel}`)}.pdf`);
+}
+
 function statusLabel(status: EmployeeStatus): string {
   const labels: Record<EmployeeStatus, string> = {
     ACTIVE: 'Activo',
@@ -1321,6 +1576,7 @@ export function AdminHR() {
   const [savingEmployee, setSavingEmployee] = useState(false);
   const [savingDocument, setSavingDocument] = useState(false);
   const [savingBranch, setSavingBranch] = useState(false);
+  const [exportingCalendarPdf, setExportingCalendarPdf] = useState(false);
   const [exportingEmployeesPdf, setExportingEmployeesPdf] = useState(false);
   const [exportingBranchesPdf, setExportingBranchesPdf] = useState(false);
   const [deletingEmployeeId, setDeletingEmployeeId] = useState<string | null>(null);
@@ -1656,8 +1912,8 @@ export function AdminHR() {
 
   const REQUEST_TYPE_CALENDAR_COLOR: Record<VacationRequestType, CalendarChipColor> = {
     VACATION: 'green',
-    PERMISSION: 'blue',
-    OVERTIME: 'amber',
+    PERMISSION: 'amber',
+    OVERTIME: 'blue',
     LEAVE: 'purple',
     INCAPACITY: 'red',
     LOAN: 'pink',
@@ -2069,6 +2325,31 @@ export function AdminHR() {
       toast.error(error instanceof Error ? error.message : 'No se pudo exportar el PDF de empleados');
     } finally {
       setExportingEmployeesPdf(false);
+    }
+  };
+
+  const handleCalendarPdfExport = async () => {
+    const typeFilterLabel = calendarTypeFilter === 'all'
+      ? 'Todos los tipos'
+      : getRequestTypeLabel(calendarTypeFilter);
+    const departmentFilterLabel = calendarDepartmentFilter === 'all'
+      ? 'Todos los departamentos'
+      : departmentById.get(calendarDepartmentFilter)?.name ?? 'Departamento seleccionado';
+
+    setExportingCalendarPdf(true);
+    try {
+      await exportRequestsCalendarPdf({
+        month: calendarMonth,
+        eventsByDay: calendarEventsByDay,
+        typeFilterLabel,
+        departmentFilterLabel,
+      });
+      toast.success('PDF del calendario generado');
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo generar el PDF del calendario');
+    } finally {
+      setExportingCalendarPdf(false);
     }
   };
 
@@ -3970,7 +4251,20 @@ export function AdminHR() {
                     Cumpleaños
                   </button>
                 </div>
-                <CalendarMonthNav month={calendarMonth} onChange={setCalendarMonth} />
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                  <CalendarMonthNav month={calendarMonth} onChange={setCalendarMonth} />
+                  {calendarView === 'requests' && (
+                    <button
+                      type="button"
+                      onClick={() => void handleCalendarPdfExport()}
+                      disabled={exportingCalendarPdf}
+                      className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {exportingCalendarPdf ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
+                      {exportingCalendarPdf ? 'Generando...' : 'Exportar calendario PDF'}
+                    </button>
+                  )}
+                </div>
               </div>
 
               {calendarView === 'requests' && (

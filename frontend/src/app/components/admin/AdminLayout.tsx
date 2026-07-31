@@ -23,6 +23,7 @@ import {
   Truck,
   FlaskConical,
   HandCoins,
+  Banknote,
   Settings,
 } from 'lucide-react';
 
@@ -35,8 +36,10 @@ interface AdminLayoutProps {
 export function AdminLayout({ children, currentView, onViewChange }: AdminLayoutProps) {
   const { currentUser, logout } = useAdmin();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarHover, setSidebarHover] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const isCompactSidebar = currentView !== 'dashboard';
+  const isSidebarExpanded = !isCompactSidebar || sidebarHover;
 
   const employeeAccessRoles = [
     'ADMIN',
@@ -92,6 +95,7 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
     { id: 'payments', label: 'Pagos', icon: CreditCard, roles: ['ADMIN', 'SELLER'] },
     { id: 'reports', label: 'Reportes', icon: BarChart3, roles: ['ADMIN', 'SELLER'] },
     { id: 'hr', label: 'RRHH', icon: Briefcase, roles: ['ADMIN', 'RRHH'] },
+    { id: 'payroll', label: 'Nómina', icon: Banknote, roles: ['ADMIN', 'RRHH', 'CONTABILIDAD', 'TESORERIA'] },
     { id: 'employee-portal', label: 'Mis solicitudes', icon: CalendarClock, roles: ['ADMIN', 'SELLER', 'DISTRIBUTOR', 'RRHH', 'EMPLEADO', 'PEDIDOS'] },
     { id: 'employee-settings', label: 'Configuración', icon: Settings, roles: employeeAccessRoles },
     { id: 'loans', label: 'Préstamos', icon: HandCoins, roles: ['ADMIN', 'RRHH', 'CONTABILIDAD', 'TESORERIA'] },
@@ -128,10 +132,10 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
   }, [currentUser?.rol]);
 
   const Sidebar = ({ compact = false }: { compact?: boolean }) => (
-    <div className={`bg-gray-50 border-r border-gray-100 h-full flex flex-col ${compact ? 'items-center' : ''}`}>
-      <div className={`border-b border-gray-100 ${compact ? 'px-2 pt-5 pb-4' : 'px-5 pt-6 pb-4'}`}>
+    <div className={`bg-gray-50 border-r border-gray-100 h-full flex flex-col shadow-sm ${compact ? 'items-center' : ''}`}>
+      <div className={`border-b border-gray-100 ${compact ? 'px-3 pt-5 pb-5' : 'px-5 pt-6 pb-4'}`}>
         {compact ? (
-          <div className="h-10 w-10 rounded-2xl bg-[#2a4038] text-white flex items-center justify-center text-xs font-bold" title="Juhnios Rold">
+          <div className="h-12 w-12 rounded-2xl bg-[#2a4038] text-white flex items-center justify-center text-xs font-bold shadow-sm" title="Juhnios Rold">
             JR
           </div>
         ) : (
@@ -142,8 +146,8 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
         )}
       </div>
 
-      <nav className={`flex-1 overflow-y-auto ${compact ? 'w-full px-2 py-3' : 'p-3'}`}>
-        <div className="space-y-0.5">
+      <nav className={`flex-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${compact ? 'w-full px-3 py-4' : 'p-3'}`}>
+        <div className={compact ? 'space-y-1.5' : 'space-y-0.5'}>
           {allowedNavItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentView === item.id;
@@ -156,7 +160,7 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
                   setSidebarOpen(false);
                 }}
                 title={compact ? item.label : undefined}
-                className={`${compact ? 'mx-auto h-11 w-11 justify-center px-0' : 'w-full gap-3 px-3'} flex items-center py-2.5 rounded-xl text-left text-xs font-medium transition-all ${
+                className={`${compact ? 'mx-auto h-12 w-12 justify-center px-0' : 'w-full gap-3 px-3'} flex items-center py-2.5 rounded-2xl text-left text-xs font-medium transition-all ${
                   isActive
                     ? 'bg-[#2a4038] text-white shadow-sm'
                     : 'text-gray-600 hover:bg-white hover:shadow-sm'
@@ -170,14 +174,14 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
         </div>
       </nav>
 
-      <div className={`border-t border-gray-100 ${compact ? 'w-full p-2' : 'p-3'}`}>
+      <div className={`border-t border-gray-100 ${compact ? 'w-full p-3 space-y-2' : 'p-3'}`}>
         <button
           type="button"
           onClick={() => {
             setProfileModalOpen(true);
             setSidebarOpen(false);
           }}
-          className={`${compact ? 'mx-auto mb-2 flex h-11 w-11 items-center justify-center p-0' : 'w-full mb-3 p-3 text-left'} bg-white border border-gray-100 rounded-xl hover:border-[#2a4038]/40 hover:shadow-sm transition-all cursor-pointer`}
+          className={`${compact ? 'mx-auto flex h-12 w-12 items-center justify-center p-0' : 'w-full mb-3 p-3 text-left'} bg-white border border-gray-100 rounded-2xl hover:border-[#2a4038]/40 hover:shadow-sm transition-all cursor-pointer`}
           title="Ver mi perfil"
         >
           {compact ? (
@@ -193,7 +197,7 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
         <button
           onClick={logout}
           title="Cerrar sesión"
-          className={`${compact ? 'mx-auto h-11 w-11 px-0 overflow-hidden text-[0px]' : 'w-full gap-2 px-4 text-xs'} flex items-center justify-center py-2.5 border border-gray-200 rounded-xl font-semibold text-gray-600 hover:bg-white transition-colors`}
+          className={`${compact ? 'mx-auto h-12 w-12 px-0 overflow-hidden text-[0px]' : 'w-full gap-2 px-4 text-xs'} flex items-center justify-center py-2.5 border border-gray-200 rounded-2xl font-semibold text-gray-600 hover:bg-white transition-colors`}
         >
           <LogOut size={14} strokeWidth={1.75} />
           Cerrar Sesión
@@ -205,8 +209,14 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
   return (
     <div className="min-h-screen bg-gray-50/40 flex">
       {/* Desktop Sidebar */}
-      <div className={`hidden md:block fixed left-0 top-0 bottom-0 z-30 transition-[width] duration-200 ${isCompactSidebar ? 'w-[68px]' : 'w-56 lg:w-64'}`}>
-        <Sidebar compact={isCompactSidebar} />
+      <div
+        className={`hidden md:block fixed left-0 top-0 bottom-0 z-30 transition-[width] duration-150 ${isSidebarExpanded ? 'w-56 lg:w-64' : 'w-20'}`}
+        onMouseEnter={() => {
+          if (isCompactSidebar) setSidebarHover(true);
+        }}
+        onMouseLeave={() => setSidebarHover(false)}
+      >
+        <Sidebar compact={!isSidebarExpanded} />
       </div>
 
       {/* Mobile Sidebar overlay */}
@@ -224,7 +234,7 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
       )}
 
       {/* Main Content */}
-      <div className={`flex-1 min-w-0 transition-[margin] duration-200 ${isCompactSidebar ? 'md:ml-[68px]' : 'md:ml-56 lg:ml-64'}`}>
+      <div className={`flex-1 min-w-0 transition-[margin] duration-150 ${isCompactSidebar ? 'md:ml-20' : 'md:ml-56 lg:ml-64'}`}>
         {/* Mobile top bar */}
         <div className="sticky top-0 z-40 bg-white border-b border-gray-100 md:hidden">
           <div className="flex items-center justify-between px-4 h-14">

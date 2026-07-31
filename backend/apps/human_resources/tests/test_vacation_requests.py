@@ -1,7 +1,9 @@
+import io
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.core.files.uploadedfile import SimpleUploadedFile
-from pypdf import PdfReader
+from pypdf import PdfReader, PdfWriter
 from rest_framework.test import APIClient
 
 from apps.employees.infrastructure.models import Department, Employee, Position
@@ -167,6 +169,32 @@ class VacationRequestPortalTests(TestCase):
 
         self.assertIn("Firmas de aprob", text)
         self.assertNotIn("firmas registradas", text)
+
+    def test_request_pdf_appends_pdf_support_document_as_extra_page(self):
+        support_buffer = io.BytesIO()
+        support_writer = PdfWriter()
+        support_writer.add_blank_page(width=72, height=72)
+        support_writer.write(support_buffer)
+        support_buffer.seek(0)
+        support_file = SimpleUploadedFile(
+            "soporte.pdf",
+            support_buffer.read(),
+            content_type="application/pdf",
+        )
+        vacation = VacationRequest.objects.create(
+            employee=self.employee,
+            request_type=VacationRequest.RequestType.PERMISSION,
+            start_date="2026-07-27",
+            end_date="2026-07-27",
+            is_full_day=False,
+            reason="Cita medica",
+            support_document=support_file,
+        )
+
+        pdf_buffer = render_request_pdf(vacation)
+        reader = PdfReader(pdf_buffer)
+
+        self.assertGreaterEqual(len(reader.pages), 2)
 
     def test_treasury_approval_finalizes_loan_without_admin_step(self):
         loan_signature = SimpleUploadedFile(
