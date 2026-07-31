@@ -23,6 +23,7 @@ import {
   Truck,
   FlaskConical,
   HandCoins,
+  Banknote,
   Settings,
 } from 'lucide-react';
 
@@ -94,6 +95,7 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
     { id: 'payments', label: 'Pagos', icon: CreditCard, roles: ['ADMIN', 'SELLER'] },
     { id: 'reports', label: 'Reportes', icon: BarChart3, roles: ['ADMIN', 'SELLER'] },
     { id: 'hr', label: 'RRHH', icon: Briefcase, roles: ['ADMIN', 'RRHH'] },
+    { id: 'payroll', label: 'Nómina', icon: Banknote, roles: ['ADMIN', 'RRHH', 'CONTABILIDAD', 'TESORERIA'] },
     { id: 'employee-portal', label: 'Mis solicitudes', icon: CalendarClock, roles: ['ADMIN', 'SELLER', 'DISTRIBUTOR', 'RRHH', 'EMPLEADO', 'PEDIDOS'] },
     { id: 'employee-settings', label: 'Configuración', icon: Settings, roles: employeeAccessRoles },
     { id: 'loans', label: 'Préstamos', icon: HandCoins, roles: ['ADMIN', 'RRHH', 'CONTABILIDAD', 'TESORERIA'] },
