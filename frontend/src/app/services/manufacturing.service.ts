@@ -466,6 +466,8 @@ export interface PackagingControlRecord {
   label_material_batch: string;
   label_result: ResultStatus | '';
   label_observations: string;
+  label_performed_by: UUID | null;
+  label_verified_by: UUID | null;
   units_per_display: number | null;
   displays_per_box: number | null;
   units_per_box: number | null;
@@ -1243,6 +1245,35 @@ export async function createPackagingControl(input: {
   rejection_reasons?: string;
 }): Promise<PackagingControlRecord> {
   const { data } = await api.post<PackagingControlRecord>(`${BASE}/packaging-controls/`, input);
+  return data as PackagingControlRecord;
+}
+
+export async function updatePackagingControlLabel(
+  id: string,
+  input: {
+    label_code?: string;
+    artwork_version?: string;
+    label_material_batch?: string;
+    label_result?: ResultStatus;
+    label_observations?: string;
+    label_performed_by?: string | null;
+    label_verified_by?: string | null;
+    label_sample_file?: File | null;
+  },
+): Promise<PackagingControlRecord> {
+  const { label_sample_file, ...rest } = input;
+  const body: FormData | typeof rest = label_sample_file
+    ? (() => {
+        const formData = new FormData();
+        Object.entries(rest).forEach(([key, value]) => {
+          if (value === null || value === undefined) return;
+          formData.append(key, String(value));
+        });
+        formData.append('label_sample_file', label_sample_file);
+        return formData;
+      })()
+    : rest;
+  const { data } = await api.patch<PackagingControlRecord>(`${BASE}/packaging-controls/${id}/`, body);
   return data as PackagingControlRecord;
 }
 

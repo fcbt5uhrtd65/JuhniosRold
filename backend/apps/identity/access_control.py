@@ -205,6 +205,16 @@ COMPONENT_DEFINITIONS = (
         "description": "Solicitudes de préstamo de empleados: ver, aprobar/rechazar y definir el monto.",
     },
     {
+        "code": "human_resources.payroll",
+        "name": "Nómina",
+        "description": "Cálculo, aprobación y pago de nómina quincenal, horarios y festivos.",
+    },
+    {
+        "code": "human_resources.biometric_import",
+        "name": "Importación de marcaciones biométricas",
+        "description": "Carga de archivos del reloj biométrico, mapeo de empleados y corrección de asistencia.",
+    },
+    {
         "code": "finance.management",
         "name": "Finanzas",
         "description": "Transacciones financieras y facturación.",
@@ -275,6 +285,8 @@ def build_default_role_permissions():
         "identity.users": {"can_view": True, "can_edit": True},
         "employees.management": {"can_view": True, "can_edit": True},
         "human_resources.management": {"can_view": True, "can_edit": True},
+        "human_resources.payroll": {"can_view": True, "can_edit": True},
+        "human_resources.biometric_import": {"can_view": True, "can_edit": True},
     }
     permissions["EMPLEADO"] = {
         "identity.users": {"can_view": True, "can_edit": False},
@@ -323,17 +335,22 @@ def build_default_role_permissions():
         "manufacturing.management": {"can_view": True, "can_edit": False},
         "audit.logs": {"can_view": True, "can_edit": False},
         "human_resources.management": {"can_view": True, "can_edit": False},
+        "human_resources.payroll": {"can_view": True, "can_edit": False},
         "inventory.management": {"can_view": True, "can_edit": False},
         "employees.management": {"can_view": True, "can_edit": False},
         "commerce.orders": {"can_view": True, "can_edit": False},
     }
     # Contabilidad solo puede CONSULTAR y descargar el PDF de préstamos, nunca
     # aprobar/rechazar ni definir el monto. Tesorería sí gestiona el módulo
-    # completo (ver, aprobar, rechazar, aprobar monto parcial).
+    # completo (ver, aprobar, rechazar, aprobar monto parcial). Ambas también
+    # pueden consultar (sin editar) nómina, para verificar antes de procesar
+    # pagos — la edición (calcular/aprobar/marcar pagada) queda en RRHH/Admin.
     permissions["CONTABILIDAD"] = {
         "human_resources.loans": {"can_view": True, "can_edit": False},
+        "human_resources.payroll": {"can_view": True, "can_edit": False},
     }
     permissions["TESORERIA"] = {
         "human_resources.loans": {"can_view": True, "can_edit": True},
+        "human_resources.payroll": {"can_view": True, "can_edit": False},
     }
     return permissions

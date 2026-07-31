@@ -99,6 +99,7 @@ import {
   rejectLineClearance,
   releaseBatch,
   startBatch,
+  updatePackagingControlLabel,
   verifyDispensingLine,
   weighDispensingLine,
   type AnalysisCertificateRecord,
@@ -392,6 +393,15 @@ const BATCHING_FLOW_EXAMPLE = {
     'Procedimiento formal de autorizacion para fuera de tolerancia.',
   ],
 };
+
+function getMediaUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return parsed.pathname + parsed.search;
+  } catch {
+    return url;
+  }
+}
 
 function statusBadgeColor(status: BatchStatus): BadgeColor {
   if (status === 'RELEASED') return 'green';
@@ -1197,7 +1207,7 @@ function BatchDetail({
       {activeTab === 'manufacturing' && <ManufacturingTab batch={batch} employeeById={employeeById} />}
       {activeTab === 'bulk_quality' && <BulkQualityTab batch={batch} />}
       {activeTab === 'filling' && <FillingTab batch={batch} />}
-      {activeTab === 'packaging' && <PackagingTab batch={batch} />}
+      {activeTab === 'packaging' && <PackagingTab batch={batch} employeeById={employeeById} employees={Array.from(employeeById.values())} />}
       {activeTab === 'final_quality' && <FinalQualityTab batch={batch} />}
       {activeTab === 'documents' && <DocumentsTab batch={batch} />}
       {activeTab === 'release' && <ReleaseTab batch={batch} employeeById={employeeById} onRefresh={onRefresh} />}
@@ -2644,7 +2654,15 @@ function FillingTab({ batch }: { batch: BatchRecord }) {
   );
 }
 
-function PackagingTab({ batch }: { batch: BatchRecord }) {
+function PackagingTab({
+  batch,
+  employeeById,
+  employees,
+}: {
+  batch: BatchRecord;
+  employeeById: Map<string, Employee>;
+  employees: Employee[];
+}) {
   const toast = useToast();
   const [control, setControl] = useState<PackagingControlRecord | null>(null);
   const [seal, setSeal] = useState<SealIntegrityControlRecord | null>(null);
@@ -2654,6 +2672,7 @@ function PackagingTab({ batch }: { batch: BatchRecord }) {
   const [showSealModal, setShowSealModal] = useState(false);
   const [showWeightModal, setShowWeightModal] = useState(false);
   const [showLotMarkingModal, setShowLotMarkingModal] = useState(false);
+  const [showLabelModal, setShowLabelModal] = useState(false);
   const [sampleForm, setSampleForm] = useState({ sampleNumber: '', grossWeight: '', tare: '' });
   const [savingSample, setSavingSample] = useState(false);
   const [authorizing, setAuthorizing] = useState(false);
@@ -2750,6 +2769,47 @@ function PackagingTab({ batch }: { batch: BatchRecord }) {
 
   return (
     <div className="space-y-4">
+      {control && (
+        <Card className="p-5">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-semibold text-gray-900">Etiqueta testigo</p>
+            <SecondaryButton onClick={() => setShowLabelModal(true)} icon={<Plus size={13} />}>
+              {control.label_code || control.label_sample_file ? 'Editar' : 'Registrar'}
+            </SecondaryButton>
+          </div>
+          {!control.label_code && !control.label_sample_file ? (
+            <EmptyState title="Sin etiqueta testigo registrada" />
+          ) : (
+            <div className="grid sm:grid-cols-[1fr_auto] gap-4">
+              <div className="grid sm:grid-cols-2 gap-4">
+                <SectionField label="Código de etiqueta" value={control.label_code || '-'} />
+                <SectionField label="Versión del arte" value={control.artwork_version || '-'} />
+                <SectionField label="Lote del material" value={control.label_material_batch || '-'} />
+                <SectionField label="Resultado" value={control.label_result || '-'} />
+                {control.label_observations && (
+                  <div className="sm:col-span-2">
+                    <SectionField label="Observaciones" value={control.label_observations} />
+                  </div>
+                )}
+              </div>
+              {control.label_sample_file && (
+                <img
+                  src={getMediaUrl(control.label_sample_file)}
+                  alt="Etiqueta testigo"
+                  className="h-24 w-24 object-cover rounded-lg border border-gray-200"
+                />
+              )}
+            </div>
+          )}
+          {(control.label_performed_by || control.label_verified_by) && (
+            <div className="grid sm:grid-cols-2 gap-4 mt-4 pt-3 border-t border-gray-100">
+              <SectionField label="Realizado por" value={getEmployeeName(employeeById.get(control.label_performed_by ?? ''))} />
+              <SectionField label="Verificado por" value={getEmployeeName(employeeById.get(control.label_verified_by ?? ''))} />
+            </div>
+          )}
+        </Card>
+      )}
+
       <Card className="p-5">
         <div className="flex items-center justify-between mb-3">
           <p className="text-sm font-semibold text-gray-900">Control de acondicionamiento</p>
@@ -2924,7 +2984,148 @@ function PackagingTab({ batch }: { batch: BatchRecord }) {
           }}
         />
       )}
+      {control && (
+        <LabelSampleModal
+          open={showLabelModal}
+          control={control}
+          employees={employees}
+          onClose={() => setShowLabelModal(false)}
+          onSaved={async () => {
+            setShowLabelModal(false);
+            await load();
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+function LabelSampleModal({
+  open,
+  control,
+  employees,
+  onClose,
+  onSaved,
+}: {
+  open: boolean;
+  control: PackagingControlRecord;
+  employees: Employee[];
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  const toast = useToast();
+  const [labelCode, setLabelCode] = useState(control.label_code);
+  const [artworkVersion, setArtworkVersion] = useState(control.artwork_version);
+  const [labelMaterialBatch, setLabelMaterialBatch] = useState(control.label_material_batch);
+  const [labelResult, setLabelResult] = useState<ResultStatus | ''>(control.label_result);
+  const [observations, setObservations] = useState(control.label_observations);
+  const [performedBy, setPerformedBy] = useState(control.label_performed_by ?? '');
+  const [verifiedBy, setVerifiedBy] = useState(control.label_verified_by ?? '');
+  const [file, setFile] = useState<File | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setLabelCode(control.label_code);
+    setArtworkVersion(control.artwork_version);
+    setLabelMaterialBatch(control.label_material_batch);
+    setLabelResult(control.label_result);
+    setObservations(control.label_observations);
+    setPerformedBy(control.label_performed_by ?? '');
+    setVerifiedBy(control.label_verified_by ?? '');
+    setFile(null);
+  }, [open, control]);
+
+  const handleSubmit = async () => {
+    setSaving(true);
+    try {
+      await updatePackagingControlLabel(control.id, {
+        label_code: labelCode,
+        artwork_version: artworkVersion,
+        label_material_batch: labelMaterialBatch,
+        label_result: labelResult || undefined,
+        label_observations: observations,
+        label_performed_by: performedBy || null,
+        label_verified_by: verifiedBy || null,
+        label_sample_file: file,
+      });
+      toast.success('Etiqueta testigo registrada');
+      await onSaved();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo registrar la etiqueta testigo');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title="Etiqueta testigo" open={open} onClose={onClose} wide>
+      <div className="space-y-4">
+        <div className="grid sm:grid-cols-2 gap-3">
+          <label className="block">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Código de etiqueta</span>
+            <input value={labelCode} onChange={(e) => setLabelCode(e.target.value)} className={inputCls} />
+          </label>
+          <label className="block">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Versión del arte</span>
+            <input value={artworkVersion} onChange={(e) => setArtworkVersion(e.target.value)} className={inputCls} />
+          </label>
+        </div>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <label className="block">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Lote del material</span>
+            <input value={labelMaterialBatch} onChange={(e) => setLabelMaterialBatch(e.target.value)} className={inputCls} />
+          </label>
+          <label className="block">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Resultado</span>
+            <select value={labelResult} onChange={(e) => setLabelResult(e.target.value as ResultStatus | '')} className={selectCls}>
+              <option value="">Sin definir</option>
+              <option value="YES">Cumple</option>
+              <option value="NO">No cumple</option>
+              <option value="NOT_APPLICABLE">No aplica</option>
+            </select>
+          </label>
+        </div>
+        <label className="block">
+          <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Observaciones</span>
+          <textarea value={observations} onChange={(e) => setObservations(e.target.value)} rows={2} className={`${inputCls} resize-none`} />
+        </label>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <label className="block">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Realizado por</span>
+            <select value={performedBy} onChange={(e) => setPerformedBy(e.target.value)} className={selectCls}>
+              <option value="">Sin asignar</option>
+              {employees.map((employee) => (
+                <option key={employee.id} value={employee.id}>{`${employee.first_name} ${employee.last_name}`.trim()}</option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Verificado por</span>
+            <select value={verifiedBy} onChange={(e) => setVerifiedBy(e.target.value)} className={selectCls}>
+              <option value="">Sin asignar</option>
+              {employees.map((employee) => (
+                <option key={employee.id} value={employee.id}>{`${employee.first_name} ${employee.last_name}`.trim()}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <label className="block">
+          <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Foto de la etiqueta</span>
+          <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className={inputCls} />
+          {control.label_sample_file && !file && (
+            <p className="text-[11px] text-gray-400 mt-1">Ya hay una foto guardada; sube una nueva solo si quieres reemplazarla.</p>
+          )}
+        </label>
+        <div className="flex justify-end gap-2">
+          <SecondaryButton onClick={onClose}>Cancelar</SecondaryButton>
+          <PrimaryButton onClick={() => void handleSubmit()} disabled={saving}>
+            {saving ? 'Guardando...' : 'Guardar etiqueta testigo'}
+          </PrimaryButton>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

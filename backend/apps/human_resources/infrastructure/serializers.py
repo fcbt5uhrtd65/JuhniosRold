@@ -7,11 +7,19 @@ from apps.notifications.infrastructure.models import StaffNotification
 
 from .models import (
     Attendance,
+    BiometricDevice,
+    BiometricImportBatch,
+    EmployeeBiometricId,
     EmployeeDocument,
+    EmployeeWorkSchedule,
+    EmployeeWorkScheduleDay,
     OvertimeShift,
     Payroll,
     PayrollItem,
+    PayrollLegalParameter,
     PerformanceReview,
+    PublicHoliday,
+    RawBiometricPunch,
     VacationRequest,
     VacationRequestApprovalStep,
     VacationRequestAttachment,
@@ -264,3 +272,59 @@ class HRNotificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = StaffNotification
         fields = "__all__"
+
+
+class PublicHolidaySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PublicHoliday
+        fields = "__all__"
+
+
+class PayrollLegalParameterSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PayrollLegalParameter
+        fields = "__all__"
+
+
+class EmployeeWorkScheduleDaySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EmployeeWorkScheduleDay
+        fields = "__all__"
+        read_only_fields = ("schedule",)
+
+
+class EmployeeWorkScheduleSerializer(serializers.ModelSerializer):
+    days = EmployeeWorkScheduleDaySerializer(many=True, read_only=True)
+
+    class Meta:
+        model = EmployeeWorkSchedule
+        fields = "__all__"
+        read_only_fields = ("created_by",)
+
+
+class BiometricDeviceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BiometricDevice
+        fields = "__all__"
+
+
+class EmployeeBiometricIdSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EmployeeBiometricId
+        fields = "__all__"
+
+
+class RawBiometricPunchSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RawBiometricPunch
+        fields = "__all__"
+
+
+class BiometricImportBatchSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BiometricImportBatch
+        fields = "__all__"
+        read_only_fields = (
+            "uploaded_by", "status", "total_rows", "matched_rows",
+            "unmatched_rows", "duplicate_rows", "error_log", "processed_at",
+        )
