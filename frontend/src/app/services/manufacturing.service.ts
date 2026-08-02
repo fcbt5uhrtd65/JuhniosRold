@@ -1121,6 +1121,11 @@ export async function createLineIdentification(input: {
   return data as LineIdentificationRecord;
 }
 
+export async function removeLineIdentification(id: string): Promise<LineIdentificationRecord> {
+  const { data } = await api.post<LineIdentificationRecord>(`${BASE}/line-identifications/${id}/remove/`, {});
+  return data as LineIdentificationRecord;
+}
+
 export async function createProductionControl(input: { batch: string; lot_size?: number | null; unit?: string | null; notes?: string }): Promise<ProductionControlRecord> {
   const { data } = await api.post<ProductionControlRecord>(`${BASE}/production-controls/`, input);
   return data as ProductionControlRecord;

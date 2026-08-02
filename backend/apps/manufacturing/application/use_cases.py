@@ -21,6 +21,7 @@ from ..infrastructure.models import (
     ItemStock,
     ItemStockMovement,
     LineClearance,
+    LineIdentification,
     ManufacturingStepExecution,
     MicrobiologyAnalysis,
     ProductSpecification,
@@ -484,6 +485,19 @@ class CreateBatchLotMarking:
             defaults=fields,
         )
         return marking
+
+
+class RemoveLineIdentification:
+    """Registra el retiro de la identificación de línea al terminar de usar
+    el área/equipo, para que no quede mal etiquetada para el siguiente lote."""
+
+    def execute(self, line_identification: LineIdentification, actor):
+        if line_identification.removed_at:
+            raise BusinessRuleViolation("La identificación de línea ya fue retirada.")
+        line_identification.removed_at = timezone.now()
+        line_identification.removed_by = actor
+        line_identification.save(update_fields=("removed_at", "removed_by", "updated_at"))
+        return line_identification
 
 
 class ApproveLineClearance:

@@ -41,6 +41,7 @@ from ..application.use_cases import (
     LoadMicrobiologySpecificationFromMaster,
     RecordWeightVolumeSample,
     ReleaseBatch,
+    RemoveLineIdentification,
     SignDocument,
     StartBatch,
     VerifyDispensingLine,
@@ -622,6 +623,18 @@ class LineIdentificationViewSet(ManufacturingBaseViewSet):
     queryset = LineIdentification.objects.select_related("batch", "placed_by", "removed_by")
     serializer_class = LineIdentificationSerializer
     filterset_fields = ("batch",)
+
+    @action(detail=True, methods=("post",), url_path="remove")
+    def remove(self, request, pk=None):
+        line_identification = self.get_object()
+        try:
+            line_identification = RemoveLineIdentification().execute(
+                line_identification, actor=self._require_actor(request)
+            )
+        except BusinessRuleViolation as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        self._audit("remove", line_identification)
+        return Response(self.get_serializer(line_identification).data)
 
     @action(detail=True, methods=("get",), url_path="export")
     def export(self, request, pk=None):
