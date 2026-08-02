@@ -579,7 +579,14 @@ export function AdminManufacturing() {
 
       <TabBar tabs={MANUFACTURING_SECTIONS} value={activeSection} onChange={setActiveSection} />
 
-      {activeSection === 'planning' && <AdminProductionPlanning />}
+      {activeSection === 'planning' && (
+        <AdminProductionPlanning
+          onCreateBatch={() => {
+            setActiveSection('batches');
+            setShowNewBatchModal(true);
+          }}
+        />
+      )}
 
       {activeSection === 'batching_flow' && <BatchingConsumptionFlow />}
 

@@ -5,7 +5,6 @@ import {
 import {
   closeProductionOrder,
   createFormula,
-  createProductionOrder,
   getProductionPlanningWorkspace,
   numeric,
   type InventoryWorkspace,
@@ -118,7 +117,7 @@ function EmptyRow({ colSpan, label }: { colSpan: number; label: string }) {
 /* ═══════════════════════════════════════════════════════
    PLANIFICACIÓN DE PRODUCCIÓN — Órdenes y Fórmulas
 ═══════════════════════════════════════════════════════ */
-export function AdminProductionPlanning() {
+export function AdminProductionPlanning({ onCreateBatch }: { onCreateBatch: () => void }) {
   const toast = useToast();
   const { data, itemStocks, loading, reload } = useProductionPlanningWorkspace();
   const [tab, setTab] = useState<TabProduccion>('ordenes');
@@ -127,7 +126,6 @@ export function AdminProductionPlanning() {
   const [cierreForm, setCierreForm] = useState({ actualQuantity: '', notes: '' });
   const [closing, setClosing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [orderForm, setOrderForm] = useState({ formula: '', outputItem: '', plannedQuantity: '', batchCode: '', startedAt: currentDateInput(), responsible: '', notes: '' });
   const emptyFormulaLine = () => ({ key: Math.random().toString(36).slice(2), item: '', quantity: '' });
   const [formulaForm, setFormulaForm] = useState({ code: '', name: '', outputItem: '', yieldQuantity: '', yieldUnit: '' });
   const [formulaLines, setFormulaLines] = useState([emptyFormulaLine()]);
@@ -141,33 +139,6 @@ export function AdminProductionPlanning() {
 
   const estadoApiColor: Record<string, 'yellow' | 'blue' | 'green' | 'red'> = { PENDING: 'yellow', IN_PROGRESS: 'blue', CLOSED: 'green', VOIDED: 'red' };
   const estadoApiLabel: Record<string, string> = { PENDING: 'Pendiente', IN_PROGRESS: 'En Proceso', CLOSED: 'Cerrada', VOIDED: 'Anulada' };
-
-  const handleCreateOrder = async () => {
-    if (!orderForm.formula || !orderForm.outputItem || !Number(orderForm.plannedQuantity)) {
-      toast.warning('Fórmula, producto y cantidad planificada son obligatorios.');
-      return;
-    }
-    setSaving(true);
-    try {
-      await createProductionOrder({
-        formula: orderForm.formula,
-        output_item: orderForm.outputItem,
-        planned_quantity: Number(orderForm.plannedQuantity),
-        batch_code: orderForm.batchCode,
-        started_at: orderForm.startedAt || null,
-        responsible: orderForm.responsible,
-        notes: orderForm.notes,
-      });
-      toast.success('Orden de producción creada');
-      setOrderForm({ formula: '', outputItem: '', plannedQuantity: '', batchCode: '', startedAt: currentDateInput(), responsible: '', notes: '' });
-      setDrawerOpen(false);
-      await reload();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No fue posible crear la OP');
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const handleCloseOrder = async () => {
     if (!cierreOP || !Number(cierreForm.actualQuantity)) {
@@ -236,7 +207,12 @@ export function AdminProductionPlanning() {
       {/* ÓRDENES */}
       {tab === 'ordenes' && (
         <>
-          <Hdr title="Órdenes de Producción" subtitle="Planificación y control del proceso productivo" onNew={() => setDrawerOpen(true)} newLabel="Nueva Orden" />
+          <Hdr title="Órdenes de Producción" subtitle="Planificación y control del proceso productivo" onNew={onCreateBatch} newLabel="Nueva Orden" />
+          <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 mb-5">
+            <p className="text-xs text-blue-700 font-medium">
+              Las órdenes de producción se crean junto con su expediente de lote GMP desde "Expedientes de lote → Nuevo lote", para que toda orden quede desde el inicio bajo trazabilidad de calidad.
+            </p>
+          </div>
           <div className="grid grid-cols-4 gap-4 mb-5">
             {[
               { label: 'Pendientes', value: (data?.productionOrders ?? []).filter(o => o.status === 'PENDING').length, color: 'bg-amber-50 text-amber-600 border-amber-100' },
@@ -302,23 +278,6 @@ export function AdminProductionPlanning() {
             </div>
           )}
 
-          <Drawer title="Nueva Orden de Producción" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Número de orden"><input className={inp + ' bg-gray-50'} placeholder="Automático" readOnly /></Field>
-              <Field label="Fecha programada" required><input className={inp} type="date" value={orderForm.startedAt} onChange={e => setOrderForm(f => ({ ...f, startedAt: e.target.value }))} /></Field>
-              <div className="col-span-2"><Field label="Producto a fabricar" required><select className={sel} value={orderForm.outputItem} onChange={e => setOrderForm(f => ({ ...f, outputItem: e.target.value }))}><option value="">Seleccionar producto terminado...</option>{(data?.items ?? []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field></div>
-              <div className="col-span-2"><Field label="Fórmula / Receta" required><select className={sel} value={orderForm.formula} onChange={e => { const formula = maps.formulas.get(e.target.value); setOrderForm(f => ({ ...f, formula: e.target.value, outputItem: formula?.output_item ?? f.outputItem })); }}><option value="">Seleccionar fórmula...</option>{(data?.formulas ?? []).map(f => <option key={f.id} value={f.id}>{f.code} — {f.name}</option>)}</select></Field></div>
-              <Field label="Cantidad planificada" required><input className={inp} type="number" placeholder="0" value={orderForm.plannedQuantity} onChange={e => setOrderForm(f => ({ ...f, plannedQuantity: e.target.value }))} /></Field>
-              <div className="col-span-2"><Field label="Lote asignado" required><input className={inp} placeholder="Ej: PT2025-022" value={orderForm.batchCode} onChange={e => setOrderForm(f => ({ ...f, batchCode: e.target.value }))} /></Field></div>
-              <div className="col-span-2"><Field label="Responsable" required><input className={inp} placeholder="Responsable" value={orderForm.responsible} onChange={e => setOrderForm(f => ({ ...f, responsible: e.target.value }))} /></Field></div>
-              <div className="col-span-2"><Field label="Observaciones"><textarea className={inp + ' resize-none h-14'} placeholder="Instrucciones especiales..." value={orderForm.notes} onChange={e => setOrderForm(f => ({ ...f, notes: e.target.value }))} /></Field></div>
-            </div>
-            <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 mt-4"><p className="text-xs text-blue-700 font-medium">Al crear la orden se generará automáticamente la Orden de Dispensación con las materias primas de la fórmula seleccionada.</p></div>
-            <div className="flex gap-3 mt-8 pt-5 border-t border-gray-100">
-              <button onClick={() => setDrawerOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancelar</button>
-              <button onClick={handleCreateOrder} disabled={saving} className="flex-1 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold hover:bg-[#3d5c4e] flex items-center justify-center gap-2 disabled:opacity-50">{saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Guardar</button>
-            </div>
-          </Drawer>
         </>
       )}
 
