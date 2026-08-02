@@ -11,6 +11,7 @@ import {
   type InventoryWorkspace,
   type ProductionOrderRecord,
 } from '../../services/inventory-production.service';
+import { getItemStocks, type ItemStockRecord } from '../../services/manufacturing.service';
 import { useToast } from '../../contexts/ToastContext';
 
 /* ═══════════════════════════════════════════════════════
@@ -24,12 +25,18 @@ type TabProduccion = 'ordenes' | 'formulas';
 function useProductionPlanningWorkspace() {
   const toast = useToast();
   const [data, setData] = useState<InventoryWorkspace | null>(null);
+  const [itemStocks, setItemStocks] = useState<ItemStockRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setData(await getProductionPlanningWorkspace());
+      const [workspace, stocks] = await Promise.all([
+        getProductionPlanningWorkspace(),
+        getItemStocks().catch(() => []),
+      ]);
+      setData(workspace);
+      setItemStocks(stocks);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'No fue posible cargar planificación de producción');
     } finally {
@@ -39,7 +46,15 @@ function useProductionPlanningWorkspace() {
 
   useEffect(() => { load(); }, [load]);
 
-  return { data, loading, reload: load };
+  return { data, itemStocks, loading, reload: load };
+}
+
+function availableStockByItem(itemStocks: ItemStockRecord[]) {
+  const totals = new Map<string, number>();
+  for (const stock of itemStocks) {
+    totals.set(stock.item, (totals.get(stock.item) ?? 0) + Number(stock.available_quantity));
+  }
+  return totals;
 }
 
 function buildInventoryMaps(data: InventoryWorkspace | null) {
@@ -105,7 +120,7 @@ function EmptyRow({ colSpan, label }: { colSpan: number; label: string }) {
 ═══════════════════════════════════════════════════════ */
 export function AdminProductionPlanning() {
   const toast = useToast();
-  const { data, loading, reload } = useProductionPlanningWorkspace();
+  const { data, itemStocks, loading, reload } = useProductionPlanningWorkspace();
   const [tab, setTab] = useState<TabProduccion>('ordenes');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [cierreOP, setCierreOP] = useState<ProductionOrderRecord | null>(null);
@@ -113,8 +128,11 @@ export function AdminProductionPlanning() {
   const [closing, setClosing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [orderForm, setOrderForm] = useState({ formula: '', outputItem: '', plannedQuantity: '', batchCode: '', startedAt: currentDateInput(), responsible: '', notes: '' });
-  const [formulaForm, setFormulaForm] = useState({ code: '', name: '', outputItem: '', yieldQuantity: '', yieldUnit: '', item: '', quantity: '' });
+  const emptyFormulaLine = () => ({ key: Math.random().toString(36).slice(2), item: '', quantity: '' });
+  const [formulaForm, setFormulaForm] = useState({ code: '', name: '', outputItem: '', yieldQuantity: '', yieldUnit: '' });
+  const [formulaLines, setFormulaLines] = useState([emptyFormulaLine()]);
   const maps = useMemo(() => buildInventoryMaps(data), [data]);
+  const stockByItem = useMemo(() => availableStockByItem(itemStocks), [itemStocks]);
 
   const tabs = [
     { id: 'ordenes' as TabProduccion, label: 'Órdenes de Producción' },
@@ -174,8 +192,16 @@ export function AdminProductionPlanning() {
     }
   };
 
+  const validFormulaLines = formulaLines.filter(l => l.item && Number(l.quantity) > 0);
+
+  const handleAddFormulaLine = () => setFormulaLines(lines => [...lines, emptyFormulaLine()]);
+  const handleRemoveFormulaLine = (key: string) => setFormulaLines(lines => (lines.length > 1 ? lines.filter(l => l.key !== key) : lines));
+  const handleFormulaLineChange = (key: string, field: 'item' | 'quantity', value: string) => {
+    setFormulaLines(lines => lines.map(l => (l.key === key ? { ...l, [field]: value } : l)));
+  };
+
   const handleCreateFormula = async () => {
-    if (!formulaForm.code || !formulaForm.name || !formulaForm.outputItem || !formulaForm.yieldUnit || !Number(formulaForm.yieldQuantity) || !formulaForm.item || !Number(formulaForm.quantity)) {
+    if (!formulaForm.code || !formulaForm.name || !formulaForm.outputItem || !formulaForm.yieldUnit || !Number(formulaForm.yieldQuantity) || validFormulaLines.length === 0) {
       toast.warning('Completa la fórmula y al menos un ingrediente.');
       return;
     }
@@ -187,10 +213,11 @@ export function AdminProductionPlanning() {
         output_item: formulaForm.outputItem,
         yield_quantity: Number(formulaForm.yieldQuantity),
         yield_unit: formulaForm.yieldUnit,
-        lines: [{ item: formulaForm.item, quantity: Number(formulaForm.quantity) }],
+        lines: validFormulaLines.map(l => ({ item: l.item, quantity: Number(l.quantity) })),
       });
       toast.success('Fórmula creada');
-      setFormulaForm({ code: '', name: '', outputItem: '', yieldQuantity: '', yieldUnit: '', item: '', quantity: '' });
+      setFormulaForm({ code: '', name: '', outputItem: '', yieldQuantity: '', yieldUnit: '' });
+      setFormulaLines([emptyFormulaLine()]);
       setDrawerOpen(false);
       await reload();
     } catch (error) {
@@ -282,8 +309,7 @@ export function AdminProductionPlanning() {
               <div className="col-span-2"><Field label="Producto a fabricar" required><select className={sel} value={orderForm.outputItem} onChange={e => setOrderForm(f => ({ ...f, outputItem: e.target.value }))}><option value="">Seleccionar producto terminado...</option>{(data?.items ?? []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field></div>
               <div className="col-span-2"><Field label="Fórmula / Receta" required><select className={sel} value={orderForm.formula} onChange={e => { const formula = maps.formulas.get(e.target.value); setOrderForm(f => ({ ...f, formula: e.target.value, outputItem: formula?.output_item ?? f.outputItem })); }}><option value="">Seleccionar fórmula...</option>{(data?.formulas ?? []).map(f => <option key={f.id} value={f.id}>{f.code} — {f.name}</option>)}</select></Field></div>
               <Field label="Cantidad planificada" required><input className={inp} type="number" placeholder="0" value={orderForm.plannedQuantity} onChange={e => setOrderForm(f => ({ ...f, plannedQuantity: e.target.value }))} /></Field>
-              <Field label="Lote asignado" required><input className={inp} placeholder="Ej: PT2025-022" value={orderForm.batchCode} onChange={e => setOrderForm(f => ({ ...f, batchCode: e.target.value }))} /></Field>
-              <Field label="Fecha vencimiento del lote"><input className={inp} type="date" /></Field>
+              <div className="col-span-2"><Field label="Lote asignado" required><input className={inp} placeholder="Ej: PT2025-022" value={orderForm.batchCode} onChange={e => setOrderForm(f => ({ ...f, batchCode: e.target.value }))} /></Field></div>
               <div className="col-span-2"><Field label="Responsable" required><input className={inp} placeholder="Responsable" value={orderForm.responsible} onChange={e => setOrderForm(f => ({ ...f, responsible: e.target.value }))} /></Field></div>
               <div className="col-span-2"><Field label="Observaciones"><textarea className={inp + ' resize-none h-14'} placeholder="Instrucciones especiales..." value={orderForm.notes} onChange={e => setOrderForm(f => ({ ...f, notes: e.target.value }))} /></Field></div>
             </div>
@@ -312,14 +338,14 @@ export function AdminProductionPlanning() {
                   <thead><tr className="text-[10px] font-bold uppercase tracking-wider text-gray-400"><th className="py-2 text-left">Ingrediente</th><th className="py-2 text-right">Cantidad</th><th className="py-2 text-right">Und</th><th className="py-2 text-right">%</th><th className="py-2 text-right">Stock disp.</th></tr></thead>
                   <tbody>
                     {f.lines.map((l, index) => {
-                      const stockDisp = 0;
+                      const stockDisp = stockByItem.get(l.item) ?? 0;
                       return (
                         <tr key={l.id ?? index} className="border-t border-gray-50">
                           <td className="py-2.5 font-medium text-gray-800">{itemName(data, l.item)}</td>
                           <td className="py-2.5 text-right font-bold">{numeric(l.quantity)}</td>
                           <td className="py-2.5 text-right text-gray-500">{unitLabel(data, maps.items.get(l.item)?.unit)}</td>
                           <td className="py-2.5 text-right text-gray-500">{numeric(f.yield_quantity) > 0 ? ((numeric(l.quantity) / numeric(f.yield_quantity)) * 100).toFixed(1) : '0.0'}%</td>
-                          <td className="py-2.5 text-right"><span className={stockDisp > numeric(l.quantity) ? 'text-emerald-600 font-semibold' : 'text-red-600 font-semibold'}>{stockDisp > 0 ? stockDisp : 'Sin stock'}</span></td>
+                          <td className="py-2.5 text-right"><span className={stockDisp > numeric(l.quantity) ? 'text-emerald-600 font-semibold' : 'text-red-600 font-semibold'}>{stockDisp > 0 ? stockDisp.toLocaleString(undefined, { maximumFractionDigits: 2 }) : 'Sin stock'}</span></td>
                         </tr>
                       );
                     })}
@@ -338,14 +364,16 @@ export function AdminProductionPlanning() {
               <Field label="Unidad del rendimiento"><select className={sel} value={formulaForm.yieldUnit} onChange={e => setFormulaForm(f => ({ ...f, yieldUnit: e.target.value }))}><option value="">Seleccionar...</option>{(data?.units ?? []).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}</select></Field>
             </div>
             <div className="mt-5">
-              <div className="flex items-center justify-between mb-3"><p className="text-xs font-bold uppercase tracking-wider text-gray-500">Ingredientes</p><button className="text-xs text-[#2a4038] font-semibold flex items-center gap-1"><Plus size={12} /> Agregar línea</button></div>
+              <div className="flex items-center justify-between mb-3"><p className="text-xs font-bold uppercase tracking-wider text-gray-500">Ingredientes</p><button onClick={handleAddFormulaLine} className="text-xs text-[#2a4038] font-semibold flex items-center gap-1"><Plus size={12} /> Agregar línea</button></div>
               <div className="space-y-2">
-                  <div className="grid grid-cols-12 gap-2 items-center bg-gray-50 rounded-lg p-2">
-                    <div className="col-span-5"><select className={sel + ' text-xs py-2'} value={formulaForm.item} onChange={e => setFormulaForm(f => ({ ...f, item: e.target.value }))}><option value="">Seleccionar materia prima...</option>{(data?.items ?? []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
-                    <div className="col-span-3"><input className={inp + ' text-xs py-2'} type="number" placeholder="Cantidad" value={formulaForm.quantity} onChange={e => setFormulaForm(f => ({ ...f, quantity: e.target.value }))} /></div>
-                    <div className="col-span-2"><select className={sel + ' text-xs py-2'} value={maps.items.get(formulaForm.item)?.unit ?? ''} disabled>{(data?.units ?? []).map(u => <option key={u.id} value={u.id}>{u.abbreviation}</option>)}</select></div>
-                    <div className="col-span-2 flex justify-center"><button className="p-1 text-red-400 hover:text-red-600"><X size={14} /></button></div>
+                {formulaLines.map(line => (
+                  <div key={line.key} className="grid grid-cols-12 gap-2 items-center bg-gray-50 rounded-lg p-2">
+                    <div className="col-span-5"><select className={sel + ' text-xs py-2'} value={line.item} onChange={e => handleFormulaLineChange(line.key, 'item', e.target.value)}><option value="">Seleccionar materia prima...</option>{(data?.items ?? []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
+                    <div className="col-span-3"><input className={inp + ' text-xs py-2'} type="number" placeholder="Cantidad" value={line.quantity} onChange={e => handleFormulaLineChange(line.key, 'quantity', e.target.value)} /></div>
+                    <div className="col-span-2"><select className={sel + ' text-xs py-2'} value={maps.items.get(line.item)?.unit ?? ''} disabled>{(data?.units ?? []).map(u => <option key={u.id} value={u.id}>{u.abbreviation}</option>)}</select></div>
+                    <div className="col-span-2 flex justify-center"><button onClick={() => handleRemoveFormulaLine(line.key)} disabled={formulaLines.length === 1} className="p-1 text-red-400 hover:text-red-600 disabled:opacity-30 disabled:cursor-not-allowed"><X size={14} /></button></div>
                   </div>
+                ))}
               </div>
             </div>
             <div className="flex gap-3 mt-8 pt-5 border-t border-gray-100">

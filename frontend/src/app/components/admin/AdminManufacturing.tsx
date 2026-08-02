@@ -196,6 +196,32 @@ const STATUS_ORDER: BatchStatus[] = [
   'PENDING_DOCUMENTS', 'PENDING_MICROBIOLOGY', 'RELEASED',
 ];
 
+function batchProgressPercentage(status: BatchStatus): number {
+  const index = STATUS_ORDER.indexOf(status);
+  return index >= 0 ? Math.round(((index + 1) / STATUS_ORDER.length) * 100) : 100;
+}
+
+// Fase del expediente donde el usuario debe actuar a continuación, según el estado actual del lote.
+const STATUS_TO_CURRENT_TAB: Record<BatchStatus, BatchTab> = {
+  DRAFT: 'general',
+  SCHEDULED: 'general',
+  PENDING_DISPENSING: 'dispensing',
+  DISPENSING: 'dispensing',
+  DISPENSING_DONE: 'manufacturing',
+  MANUFACTURING: 'manufacturing',
+  BULK_PENDING_ANALYSIS: 'bulk_quality',
+  BULK_APPROVED: 'filling',
+  FILLING: 'filling',
+  PACKAGING: 'packaging',
+  FINISHED_QUARANTINE: 'packaging',
+  PENDING_DOCUMENTS: 'documents',
+  PENDING_MICROBIOLOGY: 'final_quality',
+  RELEASED: 'release',
+  REJECTED: 'release',
+  CLOSED: 'release',
+  CANCELLED: 'general',
+};
+
 const BATCHING_FLOW_EXAMPLE = {
   order: {
     number: 'OP-202607-0042',
@@ -591,6 +617,12 @@ export function AdminManufacturing() {
                   <p>Línea: {batch.production_line_name || 'Sin asignar'}</p>
                   <p>Responsable: {getEmployeeName(employeeById.get(batch.production_manager ?? ''))}</p>
                   <p>Programada: {formatDate(batch.scheduled_at)}</p>
+                </div>
+                <div className="flex items-center gap-2 mt-2">
+                  <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-[#2a4038]" style={{ width: `${batchProgressPercentage(batch.status)}%` }} />
+                  </div>
+                  <span className="text-[10px] font-semibold text-gray-400">{batchProgressPercentage(batch.status)}%</span>
                 </div>
               </div>
               <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
@@ -1165,7 +1197,8 @@ function BatchDetail({
   onRefresh: () => Promise<void>;
 }) {
   const toast = useToast();
-  const [activeTab, setActiveTab] = useState<BatchTab>('general');
+  const currentPhaseTab = STATUS_TO_CURRENT_TAB[batch.status];
+  const [activeTab, setActiveTab] = useState<BatchTab>(currentPhaseTab);
   const [starting, setStarting] = useState(false);
 
   const handleStart = async () => {
@@ -1202,7 +1235,7 @@ function BatchDetail({
 
       <BatchProgressBar status={batch.status} />
 
-      <TabBar tabs={BATCH_TABS} value={activeTab} onChange={setActiveTab} />
+      <TabBar tabs={BATCH_TABS} value={activeTab} onChange={setActiveTab} currentId={currentPhaseTab} />
 
       {activeTab === 'general' && <GeneralTab batch={batch} employeeById={employeeById} onRefresh={onRefresh} />}
       {activeTab === 'dispensing' && <DispensingTab batch={batch} employeeById={employeeById} />}
@@ -1219,8 +1252,7 @@ function BatchDetail({
 }
 
 function BatchProgressBar({ status }: { status: BatchStatus }) {
-  const index = STATUS_ORDER.indexOf(status);
-  const percentage = index >= 0 ? Math.round(((index + 1) / STATUS_ORDER.length) * 100) : 100;
+  const percentage = batchProgressPercentage(status);
   return (
     <Card className="p-4 mb-4">
       <div className="flex items-center justify-between mb-2">

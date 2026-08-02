@@ -367,7 +367,7 @@ export function ErrorState({ title, description, action }: { title?: string; des
   );
 }
 
-export function TabBar<T extends string>({ tabs, value, onChange }: { tabs: { id: T; label: string; icon?: React.ComponentType<{ size?: number }> }[]; value: T; onChange: (id: T) => void }) {
+export function TabBar<T extends string>({ tabs, value, onChange, currentId }: { tabs: { id: T; label: string; icon?: React.ComponentType<{ size?: number }> }[]; value: T; onChange: (id: T) => void; currentId?: T }) {
   return (
     <div className="flex gap-1 mb-6 bg-gray-100 rounded-xl p-1 flex-wrap">
       {tabs.map(t => {
@@ -377,9 +377,11 @@ export function TabBar<T extends string>({ tabs, value, onChange }: { tabs: { id
           <button
             key={t.id}
             onClick={() => onChange(t.id)}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${active ? 'bg-white text-[#2a4038] shadow-sm font-semibold' : 'text-gray-500 hover:text-gray-700'}`}
+            title={t.id === currentId ? 'Fase actual del lote' : undefined}
+            className={`relative flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${active ? 'bg-white text-[#2a4038] shadow-sm font-semibold' : 'text-gray-500 hover:text-gray-700'}`}
           >
             {Icon && <Icon size={12} />} {t.label}
+            {t.id === currentId && <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />}
           </button>
         );
       })}
