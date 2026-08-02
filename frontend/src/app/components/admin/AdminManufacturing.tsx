@@ -492,6 +492,7 @@ export function AdminManufacturing() {
   const [productionLines, setProductionLines] = useState<ProductionLineRecord[]>([]);
   const [selectedBatch, setSelectedBatch] = useState<BatchRecord | null>(null);
   const [showNewBatchModal, setShowNewBatchModal] = useState(false);
+  const [planningRefreshKey, setPlanningRefreshKey] = useState(0);
 
   const employeeById = useMemo(() => new Map(employees.map((employee) => [employee.id, employee])), [employees]);
 
@@ -581,10 +582,8 @@ export function AdminManufacturing() {
 
       {activeSection === 'planning' && (
         <AdminProductionPlanning
-          onCreateBatch={() => {
-            setActiveSection('batches');
-            setShowNewBatchModal(true);
-          }}
+          refreshKey={planningRefreshKey}
+          onCreateBatch={() => setShowNewBatchModal(true)}
         />
       )}
 
@@ -664,6 +663,7 @@ export function AdminManufacturing() {
         onClose={() => setShowNewBatchModal(false)}
         onCreated={async () => {
           setShowNewBatchModal(false);
+          setPlanningRefreshKey((key) => key + 1);
           await loadData();
         }}
       />

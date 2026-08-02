@@ -117,9 +117,14 @@ function EmptyRow({ colSpan, label }: { colSpan: number; label: string }) {
 /* ═══════════════════════════════════════════════════════
    PLANIFICACIÓN DE PRODUCCIÓN — Órdenes y Fórmulas
 ═══════════════════════════════════════════════════════ */
-export function AdminProductionPlanning({ onCreateBatch }: { onCreateBatch: () => void }) {
+export function AdminProductionPlanning({ onCreateBatch, refreshKey }: { onCreateBatch: () => void; refreshKey?: number }) {
   const toast = useToast();
   const { data, itemStocks, loading, reload } = useProductionPlanningWorkspace();
+
+  useEffect(() => {
+    if (refreshKey) void reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshKey]);
   const [tab, setTab] = useState<TabProduccion>('ordenes');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [cierreOP, setCierreOP] = useState<ProductionOrderRecord | null>(null);
