@@ -1,6 +1,6 @@
-import { useState, useMemo, useEffect, useCallback, type ComponentType, type ReactNode } from 'react';
+import { useState, useMemo, useEffect, useCallback, type ComponentType } from 'react';
 import {
-  Plus, Search, Edit2, Trash2, X, Save, ChevronRight,
+  Plus, Edit2, Trash2, X, Save, ChevronRight,
   Warehouse, Package, ArrowRightLeft, Factory,
   BarChart3, Layers, AlertTriangle, CheckCircle, Clock,
   Truck, RefreshCw, FileText, Scale, Box,
@@ -43,6 +43,9 @@ import { getAuditLogs, type AuditLog } from '../../services/audit.service';
 import { pollExportStatus, downloadFile } from '../../utils/pollExportStatus';
 import { resolveBackendUrl } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
+import {
+  Badge, Field, Table, Th, Td, Drawer, PageHeader, SearchBarAdmin, inputCls, selectCls,
+} from './AdminUI';
 
 /* ═══════════════════════════════════════════════════════
    TYPES
@@ -257,38 +260,6 @@ function currentDateInput() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function Badge({ label, color }: { label: string; color: 'green' | 'yellow' | 'red' | 'blue' | 'gray' | 'purple' }) {
-  const s = { green: 'bg-emerald-50 text-emerald-700 border border-emerald-200', yellow: 'bg-amber-50 text-amber-700 border border-amber-200', red: 'bg-red-50 text-red-700 border border-red-200', blue: 'bg-blue-50 text-blue-700 border border-blue-200', gray: 'bg-gray-50 text-gray-600 border border-gray-200', purple: 'bg-purple-50 text-purple-700 border border-purple-200' };
-  return <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold ${s[color]}`}>{label}</span>;
-}
-
-function Field({ label, required, children }: { label: string; required?: boolean; children: ReactNode }) {
-  return <div className="flex flex-col gap-1.5"><label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">{label}{required && <span className="text-red-500 ml-1">*</span>}</label>{children}</div>;
-}
-
-const inp = "w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#2a4038]/20 focus:border-[#2a4038] transition-all placeholder:text-gray-300";
-const sel = "w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#2a4038]/20 focus:border-[#2a4038] transition-all";
-
-function Hdr({ title, subtitle, onNew, newLabel }: { title: string; subtitle?: string; onNew?: () => void; newLabel?: string }) {
-  return <div className="flex items-center justify-between mb-6"><div><h2 className="text-lg font-semibold text-gray-900">{title}</h2>{subtitle && <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>}</div>{onNew && <button onClick={onNew} className="flex items-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white text-xs font-semibold rounded-xl hover:bg-[#3d5c4e] transition-colors"><Plus size={14} /> {newLabel ?? 'Nuevo'}</button>}</div>;
-}
-
-function Tbl({ children }: { children: ReactNode }) {
-  return <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm"><div className="overflow-x-auto"><table className="w-full text-sm">{children}</table></div></div>;
-}
-
-function Th({ children }: { children: ReactNode }) { return <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-gray-400 bg-gray-50 border-b border-gray-100 whitespace-nowrap">{children}</th>; }
-function Td({ children, className }: { children: ReactNode; className?: string }) { return <td className={`px-4 py-3 border-b border-gray-50 text-sm text-gray-700 ${className ?? ''}`}>{children}</td>; }
-
-function Drawer({ title, open, onClose, wide, children }: { title: string; open: boolean; onClose: () => void; wide?: boolean; children: ReactNode }) {
-  if (!open) return null;
-  return <div className="fixed inset-0 z-50 flex justify-end"><div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} /><div className={`relative bg-white ${wide ? 'w-full max-w-2xl' : 'w-full max-w-xl'} h-full flex flex-col shadow-2xl`}><div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50"><h3 className="font-semibold text-gray-900">{title}</h3><button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-200"><X size={16} /></button></div><div className="flex-1 overflow-y-auto px-6 py-5">{children}</div></div></div>;
-}
-
-function SBar({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
-  return <div className="relative"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" /><input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder ?? 'Buscar...'} className="pl-9 pr-3 py-2.5 text-sm border border-gray-200 rounded-xl w-full bg-white focus:outline-none focus:ring-2 focus:ring-[#2a4038]/20 focus:border-[#2a4038] transition-all" /></div>;
-}
-
 /* ═══════════════════════════════════════════════════════
    PANEL — Dashboard KPIs
 ═══════════════════════════════════════════════════════ */
@@ -322,7 +293,7 @@ function ModuloPanel() {
 
   return (
     <div>
-      <Hdr title="Panel de Control" subtitle="Resumen del estado actual del inventario y producción" />
+      <PageHeader title="Panel de Control" subtitle="Resumen del estado actual del inventario y producción" />
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
@@ -394,7 +365,7 @@ function ModuloPanel() {
       {/* Últimos movimientos */}
       <div className="mt-6">
         <h3 className="text-sm font-semibold text-gray-900 mb-3">Últimos movimientos del día</h3>
-        <Tbl>
+        <Table>
           <thead><tr><Th>Hora</Th><Th>Tipo</Th><Th>Artículo</Th><Th>Cantidad</Th><Th>Usuario</Th><Th>Referencia</Th></tr></thead>
           <tbody>
             {recentMovements.map(m => {
@@ -411,7 +382,7 @@ function ModuloPanel() {
             );})}
             {!loading && recentMovements.length === 0 && <EmptyRow colSpan={6} label="Sin movimientos registrados" />}
           </tbody>
-        </Tbl>
+        </Table>
       </div>
     </div>
   );
@@ -552,13 +523,13 @@ function TabArticulos({ search, setSearch, drawerOpen, setDrawerOpen }: { search
 
   return (
     <>
-      <Hdr title="Artículos" subtitle={`${filtered.length} de ${items.length} artículos`} onNew={() => setDrawerOpen(true)} newLabel="Nuevo Artículo" />
+      <PageHeader title="Artículos" subtitle={`${filtered.length} de ${items.length} artículos`} onNew={() => setDrawerOpen(true)} newLabel="Nuevo Artículo" />
       <div className="flex gap-3 mb-4">
-        <div className="flex-1"><SBar value={search} onChange={setSearch} placeholder="Buscar por nombre o código..." /></div>
-        <select className={sel + ' w-52'} value={filterTipo} onChange={e => setFilterTipo(e.target.value)}><option value="">Todos los tipos</option>{types.filter(t => t.isInventoried).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
+        <div className="flex-1"><SearchBarAdmin value={search} onChange={setSearch} placeholder="Buscar por nombre o código..." /></div>
+        <select className={selectCls + ' w-52'} value={filterTipo} onChange={e => setFilterTipo(e.target.value)}><option value="">Todos los tipos</option>{types.filter(t => t.isInventoried).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
         <button className="flex items-center gap-2 px-3 py-2.5 border border-gray-200 rounded-xl text-xs text-gray-600 hover:bg-gray-50"><Download size={13} /> Exportar</button>
       </div>
-      <Tbl>
+      <Table>
         <thead><tr><Th>Código</Th><Th>Nombre</Th><Th>Tipo</Th><Th>Unidad</Th><Th>Costo</Th><Th>Stock Mín.</Th><Th>IVA</Th><Th>Alerta</Th><Th>Estado</Th><Th></Th></tr></thead>
         <tbody>
           {loading && <LoadingRow colSpan={10} />}
@@ -583,21 +554,21 @@ function TabArticulos({ search, setSearch, drawerOpen, setDrawerOpen }: { search
             );
           })}
         </tbody>
-      </Tbl>
+      </Table>
       <Drawer title="Nuevo Artículo" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Código" required><input className={inp} placeholder="Ej: MP005" value={form.code} onChange={e => setForm(f => ({ ...f, code: e.target.value }))} /></Field>
-          <Field label="Código de barras"><input className={inp} placeholder="EAN / UPC" /></Field>
-          <div className="col-span-2"><Field label="Nombre del artículo" required><input className={inp} placeholder="Nombre completo" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></Field></div>
-          <Field label="Tipo de artículo" required><select className={sel} value={form.itemTypeId} onChange={e => setForm(f => ({ ...f, itemTypeId: e.target.value }))}><option value="">Seleccionar...</option>{types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></Field>
-          <Field label="Grupo de artículo" required><select className={sel} value={form.itemGroupId} onChange={e => setForm(f => ({ ...f, itemGroupId: e.target.value }))}><option value="">Seleccionar...</option>{groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select></Field>
-          <Field label="Unidad de medida" required><select className={sel} value={form.unitId} onChange={e => setForm(f => ({ ...f, unitId: e.target.value }))}><option value="">Seleccionar...</option>{units.map(u => <option key={u.id} value={u.id}>{u.name} ({u.abbreviation})</option>)}</select></Field>
-          <Field label="Proveedor principal"><select className={sel} value={form.supplierId} onChange={e => setForm(f => ({ ...f, supplierId: e.target.value }))}><option value="">Ninguno</option>{suppliers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
-          <Field label="Costo unitario" required><input className={inp} type="number" placeholder="0.00" value={form.cost} onChange={e => setForm(f => ({ ...f, cost: e.target.value }))} /></Field>
-          <Field label="IVA (%)"><select className={sel} value={form.taxRate} onChange={e => setForm(f => ({ ...f, taxRate: e.target.value }))}><option value="0">0% — Exento</option><option value="5">5%</option><option value="19">19%</option></select></Field>
-          <Field label="Stock mínimo"><input className={inp} type="number" placeholder="0" value={form.minimumQuantity} onChange={e => setForm(f => ({ ...f, minimumQuantity: e.target.value }))} /></Field>
-          <Field label="Stock máximo"><input className={inp} type="number" placeholder="0" value={form.maximumQuantity} onChange={e => setForm(f => ({ ...f, maximumQuantity: e.target.value }))} /></Field>
-          <div className="col-span-2"><Field label="Descripción técnica"><textarea className={inp + ' resize-none h-16'} placeholder="Descripción y especificaciones del artículo..." value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} /></Field></div>
+          <Field label="Código" required><input className={inputCls} placeholder="Ej: MP005" value={form.code} onChange={e => setForm(f => ({ ...f, code: e.target.value }))} /></Field>
+          <Field label="Código de barras"><input className={inputCls} placeholder="EAN / UPC" /></Field>
+          <div className="col-span-2"><Field label="Nombre del artículo" required><input className={inputCls} placeholder="Nombre completo" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></Field></div>
+          <Field label="Tipo de artículo" required><select className={selectCls} value={form.itemTypeId} onChange={e => setForm(f => ({ ...f, itemTypeId: e.target.value }))}><option value="">Seleccionar...</option>{types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></Field>
+          <Field label="Grupo de artículo" required><select className={selectCls} value={form.itemGroupId} onChange={e => setForm(f => ({ ...f, itemGroupId: e.target.value }))}><option value="">Seleccionar...</option>{groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select></Field>
+          <Field label="Unidad de medida" required><select className={selectCls} value={form.unitId} onChange={e => setForm(f => ({ ...f, unitId: e.target.value }))}><option value="">Seleccionar...</option>{units.map(u => <option key={u.id} value={u.id}>{u.name} ({u.abbreviation})</option>)}</select></Field>
+          <Field label="Proveedor principal"><select className={selectCls} value={form.supplierId} onChange={e => setForm(f => ({ ...f, supplierId: e.target.value }))}><option value="">Ninguno</option>{suppliers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
+          <Field label="Costo unitario" required><input className={inputCls} type="number" placeholder="0.00" value={form.cost} onChange={e => setForm(f => ({ ...f, cost: e.target.value }))} /></Field>
+          <Field label="IVA (%)"><select className={selectCls} value={form.taxRate} onChange={e => setForm(f => ({ ...f, taxRate: e.target.value }))}><option value="0">0% — Exento</option><option value="5">5%</option><option value="19">19%</option></select></Field>
+          <Field label="Stock mínimo"><input className={inputCls} type="number" placeholder="0" value={form.minimumQuantity} onChange={e => setForm(f => ({ ...f, minimumQuantity: e.target.value }))} /></Field>
+          <Field label="Stock máximo"><input className={inputCls} type="number" placeholder="0" value={form.maximumQuantity} onChange={e => setForm(f => ({ ...f, maximumQuantity: e.target.value }))} /></Field>
+          <div className="col-span-2"><Field label="Descripción técnica"><textarea className={inputCls + ' resize-none h-16'} placeholder="Descripción y especificaciones del artículo..." value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} /></Field></div>
           <div className="col-span-2 flex flex-col gap-2 pt-1">
             <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"><input type="checkbox" className="w-4 h-4 accent-[#2a4038]" checked={form.tracksInventory} onChange={e => setForm(f => ({ ...f, tracksInventory: e.target.checked }))} /> Genera movimiento de inventario</label>
             <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"><input type="checkbox" className="w-4 h-4 accent-[#2a4038]" checked={form.tracksBatches} onChange={e => setForm(f => ({ ...f, tracksBatches: e.target.checked }))} /> Maneja lote y fecha de vencimiento</label>
@@ -677,9 +648,9 @@ function TabBodegas({ search, setSearch, drawerOpen, setDrawerOpen }: { search: 
 
   return (
     <>
-      <Hdr title="Bodegas" subtitle={`${warehouses.length} bodegas`} onNew={() => setDrawerOpen(true)} newLabel="Nueva Bodega" />
-      <div className="mb-4"><SBar value={search} onChange={setSearch} placeholder="Buscar bodega..." /></div>
-      <Tbl>
+      <PageHeader title="Bodegas" subtitle={`${warehouses.length} bodegas`} onNew={() => setDrawerOpen(true)} newLabel="Nueva Bodega" />
+      <div className="mb-4"><SearchBarAdmin value={search} onChange={setSearch} placeholder="Buscar bodega..." /></div>
+      <Table>
         <thead><tr><Th>Código</Th><Th>Nombre</Th><Th>Dirección</Th><Th>Estado</Th><Th></Th></tr></thead>
         <tbody>
           {loading && <LoadingRow colSpan={5} />}
@@ -694,12 +665,12 @@ function TabBodegas({ search, setSearch, drawerOpen, setDrawerOpen }: { search: 
             </tr>
           ))}
         </tbody>
-      </Tbl>
+      </Table>
       <Drawer title="Nueva Bodega" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Código" required><input className={inp} placeholder="Ej: B08" value={form.code} onChange={e => setForm(f => ({ ...f, code: e.target.value }))} /></Field>
-          <div className="col-span-2"><Field label="Nombre de la bodega" required><input className={inp} placeholder="Nombre completo" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></Field></div>
-          <div className="col-span-2"><Field label="Dirección"><input className={inp} placeholder="Área, bloque o dirección" value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} /></Field></div>
+          <Field label="Código" required><input className={inputCls} placeholder="Ej: B08" value={form.code} onChange={e => setForm(f => ({ ...f, code: e.target.value }))} /></Field>
+          <div className="col-span-2"><Field label="Nombre de la bodega" required><input className={inputCls} placeholder="Nombre completo" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></Field></div>
+          <div className="col-span-2"><Field label="Dirección"><input className={inputCls} placeholder="Área, bloque o dirección" value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} /></Field></div>
           <div className="col-span-2"><label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"><input type="checkbox" className="w-4 h-4 accent-[#2a4038]" checked={form.isActive} onChange={e => setForm(f => ({ ...f, isActive: e.target.checked }))} /> Bodega activa</label></div>
         </div>
         <div className="flex gap-3 mt-8 pt-5 border-t border-gray-100">
@@ -754,9 +725,9 @@ function TabGrupos({ search, setSearch, drawerOpen, setDrawerOpen }: { search: s
 
   return (
     <>
-      <Hdr title="Grupos de Artículos" subtitle="Clasificación primaria" onNew={() => setDrawerOpen(true)} newLabel="Nuevo Grupo" />
-      <div className="mb-4"><SBar value={search} onChange={setSearch} placeholder="Buscar grupo..." /></div>
-      <Tbl>
+      <PageHeader title="Grupos de Artículos" subtitle="Clasificación primaria" onNew={() => setDrawerOpen(true)} newLabel="Nuevo Grupo" />
+      <div className="mb-4"><SearchBarAdmin value={search} onChange={setSearch} placeholder="Buscar grupo..." /></div>
+      <Table>
         <thead><tr><Th>Código</Th><Th>Nombre</Th><Th>Inventariable</Th></tr></thead>
         <tbody>
           {loading && <LoadingRow colSpan={3} />}
@@ -769,11 +740,11 @@ function TabGrupos({ search, setSearch, drawerOpen, setDrawerOpen }: { search: s
             </tr>
           ))}
         </tbody>
-      </Tbl>
+      </Table>
       <Drawer title="Nuevo Grupo de Artículo" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Código" required><input className={inp} placeholder="Ej: GR11" value={form.code} onChange={e => setForm(f => ({ ...f, code: e.target.value }))} /></Field>
-          <div className="col-span-2"><Field label="Nombre del grupo" required><input className={inp} placeholder="Nombre descriptivo" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></Field></div>
+          <Field label="Código" required><input className={inputCls} placeholder="Ej: GR11" value={form.code} onChange={e => setForm(f => ({ ...f, code: e.target.value }))} /></Field>
+          <div className="col-span-2"><Field label="Nombre del grupo" required><input className={inputCls} placeholder="Nombre descriptivo" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></Field></div>
           <div className="col-span-2"><label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"><input type="checkbox" className="w-4 h-4 accent-[#2a4038]" checked={form.isInventoried} onChange={e => setForm(f => ({ ...f, isInventoried: e.target.checked }))} /> Es inventariable</label></div>
         </div>
         <div className="flex gap-3 mt-8 pt-5 border-t border-gray-100">
@@ -805,8 +776,8 @@ function TabTipos() {
 
   return (
     <>
-      <Hdr title="Tipos de Artículo" subtitle="Clasificación técnica para reglas de negocio" />
-      <Tbl>
+      <PageHeader title="Tipos de Artículo" subtitle="Clasificación técnica para reglas de negocio" />
+      <Table>
         <thead><tr><Th>#</Th><Th>Tipo</Th><Th>Inventariable</Th><Th>Descripción</Th></tr></thead>
         <tbody>
           {loading && <LoadingRow colSpan={4} />}
@@ -820,7 +791,7 @@ function TabTipos() {
             </tr>
           ))}
         </tbody>
-      </Tbl>
+      </Table>
     </>
   );
 }
@@ -871,9 +842,9 @@ function TabProveedores({ search, setSearch, drawerOpen, setDrawerOpen }: { sear
 
   return (
     <>
-      <Hdr title="Proveedores" subtitle={`${suppliers.length} proveedores`} onNew={() => setDrawerOpen(true)} newLabel="Nuevo Proveedor" />
-      <div className="mb-4"><SBar value={search} onChange={setSearch} placeholder="Buscar por nombre o NIT..." /></div>
-      <Tbl>
+      <PageHeader title="Proveedores" subtitle={`${suppliers.length} proveedores`} onNew={() => setDrawerOpen(true)} newLabel="Nuevo Proveedor" />
+      <div className="mb-4"><SearchBarAdmin value={search} onChange={setSearch} placeholder="Buscar por nombre o NIT..." /></div>
+      <Table>
         <thead><tr><Th>NIT</Th><Th>Razón Social</Th><Th>Contacto</Th><Th>Teléfono</Th><Th>Ciudad</Th><Th>Estado</Th></tr></thead>
         <tbody>
           {loading && <LoadingRow colSpan={6} />}
@@ -889,16 +860,16 @@ function TabProveedores({ search, setSearch, drawerOpen, setDrawerOpen }: { sear
             </tr>
           ))}
         </tbody>
-      </Tbl>
+      </Table>
       <Drawer title="Nuevo Proveedor" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
         <div className="grid grid-cols-2 gap-4">
-          <Field label="NIT" required><input className={inp} placeholder="000.000.000-0" value={form.nit} onChange={e => setForm(f => ({ ...f, nit: e.target.value }))} /></Field>
-          <Field label="Teléfono"><input className={inp} placeholder="Teléfono o celular" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} /></Field>
-          <div className="col-span-2"><Field label="Razón social / Nombre" required><input className={inp} placeholder="Nombre completo o razón social" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></Field></div>
-          <Field label="Nombre contacto"><input className={inp} placeholder="Nombre del contacto" value={form.contactName} onChange={e => setForm(f => ({ ...f, contactName: e.target.value }))} /></Field>
-          <Field label="Correo"><input className={inp} type="email" placeholder="correo@empresa.com" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></Field>
-          <Field label="Ciudad"><input className={inp} placeholder="Ciudad" value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} /></Field>
-          <div className="col-span-2"><Field label="Dirección"><input className={inp} placeholder="Dirección completa" value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} /></Field></div>
+          <Field label="NIT" required><input className={inputCls} placeholder="000.000.000-0" value={form.nit} onChange={e => setForm(f => ({ ...f, nit: e.target.value }))} /></Field>
+          <Field label="Teléfono"><input className={inputCls} placeholder="Teléfono o celular" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} /></Field>
+          <div className="col-span-2"><Field label="Razón social / Nombre" required><input className={inputCls} placeholder="Nombre completo o razón social" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></Field></div>
+          <Field label="Nombre contacto"><input className={inputCls} placeholder="Nombre del contacto" value={form.contactName} onChange={e => setForm(f => ({ ...f, contactName: e.target.value }))} /></Field>
+          <Field label="Correo"><input className={inputCls} type="email" placeholder="correo@empresa.com" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></Field>
+          <Field label="Ciudad"><input className={inputCls} placeholder="Ciudad" value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} /></Field>
+          <div className="col-span-2"><Field label="Dirección"><input className={inputCls} placeholder="Dirección completa" value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} /></Field></div>
         </div>
         <div className="flex gap-3 mt-8 pt-5 border-t border-gray-100">
           <button onClick={() => setDrawerOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancelar</button>
@@ -950,8 +921,8 @@ function TabUnidades({ drawerOpen, setDrawerOpen }: { drawerOpen: boolean; setDr
 
   return (
     <>
-      <Hdr title="Unidades de Medida" onNew={() => setDrawerOpen(true)} newLabel="Nueva Unidad" />
-      <Tbl>
+      <PageHeader title="Unidades de Medida" onNew={() => setDrawerOpen(true)} newLabel="Nueva Unidad" />
+      <Table>
         <thead><tr><Th>Código</Th><Th>Nombre</Th><Th>Abreviatura</Th></tr></thead>
         <tbody>
           {loading && <LoadingRow colSpan={3} />}
@@ -964,12 +935,12 @@ function TabUnidades({ drawerOpen, setDrawerOpen }: { drawerOpen: boolean; setDr
             </tr>
           ))}
         </tbody>
-      </Tbl>
+      </Table>
       <Drawer title="Nueva Unidad de Medida" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Código" required><input className={inp} placeholder="Ej: TON" value={form.code} onChange={e => setForm(f => ({ ...f, code: e.target.value }))} /></Field>
-          <Field label="Abreviatura" required><input className={inp} placeholder="Ej: t" value={form.abbreviation} onChange={e => setForm(f => ({ ...f, abbreviation: e.target.value }))} /></Field>
-          <div className="col-span-2"><Field label="Nombre completo" required><input className={inp} placeholder="Ej: Tonelada" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></Field></div>
+          <Field label="Código" required><input className={inputCls} placeholder="Ej: TON" value={form.code} onChange={e => setForm(f => ({ ...f, code: e.target.value }))} /></Field>
+          <Field label="Abreviatura" required><input className={inputCls} placeholder="Ej: t" value={form.abbreviation} onChange={e => setForm(f => ({ ...f, abbreviation: e.target.value }))} /></Field>
+          <div className="col-span-2"><Field label="Nombre completo" required><input className={inputCls} placeholder="Ej: Tonelada" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></Field></div>
         </div>
         <div className="flex gap-3 mt-8 pt-5 border-t border-gray-100">
           <button onClick={() => setDrawerOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancelar</button>
@@ -1037,7 +1008,7 @@ function ModuloCompras() {
 
   return (
     <div>
-      <Hdr title="Órdenes de Compra" subtitle="Gestión de compras a proveedores y recepción de mercancía" onNew={() => setDrawerOpen(true)} newLabel="Nueva OC" />
+      <PageHeader title="Órdenes de Compra" subtitle="Gestión de compras a proveedores y recepción de mercancía" onNew={() => setDrawerOpen(true)} newLabel="Nueva OC" />
 
       <div className="grid grid-cols-4 gap-4 mb-6">
         {[
@@ -1049,12 +1020,12 @@ function ModuloCompras() {
       </div>
 
       <div className="flex gap-3 mb-4">
-        <div className="flex-1"><SBar value={search} onChange={setSearch} placeholder="Buscar por número o proveedor..." /></div>
-        <select className={sel + ' w-44'} value={filterEstado} onChange={e => setFilterEstado(e.target.value)}><option value="">Todos los estados</option><option value="DRAFT">Borrador</option><option value="SENT">Enviada</option><option value="PARTIAL">Parcial</option><option value="CLOSED">Cerrada</option><option value="VOIDED">Anulada</option></select>
+        <div className="flex-1"><SearchBarAdmin value={search} onChange={setSearch} placeholder="Buscar por número o proveedor..." /></div>
+        <select className={selectCls + ' w-44'} value={filterEstado} onChange={e => setFilterEstado(e.target.value)}><option value="">Todos los estados</option><option value="DRAFT">Borrador</option><option value="SENT">Enviada</option><option value="PARTIAL">Parcial</option><option value="CLOSED">Cerrada</option><option value="VOIDED">Anulada</option></select>
         <button className="flex items-center gap-2 px-3 py-2.5 border border-gray-200 rounded-xl text-xs text-gray-600 hover:bg-gray-50"><Download size={13} /> Exportar</button>
       </div>
 
-      <Tbl>
+      <Table>
         <thead><tr><Th>Número</Th><Th>Proveedor</Th><Th>F. Emisión</Th><Th>F. Entrega</Th><Th>Total</Th><Th>Estado</Th><Th>Avance</Th><Th>Acciones</Th></tr></thead>
         <tbody>
           {loading && <LoadingRow colSpan={8} />}
@@ -1090,17 +1061,17 @@ function ModuloCompras() {
           })}
           {!loading && filtered.length === 0 && <EmptyRow colSpan={8} label="Sin órdenes de compra registradas" />}
         </tbody>
-      </Tbl>
+      </Table>
 
       {/* Drawer: Nueva OC */}
       <Drawer title="Nueva Orden de Compra" open={drawerOpen} onClose={() => setDrawerOpen(false)} wide>
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Número OC"><input className={inp + ' bg-gray-50'} placeholder="Automático" readOnly /></Field>
-          <Field label="Fecha de emisión" required><input className={inp} type="date" value={form.issuedAt} onChange={e => setForm(f => ({ ...f, issuedAt: e.target.value }))} /></Field>
-          <div className="col-span-2"><Field label="Proveedor" required><select className={sel} value={form.supplier} onChange={e => setForm(f => ({ ...f, supplier: e.target.value }))}><option value="">Seleccionar proveedor...</option>{(data?.suppliers ?? []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field></div>
-          <Field label="Fecha de entrega esperada" required><input className={inp} type="date" value={form.expectedAt} onChange={e => setForm(f => ({ ...f, expectedAt: e.target.value }))} /></Field>
-          <Field label="Condiciones de pago"><select className={sel}><option>Contado</option><option>30 días</option><option>60 días</option><option>Crédito bancario</option></select></Field>
-          <div className="col-span-2"><Field label="Ubicación de entrega"><select className={sel} value={form.destinationLocation} onChange={e => setForm(f => ({ ...f, destinationLocation: e.target.value }))}><option value="">Sin ubicación</option>{(data?.locations ?? []).map(l => <option key={l.id} value={l.id}>{locationName(data, l.id)}</option>)}</select></Field></div>
+          <Field label="Número OC"><input className={inputCls + ' bg-gray-50'} placeholder="Automático" readOnly /></Field>
+          <Field label="Fecha de emisión" required><input className={inputCls} type="date" value={form.issuedAt} onChange={e => setForm(f => ({ ...f, issuedAt: e.target.value }))} /></Field>
+          <div className="col-span-2"><Field label="Proveedor" required><select className={selectCls} value={form.supplier} onChange={e => setForm(f => ({ ...f, supplier: e.target.value }))}><option value="">Seleccionar proveedor...</option>{(data?.suppliers ?? []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field></div>
+          <Field label="Fecha de entrega esperada" required><input className={inputCls} type="date" value={form.expectedAt} onChange={e => setForm(f => ({ ...f, expectedAt: e.target.value }))} /></Field>
+          <Field label="Condiciones de pago"><select className={selectCls}><option>Contado</option><option>30 días</option><option>60 días</option><option>Crédito bancario</option></select></Field>
+          <div className="col-span-2"><Field label="Ubicación de entrega"><select className={selectCls} value={form.destinationLocation} onChange={e => setForm(f => ({ ...f, destinationLocation: e.target.value }))}><option value="">Sin ubicación</option>{(data?.locations ?? []).map(l => <option key={l.id} value={l.id}>{locationName(data, l.id)}</option>)}</select></Field></div>
         </div>
         <div className="mt-5">
           <div className="flex items-center justify-between mb-3"><p className="text-xs font-bold uppercase tracking-wider text-gray-500">Líneas de la OC</p><button className="text-xs text-[#2a4038] font-semibold flex items-center gap-1"><Plus size={12} /> Agregar artículo</button></div>
@@ -1109,10 +1080,10 @@ function ModuloCompras() {
               <div className="col-span-5">Artículo</div><div className="col-span-2">Cantidad</div><div className="col-span-2">Precio Unit.</div><div className="col-span-2">Total</div><div className="col-span-1" />
             </div>
               <div className="grid grid-cols-12 gap-2 items-center bg-white rounded-lg p-2">
-                <div className="col-span-5"><select className={sel + ' text-xs py-2'} value={form.item} onChange={e => setForm(f => ({ ...f, item: e.target.value }))}><option value="">Seleccionar artículo...</option>{(data?.items ?? []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
-                <div className="col-span-2"><input className={inp + ' text-xs py-2'} type="number" placeholder="0" value={form.quantity} onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))} /></div>
-                <div className="col-span-2"><input className={inp + ' text-xs py-2'} type="number" placeholder="$0" value={form.unitPrice} onChange={e => setForm(f => ({ ...f, unitPrice: e.target.value }))} /></div>
-                <div className="col-span-2"><input className={inp + ' text-xs py-2 bg-gray-50'} readOnly value={`$${((Number(form.quantity) || 0) * (Number(form.unitPrice) || 0)).toLocaleString('es-CO')}`} /></div>
+                <div className="col-span-5"><select className={selectCls + ' text-xs py-2'} value={form.item} onChange={e => setForm(f => ({ ...f, item: e.target.value }))}><option value="">Seleccionar artículo...</option>{(data?.items ?? []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
+                <div className="col-span-2"><input className={inputCls + ' text-xs py-2'} type="number" placeholder="0" value={form.quantity} onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))} /></div>
+                <div className="col-span-2"><input className={inputCls + ' text-xs py-2'} type="number" placeholder="$0" value={form.unitPrice} onChange={e => setForm(f => ({ ...f, unitPrice: e.target.value }))} /></div>
+                <div className="col-span-2"><input className={inputCls + ' text-xs py-2 bg-gray-50'} readOnly value={`$${((Number(form.quantity) || 0) * (Number(form.unitPrice) || 0)).toLocaleString('es-CO')}`} /></div>
                 <div className="col-span-1 flex justify-center"><button className="p-1 text-red-400 hover:text-red-600"><X size={14} /></button></div>
               </div>
           </div>
@@ -1122,7 +1093,7 @@ function ModuloCompras() {
           <div className="text-right"><p className="text-xs text-gray-500">IVA</p><p className="font-bold text-gray-900">$0</p></div>
           <div className="text-right"><p className="text-xs text-gray-500">Total OC</p><p className="text-lg font-bold text-[#2a4038]">$0</p></div>
         </div>
-        <div className="col-span-2 mt-3"><Field label="Observaciones"><textarea className={inp + ' resize-none h-14'} placeholder="Condiciones especiales, notas de entrega..." /></Field></div>
+        <div className="col-span-2 mt-3"><Field label="Observaciones"><textarea className={inputCls + ' resize-none h-14'} placeholder="Condiciones especiales, notas de entrega..." /></Field></div>
         <div className="flex gap-3 mt-8 pt-5 border-t border-gray-100">
           <button onClick={() => setDrawerOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancelar</button>
           <button onClick={handleCreate} disabled={saving} className="flex-1 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold hover:bg-[#3d5c4e] flex items-center justify-center gap-2 disabled:opacity-50">{saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Guardar</button>
@@ -1138,10 +1109,10 @@ function ModuloCompras() {
               <p className="text-xs text-blue-700">Al registrar la recepción se generará automáticamente un movimiento <strong>Entrada por Compra</strong> y se asignará el lote correspondiente en inventario.</p>
             </div>
             <div className="grid grid-cols-2 gap-4 mb-5">
-              <Field label="Fecha de recepción" required><input className={inp} type="date" defaultValue={currentDateInput()} /></Field>
-              <Field label="Número de factura proveedor"><input className={inp} placeholder="Factura / Remisión" /></Field>
-              <Field label="Responsable de recepción" required><input className={inp} placeholder="Nombre del receptor" /></Field>
-              <Field label="Bodega de ingreso" required><select className={sel}>{(data?.locations ?? []).map(l => <option key={l.id}>{locationName(data, l.id)}</option>)}</select></Field>
+              <Field label="Fecha de recepción" required><input className={inputCls} type="date" defaultValue={currentDateInput()} /></Field>
+              <Field label="Número de factura proveedor"><input className={inputCls} placeholder="Factura / Remisión" /></Field>
+              <Field label="Responsable de recepción" required><input className={inputCls} placeholder="Nombre del receptor" /></Field>
+              <Field label="Bodega de ingreso" required><select className={selectCls}>{(data?.locations ?? []).map(l => <option key={l.id}>{locationName(data, l.id)}</option>)}</select></Field>
             </div>
             <p className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">Artículos recibidos</p>
             <div className="space-y-3">
@@ -1152,15 +1123,15 @@ function ModuloCompras() {
                     <div className="text-right"><p className="text-[10px] text-gray-400">Pedido</p><p className="font-bold">{numeric(l.quantity)}</p></div>
                   </div>
                   <div className="grid grid-cols-3 gap-3">
-                    <Field label="Cantidad recibida" required><input className={inp} type="number" defaultValue={numeric(l.received_quantity)} /></Field>
-                    <Field label="Lote asignado" required><input className={inp} placeholder="Ej: L2025-010" /></Field>
-                    <Field label="Fecha vencimiento"><input className={inp} type="date" /></Field>
+                    <Field label="Cantidad recibida" required><input className={inputCls} type="number" defaultValue={numeric(l.received_quantity)} /></Field>
+                    <Field label="Lote asignado" required><input className={inputCls} placeholder="Ej: L2025-010" /></Field>
+                    <Field label="Fecha vencimiento"><input className={inputCls} type="date" /></Field>
                   </div>
                   {numeric(l.received_quantity) < numeric(l.quantity) && <div className="mt-2 text-xs text-amber-600 flex items-center gap-1"><AlertTriangle size={11} /> Recepción incompleta: quedan {numeric(l.quantity) - numeric(l.received_quantity)} unidades pendientes</div>}
                 </div>
               ))}
             </div>
-            <div className="mt-4"><Field label="Observaciones de recepción"><textarea className={inp + ' resize-none h-14'} placeholder="Estado de la mercancía, notas de calidad, etc." /></Field></div>
+            <div className="mt-4"><Field label="Observaciones de recepción"><textarea className={inputCls + ' resize-none h-14'} placeholder="Estado de la mercancía, notas de calidad, etc." /></Field></div>
             <div className="flex gap-3 mt-6 pt-5 border-t border-gray-100">
               <button onClick={() => setRecepcionOC(null)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancelar</button>
               <button className="flex-1 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold hover:bg-[#3d5c4e] flex items-center justify-center gap-2"><Save size={14} /> Confirmar Recepción</button>
@@ -1259,7 +1230,7 @@ function ModuloExistencias() {
 
       {tab === 'por-bodega' && (
         <>
-          <Hdr title="Existencias por Bodega" subtitle="Stock disponible, reservado y en proceso por ubicación" />
+          <PageHeader title="Existencias por Bodega" subtitle="Stock disponible, reservado y en proceso por ubicación" />
           <div className="grid grid-cols-4 gap-4 mb-5">
             {[
               { label: 'Stocks activos', value: data?.stocks.length ?? 0, icon: Package, color: 'bg-blue-50 text-blue-600' },
@@ -1275,11 +1246,11 @@ function ModuloExistencias() {
             ))}
           </div>
           <div className="flex gap-3 mb-4">
-            <select className={sel + ' w-52'} value={filterBodega} onChange={e => setFilterBodega(e.target.value)}><option value="">Todas las bodegas</option>{(data?.warehouses ?? []).map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select>
-            <select className={sel + ' w-48'} value={filterTipo} onChange={e => setFilterTipo(e.target.value)}><option value="">Todas las variantes</option>{(data?.variants ?? []).map(v => <option key={v.id} value={v.id}>{data?.productNameByVariantId.get(v.id) ?? v.sku}</option>)}</select>
-            <div className="flex-1"><SBar value={search} onChange={setSearch} placeholder="Buscar variante o ubicación..." /></div>
+            <select className={selectCls + ' w-52'} value={filterBodega} onChange={e => setFilterBodega(e.target.value)}><option value="">Todas las bodegas</option>{(data?.warehouses ?? []).map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select>
+            <select className={selectCls + ' w-48'} value={filterTipo} onChange={e => setFilterTipo(e.target.value)}><option value="">Todas las variantes</option>{(data?.variants ?? []).map(v => <option key={v.id} value={v.id}>{data?.productNameByVariantId.get(v.id) ?? v.sku}</option>)}</select>
+            <div className="flex-1"><SearchBarAdmin value={search} onChange={setSearch} placeholder="Buscar variante o ubicación..." /></div>
           </div>
-          <Tbl>
+          <Table>
             <thead><tr><Th>Artículo</Th><Th>Bodega</Th><Th>Lote</Th><Th>Disponible</Th><Th>Reservado</Th><Th>En Proceso</Th><Th>Total Físico</Th><Th>Costo Unit.</Th><Th>Vencimiento</Th><Th>Alerta</Th></tr></thead>
             <tbody>
               {loading && <LoadingRow colSpan={10} />}
@@ -1304,15 +1275,15 @@ function ModuloExistencias() {
               })}
               {!loading && filteredStocks.length === 0 && <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-400 text-sm">Sin resultados para los filtros aplicados</td></tr>}
             </tbody>
-          </Tbl>
+          </Table>
         </>
       )}
 
       {tab === 'por-lote' && (
         <>
-          <Hdr title="Trazabilidad por Lote" subtitle="Control de lotes, fechas de vencimiento y estado" />
-          <div className="mb-4"><SBar value={search} onChange={setSearch} placeholder="Buscar lote o artículo..." /></div>
-          <Tbl>
+          <PageHeader title="Trazabilidad por Lote" subtitle="Control de lotes, fechas de vencimiento y estado" />
+          <div className="mb-4"><SearchBarAdmin value={search} onChange={setSearch} placeholder="Buscar lote o artículo..." /></div>
+          <Table>
             <thead><tr><Th>Lote</Th><Th>Artículo</Th><Th>Bodega</Th><Th>Cantidad</Th><Th>F. Ingreso</Th><Th>F. Vencimiento</Th><Th>Estado</Th></tr></thead>
             <tbody>
               {(data?.items ?? []).filter(item => item.tracks_batches && (!search || item.name.toLowerCase().includes(search.toLowerCase()) || item.code.toLowerCase().includes(search.toLowerCase()))).map(item => {
@@ -1329,20 +1300,20 @@ function ModuloExistencias() {
                 );
               })}
             </tbody>
-          </Tbl>
+          </Table>
         </>
       )}
 
       {tab === 'valorizado' && (
         <>
-          <Hdr title="Inventario Valorizado" subtitle="Valorización financiera del inventario" />
+          <PageHeader title="Inventario Valorizado" subtitle="Valorización financiera del inventario" />
           <div className="flex gap-3 mb-4">
-            <select className={sel + ' w-56'}><option>Costo Unitario sin IVA</option><option>Costo con IVA incluido</option><option>Precio de Venta con IVA</option></select>
-            <select className={sel + ' w-48'} value={filterBodega} onChange={e => setFilterBodega(e.target.value)}><option value="">Todas las bodegas</option>{(data?.warehouses ?? []).map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select>
-            <input type="date" className={inp + ' w-44'} defaultValue="2025-06-19" />
+            <select className={selectCls + ' w-56'}><option>Costo Unitario sin IVA</option><option>Costo con IVA incluido</option><option>Precio de Venta con IVA</option></select>
+            <select className={selectCls + ' w-48'} value={filterBodega} onChange={e => setFilterBodega(e.target.value)}><option value="">Todas las bodegas</option>{(data?.warehouses ?? []).map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select>
+            <input type="date" className={inputCls + ' w-44'} defaultValue="2025-06-19" />
             <button className="flex items-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white text-xs rounded-xl"><Download size={13} /> Exportar</button>
           </div>
-          <Tbl>
+          <Table>
             <thead><tr><Th>Artículo</Th><Th>Tipo</Th><Th>Cantidad</Th><Th>Costo Unit.</Th><Th>Total Costo</Th><Th>IVA</Th><Th>Total + IVA</Th></tr></thead>
             <tbody>
               {filteredStocks.map(s => {
@@ -1369,35 +1340,35 @@ function ModuloExistencias() {
                 <Td className="font-bold text-[#2a4038]">${filteredStocks.reduce((a, s) => a + numeric(s.quantity) * (variantCost.get(s.variant) ?? 0), 0).toLocaleString('es-CO', { maximumFractionDigits: 0 })}</Td>
               </tr>
             </tbody>
-          </Tbl>
+          </Table>
         </>
       )}
 
       {tab === 'ajustes' && (
         <>
-          <Hdr title="Ajustes de Inventario" subtitle="Correcciones documentadas con motivo y aprobador" onNew={() => setDrawerOpen(true)} newLabel="Nuevo Ajuste" />
-          <Tbl>
+          <PageHeader title="Ajustes de Inventario" subtitle="Correcciones documentadas con motivo y aprobador" onNew={() => setDrawerOpen(true)} newLabel="Nuevo Ajuste" />
+          <Table>
             <thead><tr><Th>Fecha</Th><Th>Artículo</Th><Th>Bodega</Th><Th>Cant. Sistema</Th><Th>Cant. Física</Th><Th>Diferencia</Th><Th>Motivo</Th><Th>Usuario</Th><Th>Estado</Th></tr></thead>
             <tbody>
               <tr className="hover:bg-gray-50/50"><Td>2025-06-15</Td><Td className="font-medium">Envase PET 400ml</Td><Td className="text-xs text-gray-500">Bodega Plástico</Td><Td>4.000</Td><Td className="font-bold">4.200</Td><Td><span className="text-emerald-600 font-bold">+200</span></Td><Td className="text-xs text-gray-500">Conteo físico junio</Td><Td className="text-xs">Carlos Roldán</Td><Td><Badge label="Aprobado" color="green" /></Td></tr>
               <tr className="hover:bg-gray-50/50"><Td>2025-06-10</Td><Td className="font-medium">Betaína de Coco</Td><Td className="text-xs text-gray-500">Principal Cosméticos</Td><Td>90</Td><Td className="font-bold">85</Td><Td><span className="text-red-600 font-bold">-5</span></Td><Td className="text-xs text-gray-500">Merma por derrame</Td><Td className="text-xs">Ana González</Td><Td><Badge label="Aprobado" color="green" /></Td></tr>
             </tbody>
-          </Tbl>
+          </Table>
           <Drawer title="Nuevo Ajuste de Inventario" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-5 flex gap-2">
               <AlertTriangle size={14} className="text-amber-600 flex-shrink-0 mt-0.5" />
               <p className="text-xs text-amber-700">Todo ajuste queda registrado en auditoría. Requiere motivo obligatorio y aprobación de supervisor.</p>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <Field label="Fecha"><input className={inp + ' bg-gray-50'} type="date" value={currentDateInput()} readOnly /></Field>
-              <Field label="Bodega" required><select className={sel} value={ajusteForm.location} onChange={e => setAjusteForm(f => ({ ...f, location: e.target.value }))}><option value="">Seleccionar...</option>{(data?.locations ?? []).map(l => <option key={l.id} value={l.id}>{locationName(data, l.id)}</option>)}</select></Field>
-              <div className="col-span-2"><Field label="Artículo" required><select className={sel} value={ajusteForm.variant} onChange={e => handleAjusteVariantChange(e.target.value)}><option value="">Seleccionar artículo...</option>{(data?.variants ?? []).map(v => <option key={v.id} value={v.id}>{variantName(data, v.id)}</option>)}</select></Field></div>
-              <Field label="Cantidad en sistema"><input className={inp + ' bg-gray-50'} readOnly value={ajusteForm.systemQuantity} placeholder="Se carga al seleccionar" /></Field>
-              <Field label="Cantidad física contada" required><input className={inp} type="number" placeholder="0" value={ajusteForm.physicalQuantity} onChange={e => setAjusteForm(f => ({ ...f, physicalQuantity: e.target.value }))} /></Field>
-              <div className="col-span-2"><Field label="Motivo" required><select className={sel} value={ajusteForm.motivo} onChange={e => setAjusteForm(f => ({ ...f, motivo: e.target.value }))}>{AJUSTE_MOTIVOS.map(m => <option key={m}>{m}</option>)}</select></Field></div>
-              <div className="col-span-2"><Field label="Descripción detallada" required><textarea className={inp + ' resize-none h-16'} placeholder="Descripción completa del motivo del ajuste..." value={ajusteForm.descripcion} onChange={e => setAjusteForm(f => ({ ...f, descripcion: e.target.value }))} /></Field></div>
-              <Field label="Responsable del conteo" required><input className={inp} placeholder="Nombre" value={ajusteForm.responsable} onChange={e => setAjusteForm(f => ({ ...f, responsable: e.target.value }))} /></Field>
-              <Field label="Aprobado por" required><input className={inp} placeholder="Supervisor o jefe de bodega" value={ajusteForm.aprobadoPor} onChange={e => setAjusteForm(f => ({ ...f, aprobadoPor: e.target.value }))} /></Field>
+              <Field label="Fecha"><input className={inputCls + ' bg-gray-50'} type="date" value={currentDateInput()} readOnly /></Field>
+              <Field label="Bodega" required><select className={selectCls} value={ajusteForm.location} onChange={e => setAjusteForm(f => ({ ...f, location: e.target.value }))}><option value="">Seleccionar...</option>{(data?.locations ?? []).map(l => <option key={l.id} value={l.id}>{locationName(data, l.id)}</option>)}</select></Field>
+              <div className="col-span-2"><Field label="Artículo" required><select className={selectCls} value={ajusteForm.variant} onChange={e => handleAjusteVariantChange(e.target.value)}><option value="">Seleccionar artículo...</option>{(data?.variants ?? []).map(v => <option key={v.id} value={v.id}>{variantName(data, v.id)}</option>)}</select></Field></div>
+              <Field label="Cantidad en sistema"><input className={inputCls + ' bg-gray-50'} readOnly value={ajusteForm.systemQuantity} placeholder="Se carga al seleccionar" /></Field>
+              <Field label="Cantidad física contada" required><input className={inputCls} type="number" placeholder="0" value={ajusteForm.physicalQuantity} onChange={e => setAjusteForm(f => ({ ...f, physicalQuantity: e.target.value }))} /></Field>
+              <div className="col-span-2"><Field label="Motivo" required><select className={selectCls} value={ajusteForm.motivo} onChange={e => setAjusteForm(f => ({ ...f, motivo: e.target.value }))}>{AJUSTE_MOTIVOS.map(m => <option key={m}>{m}</option>)}</select></Field></div>
+              <div className="col-span-2"><Field label="Descripción detallada" required><textarea className={inputCls + ' resize-none h-16'} placeholder="Descripción completa del motivo del ajuste..." value={ajusteForm.descripcion} onChange={e => setAjusteForm(f => ({ ...f, descripcion: e.target.value }))} /></Field></div>
+              <Field label="Responsable del conteo" required><input className={inputCls} placeholder="Nombre" value={ajusteForm.responsable} onChange={e => setAjusteForm(f => ({ ...f, responsable: e.target.value }))} /></Field>
+              <Field label="Aprobado por" required><input className={inputCls} placeholder="Supervisor o jefe de bodega" value={ajusteForm.aprobadoPor} onChange={e => setAjusteForm(f => ({ ...f, aprobadoPor: e.target.value }))} /></Field>
             </div>
             <div className="flex gap-3 mt-8 pt-5 border-t border-gray-100">
               <button onClick={() => setDrawerOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancelar</button>
@@ -1531,15 +1502,15 @@ function ModuloMovimientos() {
 
       {tab === 'todos' && (
         <>
-          <Hdr title="Movimientos de Inventario" subtitle="Todos los cambios de stock con trazabilidad completa" onNew={() => setDrawerOpen(true)} newLabel="Registrar Movimiento" />
+          <PageHeader title="Movimientos de Inventario" subtitle="Todos los cambios de stock con trazabilidad completa" onNew={() => setDrawerOpen(true)} newLabel="Registrar Movimiento" />
           <div className="flex gap-3 mb-4 flex-wrap">
-            <select className={sel + ' w-60'} value={tipoFilter} onChange={e => setTipoFilter(e.target.value)}><option value="">Todos los tipos</option>{tiposMovimiento.map(t => <option key={t} value={t}>{movementLabel(t)}</option>)}</select>
-            <select className={sel + ' w-48'} value={bodegaFilter} onChange={e => setBodegaFilter(e.target.value)}><option value="">Todas las bodegas</option>{(data?.warehouses ?? []).map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select>
-            <input type="date" className={inp + ' w-40'} />
-            <div className="flex-1"><SBar value={search} onChange={setSearch} placeholder="Buscar artículo, lote, motivo..." /></div>
+            <select className={selectCls + ' w-60'} value={tipoFilter} onChange={e => setTipoFilter(e.target.value)}><option value="">Todos los tipos</option>{tiposMovimiento.map(t => <option key={t} value={t}>{movementLabel(t)}</option>)}</select>
+            <select className={selectCls + ' w-48'} value={bodegaFilter} onChange={e => setBodegaFilter(e.target.value)}><option value="">Todas las bodegas</option>{(data?.warehouses ?? []).map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select>
+            <input type="date" className={inputCls + ' w-40'} />
+            <div className="flex-1"><SearchBarAdmin value={search} onChange={setSearch} placeholder="Buscar artículo, lote, motivo..." /></div>
             <button className="flex items-center gap-2 px-3 py-2.5 border border-gray-200 rounded-xl text-xs text-gray-600 hover:bg-gray-50"><Download size={13} /> Exportar</button>
           </div>
-          <Tbl>
+          <Table>
             <thead><tr><Th>Fecha</Th><Th>Tipo</Th><Th>Artículo</Th><Th>Bodega</Th><Th>Cantidad</Th><Th>Lote</Th><Th>Motivo / Ref.</Th><Th>Usuario</Th></tr></thead>
             <tbody>
               {loading && <LoadingRow colSpan={8} />}
@@ -1559,20 +1530,20 @@ function ModuloMovimientos() {
               );})}
               {!loading && filteredMovs.length === 0 && <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400 text-sm">Sin movimientos para los filtros aplicados</td></tr>}
             </tbody>
-          </Tbl>
+          </Table>
           <Drawer title="Registrar Movimiento" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
             <div className="grid grid-cols-2 gap-4">
-              <Field label="Tipo de movimiento" required><select className={sel} value={form.movementType} onChange={e => setForm(f => ({ ...f, movementType: e.target.value as MovementType }))}>{tiposMovimiento.map(t => <option key={t} value={t}>{movementLabel(t)}</option>)}</select></Field>
-              <Field label="Fecha"><input className={inp + ' bg-gray-50'} type="date" value={currentDateInput()} readOnly /></Field>
-              <div className="col-span-2"><Field label="Variante" required><select className={sel} value={form.variant} onChange={e => setForm(f => ({ ...f, variant: e.target.value }))}><option value="">Buscar variante...</option>{(data?.variants ?? []).map(v => <option key={v.id} value={v.id}>{variantName(data, v.id)}</option>)}</select></Field></div>
-              <Field label="Ubicación" required><select className={sel} value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))}><option value="">Seleccionar...</option>{(data?.locations ?? []).map(l => <option key={l.id} value={l.id}>{locationName(data, l.id)}</option>)}</select></Field>
-              <Field label="Bodega destino"><select className={sel}><option value="">N/A</option>{(data?.locations ?? []).map(l => <option key={l.id}>{locationName(data, l.id)}</option>)}</select></Field>
-              <Field label="Lote"><input className={inp + ' bg-gray-50'} placeholder="No parametrizado" readOnly /></Field>
-              <Field label="Cantidad" required><input className={inp} type="number" placeholder="0.00" step="0.01" value={form.quantity} onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))} /></Field>
-              <Field label="Costo unitario"><input className={inp} type="number" placeholder="0.00" /></Field>
-              <Field label="Referencia documental"><input className={inp} placeholder="OC, OP, Factura..." value={form.reference} onChange={e => setForm(f => ({ ...f, reference: e.target.value }))} /></Field>
-              <div className="col-span-2"><Field label="Motivo" required><input className={inp} placeholder="Motivo del movimiento" value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))} /></Field></div>
-              <div className="col-span-2"><Field label="Observaciones"><textarea className={inp + ' resize-none h-14'} placeholder="Notas adicionales..." /></Field></div>
+              <Field label="Tipo de movimiento" required><select className={selectCls} value={form.movementType} onChange={e => setForm(f => ({ ...f, movementType: e.target.value as MovementType }))}>{tiposMovimiento.map(t => <option key={t} value={t}>{movementLabel(t)}</option>)}</select></Field>
+              <Field label="Fecha"><input className={inputCls + ' bg-gray-50'} type="date" value={currentDateInput()} readOnly /></Field>
+              <div className="col-span-2"><Field label="Variante" required><select className={selectCls} value={form.variant} onChange={e => setForm(f => ({ ...f, variant: e.target.value }))}><option value="">Buscar variante...</option>{(data?.variants ?? []).map(v => <option key={v.id} value={v.id}>{variantName(data, v.id)}</option>)}</select></Field></div>
+              <Field label="Ubicación" required><select className={selectCls} value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))}><option value="">Seleccionar...</option>{(data?.locations ?? []).map(l => <option key={l.id} value={l.id}>{locationName(data, l.id)}</option>)}</select></Field>
+              <Field label="Bodega destino"><select className={selectCls}><option value="">N/A</option>{(data?.locations ?? []).map(l => <option key={l.id}>{locationName(data, l.id)}</option>)}</select></Field>
+              <Field label="Lote"><input className={inputCls + ' bg-gray-50'} placeholder="No parametrizado" readOnly /></Field>
+              <Field label="Cantidad" required><input className={inputCls} type="number" placeholder="0.00" step="0.01" value={form.quantity} onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))} /></Field>
+              <Field label="Costo unitario"><input className={inputCls} type="number" placeholder="0.00" /></Field>
+              <Field label="Referencia documental"><input className={inputCls} placeholder="OC, OP, Factura..." value={form.reference} onChange={e => setForm(f => ({ ...f, reference: e.target.value }))} /></Field>
+              <div className="col-span-2"><Field label="Motivo" required><input className={inputCls} placeholder="Motivo del movimiento" value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))} /></Field></div>
+              <div className="col-span-2"><Field label="Observaciones"><textarea className={inputCls + ' resize-none h-14'} placeholder="Notas adicionales..." /></Field></div>
             </div>
             <div className="flex gap-3 mt-8 pt-5 border-t border-gray-100">
               <button onClick={() => setDrawerOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancelar</button>
@@ -1584,8 +1555,8 @@ function ModuloMovimientos() {
 
       {tab === 'traslados' && (
         <>
-          <Hdr title="Traslados entre Bodegas" subtitle="Movimiento controlado de artículos entre ubicaciones" onNew={() => setTrasladoDrawer(true)} newLabel="Nuevo Traslado" />
-          <Tbl>
+          <PageHeader title="Traslados entre Bodegas" subtitle="Movimiento controlado de artículos entre ubicaciones" onNew={() => setTrasladoDrawer(true)} newLabel="Nuevo Traslado" />
+          <Table>
             <thead><tr><Th>Número</Th><Th>Fecha</Th><Th>Bodega Origen</Th><Th>Bodega Destino</Th><Th>Artículo</Th><Th>Cantidad</Th><Th>Lote</Th><Th>Solicitado por</Th><Th>Estado</Th><Th></Th></tr></thead>
             <tbody>
               {TRASLADOS.map(t => (
@@ -1603,21 +1574,21 @@ function ModuloMovimientos() {
                 </tr>
               ))}
             </tbody>
-          </Tbl>
+          </Table>
           <Drawer title="Nuevo Traslado entre Bodegas" open={trasladoDrawer} onClose={() => setTrasladoDrawer(false)}>
             <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 mb-4 flex gap-2">
               <MoveRight size={14} className="text-blue-600 flex-shrink-0 mt-0.5" />
               <p className="text-xs text-blue-700">El traslado genera dos movimientos: <strong>Salida</strong> de bodega origen y <strong>Entrada</strong> en bodega destino. Debe ser confirmado por el responsable de la bodega destino.</p>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <Field label="Fecha"><input className={inp + ' bg-gray-50'} type="date" value={currentDateInput()} readOnly /></Field>
-              <div className="col-span-2"><Field label="Artículo" required><select className={sel} value={trasladoForm.variant} onChange={e => setTrasladoForm(f => ({ ...f, variant: e.target.value }))}><option value="">Seleccionar artículo...</option>{(data?.variants ?? []).map(v => <option key={v.id} value={v.id}>{variantName(data, v.id)}</option>)}</select></Field></div>
-              <Field label="Bodega origen" required><select className={sel} value={trasladoForm.sourceLocation} onChange={e => setTrasladoForm(f => ({ ...f, sourceLocation: e.target.value }))}><option value="">Seleccionar...</option>{(data?.locations ?? []).map(l => <option key={l.id} value={l.id}>{locationName(data, l.id)}</option>)}</select></Field>
-              <Field label="Bodega destino" required><select className={sel} value={trasladoForm.targetLocation} onChange={e => setTrasladoForm(f => ({ ...f, targetLocation: e.target.value }))}><option value="">Seleccionar...</option>{(data?.locations ?? []).map(l => <option key={l.id} value={l.id}>{locationName(data, l.id)}</option>)}</select></Field>
-              <Field label="Cantidad a trasladar" required><input className={inp} type="number" placeholder="0" value={trasladoForm.quantity} onChange={e => setTrasladoForm(f => ({ ...f, quantity: e.target.value }))} /></Field>
-              <Field label="Solicitado por" required><input className={inp} placeholder="Nombre del solicitante" value={trasladoForm.solicitadoPor} onChange={e => setTrasladoForm(f => ({ ...f, solicitadoPor: e.target.value }))} /></Field>
-              <Field label="Responsable destino" required><input className={inp} placeholder="Quien recibirá en destino" value={trasladoForm.responsableDestino} onChange={e => setTrasladoForm(f => ({ ...f, responsableDestino: e.target.value }))} /></Field>
-              <div className="col-span-2"><Field label="Motivo del traslado"><textarea className={inp + ' resize-none h-14'} placeholder="Razón del traslado..." value={trasladoForm.motivo} onChange={e => setTrasladoForm(f => ({ ...f, motivo: e.target.value }))} /></Field></div>
+              <Field label="Fecha"><input className={inputCls + ' bg-gray-50'} type="date" value={currentDateInput()} readOnly /></Field>
+              <div className="col-span-2"><Field label="Artículo" required><select className={selectCls} value={trasladoForm.variant} onChange={e => setTrasladoForm(f => ({ ...f, variant: e.target.value }))}><option value="">Seleccionar artículo...</option>{(data?.variants ?? []).map(v => <option key={v.id} value={v.id}>{variantName(data, v.id)}</option>)}</select></Field></div>
+              <Field label="Bodega origen" required><select className={selectCls} value={trasladoForm.sourceLocation} onChange={e => setTrasladoForm(f => ({ ...f, sourceLocation: e.target.value }))}><option value="">Seleccionar...</option>{(data?.locations ?? []).map(l => <option key={l.id} value={l.id}>{locationName(data, l.id)}</option>)}</select></Field>
+              <Field label="Bodega destino" required><select className={selectCls} value={trasladoForm.targetLocation} onChange={e => setTrasladoForm(f => ({ ...f, targetLocation: e.target.value }))}><option value="">Seleccionar...</option>{(data?.locations ?? []).map(l => <option key={l.id} value={l.id}>{locationName(data, l.id)}</option>)}</select></Field>
+              <Field label="Cantidad a trasladar" required><input className={inputCls} type="number" placeholder="0" value={trasladoForm.quantity} onChange={e => setTrasladoForm(f => ({ ...f, quantity: e.target.value }))} /></Field>
+              <Field label="Solicitado por" required><input className={inputCls} placeholder="Nombre del solicitante" value={trasladoForm.solicitadoPor} onChange={e => setTrasladoForm(f => ({ ...f, solicitadoPor: e.target.value }))} /></Field>
+              <Field label="Responsable destino" required><input className={inputCls} placeholder="Quien recibirá en destino" value={trasladoForm.responsableDestino} onChange={e => setTrasladoForm(f => ({ ...f, responsableDestino: e.target.value }))} /></Field>
+              <div className="col-span-2"><Field label="Motivo del traslado"><textarea className={inputCls + ' resize-none h-14'} placeholder="Razón del traslado..." value={trasladoForm.motivo} onChange={e => setTrasladoForm(f => ({ ...f, motivo: e.target.value }))} /></Field></div>
             </div>
             <div className="flex gap-3 mt-8 pt-5 border-t border-gray-100">
               <button onClick={() => setTrasladoDrawer(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancelar</button>
@@ -1675,12 +1646,12 @@ function ModuloConversion() {
 
   return (
     <div>
-      <Hdr title="Conversión / Transformación de Productos" subtitle="Registro de salida de un artículo y entrada de otro" onNew={() => setDrawerOpen(true)} newLabel="Nueva Conversión" />
+      <PageHeader title="Conversión / Transformación de Productos" subtitle="Registro de salida de un artículo y entrada de otro" onNew={() => setDrawerOpen(true)} newLabel="Nueva Conversión" />
       <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 mb-5 flex gap-3">
         <ArrowRightLeft size={16} className="text-blue-600 flex-shrink-0 mt-0.5" />
         <div><p className="text-xs font-semibold text-blue-800">¿Qué es una conversión?</p><p className="text-xs text-blue-700 mt-0.5">Un artículo <strong>sale</strong> del inventario (granel, en proceso) y otro artículo <strong>entra</strong> (unidades envasadas, presentación fraccionada). Ambos movimientos quedan trazados con factor de conversión.</p></div>
       </div>
-      <Tbl>
+      <Table>
         <thead><tr><Th>Número</Th><Th>Fecha</Th><Th>Artículo Salida</Th><Th>Cant. Salida</Th><Th>Artículo Entrada</Th><Th>Cant. Entrada</Th><Th>Factor</Th><Th>Motivo</Th><Th>Usuario</Th></tr></thead>
         <tbody>
           {loading && <LoadingRow colSpan={9} />}
@@ -1702,35 +1673,35 @@ function ModuloConversion() {
           })}
           {!loading && (data?.conversions ?? []).length === 0 && <EmptyRow colSpan={9} label="Sin conversiones registradas" />}
         </tbody>
-      </Tbl>
+      </Table>
 
       <Drawer title="Nueva Conversión de Producto" open={drawerOpen} onClose={() => setDrawerOpen(false)} wide>
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Número de conversión"><input className={inp + ' bg-gray-50'} placeholder="Automático" readOnly /></Field>
-          <Field label="Fecha" required><input className={inp} type="date" value={form.occurredOn} onChange={e => setForm(f => ({ ...f, occurredOn: e.target.value }))} /></Field>
+          <Field label="Número de conversión"><input className={inputCls + ' bg-gray-50'} placeholder="Automático" readOnly /></Field>
+          <Field label="Fecha" required><input className={inputCls} type="date" value={form.occurredOn} onChange={e => setForm(f => ({ ...f, occurredOn: e.target.value }))} /></Field>
         </div>
         <div className="mt-4 bg-red-50 border border-red-100 rounded-xl p-4">
           <p className="text-[10px] font-bold uppercase tracking-wider text-red-500 mb-3">🔴 Artículo que SALE del inventario</p>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Artículo de salida" required><select className={sel} value={form.sourceItem} onChange={e => setForm(f => ({ ...f, sourceItem: e.target.value }))}><option value="">Seleccionar...</option>{(data?.items ?? []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>
-            <Field label="Bodega origen" required><select className={sel} value={form.sourceLocation} onChange={e => setForm(f => ({ ...f, sourceLocation: e.target.value }))}><option value="">Seleccionar...</option>{(data?.locations ?? []).map(l => <option key={l.id} value={l.id}>{locationName(data, l.id)}</option>)}</select></Field>
-            <Field label="Lote origen"><input className={inp} placeholder="Lote del artículo de salida" /></Field>
-            <Field label="Cantidad a transformar" required><input className={inp} type="number" placeholder="0.00" step="0.01" value={cantSalida} onChange={e => setCantSalida(e.target.value)} /></Field>
+            <Field label="Artículo de salida" required><select className={selectCls} value={form.sourceItem} onChange={e => setForm(f => ({ ...f, sourceItem: e.target.value }))}><option value="">Seleccionar...</option>{(data?.items ?? []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>
+            <Field label="Bodega origen" required><select className={selectCls} value={form.sourceLocation} onChange={e => setForm(f => ({ ...f, sourceLocation: e.target.value }))}><option value="">Seleccionar...</option>{(data?.locations ?? []).map(l => <option key={l.id} value={l.id}>{locationName(data, l.id)}</option>)}</select></Field>
+            <Field label="Lote origen"><input className={inputCls} placeholder="Lote del artículo de salida" /></Field>
+            <Field label="Cantidad a transformar" required><input className={inputCls} type="number" placeholder="0.00" step="0.01" value={cantSalida} onChange={e => setCantSalida(e.target.value)} /></Field>
           </div>
         </div>
         <div className="flex justify-center py-3 items-center gap-3 text-gray-400"><div className="h-px flex-1 bg-gray-200" /><div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-1.5"><ArrowRightLeft size={14} className="text-[#2a4038]" /><span className="text-xs font-semibold text-gray-600">Factor: {factor}</span></div><div className="h-px flex-1 bg-gray-200" /></div>
         <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4">
           <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 mb-3">🟢 Artículo que ENTRA al inventario</p>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Artículo de entrada" required><select className={sel} value={form.targetItem} onChange={e => setForm(f => ({ ...f, targetItem: e.target.value }))}><option value="">Seleccionar...</option>{(data?.items ?? []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>
-            <Field label="Bodega destino" required><select className={sel} value={form.targetLocation} onChange={e => setForm(f => ({ ...f, targetLocation: e.target.value }))}><option value="">Seleccionar...</option>{(data?.locations ?? []).map(l => <option key={l.id} value={l.id}>{locationName(data, l.id)}</option>)}</select></Field>
-            <Field label="Nuevo lote"><input className={inp} placeholder="Lote del artículo resultante" /></Field>
-            <Field label="Cantidad resultante" required><input className={inp} type="number" placeholder="0" value={cantEntrada} onChange={e => setCantEntrada(e.target.value)} /></Field>
+            <Field label="Artículo de entrada" required><select className={selectCls} value={form.targetItem} onChange={e => setForm(f => ({ ...f, targetItem: e.target.value }))}><option value="">Seleccionar...</option>{(data?.items ?? []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>
+            <Field label="Bodega destino" required><select className={selectCls} value={form.targetLocation} onChange={e => setForm(f => ({ ...f, targetLocation: e.target.value }))}><option value="">Seleccionar...</option>{(data?.locations ?? []).map(l => <option key={l.id} value={l.id}>{locationName(data, l.id)}</option>)}</select></Field>
+            <Field label="Nuevo lote"><input className={inputCls} placeholder="Lote del artículo resultante" /></Field>
+            <Field label="Cantidad resultante" required><input className={inputCls} type="number" placeholder="0" value={cantEntrada} onChange={e => setCantEntrada(e.target.value)} /></Field>
           </div>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-4">
-          <Field label="Motivo de la conversión" required><input className={inp} placeholder="Motivo" value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))} /></Field>
-          <div className="col-span-1"><Field label="Observaciones"><textarea className={inp + ' resize-none h-[42px]'} placeholder="Notas..." /></Field></div>
+          <Field label="Motivo de la conversión" required><input className={inputCls} placeholder="Motivo" value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))} /></Field>
+          <div className="col-span-1"><Field label="Observaciones"><textarea className={inputCls + ' resize-none h-[42px]'} placeholder="Notas..." /></Field></div>
         </div>
         <div className="flex gap-3 mt-8 pt-5 border-t border-gray-100">
           <button onClick={() => setDrawerOpen(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">Cancelar</button>
@@ -1790,12 +1761,12 @@ function ModuloReportes() {
 
   return (
     <div>
-      <Hdr title="Reportes de Inventario" subtitle="Exportación en PDF y Excel" />
+      <PageHeader title="Reportes de Inventario" subtitle="Exportación en PDF y Excel" />
       <div className="grid grid-cols-4 gap-3 mb-6 p-4 bg-gray-50 border border-gray-100 rounded-2xl">
-        <Field label="Desde"><input className={inp} type="date" value={desde} onChange={e => setDesde(e.target.value)} /></Field>
-        <Field label="Hasta"><input className={inp} type="date" value={hasta} onChange={e => setHasta(e.target.value)} /></Field>
-        <Field label="Bodega"><select className={sel} value={bodega} onChange={e => setBodega(e.target.value)}><option value="">Todas</option>{BODEGAS.map(b => <option key={b.id}>{b.nombre}</option>)}</select></Field>
-        <Field label="Grupo de artículo"><select className={sel} value={grupo} onChange={e => setGrupo(e.target.value)}><option value="">Todos</option>{GRUPOS.map(g => <option key={g.id}>{g.nombre}</option>)}</select></Field>
+        <Field label="Desde"><input className={inputCls} type="date" value={desde} onChange={e => setDesde(e.target.value)} /></Field>
+        <Field label="Hasta"><input className={inputCls} type="date" value={hasta} onChange={e => setHasta(e.target.value)} /></Field>
+        <Field label="Bodega"><select className={selectCls} value={bodega} onChange={e => setBodega(e.target.value)}><option value="">Todas</option>{BODEGAS.map(b => <option key={b.id}>{b.nombre}</option>)}</select></Field>
+        <Field label="Grupo de artículo"><select className={selectCls} value={grupo} onChange={e => setGrupo(e.target.value)}><option value="">Todos</option>{GRUPOS.map(g => <option key={g.id}>{g.nombre}</option>)}</select></Field>
       </div>
       <div className="grid grid-cols-2 gap-4">
         {reportes.map(r => (
@@ -1860,18 +1831,18 @@ function ModuloAuditoria() {
 
   return (
     <div>
-      <Hdr title="Auditoría del Sistema" subtitle="Registro de todas las acciones sobre el inventario" />
+      <PageHeader title="Auditoría del Sistema" subtitle="Registro de todas las acciones sobre el inventario" />
       <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 mb-5 flex gap-2">
         <Bell size={14} className="text-amber-600 flex-shrink-0 mt-0.5" />
         <p className="text-xs text-amber-700">Todas las acciones sobre inventario, producción y compras son registradas automáticamente. Este log no puede modificarse ni eliminarse.</p>
       </div>
       <div className="flex gap-3 mb-4">
-        <select className={sel + ' w-44'} value={modFilter} onChange={e => setModFilter(e.target.value)}><option value="">Todos los módulos</option>{modulos.map(m => <option key={m}>{m}</option>)}</select>
-        <input type="date" className={inp + ' w-40'} />
-        <div className="flex-1"><SBar value={search} onChange={setSearch} placeholder="Buscar acción, usuario, detalle..." /></div>
+        <select className={selectCls + ' w-44'} value={modFilter} onChange={e => setModFilter(e.target.value)}><option value="">Todos los módulos</option>{modulos.map(m => <option key={m}>{m}</option>)}</select>
+        <input type="date" className={inputCls + ' w-40'} />
+        <div className="flex-1"><SearchBarAdmin value={search} onChange={setSearch} placeholder="Buscar acción, usuario, detalle..." /></div>
         <button className="flex items-center gap-2 px-3 py-2.5 border border-gray-200 rounded-xl text-xs text-gray-600 hover:bg-gray-50"><Download size={13} /> Exportar</button>
       </div>
-      <Tbl>
+      <Table>
         <thead><tr><Th>Fecha</Th><Th>Hora</Th><Th>Usuario</Th><Th>Módulo</Th><Th>Acción</Th><Th>Detalle</Th><Th>IP</Th></tr></thead>
         <tbody>
           {loading && <LoadingRow colSpan={7} />}
@@ -1893,7 +1864,7 @@ function ModuloAuditoria() {
           );})}
           {!loading && filtered.length === 0 && <EmptyRow colSpan={7} label="Sin registros de auditoría" />}
         </tbody>
-      </Tbl>
+      </Table>
     </div>
   );
 }

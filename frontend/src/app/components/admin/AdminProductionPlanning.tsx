@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback, type ReactNode } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   Plus, X, Save, CheckCircle, Clock, AlertTriangle, Eye, ClipboardCheck, Loader2,
 } from 'lucide-react';
@@ -12,6 +12,9 @@ import {
 } from '../../services/inventory-production.service';
 import { getItemStocks, type ItemStockRecord } from '../../services/manufacturing.service';
 import { useToast } from '../../contexts/ToastContext';
+import {
+  Badge, Field, Table, Th, Td, Drawer, PageHeader, inputCls, selectCls,
+} from './AdminUI';
 
 /* ═══════════════════════════════════════════════════════
    TYPES
@@ -76,34 +79,6 @@ function unitLabel(data: InventoryWorkspace | null, unitId: string | null | unde
 
 function currentDateInput() {
   return new Date().toISOString().slice(0, 10);
-}
-
-function Badge({ label, color }: { label: string; color: 'green' | 'yellow' | 'red' | 'blue' | 'gray' | 'purple' }) {
-  const s = { green: 'bg-emerald-50 text-emerald-700 border border-emerald-200', yellow: 'bg-amber-50 text-amber-700 border border-amber-200', red: 'bg-red-50 text-red-700 border border-red-200', blue: 'bg-blue-50 text-blue-700 border border-blue-200', gray: 'bg-gray-50 text-gray-600 border border-gray-200', purple: 'bg-purple-50 text-purple-700 border border-purple-200' };
-  return <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold ${s[color]}`}>{label}</span>;
-}
-
-function Field({ label, required, children }: { label: string; required?: boolean; children: ReactNode }) {
-  return <div className="flex flex-col gap-1.5"><label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">{label}{required && <span className="text-red-500 ml-1">*</span>}</label>{children}</div>;
-}
-
-const inp = "w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#2a4038]/20 focus:border-[#2a4038] transition-all placeholder:text-gray-300";
-const sel = "w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#2a4038]/20 focus:border-[#2a4038] transition-all";
-
-function Hdr({ title, subtitle, onNew, newLabel }: { title: string; subtitle?: string; onNew?: () => void; newLabel?: string }) {
-  return <div className="flex items-center justify-between mb-6"><div><h2 className="text-lg font-semibold text-gray-900">{title}</h2>{subtitle && <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>}</div>{onNew && <button onClick={onNew} className="flex items-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white text-xs font-semibold rounded-xl hover:bg-[#3d5c4e] transition-colors"><Plus size={14} /> {newLabel ?? 'Nuevo'}</button>}</div>;
-}
-
-function Tbl({ children }: { children: ReactNode }) {
-  return <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm"><div className="overflow-x-auto"><table className="w-full text-sm">{children}</table></div></div>;
-}
-
-function Th({ children }: { children: ReactNode }) { return <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-gray-400 bg-gray-50 border-b border-gray-100 whitespace-nowrap">{children}</th>; }
-function Td({ children, className }: { children: ReactNode; className?: string }) { return <td className={`px-4 py-3 border-b border-gray-50 text-sm text-gray-700 ${className ?? ''}`}>{children}</td>; }
-
-function Drawer({ title, open, onClose, wide, children }: { title: string; open: boolean; onClose: () => void; wide?: boolean; children: ReactNode }) {
-  if (!open) return null;
-  return <div className="fixed inset-0 z-50 flex justify-end"><div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} /><div className={`relative bg-white ${wide ? 'w-full max-w-2xl' : 'w-full max-w-xl'} h-full flex flex-col shadow-2xl`}><div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50"><h3 className="font-semibold text-gray-900">{title}</h3><button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-200"><X size={16} /></button></div><div className="flex-1 overflow-y-auto px-6 py-5">{children}</div></div></div>;
 }
 
 function LoadingRow({ colSpan }: { colSpan: number }) {
@@ -212,7 +187,7 @@ export function AdminProductionPlanning({ onCreateBatch, refreshKey }: { onCreat
       {/* ÓRDENES */}
       {tab === 'ordenes' && (
         <>
-          <Hdr title="Órdenes de Producción" subtitle="Planificación y control del proceso productivo" onNew={onCreateBatch} newLabel="Nueva Orden" />
+          <PageHeader title="Órdenes de Producción" subtitle="Planificación y control del proceso productivo" onNew={onCreateBatch} newLabel="Nueva Orden" />
           <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 mb-5">
             <p className="text-xs text-blue-700 font-medium">
               Las órdenes de producción se crean junto con su expediente de lote GMP desde "Expedientes de lote → Nuevo lote", para que toda orden quede desde el inicio bajo trazabilidad de calidad.
@@ -226,7 +201,7 @@ export function AdminProductionPlanning({ onCreateBatch, refreshKey }: { onCreat
               { label: 'Sin Recepción PT', value: (data?.productionOrders ?? []).filter(o => o.is_dispensed && !o.is_output_received && o.status !== 'PENDING').length, color: 'bg-red-50 text-red-600 border-red-100' },
             ].map(s => <div key={s.label} className={`border rounded-2xl p-4 ${s.color}`}><p className="text-3xl font-bold">{s.value}</p><p className="text-xs font-medium mt-0.5">{s.label}</p></div>)}
           </div>
-          <Tbl>
+          <Table>
             <thead><tr><Th>Número</Th><Th>Producto</Th><Th>Plan</Th><Th>Real</Th><Th>Estado</Th><Th>Dispensada</Th><Th>PT Recibido</Th><Th>Responsable</Th><Th>Acciones</Th></tr></thead>
             <tbody>
               {loading && <LoadingRow colSpan={9} />}
@@ -252,7 +227,7 @@ export function AdminProductionPlanning({ onCreateBatch, refreshKey }: { onCreat
               ))}
               {!loading && (data?.productionOrders ?? []).length === 0 && <EmptyRow colSpan={9} label="Sin órdenes de producción registradas" />}
             </tbody>
-          </Tbl>
+          </Table>
 
           {/* Modal de Cierre de OP */}
           {cierreOP && (
@@ -273,8 +248,8 @@ export function AdminProductionPlanning({ onCreateBatch, refreshKey }: { onCreat
                     </div>
                   ))}
                 </div>
-                <div className="mb-4"><Field label="Cantidad real producida" required><input className={inp} type="number" value={cierreForm.actualQuantity} onChange={e => setCierreForm(f => ({ ...f, actualQuantity: e.target.value }))} /></Field></div>
-                <div className="mb-5"><Field label="Observaciones de cierre"><textarea className={inp + ' resize-none h-14'} placeholder="Notas finales de la orden..." value={cierreForm.notes} onChange={e => setCierreForm(f => ({ ...f, notes: e.target.value }))} /></Field></div>
+                <div className="mb-4"><Field label="Cantidad real producida" required><input className={inputCls} type="number" value={cierreForm.actualQuantity} onChange={e => setCierreForm(f => ({ ...f, actualQuantity: e.target.value }))} /></Field></div>
+                <div className="mb-5"><Field label="Observaciones de cierre"><textarea className={inputCls + ' resize-none h-14'} placeholder="Notas finales de la orden..." value={cierreForm.notes} onChange={e => setCierreForm(f => ({ ...f, notes: e.target.value }))} /></Field></div>
                 <div className="flex gap-3">
                   <button onClick={() => setCierreOP(null)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">Cancelar</button>
                   <button onClick={handleCloseOrder} disabled={closing} className="flex-1 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50">{closing ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />} Confirmar Cierre</button>
@@ -289,7 +264,7 @@ export function AdminProductionPlanning({ onCreateBatch, refreshKey }: { onCreat
       {/* FÓRMULAS */}
       {tab === 'formulas' && (
         <>
-          <Hdr title="Fórmulas y Recetas" subtitle="Composición de ingredientes por producto" onNew={() => setDrawerOpen(true)} newLabel="Nueva Fórmula" />
+          <PageHeader title="Fórmulas y Recetas" subtitle="Composición de ingredientes por producto" onNew={() => setDrawerOpen(true)} newLabel="Nueva Fórmula" />
           {loading && <div className="bg-white border border-gray-100 rounded-2xl p-6 text-center text-sm text-gray-400"><Loader2 size={16} className="inline animate-spin mr-2" /> Cargando fórmulas...</div>}
           {!loading && (data?.formulas ?? []).map(f => (
             <div key={f.id} className="bg-white border border-gray-100 rounded-2xl shadow-sm mb-4">
@@ -321,20 +296,20 @@ export function AdminProductionPlanning({ onCreateBatch, refreshKey }: { onCreat
           ))}
           <Drawer title="Nueva Fórmula / Receta" open={drawerOpen} onClose={() => setDrawerOpen(false)} wide>
             <div className="grid grid-cols-2 gap-4">
-              <Field label="Código" required><input className={inp} placeholder="FM-XXX-000" value={formulaForm.code} onChange={e => setFormulaForm(f => ({ ...f, code: e.target.value }))} /></Field>
-              <div className="col-span-2"><Field label="Nombre de la fórmula" required><input className={inp} placeholder="Nombre descriptivo" value={formulaForm.name} onChange={e => setFormulaForm(f => ({ ...f, name: e.target.value }))} /></Field></div>
-              <div className="col-span-2"><Field label="Producto resultante" required><select className={sel} value={formulaForm.outputItem} onChange={e => setFormulaForm(f => ({ ...f, outputItem: e.target.value }))}><option value="">Seleccionar producto terminado...</option>{(data?.items ?? []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field></div>
-              <Field label="Rendimiento base" required><input className={inp} type="number" placeholder="100" value={formulaForm.yieldQuantity} onChange={e => setFormulaForm(f => ({ ...f, yieldQuantity: e.target.value }))} /></Field>
-              <Field label="Unidad del rendimiento"><select className={sel} value={formulaForm.yieldUnit} onChange={e => setFormulaForm(f => ({ ...f, yieldUnit: e.target.value }))}><option value="">Seleccionar...</option>{(data?.units ?? []).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}</select></Field>
+              <Field label="Código" required><input className={inputCls} placeholder="FM-XXX-000" value={formulaForm.code} onChange={e => setFormulaForm(f => ({ ...f, code: e.target.value }))} /></Field>
+              <div className="col-span-2"><Field label="Nombre de la fórmula" required><input className={inputCls} placeholder="Nombre descriptivo" value={formulaForm.name} onChange={e => setFormulaForm(f => ({ ...f, name: e.target.value }))} /></Field></div>
+              <div className="col-span-2"><Field label="Producto resultante" required><select className={selectCls} value={formulaForm.outputItem} onChange={e => setFormulaForm(f => ({ ...f, outputItem: e.target.value }))}><option value="">Seleccionar producto terminado...</option>{(data?.items ?? []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field></div>
+              <Field label="Rendimiento base" required><input className={inputCls} type="number" placeholder="100" value={formulaForm.yieldQuantity} onChange={e => setFormulaForm(f => ({ ...f, yieldQuantity: e.target.value }))} /></Field>
+              <Field label="Unidad del rendimiento"><select className={selectCls} value={formulaForm.yieldUnit} onChange={e => setFormulaForm(f => ({ ...f, yieldUnit: e.target.value }))}><option value="">Seleccionar...</option>{(data?.units ?? []).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}</select></Field>
             </div>
             <div className="mt-5">
               <div className="flex items-center justify-between mb-3"><p className="text-xs font-bold uppercase tracking-wider text-gray-500">Ingredientes</p><button onClick={handleAddFormulaLine} className="text-xs text-[#2a4038] font-semibold flex items-center gap-1"><Plus size={12} /> Agregar línea</button></div>
               <div className="space-y-2">
                 {formulaLines.map(line => (
                   <div key={line.key} className="grid grid-cols-12 gap-2 items-center bg-gray-50 rounded-lg p-2">
-                    <div className="col-span-5"><select className={sel + ' text-xs py-2'} value={line.item} onChange={e => handleFormulaLineChange(line.key, 'item', e.target.value)}><option value="">Seleccionar materia prima...</option>{(data?.items ?? []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
-                    <div className="col-span-3"><input className={inp + ' text-xs py-2'} type="number" placeholder="Cantidad" value={line.quantity} onChange={e => handleFormulaLineChange(line.key, 'quantity', e.target.value)} /></div>
-                    <div className="col-span-2"><select className={sel + ' text-xs py-2'} value={maps.items.get(line.item)?.unit ?? ''} disabled>{(data?.units ?? []).map(u => <option key={u.id} value={u.id}>{u.abbreviation}</option>)}</select></div>
+                    <div className="col-span-5"><select className={selectCls + ' text-xs py-2'} value={line.item} onChange={e => handleFormulaLineChange(line.key, 'item', e.target.value)}><option value="">Seleccionar materia prima...</option>{(data?.items ?? []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
+                    <div className="col-span-3"><input className={inputCls + ' text-xs py-2'} type="number" placeholder="Cantidad" value={line.quantity} onChange={e => handleFormulaLineChange(line.key, 'quantity', e.target.value)} /></div>
+                    <div className="col-span-2"><select className={selectCls + ' text-xs py-2'} value={maps.items.get(line.item)?.unit ?? ''} disabled>{(data?.units ?? []).map(u => <option key={u.id} value={u.id}>{u.abbreviation}</option>)}</select></div>
                     <div className="col-span-2 flex justify-center"><button onClick={() => handleRemoveFormulaLine(line.key)} disabled={formulaLines.length === 1} className="p-1 text-red-400 hover:text-red-600 disabled:opacity-30 disabled:cursor-not-allowed"><X size={14} /></button></div>
                   </div>
                 ))}
