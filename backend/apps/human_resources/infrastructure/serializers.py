@@ -224,7 +224,13 @@ class VacationRequestSerializer(serializers.ModelSerializer):
         return self._serialize_related(obj, "history", VacationRequestHistorySerializer)
 
     def get_overtime_shifts(self, obj):
-        return self._serialize_related(obj, "overtime_shifts", OvertimeShiftSerializer)
+        if obj.request_type != VacationRequest.RequestType.OVERTIME:
+            return []
+        try:
+            related = getattr(obj, "overtime_shifts").all()
+            return OvertimeShiftSerializer(related, many=True, context=self.context).data
+        except DatabaseError:
+            return []
 
     def validate_support_document(self, file):
         if not file:

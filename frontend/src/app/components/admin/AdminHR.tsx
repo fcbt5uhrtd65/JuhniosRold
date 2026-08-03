@@ -538,8 +538,7 @@ function getRequestScheduleLabel(request: VacationRequest): string {
     const shiftsLabel = sortedShifts
       .slice(0, 2)
       .map((shift) => {
-        const shiftDate = shift.date === request.start_date && request.start_date === request.end_date ? '' : `${parseDate(shift.date)} · `;
-        return `${shiftDate}${formatTime(shift.start_time)} - ${formatTime(shift.end_time)}`;
+        return `${parseDate(shift.date)} · ${formatTime(shift.start_time)} - ${formatTime(shift.end_time)}`;
       })
       .join(' | ');
     const remaining = sortedShifts.length > 2 ? ` +${sortedShifts.length - 2} turno(s)` : '';
