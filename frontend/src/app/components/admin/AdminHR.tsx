@@ -584,11 +584,16 @@ function getRequestCalendarDateKeys(request: VacationRequest): string[] {
   if (request.request_type === 'OVERTIME') {
     const shiftDateKeys = new Set<string>();
     for (const shift of request.overtime_shifts ?? []) {
-      if (/^\d{4}-\d{2}-\d{2}$/.test(shift.date)) {
-        shiftDateKeys.add(shift.date);
+      const dateKey = shift.date?.slice(0, 10);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
+        shiftDateKeys.add(dateKey);
       }
     }
     if (shiftDateKeys.size > 0) return [...shiftDateKeys];
+    const boundaryDateKeys = [request.start_date?.slice(0, 10), request.end_date?.slice(0, 10)].filter(
+      (date): date is string => /^\d{4}-\d{2}-\d{2}$/.test(date),
+    );
+    return [...new Set(boundaryDateKeys)];
   }
 
   return getDateRangeKeys(request.start_date, request.end_date);
