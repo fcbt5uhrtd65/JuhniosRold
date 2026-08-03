@@ -1082,6 +1082,8 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
   const [showCorrectionModal, setShowCorrectionModal] = useState<Attendance | null>(null);
   const [showIntelligenceModal, setShowIntelligenceModal] = useState(false);
   const [uploadingDevice, setUploadingDevice] = useState('');
+  const [uploadDateFrom, setUploadDateFrom] = useState('');
+  const [uploadDateTo, setUploadDateTo] = useState('');
   const [uploading, setUploading] = useState(false);
   const [consolidatingId, setConsolidatingId] = useState<string | null>(null);
 
@@ -1115,10 +1117,17 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
   }, [load]);
 
   const handleUpload = async (file: File) => {
+    if (uploadDateFrom && uploadDateTo && uploadDateTo < uploadDateFrom) {
+      toast.error('La fecha hasta no puede ser anterior a la fecha desde.');
+      return;
+    }
     setUploading(true);
     try {
-      const batch = await uploadBiometricFile(file, uploadingDevice || undefined);
-      toast.success(`Archivo procesado: ${batch.matched_rows} marcaciones asociadas, ${batch.unmatched_rows} sin empleado, ${batch.duplicate_rows} duplicadas.`);
+      const batch = await uploadBiometricFile(file, uploadingDevice || undefined, {
+        dateFrom: uploadDateFrom || undefined,
+        dateTo: uploadDateTo || undefined,
+      });
+      toast.success(`TXT procesado: ${batch.total_rows} marcaciones por codigo, ${batch.duplicate_rows} duplicadas.`);
       await load();
     } catch (error) {
       console.error(error);
@@ -1162,8 +1171,7 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
           <div>
             <p className="text-sm font-semibold text-gray-900">Inteligencia de marcaciones</p>
             <p className="text-[11px] text-gray-500 mt-0.5">
-              Si el archivo trae acción explícita, se usa para ubicar entrada, salida y almuerzo; si no, marcaciones separadas por menos de <strong>{intelligenceSettings?.duplicate_punch_window_minutes ?? 15} min</strong> se tratan como el mismo evento repetido.
-              Con 1 sola marcación en el día, se compara contra el horario esperado del empleado (tolerancia de <strong>{intelligenceSettings?.schedule_proximity_minutes ?? 120} min</strong>).
+              El TXT del huellero se guarda primero por codigo, sin relacionarlo automaticamente con empleados. Marcaciones separadas por menos de <strong>{intelligenceSettings?.duplicate_punch_window_minutes ?? 15} min</strong> se tratan como repetidas.
             </p>
           </div>
           <SecondaryButton onClick={() => setShowIntelligenceModal(true)}>Ajustar</SecondaryButton>
@@ -1172,10 +1180,10 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
 
       <Card className="p-5">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-sm font-semibold text-gray-900">Importar archivo del reloj biométrico</p>
+          <p className="text-sm font-semibold text-gray-900">Importar TXT del reloj biometrico</p>
           <SecondaryButton onClick={() => setShowDeviceModal(true)} icon={<Plus size={13} />}>Nuevo dispositivo</SecondaryButton>
         </div>
-        <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-[minmax(180px,1fr)_minmax(150px,180px)_minmax(150px,180px)_auto] items-end gap-3">
           <label className="block flex-1">
             <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Dispositivo (opcional)</span>
             <select value={uploadingDevice} onChange={(e) => setUploadingDevice(e.target.value)} className={selectCls}>
@@ -1185,11 +1193,20 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
               ))}
             </select>
           </label>
+          <label className="block">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Tomar desde</span>
+            <input type="date" value={uploadDateFrom} onChange={(e) => setUploadDateFrom(e.target.value)} className={inputCls} />
+          </label>
+          <label className="block">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Tomar hasta</span>
+            <input type="date" value={uploadDateTo} onChange={(e) => setUploadDateTo(e.target.value)} className={inputCls} />
+          </label>
           <label className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white text-xs font-semibold rounded-xl hover:bg-[#3d5c4e] transition-colors cursor-pointer disabled:opacity-50">
             <UploadCloud size={14} />
             {uploading ? 'Subiendo...' : 'Subir archivo'}
             <input
               type="file"
+              accept=".txt,text/plain"
               className="hidden"
               disabled={uploading}
               onChange={(e) => {
@@ -1213,12 +1230,12 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
                 <div>
                   <p className="text-xs font-semibold text-gray-900">{formatDateTime(batch.created_at)}</p>
                   <p className="text-[11px] text-gray-400">
-                    {batch.matched_rows} asociadas · {batch.unmatched_rows} sin empleado · {batch.duplicate_rows} duplicadas
+                    {batch.total_rows} por codigo · {batch.unmatched_rows} pendientes de relacionar · {batch.duplicate_rows} duplicadas
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge label={batch.status} color={batch.status === 'COMPLETED' ? 'green' : batch.status === 'FAILED' ? 'red' : 'yellow'} />
-                  {batch.status === 'COMPLETED' && (
+                  {batch.status === 'COMPLETED' && batch.matched_rows > 0 && (
                     <SecondaryButton onClick={() => void handleConsolidate(batch.id)} disabled={consolidatingId === batch.id}>
                       {consolidatingId === batch.id ? 'Consolidando...' : 'Consolidar en asistencia'}
                     </SecondaryButton>

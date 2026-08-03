@@ -1304,10 +1304,16 @@ export async function getBiometricImportBatches(): Promise<BiometricImportBatch[
   return normalizeListResponse(res.data).data;
 }
 
-export async function uploadBiometricFile(file: File, deviceId?: string): Promise<BiometricImportBatch> {
+export async function uploadBiometricFile(
+  file: File,
+  deviceId?: string,
+  filters?: { dateFrom?: string; dateTo?: string },
+): Promise<BiometricImportBatch> {
   const formData = new FormData();
   formData.append('file', file);
   if (deviceId) formData.append('device', deviceId);
+  if (filters?.dateFrom) formData.append('date_from', filters.dateFrom);
+  if (filters?.dateTo) formData.append('date_to', filters.dateTo);
   const res = await api.post<BiometricImportBatch>(`${BIOMETRIC_IMPORTS_PATH}upload/`, formData, LONG_REQUEST_TIMEOUT_MS);
   if (res.data) return res.data;
   throw new Error(res.message);

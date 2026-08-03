@@ -68,6 +68,8 @@ def parse_biometric_file(file_obj) -> list[dict]:
     que el llamador pueda contarlas/reportarlas, no se descartan en
     silencio."""
     if isinstance(file_obj, IOBase) or hasattr(file_obj, "read"):
+        if hasattr(file_obj, "seek"):
+            file_obj.seek(0)
         raw_content = file_obj.read()
     else:
         raw_content = file_obj

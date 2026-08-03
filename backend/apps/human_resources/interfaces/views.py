@@ -1,7 +1,8 @@
 import json
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, Max, Q, Sum
 from django.db.models.functions import TruncMonth
 from django.http import FileResponse
 from django.shortcuts import get_object_or_404
@@ -1312,7 +1313,7 @@ class BiometricImportBatchViewSet(HumanResourcesBaseViewSet):
     Attendance se dispara aparte (@action consolidate)."""
 
     required_component = "human_resources.biometric_import"
-    queryset = BiometricImportBatch.objects.select_related("uploaded_by", "device").prefetch_related("punches")
+    queryset = BiometricImportBatch.objects.select_related("uploaded_by", "device")
     serializer_class = BiometricImportBatchSerializer
     filterset_fields = ("status", "device")
     http_method_names = ("get", "post", "head", "options")
@@ -1325,11 +1326,34 @@ class BiometricImportBatchViewSet(HumanResourcesBaseViewSet):
         device_id = request.data.get("device")
         device = BiometricDevice.objects.filter(id=device_id).first() if device_id else None
         try:
-            batch = ImportBiometricFile().execute(file=uploaded_file, actor=request.user, device=device)
+            date_from = self._parse_import_date(request.data.get("date_from"), "date_from")
+            date_to = self._parse_import_date(request.data.get("date_to"), "date_to")
+        except BusinessRuleViolation as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        if date_from and date_to and date_to < date_from:
+            return Response({"detail": "La fecha hasta no puede ser anterior a la fecha desde."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            batch = ImportBiometricFile().execute(
+                file=uploaded_file,
+                actor=request.user,
+                device=device,
+                date_from=date_from,
+                date_to=date_to,
+                resolve_employees=False,
+            )
         except BusinessRuleViolation as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         self._audit("upload", batch)
         return Response(self.get_serializer(batch).data)
+
+    @staticmethod
+    def _parse_import_date(value, field_name):
+        if not value:
+            return None
+        try:
+            return datetime.strptime(str(value), "%Y-%m-%d").date()
+        except (TypeError, ValueError) as exc:
+            raise BusinessRuleViolation(f"{field_name} debe tener formato YYYY-MM-DD.") from exc
 
     @action(detail=True, methods=("get",), url_path="unmatched")
     def unmatched(self, request, pk=None):
@@ -1346,23 +1370,20 @@ class BiometricImportBatchViewSet(HumanResourcesBaseViewSet):
         punches = (
             RawBiometricPunch.objects
             .filter(matched_employee__isnull=True)
-            .select_related("device")
-            .order_by("biometric_code", "-punched_at")
+            .values("biometric_code", "device", "device__name")
+            .annotate(occurrences=Count("id"), last_seen=Max("punched_at"))
+            .order_by("-last_seen")[:100]
         )
-        summary: dict[str, dict] = {}
-        for punch in punches:
-            entry = summary.setdefault(punch.biometric_code, {
-                "biometric_code": punch.biometric_code,
-                "occurrences": 0,
-                "last_seen": punch.punched_at,
-                "device": punch.device_id,
-                "device_name": punch.device.name if punch.device_id else None,
-            })
-            entry["occurrences"] += 1
-            if punch.punched_at > entry["last_seen"]:
-                entry["last_seen"] = punch.punched_at
-        results = sorted(summary.values(), key=lambda e: e["last_seen"], reverse=True)
-        return Response(results)
+        return Response([
+            {
+                "biometric_code": row["biometric_code"],
+                "occurrences": row["occurrences"],
+                "last_seen": row["last_seen"],
+                "device": row["device"],
+                "device_name": row["device__name"],
+            }
+            for row in punches
+        ])
 
     @action(detail=True, methods=("post",), url_path="consolidate")
     def consolidate(self, request, pk=None):

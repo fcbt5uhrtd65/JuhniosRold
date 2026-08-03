@@ -916,7 +916,7 @@ class ImportBiometricFile:
     asistencia oficial."""
 
     @transaction.atomic
-    def execute(self, *, file, actor=None, device=None):
+    def execute(self, *, file, actor=None, device=None, date_from=None, date_to=None, resolve_employees=False):
         batch = BiometricImportBatch.objects.create(
             file=file,
             device=device,
@@ -934,13 +934,25 @@ class ImportBiometricFile:
 
         error_lines = [row for row in rows if "error" in row]
         valid_rows = [row for row in rows if "error" not in row]
+        if date_from:
+            valid_rows = [row for row in valid_rows if row["punched_at"].date() >= date_from]
+        if date_to:
+            valid_rows = [row for row in valid_rows if row["punched_at"].date() <= date_to]
+
+        if not valid_rows:
+            message = "No se encontraron marcaciones en el archivo TXT para el rango de fechas seleccionado."
+            batch.status = BiometricImportBatch.Status.FAILED
+            batch.error_log = message
+            batch.processed_at = timezone.now()
+            batch.save(update_fields=("status", "error_log", "processed_at", "updated_at"))
+            raise BusinessRuleViolation(message)
 
         codes_in_file = {row["biometric_code"] for row in valid_rows}
-        mapping_resolver = self._build_mapping_resolver(codes_in_file, device)
+        mapping_resolver = self._build_mapping_resolver(codes_in_file, device) if resolve_employees else None
 
         punches = []
         for row in valid_rows:
-            employee_id = mapping_resolver(row["biometric_code"], row["punched_at"].date())
+            employee_id = mapping_resolver(row["biometric_code"], row["punched_at"].date()) if mapping_resolver else None
             punches.append(RawBiometricPunch(
                 device=device,
                 biometric_code=row["biometric_code"],
@@ -960,7 +972,7 @@ class ImportBiometricFile:
         matched_count = sum(1 for p in created_punches if p.matched_employee_id)
         unmatched_count = len(created_punches) - matched_count
 
-        batch.total_rows = len(rows)
+        batch.total_rows = len(valid_rows)
         batch.matched_rows = matched_count
         batch.unmatched_rows = unmatched_count
         batch.duplicate_rows = duplicate_count
@@ -1026,16 +1038,16 @@ class ImportBiometricFile:
         return resolve
 
     def _mark_duplicates(self, punches) -> int:
-        """Agrupa por empleado resuelto y marca como duplicadas las
+        """Agrupa por empleado resuelto o, si aun no hay relacion con empleado,
+        por codigo biometrico, y marca como duplicadas las
         marcaciones consecutivas separadas por menos de la ventana
         configurada en AttendanceIntelligenceSettings (default 15 min),
         conservando la primera de cada grupo como canónica. No borra ninguna
         fila — cubre el caso de "marqué, creí que falló, volví a marcar"."""
         by_employee: dict[str, list] = {}
         for punch in punches:
-            if not punch.matched_employee_id:
-                continue
-            by_employee.setdefault(punch.matched_employee_id, []).append(punch)
+            key = punch.matched_employee_id or f"code:{punch.biometric_code}"
+            by_employee.setdefault(key, []).append(punch)
 
         settings_row = get_attendance_intelligence_settings()
         window = timedelta(minutes=settings_row.duplicate_punch_window_minutes)
