@@ -344,6 +344,15 @@ function xlsxCell(value: XlsxCellValue, style = 0): XlsxCell {
   return { value, style };
 }
 
+const XLSX_STYLE = {
+  title: 4,
+  darkHeader: 5,
+  tableHeader: 2,
+  total: 3,
+  softHeader: 6,
+  warning: 7,
+};
+
 function xmlEscape(value: XlsxCellValue): string {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -441,15 +450,32 @@ function buildContentTypesXml(sheets: XlsxSheet[]): string {
 function buildStylesXml(): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>
-  <fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFEFF4F1"/><bgColor indexed="64"/></patternFill></fill></fills>
+  <fonts count="5">
+    <font><sz val="11"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><name val="Calibri"/></font>
+    <font><b/><sz val="14"/><name val="Calibri"/><color rgb="FFFFFFFF"/></font>
+    <font><b/><sz val="11"/><name val="Calibri"/><color rgb="FFFFFFFF"/></font>
+    <font><b/><sz val="11"/><name val="Calibri"/><color rgb="FF92400E"/></font>
+  </fonts>
+  <fills count="6">
+    <fill><patternFill patternType="none"/></fill>
+    <fill><patternFill patternType="gray125"/></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFEFF4F1"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FF2A4038"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFE8F3EE"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFFFF7ED"/><bgColor indexed="64"/></patternFill></fill>
+  </fills>
   <borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/><diagonal/></border></borders>
   <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-  <cellXfs count="4">
+  <cellXfs count="8">
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>
     <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/>
     <xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"/>
+    <xf numFmtId="0" fontId="2" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"><alignment horizontal="center"/></xf>
+    <xf numFmtId="0" fontId="3" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"><alignment horizontal="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="1" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/>
+    <xf numFmtId="0" fontId="4" fillId="5" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/>
   </cellXfs>
   <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`;
@@ -931,6 +957,16 @@ function biometricStatus(row: BiometricPreviewRow | undefined, holiday: PublicHo
   return 'Falto';
 }
 
+function previewDurationLabel(row: BiometricPreviewRow | undefined): string {
+  if (!row) return '';
+  const checkIn = timeToMinutes(row.checkIn);
+  const checkOutRaw = timeToMinutes(row.checkOut);
+  if (checkIn === null || checkOutRaw === null) return '';
+  const checkOut = checkOutRaw >= checkIn ? checkOutRaw : checkOutRaw + 1440;
+  const minutes = Math.max(0, checkOut - checkIn);
+  return `${Math.floor(minutes / 60)}:${twoDigits(minutes % 60)}:00`;
+}
+
 type BiometricPayrollBreakdown = {
   rawHours: number;
   ordinaryHours: number;
@@ -1134,15 +1170,18 @@ function buildBiometricCodeDayRows(
     const holiday = holidaysByDate.get(date);
     const weekend = isWeekendDate(date);
     const breakdown = biometricPayrollBreakdown(row, holiday);
+    const rowStyle = row?.status === 'Revisar' || row?.status === 'Incompleto' ? XLSX_STYLE.warning : 3;
     return [
-      xlsxCell(code),
-      xlsxCell(row ? `${formatDate(row.date)} ${row.checkIn}` : weekend ? (mondayWeekdayIndex(date) === 5 ? 'SABADO' : 'DOMINGO') : 'NO VINO'),
-      xlsxCell(row ? `${formatDate(row.date)} ${row.checkOut}` : ''),
-      xlsxCell(row && row.checkIn !== '-' && row.checkOut !== '-' ? `${row.checkIn} - ${row.checkOut}` : ''),
+      xlsxCell(row ? code : ''),
+      xlsxCell(formatDate(date)),
+      xlsxCell(WEEKDAY_LABELS[mondayWeekdayIndex(date)]),
+      xlsxCell(row?.checkIn === '-' ? '' : row?.checkIn ?? ''),
+      xlsxCell(row?.checkOut === '-' ? '' : row?.checkOut ?? ''),
+      xlsxCell(previewDurationLabel(row)),
       xlsxCell(breakdown.rawHours),
       xlsxCell(breakdown.ordinaryHours),
-      xlsxCell(row?.breakStart ?? ''),
-      xlsxCell(row?.breakEnd ?? ''),
+      xlsxCell(row?.breakStart === '-' ? '' : row?.breakStart ?? ''),
+      xlsxCell(row?.breakEnd === '-' ? '' : row?.breakEnd ?? ''),
       xlsxCell(breakdown.lunchHours || ''),
       xlsxCell(breakdown.extraDayHours || 0),
       xlsxCell(breakdown.extraNightHours || 0),
@@ -1157,8 +1196,9 @@ function buildBiometricCodeDayRows(
       xlsxCell(biometricStatus(row, holiday, weekend)),
       xlsxCell(biometricObservation(row, holiday, weekend)),
       xlsxCell(row?.analysis ?? ''),
+      xlsxCell(row?.rawMarkCount ?? ''),
       xlsxCell(row?.marks ?? ''),
-    ];
+    ].map((cell) => ({ ...cell, style: cell.style || rowStyle }));
   });
 }
 
@@ -1241,13 +1281,12 @@ function buildBiometricPreviewXlsx(
     .map(([code, codeRows]) => [code, [...codeRows].sort((left, right) => left.date.localeCompare(right.date))] as const)
     .sort(([left], [right]) => left.localeCompare(right, 'es', { numeric: true }));
   const summaryRows: XlsxCell[][] = [
-    [xlsxCell('Resumen de analisis biometrico', 1)],
-    [xlsxCell('Archivo', 3), xlsxCell(fileName || 'TXT biometrico')],
-    [xlsxCell('Periodo', 3), xlsxCell(exportRange.length ? `${formatDate(exportRange[0])} - ${formatDate(exportRange[exportRange.length - 1])}` : 'Sin rango')],
-    [xlsxCell('Codigos', 3), xlsxCell(codeGroups.length)],
-    [xlsxCell('Dias del rango', 3), xlsxCell(exportRange.length)],
+    [xlsxCell('RESUMEN DE NOMINA BIOMETRICA', XLSX_STYLE.title)],
+    [xlsxCell('Archivo', XLSX_STYLE.softHeader), xlsxCell(fileName || 'TXT biometrico')],
+    [xlsxCell('Periodo', XLSX_STYLE.softHeader), xlsxCell(exportRange.length ? `${formatDate(exportRange[0])} - ${formatDate(exportRange[exportRange.length - 1])}` : 'Sin rango')],
+    [xlsxCell('Codigos', XLSX_STYLE.softHeader), xlsxCell(codeGroups.length), xlsxCell('Dias del rango', XLSX_STYLE.softHeader), xlsxCell(exportRange.length)],
     [],
-    ['Empleado', 'Codigo', 'Dias con marca', 'Faltas laborales', 'Festivos', 'Dias por revisar', 'Timbradas', 'Horas trabajadas', 'Horas diurnas', 'Horas nocturnas'].map((label) => xlsxCell(label, 2)),
+    ['Empleado', 'Codigo', 'Dias con marca', 'Faltas laborales', 'Festivos', 'Dias por revisar', 'Timbradas', 'Horas trabajadas', 'Horas diurnas', 'Horas nocturnas'].map((label) => xlsxCell(label, XLSX_STYLE.tableHeader)),
   ];
 
   const codeSheets = codeGroups.map(([code, codeRows]) => {
@@ -1266,6 +1305,7 @@ function buildBiometricPreviewXlsx(
       sundayNight: summary.payroll.sundayNightHours * rates.sundayNight,
       sundayExtraNight: summary.payroll.sundayExtraNightHours * rates.sundayExtraNight,
     };
+    const summaryStyle = summary.reviewDays > 0 ? XLSX_STYLE.warning : 3;
     summaryRows.push([
       xlsxCell(biometricCodeDisplayName(code, employeeByBiometricCode)),
       xlsxCell(code),
@@ -1277,122 +1317,127 @@ function buildBiometricPreviewXlsx(
       xlsxCell(summary.totalHours),
       xlsxCell(summary.dayHours),
       xlsxCell(summary.nightHours),
+    ].map((cell) => ({ ...cell, style: cell.style || summaryStyle })));
+
+    const estimatedTotal = Object.values(values).reduce((sum, value) => sum + value, 0);
+    const rateRows: XlsxCell[][] = [
+      ['Hora ordinaria', 'Base / divisor legal', rates.ordinary, summary.payroll.ordinaryHours, values.ordinary],
+      ['Hora extra diurna', '+25%', rates.dayExtra, summary.payroll.extraDayHours, values.dayExtra],
+      ['Hora extra nocturna', '+75%', rates.nightExtra, summary.payroll.extraNightHours, values.nightExtra],
+      ['Recargo nocturno', '+35%', rates.nightSurcharge, summary.payroll.nightSurchargeHours, values.nightSurcharge],
+      ['Dominical / festiva diurna', '+80%', rates.sundayDay, summary.payroll.sundayDayHours, values.sundayDay],
+      ['Extra diurna dominical / festiva', '+80% + 25%', rates.sundayExtraDay, summary.payroll.sundayExtraDayHours, values.sundayExtraDay],
+      ['Dominical / festiva nocturna', '+80% + 35%', rates.sundayNight, summary.payroll.sundayNightHours, values.sundayNight],
+      ['Extra nocturna dominical / festiva', '+80% + 75%', rates.sundayExtraNight, summary.payroll.sundayExtraNightHours, values.sundayExtraNight],
+    ].map(([concept, rule, hourValue, hours, amount]) => [
+      xlsxCell(String(concept), 3),
+      xlsxCell(String(rule), 3),
+      xlsxCell(roundedCurrency(Number(hourValue)), 3),
+      xlsxCell(Number(hours), 3),
+      xlsxCell(roundedCurrency(Number(amount)), 3),
     ]);
 
     const detailHeader = [
       'COD',
-      'Entrada',
-      'Salida',
-      'Duracion',
-      'Horas trabajadas',
-      'Horas ord.',
-      'Inicio almuerzo',
-      'Fin almuerzo',
-      'Descanso',
-      'Horas extras diurnas',
-      'Horas extras noct.',
-      'Recargo nocturno',
-      'Hora dominical diurna',
-      'Horas extras diurna dom.',
-      'Hora dominical noct.',
-      'Horas extras noct. dom.',
-      'Incapacidades',
-      'Hora ordinaria',
-      'Festivo',
-      'Estado',
-      'Observacion',
-      'Analisis',
-      'Todas las timbradas',
+      'FECHA',
+      'DIA',
+      'ENTRADA',
+      'SALIDA',
+      'DURACION',
+      'HORAS TRABAJADAS',
+      'HORAS ORD.',
+      'INICIO ALMUERZO',
+      'FIN ALMUERZO',
+      'DESCANSO',
+      'H. EXTRAS DIURNAS',
+      'H. EXTRAS NOCT.',
+      'RECARGO NOCT.',
+      'DOMINICAL DIURNA',
+      'EXTRA DIURNA DOM.',
+      'DOMINICAL NOCT.',
+      'EXTRA NOCT. DOM.',
+      'INCAPACIDADES',
+      'HORA ORDINARIA',
+      'FESTIVO',
+      'ESTADO',
+      'OBSERVACION',
+      'ANALISIS',
+      'TIMBRADAS',
+      'TODAS LAS TIMBRADAS',
     ];
     const dayRows = buildBiometricCodeDayRows(code, codeRows, holidaysByDate, exportRange);
     const totalRow = [
-      xlsxCell('TOTALES', 3),
+      xlsxCell('TOTALES', XLSX_STYLE.total),
       xlsxCell(''),
       xlsxCell(''),
       xlsxCell(''),
-      xlsxCell(summary.payroll.rawHours, 3),
-      xlsxCell(summary.payroll.ordinaryHours, 3),
       xlsxCell(''),
       xlsxCell(''),
-      xlsxCell(summary.payroll.lunchHours, 3),
-      xlsxCell(summary.payroll.extraDayHours, 3),
-      xlsxCell(summary.payroll.extraNightHours, 3),
-      xlsxCell(summary.payroll.nightSurchargeHours, 3),
-      xlsxCell(summary.payroll.sundayDayHours, 3),
-      xlsxCell(summary.payroll.sundayExtraDayHours, 3),
-      xlsxCell(summary.payroll.sundayNightHours, 3),
-      xlsxCell(summary.payroll.sundayExtraNightHours, 3),
-      xlsxCell(0, 3),
-      xlsxCell(summary.payroll.ordinaryHours, 3),
+      xlsxCell(summary.payroll.rawHours, XLSX_STYLE.total),
+      xlsxCell(summary.payroll.ordinaryHours, XLSX_STYLE.total),
+      xlsxCell(''),
+      xlsxCell(''),
+      xlsxCell(summary.payroll.lunchHours, XLSX_STYLE.total),
+      xlsxCell(summary.payroll.extraDayHours, XLSX_STYLE.total),
+      xlsxCell(summary.payroll.extraNightHours, XLSX_STYLE.total),
+      xlsxCell(summary.payroll.nightSurchargeHours, XLSX_STYLE.total),
+      xlsxCell(summary.payroll.sundayDayHours, XLSX_STYLE.total),
+      xlsxCell(summary.payroll.sundayExtraDayHours, XLSX_STYLE.total),
+      xlsxCell(summary.payroll.sundayNightHours, XLSX_STYLE.total),
+      xlsxCell(summary.payroll.sundayExtraNightHours, XLSX_STYLE.total),
+      xlsxCell(0, XLSX_STYLE.total),
+      xlsxCell(summary.payroll.ordinaryHours, XLSX_STYLE.total),
+      xlsxCell(''),
+      xlsxCell(summary.reviewDays > 0 ? `${summary.reviewDays} dia(s) por revisar` : 'OK', summary.reviewDays > 0 ? XLSX_STYLE.warning : XLSX_STYLE.total),
+      xlsxCell(''),
+      xlsxCell(''),
+      xlsxCell(summary.rawMarkCount, XLSX_STYLE.total),
+      xlsxCell(''),
     ];
     const valueRow = [
-      xlsxCell('Bonificacion', 3),
+      xlsxCell('VALOR ESTIMADO', XLSX_STYLE.total),
       xlsxCell(''),
       xlsxCell(''),
       xlsxCell(''),
       xlsxCell(''),
-      xlsxCell(roundedCurrency(values.ordinary), 3),
+      xlsxCell(''),
+      xlsxCell(''),
+      xlsxCell(roundedCurrency(values.ordinary), XLSX_STYLE.total),
       xlsxCell(''),
       xlsxCell(''),
       xlsxCell(''),
-      xlsxCell(roundedCurrency(values.dayExtra), 3),
-      xlsxCell(roundedCurrency(values.nightExtra), 3),
-      xlsxCell(roundedCurrency(values.nightSurcharge), 3),
-      xlsxCell(roundedCurrency(values.sundayDay), 3),
-      xlsxCell(roundedCurrency(values.sundayExtraDay), 3),
-      xlsxCell(roundedCurrency(values.sundayNight), 3),
-      xlsxCell(roundedCurrency(values.sundayExtraNight), 3),
-      xlsxCell(0, 3),
-      xlsxCell(roundedCurrency(values.ordinary), 3),
+      xlsxCell(roundedCurrency(values.dayExtra), XLSX_STYLE.total),
+      xlsxCell(roundedCurrency(values.nightExtra), XLSX_STYLE.total),
+      xlsxCell(roundedCurrency(values.nightSurcharge), XLSX_STYLE.total),
+      xlsxCell(roundedCurrency(values.sundayDay), XLSX_STYLE.total),
+      xlsxCell(roundedCurrency(values.sundayExtraDay), XLSX_STYLE.total),
+      xlsxCell(roundedCurrency(values.sundayNight), XLSX_STYLE.total),
+      xlsxCell(roundedCurrency(values.sundayExtraNight), XLSX_STYLE.total),
+      xlsxCell(0, XLSX_STYLE.total),
+      xlsxCell(roundedCurrency(values.ordinary), XLSX_STYLE.total),
+      xlsxCell(''),
+      xlsxCell(`TOTAL: ${roundedCurrency(estimatedTotal)}`, XLSX_STYLE.total),
+      xlsxCell(''),
+      xlsxCell(''),
+      xlsxCell(''),
+      xlsxCell(''),
     ];
 
     return {
       name: uniqueSheetName(`COD ${code}`, usedSheetNames),
-      widths: [10, 22, 22, 16, 17, 12, 18, 16, 11, 19, 18, 16, 21, 25, 21, 24, 14, 13, 24, 14, 20, 44, 36],
+      widths: [10, 14, 12, 13, 13, 13, 17, 12, 17, 16, 11, 18, 17, 16, 19, 21, 19, 21, 14, 14, 24, 14, 20, 42, 11, 42],
       rows: [
-        [xlsxCell(displayName, 1), xlsxCell(`Codigo ${code}`), xlsxCell(fileName || 'TXT biometrico')],
-        [xlsxCell('Periodo', 3), xlsxCell(exportRange.length ? `${formatDate(exportRange[0])} - ${formatDate(exportRange[exportRange.length - 1])}` : 'Sin rango'), xlsxCell('Salario base', 3), xlsxCell(baseSalary)],
+        [xlsxCell('NOMINA BIOMETRICA', XLSX_STYLE.title), xlsxCell(displayName, XLSX_STYLE.title), xlsxCell(`CODIGO ${code}`, XLSX_STYLE.title)],
+        [xlsxCell('Archivo', XLSX_STYLE.softHeader), xlsxCell(fileName || 'TXT biometrico'), xlsxCell('Periodo', XLSX_STYLE.softHeader), xlsxCell(exportRange.length ? `${formatDate(exportRange[0])} - ${formatDate(exportRange[exportRange.length - 1])}` : 'Sin rango')],
+        [xlsxCell('Empleado', XLSX_STYLE.softHeader), xlsxCell(displayName), xlsxCell('Salario base', XLSX_STYLE.softHeader), xlsxCell(baseSalary), xlsxCell('Dias por revisar', XLSX_STYLE.softHeader), xlsxCell(summary.reviewDays)],
         [],
-        [
-          xlsxCell(''),
-          xlsxCell(''),
-          xlsxCell(''),
-          xlsxCell(''),
-          xlsxCell(''),
-          xlsxCell(''),
-          xlsxCell(''),
-          xlsxCell('Salario base', 2),
-          xlsxCell('Hora ordinaria', 2),
-          xlsxCell('Hora extra diurna 25%', 2),
-          xlsxCell('Hora extra nocturna 75%', 2),
-          xlsxCell('Recargo nocturno 35%', 2),
-          xlsxCell('Hora dominical diurna 80%', 2),
-          xlsxCell('Hora extra diurna dominical 80%+25%', 2),
-          xlsxCell('Hora dominical nocturna 80%+35%', 2),
-          xlsxCell('Hora extra nocturna dominical 80%+75%', 2),
-          xlsxCell('Incapacidades', 2),
-        ],
-        [
-          xlsxCell(''),
-          xlsxCell(''),
-          xlsxCell(''),
-          xlsxCell(''),
-          xlsxCell(''),
-          xlsxCell(''),
-          xlsxCell(''),
-          xlsxCell(baseSalary, 3),
-          xlsxCell(roundedCurrency(rates.ordinary), 3),
-          xlsxCell(roundedCurrency(rates.dayExtra), 3),
-          xlsxCell(roundedCurrency(rates.nightExtra), 3),
-          xlsxCell(roundedCurrency(rates.nightSurcharge), 3),
-          xlsxCell(roundedCurrency(rates.sundayDay), 3),
-          xlsxCell(roundedCurrency(rates.sundayExtraDay), 3),
-          xlsxCell(roundedCurrency(rates.sundayNight), 3),
-          xlsxCell(roundedCurrency(rates.sundayExtraNight), 3),
-          xlsxCell(0, 3),
-        ],
+        [xlsxCell('TARIFAS, HORAS Y VALORES', XLSX_STYLE.darkHeader)],
+        ['Concepto', 'Regla', 'Valor hora', 'Horas', 'Valor estimado'].map((label) => xlsxCell(label, XLSX_STYLE.tableHeader)),
+        ...rateRows,
+        [xlsxCell('TOTAL ESTIMADO', XLSX_STYLE.total), xlsxCell(''), xlsxCell(''), xlsxCell(''), xlsxCell(roundedCurrency(estimatedTotal), XLSX_STYLE.total)],
         [],
-        detailHeader.map((label) => xlsxCell(label, 2)),
+        [xlsxCell('DETALLE DIARIO', XLSX_STYLE.darkHeader)],
+        detailHeader.map((label) => xlsxCell(label, XLSX_STYLE.tableHeader)),
         ...dayRows,
         totalRow,
         valueRow,
