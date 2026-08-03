@@ -4590,6 +4590,57 @@ export function AdminHR() {
                 </div>
               </Card>
             )}
+            {viewingRequest.request_type === 'OVERTIME' && (
+              <Card className="p-4">
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <div className="text-sm font-semibold text-gray-900">Horario de horas extra</div>
+                  <Badge label={`${Number(viewingRequest.hours_count ?? 0).toFixed(1)} h`} color="blue" />
+                </div>
+                {viewingRequest.overtime_shifts?.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="text-left text-[10px] uppercase text-gray-400 border-b border-gray-100">
+                          <th className="py-2 pr-3">Fecha</th>
+                          <th className="py-2 pr-3">Desde</th>
+                          <th className="py-2 pr-3">Hasta</th>
+                          <th className="py-2 pr-3">Horas</th>
+                          <th className="py-2 pr-3">Notas</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[...viewingRequest.overtime_shifts]
+                          .sort((left, right) => `${left.date} ${left.start_time}`.localeCompare(`${right.date} ${right.start_time}`))
+                          .map((shift) => (
+                            <tr key={shift.id} className="border-b border-gray-50">
+                              <td className="py-2 pr-3 whitespace-nowrap">{parseDate(shift.date)}</td>
+                              <td className="py-2 pr-3 font-mono">{formatTime(shift.start_time)}</td>
+                              <td className="py-2 pr-3 font-mono">{formatTime(shift.end_time)}</td>
+                              <td className="py-2 pr-3 font-semibold">{Number(shift.hours_count ?? 0).toFixed(1)} h</td>
+                              <td className="py-2 pr-3 text-gray-500">{shift.notes || '—'}</td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="grid sm:grid-cols-3 gap-3 text-xs">
+                    <div className="rounded-lg border border-gray-100 bg-gray-50/60 px-3 py-2">
+                      <div className="text-[10px] font-semibold uppercase text-gray-400">Fecha</div>
+                      <div className="text-gray-700">{parseDate(viewingRequest.start_date)}</div>
+                    </div>
+                    <div className="rounded-lg border border-gray-100 bg-gray-50/60 px-3 py-2">
+                      <div className="text-[10px] font-semibold uppercase text-gray-400">Desde</div>
+                      <div className="font-mono text-gray-700">{viewingRequest.start_time ? formatTime(viewingRequest.start_time) : '—'}</div>
+                    </div>
+                    <div className="rounded-lg border border-gray-100 bg-gray-50/60 px-3 py-2">
+                      <div className="text-[10px] font-semibold uppercase text-gray-400">Hasta</div>
+                      <div className="font-mono text-gray-700">{viewingRequest.end_time ? formatTime(viewingRequest.end_time) : '—'}</div>
+                    </div>
+                  </div>
+                )}
+              </Card>
+            )}
             {(viewingRequest.request_type === 'SCHEDULE_CHANGE' || viewingRequest.subtype === 'SCHEDULE_CHANGE') && viewingRequest.requested_work_schedule_days?.length > 0 && (
               <Card className="p-4">
                 <div className="flex items-center justify-between gap-3 mb-3">
