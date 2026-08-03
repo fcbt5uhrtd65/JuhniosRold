@@ -413,9 +413,16 @@ class EmployeeBiometricIdSerializer(serializers.ModelSerializer):
             queryset = queryset.filter(device=device) if device else queryset.filter(device__isnull=True)
             if instance:
                 queryset = queryset.exclude(pk=instance.pk)
-            if queryset.exists():
+            existing = queryset.select_related("employee").first()
+            if existing:
+                target_employee = attrs.get("employee", getattr(instance, "employee", None))
+                if target_employee and existing.employee_id == target_employee.id:
+                    message = "Este empleado ya tiene guardado ese mismo código para ese dispositivo."
+                else:
+                    employee_name = str(existing.employee)
+                    message = f"Este código activo ya está asignado a {employee_name} para ese dispositivo."
                 raise serializers.ValidationError({
-                    "biometric_code": ["Este código activo ya está asignado a otro empleado para ese dispositivo."],
+                    "biometric_code": [message],
                 })
         return attrs
 

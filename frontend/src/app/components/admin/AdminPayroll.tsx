@@ -32,6 +32,7 @@ import {
   inputCls,
   selectCls,
 } from './AdminUI';
+import { Pagination } from './Pagination';
 import {
   applyWorkScheduleTemplate,
   approvePayrollPeriod,
@@ -81,6 +82,8 @@ const PAYROLL_SECTIONS: Array<{ id: PayrollSection; label: string; icon: typeof 
   { id: 'biometric', label: 'Biométrico', icon: Fingerprint },
   { id: 'holidays', label: 'Festivos y parámetros', icon: CalendarDays },
 ];
+
+const BIOMETRIC_MAPPING_PAGE_SIZE = 6;
 
 const PERIOD_STATUS_LABELS: Record<PayrollPeriodStatus, string> = {
   OPEN: 'Abierto',
@@ -2384,13 +2387,14 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
   const [savedAnalyses, setSavedAnalyses] = useState<SavedBiometricAnalysis[]>([]);
   const [selectedSavedAnalysisId, setSelectedSavedAnalysisId] = useState('');
   const [currentSavedAnalysisId, setCurrentSavedAnalysisId] = useState<string | null>(null);
+  const [mappingPage, setMappingPage] = useState(1);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const [devicesRes, mappingsRes, pendingRes, intelligenceRes, parametersRes] = await Promise.allSettled([
         getBiometricDevices(),
-        getEmployeeBiometricIds(),
+        getEmployeeBiometricIds({ limit: 1000 }),
         getPendingCorrectionAttendance(),
         getAttendanceIntelligenceSettings(),
         getPayrollLegalParameters(),
@@ -2557,6 +2561,26 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
     });
     return byCode;
   }, [mappings, employeeById]);
+
+  const sortedMappings = useMemo(() => {
+    return [...mappings].sort((left, right) => {
+      const leftEmployee = employeeName(employeeById.get(left.employee));
+      const rightEmployee = employeeName(employeeById.get(right.employee));
+      return leftEmployee.localeCompare(rightEmployee, 'es', { numeric: true }) ||
+        left.biometric_code.localeCompare(right.biometric_code, 'es', { numeric: true });
+    });
+  }, [mappings, employeeById]);
+
+  const mappingTotalPages = Math.max(1, Math.ceil(sortedMappings.length / BIOMETRIC_MAPPING_PAGE_SIZE));
+  const paginatedMappings = useMemo(() => {
+    const page = Math.min(mappingPage, mappingTotalPages);
+    const start = (page - 1) * BIOMETRIC_MAPPING_PAGE_SIZE;
+    return sortedMappings.slice(start, start + BIOMETRIC_MAPPING_PAGE_SIZE);
+  }, [sortedMappings, mappingPage, mappingTotalPages]);
+
+  useEffect(() => {
+    setMappingPage((page) => Math.min(page, mappingTotalPages));
+  }, [mappingTotalPages]);
 
   const previewByCode = useMemo(() => {
     const groups = new Map<
@@ -3136,7 +3160,7 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
                 </tr>
               </thead>
               <tbody>
-                {mappings.map((mapping) => (
+                {paginatedMappings.map((mapping) => (
                   <tr key={mapping.id} className="border-b border-gray-50">
                     <td className="py-2 pr-3 font-mono">{mapping.biometric_code}</td>
                     <td className="py-2 pr-3">{employeeName(employeeById.get(mapping.employee))}</td>
@@ -3150,6 +3174,18 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
                 ))}
               </tbody>
             </table>
+            {mappings.length > BIOMETRIC_MAPPING_PAGE_SIZE && (
+              <div className="mt-3">
+                <Pagination
+                  currentPage={Math.min(mappingPage, mappingTotalPages)}
+                  totalPages={mappingTotalPages}
+                  totalItems={mappings.length}
+                  itemsPerPage={BIOMETRIC_MAPPING_PAGE_SIZE}
+                  itemsPerPageOptions={[6]}
+                  onPageChange={setMappingPage}
+                />
+              </div>
+            )}
           </div>
         )}
       </Card>

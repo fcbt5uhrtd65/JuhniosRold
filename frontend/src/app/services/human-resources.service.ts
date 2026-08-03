@@ -1278,8 +1278,8 @@ export async function createBiometricDevice(payload: { name: string; location?: 
   throw new Error(res.message);
 }
 
-export async function getEmployeeBiometricIds(params?: { employee?: string }): Promise<EmployeeBiometricId[]> {
-  const query = buildQuery({ employee: params?.employee });
+export async function getEmployeeBiometricIds(params?: { employee?: string; page?: number; limit?: number }): Promise<EmployeeBiometricId[]> {
+  const query = buildQuery({ employee: params?.employee, page: params?.page, page_size: params?.limit });
   const res = await api.get<EmployeeBiometricId[] | PaginatedResponse<EmployeeBiometricId>>(`${BIOMETRIC_IDS_PATH}${query}`);
   return normalizeListResponse(res.data).data;
 }
