@@ -41,6 +41,7 @@ from ..application.use_cases import (
     LoadMicrobiologySpecificationFromMaster,
     RecordWeightVolumeSample,
     ReleaseBatch,
+    RemoveLineIdentification,
     SignDocument,
     StartBatch,
     VerifyDispensingLine,
@@ -146,6 +147,18 @@ class ManufacturingBaseViewSet(SoftDeleteModelViewSet):
             resource_type=instance.__class__.__name__,
             resource_id=instance.pk,
         )
+
+    def _require_actor(self, request):
+        """Perfil de empleado del usuario autenticado, requerido como actor de
+        cualquier acción GMP trazable (pesar, verificar, aprobar, liberar...).
+        Sin este guard la acción se ejecutaba igual con performed_by/verified_by
+        en None, dejando un vacío silencioso en la trazabilidad de quién hizo qué."""
+        actor = getattr(request.user, "employee_profile", None)
+        if actor is None:
+            raise BusinessRuleViolation(
+                "Tu usuario no tiene un perfil de empleado asociado; no puedes realizar esta acción."
+            )
+        return actor
 
     def perform_create(self, serializer):
         super().perform_create(serializer)
@@ -451,7 +464,7 @@ class DispensingLineViewSet(ManufacturingBaseViewSet):
                 gross_weight=request.data.get("gross_weight"),
                 tare=request.data.get("tare"),
                 container=request.data.get("container", ""),
-                actor=getattr(request.user, "employee_profile", None),
+                actor=self._require_actor(request),
             )
         except BusinessRuleViolation as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
@@ -462,7 +475,7 @@ class DispensingLineViewSet(ManufacturingBaseViewSet):
     def verify(self, request, pk=None):
         line = self.get_object()
         try:
-            line = VerifyDispensingLine().execute(line, actor=getattr(request.user, "employee_profile", None))
+            line = VerifyDispensingLine().execute(line, actor=self._require_actor(request))
         except BusinessRuleViolation as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         self._audit("verify", line)
@@ -534,7 +547,7 @@ class ManufacturingStepExecutionViewSet(ManufacturingBaseViewSet):
         try:
             execution = CompleteManufacturingStep().execute(
                 execution,
-                actor=getattr(request.user, "employee_profile", None),
+                actor=self._require_actor(request),
                 status=new_status,
                 actual_data=actual_data,
                 deviation=request.data.get("deviation", ""),
@@ -556,7 +569,7 @@ class LineClearanceViewSet(ManufacturingBaseViewSet):
     def approve(self, request, pk=None):
         clearance = self.get_object()
         try:
-            clearance = ApproveLineClearance().execute(clearance, actor=getattr(request.user, "employee_profile", None), approve=True)
+            clearance = ApproveLineClearance().execute(clearance, actor=self._require_actor(request), approve=True)
         except BusinessRuleViolation as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         self._audit("approve", clearance)
@@ -565,7 +578,7 @@ class LineClearanceViewSet(ManufacturingBaseViewSet):
     @action(detail=True, methods=("post",), url_path="reject")
     def reject(self, request, pk=None):
         clearance = self.get_object()
-        clearance = ApproveLineClearance().execute(clearance, actor=getattr(request.user, "employee_profile", None), approve=False)
+        clearance = ApproveLineClearance().execute(clearance, actor=self._require_actor(request), approve=False)
         self._audit("reject", clearance)
         return Response(self.get_serializer(clearance).data)
 
@@ -610,6 +623,18 @@ class LineIdentificationViewSet(ManufacturingBaseViewSet):
     queryset = LineIdentification.objects.select_related("batch", "placed_by", "removed_by")
     serializer_class = LineIdentificationSerializer
     filterset_fields = ("batch",)
+
+    @action(detail=True, methods=("post",), url_path="remove")
+    def remove(self, request, pk=None):
+        line_identification = self.get_object()
+        try:
+            line_identification = RemoveLineIdentification().execute(
+                line_identification, actor=self._require_actor(request)
+            )
+        except BusinessRuleViolation as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        self._audit("remove", line_identification)
+        return Response(self.get_serializer(line_identification).data)
 
     @action(detail=True, methods=("get",), url_path="export")
     def export(self, request, pk=None):
@@ -701,7 +726,7 @@ class WeightVolumeControlViewSet(ManufacturingBaseViewSet):
                 gross_weight=request.data.get("gross_weight"),
                 tare=request.data.get("tare"),
                 volume=request.data.get("volume"),
-                actor=getattr(request.user, "employee_profile", None),
+                actor=self._require_actor(request),
             )
         except BusinessRuleViolation as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
@@ -713,7 +738,7 @@ class WeightVolumeControlViewSet(ManufacturingBaseViewSet):
     def authorize_resume(self, request, pk=None):
         control = self.get_object()
         try:
-            control = AuthorizeWeightVolumeResume().execute(control, actor=getattr(request.user, "employee_profile", None))
+            control = AuthorizeWeightVolumeResume().execute(control, actor=self._require_actor(request))
         except BusinessRuleViolation as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         self._audit("authorize-resume", control)
@@ -806,7 +831,7 @@ class BatchLotMarkingViewSet(ManufacturingBaseViewSet):
             marking = CreateBatchLotMarking().execute(
                 packaging_control,
                 stage=stage,
-                actor=getattr(request.user, "employee_profile", None),
+                actor=self._require_actor(request),
                 **validated_fields,
             )
         except BusinessRuleViolation as exc:
@@ -966,7 +991,7 @@ class BatchReleaseViewSet(ManufacturingBaseViewSet):
         try:
             release = ReleaseBatch().execute(
                 batch,
-                actor=getattr(request.user, "employee_profile", None),
+                actor=self._require_actor(request),
                 released_quantity=request.data.get("released_quantity", 0),
                 retained_quantity=request.data.get("retained_quantity", 0),
                 rejected_quantity=request.data.get("rejected_quantity", 0),
