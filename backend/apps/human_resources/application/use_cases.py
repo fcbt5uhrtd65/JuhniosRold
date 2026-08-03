@@ -1071,17 +1071,12 @@ class ImportBiometricFile:
 
 
 class ConsolidateAttendanceFromPunches:
-    """Agrupa las marcaciones no-duplicadas de un lote de importación por
+    """Agrupa las marcaciones de un lote de importación por
     (empleado, fecha) e infiere entrada/salida/descansos, creando o
     actualizando la fila Attendance consolidada de ese día.
 
     Regla de inferencia (dado que las marcaciones olvidadas/incompletas son
     el caso esperado, no la excepción):
-      - Antes de aplicar cualquier regla de conteo, se colapsan marcaciones
-        del mismo día que caigan ambas dentro de la ventana de proximidad al
-        horario esperado (ver AttendanceIntelligenceSettings) — cubre "marqué,
-        pensé que había fallado, y volví a marcar" cuando la reimportación ya
-        pasó la ventana de deduplicación fina de ImportBiometricFile.
       - 2 marcaciones: la más temprana = check_in, la más tardía = check_out.
       - 4 marcaciones: 1a=check_in, 2a=break_start, 3a=break_end, 4a=check_out.
       - 1 marcación: se compara contra el horario esperado del empleado ese
@@ -1101,7 +1096,7 @@ class ConsolidateAttendanceFromPunches:
     @transaction.atomic
     def execute(self, *, import_batch, actor=None):
         punches = list(
-            import_batch.punches.filter(is_duplicate=False, matched_employee__isnull=False)
+            import_batch.punches.filter(matched_employee__isnull=False)
             .select_related("matched_employee")
             .order_by("matched_employee_id", "punched_at")
         )
@@ -1110,9 +1105,6 @@ class ConsolidateAttendanceFromPunches:
         for punch in punches:
             key = (punch.matched_employee_id, punch.punched_at.date())
             by_employee_day.setdefault(key, []).append(punch)
-
-        settings_row = get_attendance_intelligence_settings()
-        proximity_window = timedelta(minutes=settings_row.schedule_proximity_minutes)
 
         created = 0
         updated = 0
@@ -1132,7 +1124,6 @@ class ConsolidateAttendanceFromPunches:
             employee = employees_cache[employee_id]
             schedule = get_schedule_for(employee, day)
 
-            day_punches = self._collapse_near_schedule_duplicates(day_punches, schedule, day, proximity_window)
             values = self._infer_attendance(day_punches, schedule, day)
             if values["has_incomplete_marks"]:
                 incomplete += 1
@@ -1172,38 +1163,6 @@ class ConsolidateAttendanceFromPunches:
             return None, None
         day_slots.sort(key=lambda d: d.expected_start_time)
         return day_slots[0].expected_start_time, day_slots[-1].expected_end_time
-
-    def _collapse_near_schedule_duplicates(self, day_punches, schedule, day, proximity_window):
-        """Colapsa marcaciones consecutivas que caen dentro de la misma
-        ventana de proximidad al horario esperado (ambas "cerca de la
-        entrada" o ambas "cerca de la salida") — la marcación repetida por
-        error humano suele estar minutos después de la real, ya fuera del
-        rango fino de ImportBiometricFile pero claramente pegada al mismo
-        punto del horario, no a un evento distinto del día."""
-        expected_start, expected_end = self._expected_times(schedule, day)
-        if not expected_start or len(day_punches) < 2:
-            return day_punches
-
-        def nearest_anchor_offset(punch_dt):
-            start_dt = datetime.combine(day, expected_start)
-            end_dt = datetime.combine(day, expected_end) if expected_end else None
-            offsets = [abs(punch_dt - start_dt)]
-            if end_dt:
-                offsets.append(abs(punch_dt - end_dt))
-            return min(offsets)
-
-        collapsed = [day_punches[0]]
-        for punch in day_punches[1:]:
-            previous = collapsed[-1]
-            close_to_each_other = (punch.punched_at - previous.punched_at) <= proximity_window
-            both_near_same_anchor = (
-                nearest_anchor_offset(previous.punched_at) <= proximity_window
-                and nearest_anchor_offset(punch.punched_at) <= proximity_window
-            )
-            if close_to_each_other and both_near_same_anchor:
-                continue  # se descarta la repetida, se conserva la primera vista de ese punto
-            collapsed.append(punch)
-        return collapsed
 
     def _infer_attendance(self, day_punches, schedule=None, day=None) -> dict:
         action_values = self._infer_attendance_from_punch_actions(day_punches)
@@ -1267,6 +1226,10 @@ class ConsolidateAttendanceFromPunches:
         break_end = self._last_punch_time(action_punches["break_end"])
 
         has_incomplete_marks = bool(unknown_punches) or not (check_in and check_out)
+        if len(day_punches) not in (2, 4):
+            has_incomplete_marks = True
+        if any(getattr(punch, "is_duplicate", False) for punch in day_punches):
+            has_incomplete_marks = True
         if check_in and check_out and check_out <= check_in:
             has_incomplete_marks = True
         if (break_start and not break_end) or (break_end and not break_start):

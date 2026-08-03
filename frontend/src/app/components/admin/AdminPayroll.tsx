@@ -790,34 +790,6 @@ function enrichPreviewRow(row: Omit<BiometricPreviewRow, 'workedHours' | 'dayHou
   return { ...row, ...calculatePreviewHours(row) };
 }
 
-function compactRepeatedPreviewPunches(punches: BiometricPreviewPunch[], windowMinutes: number): BiometricPreviewPunch[] {
-  const sorted = [...punches].sort((left, right) => left.time.localeCompare(right.time));
-  if (sorted.length <= 1) return sorted;
-
-  const compacted: BiometricPreviewPunch[] = [];
-  let current = sorted[0];
-
-  for (const punch of sorted.slice(1)) {
-    const currentMinutes = timeToMinutes(current.time);
-    const punchMinutes = timeToMinutes(punch.time);
-    const sameAction = current.action === punch.action || !current.action || !punch.action;
-    const closeEnough =
-      currentMinutes !== null &&
-      punchMinutes !== null &&
-      Math.abs(punchMinutes - currentMinutes) < windowMinutes;
-
-    if (sameAction && closeEnough) {
-      current = punch;
-    } else {
-      compacted.push(current);
-      current = punch;
-    }
-  }
-
-  compacted.push(current);
-  return compacted;
-}
-
 function chooseLunchPair(punches: BiometricPreviewPunch[]): [BiometricPreviewPunch, BiometricPreviewPunch] | null {
   const candidates = punches
     .slice(1, -1)
@@ -843,11 +815,12 @@ function chooseLunchPair(punches: BiometricPreviewPunch[]): [BiometricPreviewPun
 }
 
 function classifyPreviewPunches(punches: BiometricPreviewPunch[], rawMarkCount: number): Omit<BiometricPreviewRow, 'key' | 'code' | 'date' | 'workedHours' | 'dayHours' | 'nightHours'> {
+  const sortedPunches = [...punches].sort((left, right) => left.time.localeCompare(right.time));
   const analysis: string[] = [];
-  const ignoredMarkCount = Math.max(0, rawMarkCount - punches.length);
-  if (ignoredMarkCount > 0) analysis.push(`${ignoredMarkCount} marca(s) repetida(s) limpiada(s)`);
+  const ignoredMarkCount = 0;
+  if (rawMarkCount > 4) analysis.push(`${rawMarkCount} timbradas en el dia; revisar antes de liquidar`);
 
-  const hasActions = punches.some((punch) => punch.action);
+  const hasActions = sortedPunches.some((punch) => punch.action);
   let checkIn = '-';
   let checkOut = '-';
   let breakStart = '-';
@@ -855,58 +828,59 @@ function classifyPreviewPunches(punches: BiometricPreviewPunch[], rawMarkCount: 
   let status: BiometricPreviewRow['status'] = 'Revisar';
 
   if (hasActions) {
-    checkIn = firstActionTime(punches, 'check_in');
-    checkOut = lastActionTime(punches, 'check_out');
-    breakStart = firstActionTime(punches, 'break_start');
-    breakEnd = lastActionTime(punches, 'break_end');
+    checkIn = firstActionTime(sortedPunches, 'check_in');
+    checkOut = lastActionTime(sortedPunches, 'check_out');
+    breakStart = firstActionTime(sortedPunches, 'break_start');
+    breakEnd = lastActionTime(sortedPunches, 'break_end');
     status = checkIn !== '-' && checkOut !== '-' ? 'Completo' : 'Incompleto';
     if (status === 'Incompleto') analysis.push('El reloj envio acciones, pero falta entrada o salida');
-  } else if (punches.length === 0) {
+    if (rawMarkCount !== 2 && rawMarkCount !== 4) {
+      status = 'Revisar';
+      if (rawMarkCount <= 4) analysis.push(`${rawMarkCount} timbrada(s); revisar secuencia del dia`);
+    }
+  } else if (sortedPunches.length === 0) {
     analysis.push('Sin marcas utiles');
     status = 'Incompleto';
-  } else if (punches.length === 1) {
-    checkIn = punches[0].time;
+  } else if (sortedPunches.length === 1) {
+    checkIn = sortedPunches[0].time;
     status = 'Incompleto';
-    analysis.push('Solo hay una marca; falta salida');
+    analysis.push('1 timbrada; falta entrada o salida');
   } else {
-    checkIn = punches[0].time;
-    checkOut = punches[punches.length - 1].time;
+    checkIn = sortedPunches[0].time;
+    checkOut = sortedPunches[sortedPunches.length - 1].time;
 
-    if (punches.length === 2) {
+    if (sortedPunches.length === 2) {
       status = 'Completo';
-      analysis.push('Entrada y salida detectadas');
-    } else if (punches.length === 3) {
-      const middle = punches[1];
+    } else if (sortedPunches.length === 3) {
+      const middle = sortedPunches[1];
       const middleMinutes = timeToMinutes(middle.time);
       if (middleMinutes !== null && middleMinutes >= 10 * 60 && middleMinutes <= 15 * 60 + 30) {
         breakStart = middle.time;
-        analysis.push('Hay una sola marca de almuerzo; falta regreso de almuerzo');
+        analysis.push('3 timbradas; hay una sola marca de almuerzo');
       } else {
-        analysis.push('Hay una marca intermedia fuera de almuerzo; revisar');
+        analysis.push('3 timbradas; la marca intermedia debe revisarse');
       }
       status = 'Revisar';
-    } else if (punches.length === 4) {
-      breakStart = punches[1].time;
-      breakEnd = punches[2].time;
+    } else if (sortedPunches.length === 4) {
+      breakStart = sortedPunches[1].time;
+      breakEnd = sortedPunches[2].time;
       status = 'Completo';
-      analysis.push('Entrada, almuerzo y salida detectados');
     } else {
-      const lunchPair = chooseLunchPair(punches);
+      const lunchPair = chooseLunchPair(sortedPunches);
       if (lunchPair) {
         breakStart = lunchPair[0].time;
         breakEnd = lunchPair[1].time;
-        const extraCount = Math.max(0, punches.length - 4);
-        status = extraCount > 0 ? 'Revisar' : 'Completo';
-        analysis.push(`Almuerzo inferido; ${extraCount} marca(s) adicional(es) quedan para revisar`);
+        status = 'Revisar';
+        analysis.push('Se sugiere entrada, almuerzo y salida, pero sobran timbradas');
       } else {
         status = 'Revisar';
-        analysis.push('Muchas marcas sin par claro de almuerzo; se uso primera entrada y ultima salida');
+        analysis.push('No hay par claro de almuerzo; se sugiere primera entrada y ultima salida');
       }
     }
   }
 
   return {
-    markCount: punches.length,
+    markCount: sortedPunches.length,
     rawMarkCount,
     ignoredMarkCount,
     checkIn,
@@ -915,18 +889,17 @@ function classifyPreviewPunches(punches: BiometricPreviewPunch[], rawMarkCount: 
     checkOut,
     status,
     analysis: analysis.join('. '),
-    marks: punches.map((punch) => punch.time).join(', '),
+    marks: sortedPunches.map((punch) => punch.time).join(', '),
   };
 }
 
 function buildBiometricPreviewRows(
   groups: Map<string, { code: string; date: string; punches: BiometricPreviewPunch[] }>,
-  duplicateWindowMinutes = 15,
 ): BiometricPreviewRow[] {
   return [...groups.values()]
     .map((group) => {
-      const rawMarkCount = group.punches.length;
-      const punches = compactRepeatedPreviewPunches(group.punches, duplicateWindowMinutes);
+      const punches = [...group.punches].sort((left, right) => left.time.localeCompare(right.time));
+      const rawMarkCount = punches.length;
       const classification = classifyPreviewPunches(punches, rawMarkCount);
 
       return enrichPreviewRow({
@@ -1274,7 +1247,7 @@ function buildBiometricPreviewXlsx(
     [xlsxCell('Codigos', 3), xlsxCell(codeGroups.length)],
     [xlsxCell('Dias del rango', 3), xlsxCell(exportRange.length)],
     [],
-    ['Empleado', 'Codigo', 'Dias con marca', 'Faltas laborales', 'Festivos', 'Dias por revisar', 'Marcas utiles', 'Marcas originales', 'Repetidas limpiadas', 'Horas trabajadas', 'Horas diurnas', 'Horas nocturnas'].map((label) => xlsxCell(label, 2)),
+    ['Empleado', 'Codigo', 'Dias con marca', 'Faltas laborales', 'Festivos', 'Dias por revisar', 'Timbradas', 'Horas trabajadas', 'Horas diurnas', 'Horas nocturnas'].map((label) => xlsxCell(label, 2)),
   ];
 
   const codeSheets = codeGroups.map(([code, codeRows]) => {
@@ -1300,9 +1273,7 @@ function buildBiometricPreviewXlsx(
       xlsxCell(summary.missingWorkDays),
       xlsxCell(summary.holidayDays),
       xlsxCell(summary.reviewDays),
-      xlsxCell(summary.markCount),
       xlsxCell(summary.rawMarkCount),
-      xlsxCell(summary.ignoredMarkCount),
       xlsxCell(summary.totalHours),
       xlsxCell(summary.dayHours),
       xlsxCell(summary.nightHours),
@@ -1331,7 +1302,7 @@ function buildBiometricPreviewXlsx(
       'Estado',
       'Observacion',
       'Analisis',
-      'Todas las marcas',
+      'Todas las timbradas',
     ];
     const dayRows = buildBiometricCodeDayRows(code, codeRows, holidaysByDate, exportRange);
     const totalRow = [
@@ -2433,7 +2404,6 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
     setPreviewProgress({ processed: 0, total: 0, parsed: 0 });
     setPreviewParsing(true);
     const groups = new Map<string, { code: string; date: string; punches: BiometricPreviewPunch[] }>();
-    const duplicateWindowMinutes = intelligenceSettings?.duplicate_punch_window_minutes ?? 15;
     try {
       const text = await file.text();
       const lines = text.split(/\r?\n/);
@@ -2453,7 +2423,7 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
           }
         }
         if ((index + 1) % 500 === 0 || index === lines.length - 1) {
-          if (parsed > 0) setPreviewRows(buildBiometricPreviewRows(groups, duplicateWindowMinutes));
+          if (parsed > 0) setPreviewRows(buildBiometricPreviewRows(groups));
           setPreviewProgress({ processed: index + 1, total: lines.length, parsed });
           await new Promise((resolve) => setTimeout(resolve, 0));
         }
@@ -2477,7 +2447,7 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
         dateFrom: uploadDateFrom || undefined,
         dateTo: uploadDateTo || undefined,
       });
-      toast.success(`TXT procesado: ${batch.total_rows} marcaciones por codigo, ${batch.duplicate_rows} duplicadas.`);
+      toast.success(`TXT procesado: ${batch.total_rows} timbradas. Las repetidas no se borran; quedan para revisar.`);
       await load();
     } catch (error) {
       console.error(error);
@@ -2782,7 +2752,7 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
           <div>
             <p className="text-sm font-semibold text-gray-900">Inteligencia de marcaciones</p>
             <p className="text-[11px] text-gray-500 mt-0.5">
-              El TXT del huellero se guarda primero por codigo, sin relacionarlo automaticamente con empleados. Marcaciones separadas por menos de <strong>{intelligenceSettings?.duplicate_punch_window_minutes ?? 15} min</strong> se tratan como repetidas.
+              El TXT se analiza por codigo y dia. Todas las timbradas se conservan; si el conteo no es normal, el dia queda marcado para revisar.
             </p>
           </div>
           <SecondaryButton onClick={() => setShowIntelligenceModal(true)}>Ajustar</SecondaryButton>
@@ -2861,13 +2831,14 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
             <div>
               <p className="text-sm font-semibold text-gray-900">Tabla analizada del TXT</p>
               <p className="text-[11px] text-gray-500">
-                {previewFileName || 'Archivo seleccionado'} - {previewProgress.parsed} marcaciones tomadas - {previewByCode.length} codigos - {previewRows.length} dias
+                {previewFileName || 'Archivo seleccionado'} - {previewProgress.parsed} timbradas - {previewByCode.length} codigos - {previewRows.length} dias analizados
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Badge label={`${previewRows.reduce((sum, row) => sum + row.workedHours, 0).toFixed(2)} hrs trabajadas`} color="gray" />
               <Badge label={`${previewRows.reduce((sum, row) => sum + row.dayHours, 0).toFixed(2)} diurnas`} color="green" />
               <Badge label={`${previewRows.reduce((sum, row) => sum + row.nightHours, 0).toFixed(2)} nocturnas`} color="blue" />
+              <Badge label={`${previewRows.filter((row) => row.status !== 'Completo').length} por revisar`} color={previewRows.some((row) => row.status !== 'Completo') ? 'yellow' : 'green'} />
               <SecondaryButton onClick={() => setPreviewMode((mode) => (mode === 'table' ? 'calendar' : 'table'))} icon={<RotateCw size={13} />}>
                 {previewMode === 'table' ? 'Girar a calendario' : 'Girar a tabla'}
               </SecondaryButton>
@@ -2944,7 +2915,9 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
                               const weekend = isWeekendDate(date);
                               const missing = !row;
                               const statusLabel = row
-                                ? `${row.workedHours.toFixed(1)}h`
+                                ? row.status === 'Completo'
+                                  ? `${row.workedHours.toFixed(1)}h`
+                                  : 'Revisar'
                                 : holiday
                                   ? 'Festivo'
                                   : weekend
@@ -2986,6 +2959,7 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
                                           </label>
                                         ))}
                                       </div>
+                                      <p className="mt-1 text-[10px] font-semibold text-gray-600">{row.rawMarkCount} timbrada(s)</p>
                                       {row.analysis && <p className="mt-1 line-clamp-2 text-[10px] text-amber-700">{row.analysis}</p>}
                                     </>
                                   ) : (
@@ -3009,8 +2983,7 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
                   <tr className="text-left text-[10px] uppercase text-gray-400 border-b border-gray-100">
                     <th className="py-2 px-3">Empleado / codigo</th>
                     <th className="py-2 px-3">Dias</th>
-                    <th className="py-2 px-3">Marcas</th>
-                    <th className="py-2 px-3">Rep.</th>
+                    <th className="py-2 px-3">Timbradas</th>
                     <th className="py-2 px-3">Hrs</th>
                     <th className="py-2 px-3">Diurnas</th>
                     <th className="py-2 px-3">Nocturnas</th>
@@ -3034,10 +3007,7 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
                             </div>
                           </td>
                           <td className="py-3 px-3">{group.rows.length}</td>
-                          <td className="py-3 px-3">{group.markCount}/{group.rawMarkCount}</td>
-                          <td className="py-3 px-3">
-                            <Badge label={group.ignoredMarkCount} color={group.ignoredMarkCount > 0 ? 'yellow' : 'gray'} />
-                          </td>
+                          <td className="py-3 px-3">{group.rawMarkCount}</td>
                           <td className="py-3 px-3 font-semibold">{group.totalHours.toFixed(2)}</td>
                           <td className="py-3 px-3 text-emerald-700">{group.dayHours.toFixed(2)}</td>
                           <td className="py-3 px-3 text-indigo-700">{group.nightHours.toFixed(2)}</td>
@@ -3074,13 +3044,13 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
                         </tr>
                         {expanded && (
                           <tr key={`${group.code}-detail`} className="border-b border-gray-100 bg-gray-50/60">
-                            <td colSpan={11} className="px-3 py-3">
+                            <td colSpan={10} className="px-3 py-3">
                               <div className="overflow-x-auto rounded-lg border border-gray-100 bg-white">
                                 <table className="w-full text-xs">
                                   <thead>
                                     <tr className="text-left text-[10px] uppercase text-gray-400 border-b border-gray-100">
                                       <th className="py-2 px-3">Dia</th>
-                                      <th className="py-2 px-3">Marcas</th>
+                                      <th className="py-2 px-3">Timbradas</th>
                                       <th className="py-2 px-3">Entrada</th>
                                       <th className="py-2 px-3">Inicio almuerzo</th>
                                       <th className="py-2 px-3">Fin almuerzo</th>
@@ -3099,8 +3069,7 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
                                       <tr key={row.key} className="border-b border-gray-50 last:border-0">
                                         <td className="py-2 px-3 whitespace-nowrap">{formatDate(row.date)}</td>
                                         <td className="py-2 px-3">
-                                          {row.markCount}/{row.rawMarkCount}
-                                          {row.ignoredMarkCount > 0 && <span className="ml-1 text-amber-600">(-{row.ignoredMarkCount})</span>}
+                                          {row.rawMarkCount}
                                         </td>
                                         {(['checkIn', 'breakStart', 'breakEnd', 'checkOut'] as const).map((field) => (
                                           <td key={field} className="py-2 px-3">
@@ -3117,7 +3086,7 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
                                         <td className="py-2 px-3 text-indigo-700">{row.nightHours.toFixed(2)}</td>
                                         <td className="py-2 px-3 text-blue-700">{previewHolidaysByDate.get(row.date)?.name ?? '-'}</td>
                                         <td className="py-2 px-3">
-                                          <Badge label={row.status} color={row.status === 'Completo' ? 'green' : row.status === 'Incompleto' ? 'yellow' : 'gray'} />
+                                          <Badge label={row.status} color={row.status === 'Completo' ? 'green' : 'yellow'} />
                                         </td>
                                         <td className="py-2 px-3 text-amber-700">{row.analysis || '-'}</td>
                                         <td className="py-2 px-3 text-gray-500">{row.marks}</td>
