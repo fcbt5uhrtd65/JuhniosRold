@@ -950,6 +950,197 @@ function biometricStatus(row: BiometricPreviewRow | undefined, holiday: PublicHo
   return 'Falto';
 }
 
+type BiometricPayrollBreakdown = {
+  rawHours: number;
+  ordinaryHours: number;
+  lunchHours: number;
+  extraDayHours: number;
+  extraNightHours: number;
+  nightSurchargeHours: number;
+  sundayDayHours: number;
+  sundayExtraDayHours: number;
+  sundayNightHours: number;
+  sundayExtraNightHours: number;
+};
+
+function minutesToHours(value: number): number {
+  return Number((Math.max(0, value) / 60).toFixed(2));
+}
+
+function expectedOrdinaryMinutesForPreview(date: string, holiday: PublicHoliday | undefined): number {
+  void holiday;
+  const weekday = mondayWeekdayIndex(date);
+  if (weekday >= 5) return 0;
+  return weekday === 4 ? 8 * 60 : 9 * 60;
+}
+
+function isNightMinute(minute: number): boolean {
+  const normalized = ((minute % 1440) + 1440) % 1440;
+  return normalized < 6 * 60 || normalized >= 19 * 60;
+}
+
+function splitDayNightMinutes(segments: Array<[number, number]>): { day: number; night: number } {
+  let day = 0;
+  let night = 0;
+  for (const [start, end] of segments) {
+    for (let minute = start; minute < end; minute += 1) {
+      if (isNightMinute(minute)) night += 1;
+      else day += 1;
+    }
+  }
+  return { day, night };
+}
+
+function takeMinutesFromSegments(segments: Array<[number, number]>, minutes: number): Array<[number, number]> {
+  const taken: Array<[number, number]> = [];
+  let remaining = Math.max(0, minutes);
+  for (const [start, end] of segments) {
+    if (remaining <= 0) break;
+    const length = Math.max(0, end - start);
+    const used = Math.min(length, remaining);
+    if (used > 0) taken.push([start, start + used]);
+    remaining -= used;
+  }
+  return taken;
+}
+
+function skipMinutesFromSegments(segments: Array<[number, number]>, minutes: number): Array<[number, number]> {
+  const kept: Array<[number, number]> = [];
+  let remaining = Math.max(0, minutes);
+  for (const [start, end] of segments) {
+    const length = Math.max(0, end - start);
+    if (remaining >= length) {
+      remaining -= length;
+      continue;
+    }
+    kept.push([start + remaining, end]);
+    remaining = 0;
+  }
+  return kept;
+}
+
+function biometricPayrollBreakdown(row: BiometricPreviewRow | undefined, holiday: PublicHoliday | undefined): BiometricPayrollBreakdown {
+  if (!row) {
+    return {
+      rawHours: 0,
+      ordinaryHours: 0,
+      lunchHours: 0,
+      extraDayHours: 0,
+      extraNightHours: 0,
+      nightSurchargeHours: 0,
+      sundayDayHours: 0,
+      sundayExtraDayHours: 0,
+      sundayNightHours: 0,
+      sundayExtraNightHours: 0,
+    };
+  }
+
+  const checkIn = timeToMinutes(row.checkIn);
+  const checkOutRaw = timeToMinutes(row.checkOut);
+  if (checkIn === null || checkOutRaw === null) {
+    return {
+      rawHours: 0,
+      ordinaryHours: 0,
+      lunchHours: 0,
+      extraDayHours: 0,
+      extraNightHours: 0,
+      nightSurchargeHours: 0,
+      sundayDayHours: 0,
+      sundayExtraDayHours: 0,
+      sundayNightHours: 0,
+      sundayExtraNightHours: 0,
+    };
+  }
+
+  const checkOut = checkOutRaw >= checkIn ? checkOutRaw : checkOutRaw + 1440;
+  const rawMinutes = Math.max(0, checkOut - checkIn);
+  const breakStartRaw = timeToMinutes(row.breakStart);
+  const breakEndRaw = timeToMinutes(row.breakEnd);
+  const hasFullBreak = breakStartRaw !== null && breakEndRaw !== null;
+  const breakStart = breakStartRaw !== null && breakStartRaw < checkIn ? breakStartRaw + 1440 : breakStartRaw;
+  const breakEnd = breakEndRaw !== null && breakStartRaw !== null && breakEndRaw < breakStartRaw ? breakEndRaw + 1440 : breakEndRaw;
+  const fallbackLunchMinutes = !hasFullBreak && rawMinutes >= 6 * 60 && expectedOrdinaryMinutesForPreview(row.date, holiday) > 0 ? 60 : 0;
+  let lunchMinutes = fallbackLunchMinutes;
+  let segments: Array<[number, number]> = [[checkIn, checkOut]];
+
+  if (breakStart !== null && breakEnd !== null && checkIn < breakStart && breakStart < breakEnd && breakEnd < checkOut) {
+    lunchMinutes = Math.max(0, breakEnd - breakStart);
+    segments = [[checkIn, breakStart], [breakEnd, checkOut]];
+  } else if (fallbackLunchMinutes > 0) {
+    const lunchStart = Math.min(checkIn + 5 * 60, Math.max(checkIn, checkOut - fallbackLunchMinutes));
+    const lunchEnd = Math.min(checkOut, lunchStart + fallbackLunchMinutes);
+    segments = [[checkIn, lunchStart], [lunchEnd, checkOut]].filter(([start, end]) => end > start);
+  }
+
+  const expectedOrdinary = expectedOrdinaryMinutesForPreview(row.date, holiday);
+  const totalWorkedMinutes = segments.reduce((sum, [start, end]) => sum + Math.max(0, end - start), 0);
+  const ordinaryMinutes = Math.min(totalWorkedMinutes, expectedOrdinary);
+  const extraMinutes = Math.max(0, totalWorkedMinutes - ordinaryMinutes);
+  const ordinarySegments = takeMinutesFromSegments(segments, ordinaryMinutes);
+  const extraSegments = skipMinutesFromSegments(segments, ordinaryMinutes);
+  const ordinarySplit = splitDayNightMinutes(ordinarySegments);
+  const extraSplit = splitDayNightMinutes(extraSegments);
+  const sundayOrHoliday = Boolean(holiday) || mondayWeekdayIndex(row.date) === 6;
+
+  if (sundayOrHoliday) {
+    return {
+      rawHours: Math.floor(rawMinutes / 60),
+      ordinaryHours: 0,
+      lunchHours: minutesToHours(lunchMinutes),
+      extraDayHours: 0,
+      extraNightHours: 0,
+      nightSurchargeHours: 0,
+      sundayDayHours: minutesToHours(ordinarySplit.day),
+      sundayExtraDayHours: minutesToHours(extraSplit.day),
+      sundayNightHours: minutesToHours(ordinarySplit.night),
+      sundayExtraNightHours: minutesToHours(extraSplit.night),
+    };
+  }
+
+  return {
+    rawHours: Math.floor(rawMinutes / 60),
+    ordinaryHours: minutesToHours(ordinarySplit.day),
+    lunchHours: minutesToHours(lunchMinutes),
+    extraDayHours: minutesToHours(extraSplit.day),
+    extraNightHours: minutesToHours(extraSplit.night),
+    nightSurchargeHours: minutesToHours(ordinarySplit.night),
+    sundayDayHours: 0,
+    sundayExtraDayHours: 0,
+    sundayNightHours: 0,
+    sundayExtraNightHours: 0,
+  };
+}
+
+function addBiometricPayrollBreakdown(left: BiometricPayrollBreakdown, right: BiometricPayrollBreakdown): BiometricPayrollBreakdown {
+  return {
+    rawHours: Number((left.rawHours + right.rawHours).toFixed(2)),
+    ordinaryHours: Number((left.ordinaryHours + right.ordinaryHours).toFixed(2)),
+    lunchHours: Number((left.lunchHours + right.lunchHours).toFixed(2)),
+    extraDayHours: Number((left.extraDayHours + right.extraDayHours).toFixed(2)),
+    extraNightHours: Number((left.extraNightHours + right.extraNightHours).toFixed(2)),
+    nightSurchargeHours: Number((left.nightSurchargeHours + right.nightSurchargeHours).toFixed(2)),
+    sundayDayHours: Number((left.sundayDayHours + right.sundayDayHours).toFixed(2)),
+    sundayExtraDayHours: Number((left.sundayExtraDayHours + right.sundayExtraDayHours).toFixed(2)),
+    sundayNightHours: Number((left.sundayNightHours + right.sundayNightHours).toFixed(2)),
+    sundayExtraNightHours: Number((left.sundayExtraNightHours + right.sundayExtraNightHours).toFixed(2)),
+  };
+}
+
+function emptyBiometricPayrollBreakdown(): BiometricPayrollBreakdown {
+  return {
+    rawHours: 0,
+    ordinaryHours: 0,
+    lunchHours: 0,
+    extraDayHours: 0,
+    extraNightHours: 0,
+    nightSurchargeHours: 0,
+    sundayDayHours: 0,
+    sundayExtraDayHours: 0,
+    sundayNightHours: 0,
+    sundayExtraNightHours: 0,
+  };
+}
+
 function buildBiometricCodeDayRows(
   code: string,
   rows: BiometricPreviewRow[],
@@ -961,26 +1152,31 @@ function buildBiometricCodeDayRows(
     const row = rowsByDate.get(date);
     const holiday = holidaysByDate.get(date);
     const weekend = isWeekendDate(date);
+    const breakdown = biometricPayrollBreakdown(row, holiday);
     return [
-      xlsxCell(date),
-      xlsxCell(WEEKDAY_LABELS[mondayWeekdayIndex(date)]),
+      xlsxCell(code),
+      xlsxCell(row ? `${formatDate(row.date)} ${row.checkIn}` : weekend ? (mondayWeekdayIndex(date) === 5 ? 'SABADO' : 'DOMINGO') : 'NO VINO'),
+      xlsxCell(row ? `${formatDate(row.date)} ${row.checkOut}` : ''),
+      xlsxCell(row && row.checkIn !== '-' && row.checkOut !== '-' ? `${row.checkIn} - ${row.checkOut}` : ''),
+      xlsxCell(breakdown.rawHours),
+      xlsxCell(breakdown.ordinaryHours),
+      xlsxCell(row?.breakStart ?? ''),
+      xlsxCell(row?.breakEnd ?? ''),
+      xlsxCell(breakdown.lunchHours || ''),
+      xlsxCell(breakdown.extraDayHours || 0),
+      xlsxCell(breakdown.extraNightHours || 0),
+      xlsxCell(breakdown.nightSurchargeHours || 0),
+      xlsxCell(breakdown.sundayDayHours || 0),
+      xlsxCell(breakdown.sundayExtraDayHours || 0),
+      xlsxCell(breakdown.sundayNightHours || 0),
+      xlsxCell(breakdown.sundayExtraNightHours || 0),
+      xlsxCell(0),
+      xlsxCell(breakdown.ordinaryHours),
       xlsxCell(holiday?.name ?? ''),
-      xlsxCell(weekend ? 'Si' : 'No'),
-      xlsxCell(row?.markCount ?? 0),
-      xlsxCell(row?.rawMarkCount ?? 0),
-      xlsxCell(row?.ignoredMarkCount ?? 0),
-      xlsxCell(row?.checkIn ?? '-'),
-      xlsxCell(row?.breakStart ?? '-'),
-      xlsxCell(row?.breakEnd ?? '-'),
-      xlsxCell(row?.checkOut ?? '-'),
-      xlsxCell(row ? Number(row.workedHours.toFixed(2)) : 0),
-      xlsxCell(row ? Number(row.dayHours.toFixed(2)) : 0),
-      xlsxCell(row ? Number(row.nightHours.toFixed(2)) : 0),
       xlsxCell(biometricStatus(row, holiday, weekend)),
       xlsxCell(biometricObservation(row, holiday, weekend)),
       xlsxCell(row?.analysis ?? ''),
       xlsxCell(row?.marks ?? ''),
-      xlsxCell(code),
     ];
   });
 }
@@ -990,6 +1186,10 @@ function summarizeBiometricCodeRows(
   holidaysByDate: Map<string, PublicHoliday>,
   dateRange: string[],
 ) {
+  const payroll = dateRange.reduce((total, date) => {
+    const row = rows.find((item) => item.date === date);
+    return addBiometricPayrollBreakdown(total, biometricPayrollBreakdown(row, holidaysByDate.get(date)));
+  }, emptyBiometricPayrollBreakdown());
   return {
     daysWithMarks: rows.length,
     missingWorkDays: dateRange.filter((date) => !rows.some((row) => row.date === date) && !isWeekendDate(date) && !holidaysByDate.has(date)).length,
@@ -1001,7 +1201,41 @@ function summarizeBiometricCodeRows(
     totalHours: Number(rows.reduce((sum, row) => sum + row.workedHours, 0).toFixed(2)),
     dayHours: Number(rows.reduce((sum, row) => sum + row.dayHours, 0).toFixed(2)),
     nightHours: Number(rows.reduce((sum, row) => sum + row.nightHours, 0).toFixed(2)),
+    payroll,
   };
+}
+
+function legalParameterForRange(parametersByYear: Map<number, PayrollLegalParameter>, dateRange: string[]): PayrollLegalParameter | undefined {
+  const year = Number((dateRange[0] ?? new Date().toISOString().slice(0, 10)).slice(0, 4));
+  return parametersByYear.get(year);
+}
+
+function numberValue(value: string | number | null | undefined): number {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function biometricHourlyRates(baseSalary: number, parameter: PayrollLegalParameter | undefined) {
+  const divisor = numberValue(parameter?.monthly_hours_divisor_default) || 220;
+  const ordinary = divisor > 0 ? baseSalary / divisor : 0;
+  const nightOrdinaryPct = numberValue(parameter?.night_ordinary_surcharge_pct) || 35;
+  const dayExtraPct = numberValue(parameter?.day_extra_surcharge_pct) || 25;
+  const nightExtraPct = numberValue(parameter?.night_extra_surcharge_pct) || 75;
+  const sundayPct = numberValue(parameter?.sunday_holiday_surcharge_pct) || 80;
+  return {
+    ordinary,
+    dayExtra: ordinary * (1 + dayExtraPct / 100),
+    nightExtra: ordinary * (1 + nightExtraPct / 100),
+    nightSurcharge: ordinary * (nightOrdinaryPct / 100),
+    sundayDay: ordinary * (1 + sundayPct / 100),
+    sundayExtraDay: ordinary * (1 + (sundayPct + dayExtraPct) / 100),
+    sundayNight: ordinary * (1 + (sundayPct + nightOrdinaryPct) / 100),
+    sundayExtraNight: ordinary * (1 + (sundayPct + nightExtraPct) / 100),
+  };
+}
+
+function roundedCurrency(value: number): number {
+  return Math.round(value);
 }
 
 function buildBiometricPreviewXlsx(
@@ -1009,8 +1243,11 @@ function buildBiometricPreviewXlsx(
   holidaysByDate: Map<string, PublicHoliday>,
   dateRange: string[],
   fileName: string,
+  employeeByBiometricCode: Map<string, Employee>,
+  parametersByYear: Map<number, PayrollLegalParameter>,
 ): Blob {
   const exportRange = biometricExportDateRange(rows, dateRange);
+  const parameter = legalParameterForRange(parametersByYear, exportRange);
   const byCode = new Map<string, BiometricPreviewRow[]>();
   rows.forEach((row) => {
     const group = byCode.get(row.code) ?? [];
@@ -1034,6 +1271,19 @@ function buildBiometricPreviewXlsx(
 
   const codeSheets = codeGroups.map(([code, codeRows]) => {
     const summary = summarizeBiometricCodeRows(codeRows, holidaysByDate, exportRange);
+    const employee = employeeByBiometricCode.get(code);
+    const baseSalary = numberValue(employee?.base_salary) || numberValue(parameter?.minimum_wage);
+    const rates = biometricHourlyRates(baseSalary, parameter);
+    const values = {
+      ordinary: summary.payroll.ordinaryHours * rates.ordinary,
+      dayExtra: summary.payroll.extraDayHours * rates.dayExtra,
+      nightExtra: summary.payroll.extraNightHours * rates.nightExtra,
+      nightSurcharge: summary.payroll.nightSurchargeHours * rates.nightSurcharge,
+      sundayDay: summary.payroll.sundayDayHours * rates.sundayDay,
+      sundayExtraDay: summary.payroll.sundayExtraDayHours * rates.sundayExtraDay,
+      sundayNight: summary.payroll.sundayNightHours * rates.sundayNight,
+      sundayExtraNight: summary.payroll.sundayExtraNightHours * rates.sundayExtraNight,
+    };
     summaryRows.push([
       xlsxCell(code),
       xlsxCell(summary.daysWithMarks),
@@ -1049,40 +1299,122 @@ function buildBiometricPreviewXlsx(
     ]);
 
     const detailHeader = [
-      'Fecha',
-      'Dia',
-      'Festivo',
-      'Fin de semana',
-      'Marcas utiles',
-      'Marcas originales',
-      'Repetidas limpiadas',
+      'COD',
       'Entrada',
+      'Salida',
+      'Duracion',
+      'Horas trabajadas',
+      'Horas ord.',
       'Inicio almuerzo',
       'Fin almuerzo',
-      'Salida',
-      'Horas trabajadas',
-      'Horas diurnas',
-      'Horas nocturnas',
+      'Descanso',
+      'Horas extras diurnas',
+      'Horas extras noct.',
+      'Recargo nocturno',
+      'Hora dominical diurna',
+      'Horas extras diurna dom.',
+      'Hora dominical noct.',
+      'Horas extras noct. dom.',
+      'Incapacidades',
+      'Hora ordinaria',
+      'Festivo',
       'Estado',
       'Observacion',
-      'Analisis del sistema',
+      'Analisis',
       'Todas las marcas',
-      'Codigo',
+    ];
+    const dayRows = buildBiometricCodeDayRows(code, codeRows, holidaysByDate, exportRange);
+    const totalRow = [
+      xlsxCell('TOTALES', 3),
+      xlsxCell(''),
+      xlsxCell(''),
+      xlsxCell(''),
+      xlsxCell(summary.payroll.rawHours, 3),
+      xlsxCell(summary.payroll.ordinaryHours, 3),
+      xlsxCell(''),
+      xlsxCell(''),
+      xlsxCell(summary.payroll.lunchHours, 3),
+      xlsxCell(summary.payroll.extraDayHours, 3),
+      xlsxCell(summary.payroll.extraNightHours, 3),
+      xlsxCell(summary.payroll.nightSurchargeHours, 3),
+      xlsxCell(summary.payroll.sundayDayHours, 3),
+      xlsxCell(summary.payroll.sundayExtraDayHours, 3),
+      xlsxCell(summary.payroll.sundayNightHours, 3),
+      xlsxCell(summary.payroll.sundayExtraNightHours, 3),
+      xlsxCell(0, 3),
+      xlsxCell(summary.payroll.ordinaryHours, 3),
+    ];
+    const valueRow = [
+      xlsxCell('Bonificacion', 3),
+      xlsxCell(''),
+      xlsxCell(''),
+      xlsxCell(''),
+      xlsxCell(''),
+      xlsxCell(roundedCurrency(values.ordinary), 3),
+      xlsxCell(''),
+      xlsxCell(''),
+      xlsxCell(''),
+      xlsxCell(roundedCurrency(values.dayExtra), 3),
+      xlsxCell(roundedCurrency(values.nightExtra), 3),
+      xlsxCell(roundedCurrency(values.nightSurcharge), 3),
+      xlsxCell(roundedCurrency(values.sundayDay), 3),
+      xlsxCell(roundedCurrency(values.sundayExtraDay), 3),
+      xlsxCell(roundedCurrency(values.sundayNight), 3),
+      xlsxCell(roundedCurrency(values.sundayExtraNight), 3),
+      xlsxCell(0, 3),
+      xlsxCell(roundedCurrency(values.ordinary), 3),
     ];
 
     return {
       name: uniqueSheetName(`COD ${code}`, usedSheetNames),
-      widths: [13, 12, 24, 14, 13, 16, 18, 12, 16, 14, 12, 17, 15, 16, 14, 20, 42, 36, 12],
+      widths: [10, 22, 22, 16, 17, 12, 18, 16, 11, 19, 18, 16, 21, 25, 21, 24, 14, 13, 24, 14, 20, 44, 36],
       rows: [
-        [xlsxCell(`Codigo ${code}`, 1)],
-        [xlsxCell('Archivo', 3), xlsxCell(fileName || 'TXT biometrico')],
-        [xlsxCell('Periodo', 3), xlsxCell(exportRange.length ? `${formatDate(exportRange[0])} - ${formatDate(exportRange[exportRange.length - 1])}` : 'Sin rango')],
-        [xlsxCell('Dias con marca', 3), xlsxCell(summary.daysWithMarks), xlsxCell('Faltas laborales', 3), xlsxCell(summary.missingWorkDays), xlsxCell('Festivos', 3), xlsxCell(summary.holidayDays)],
-        [xlsxCell('Horas trabajadas', 3), xlsxCell(summary.totalHours), xlsxCell('Diurnas', 3), xlsxCell(summary.dayHours), xlsxCell('Nocturnas', 3), xlsxCell(summary.nightHours)],
-        [xlsxCell('Marcas utiles', 3), xlsxCell(summary.markCount), xlsxCell('Originales', 3), xlsxCell(summary.rawMarkCount), xlsxCell('Repetidas limpiadas', 3), xlsxCell(summary.ignoredMarkCount)],
+        [xlsxCell(`Codigo ${code}`, 1), xlsxCell(employee ? employeeName(employee) : 'Sin empleado asociado'), xlsxCell(fileName || 'TXT biometrico')],
+        [xlsxCell('Periodo', 3), xlsxCell(exportRange.length ? `${formatDate(exportRange[0])} - ${formatDate(exportRange[exportRange.length - 1])}` : 'Sin rango'), xlsxCell('Salario base', 3), xlsxCell(baseSalary)],
+        [],
+        [
+          xlsxCell(''),
+          xlsxCell(''),
+          xlsxCell(''),
+          xlsxCell(''),
+          xlsxCell(''),
+          xlsxCell(''),
+          xlsxCell(''),
+          xlsxCell('Salario base', 2),
+          xlsxCell('Hora ordinaria', 2),
+          xlsxCell('Hora extra diurna 25%', 2),
+          xlsxCell('Hora extra nocturna 75%', 2),
+          xlsxCell('Recargo nocturno 35%', 2),
+          xlsxCell('Hora dominical diurna 80%', 2),
+          xlsxCell('Hora extra diurna dominical 80%+25%', 2),
+          xlsxCell('Hora dominical nocturna 80%+35%', 2),
+          xlsxCell('Hora extra nocturna dominical 80%+75%', 2),
+          xlsxCell('Incapacidades', 2),
+        ],
+        [
+          xlsxCell(''),
+          xlsxCell(''),
+          xlsxCell(''),
+          xlsxCell(''),
+          xlsxCell(''),
+          xlsxCell(''),
+          xlsxCell(''),
+          xlsxCell(baseSalary, 3),
+          xlsxCell(roundedCurrency(rates.ordinary), 3),
+          xlsxCell(roundedCurrency(rates.dayExtra), 3),
+          xlsxCell(roundedCurrency(rates.nightExtra), 3),
+          xlsxCell(roundedCurrency(rates.nightSurcharge), 3),
+          xlsxCell(roundedCurrency(rates.sundayDay), 3),
+          xlsxCell(roundedCurrency(rates.sundayExtraDay), 3),
+          xlsxCell(roundedCurrency(rates.sundayNight), 3),
+          xlsxCell(roundedCurrency(rates.sundayExtraNight), 3),
+          xlsxCell(0, 3),
+        ],
         [],
         detailHeader.map((label) => xlsxCell(label, 2)),
-        ...buildBiometricCodeDayRows(code, codeRows, holidaysByDate, exportRange),
+        ...dayRows,
+        totalRow,
+        valueRow,
       ],
     };
   });
@@ -2207,6 +2539,17 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
     return new Map(previewLegalParameters.map((parameter) => [parameter.year, parameter]));
   }, [previewLegalParameters]);
 
+  const employeeByBiometricCode = useMemo(() => {
+    const byCode = new Map<string, Employee>();
+    mappings.forEach((mapping) => {
+      const employee = employeeById.get(mapping.employee);
+      if (employee && !byCode.has(mapping.biometric_code)) {
+        byCode.set(mapping.biometric_code, employee);
+      }
+    });
+    return byCode;
+  }, [mappings, employeeById]);
+
   const previewByCode = useMemo(() => {
     const groups = new Map<
       string,
@@ -2303,7 +2646,14 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
     const cleanCode = code ? code.replace(/[^a-zA-Z0-9_-]/g, '_') : 'todos';
     downloadBlob(
       `biometrico_${cleanCode}_${start || 'inicio'}_${end || 'fin'}.xlsx`,
-      buildBiometricPreviewXlsx(orderedRows, previewHolidaysByDate, previewDateRange, previewFileName),
+      buildBiometricPreviewXlsx(
+        orderedRows,
+        previewHolidaysByDate,
+        previewDateRange,
+        previewFileName,
+        employeeByBiometricCode,
+        previewParametersByYear,
+      ),
     );
     toast.success(code ? `Exportado el Excel del codigo ${code}.` : 'Exportado el Excel por codigo.');
   };
