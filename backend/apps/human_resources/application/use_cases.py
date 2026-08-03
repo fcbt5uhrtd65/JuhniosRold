@@ -54,6 +54,7 @@ RECHARGE_LABEL_TO_CONCEPT_CODE = {
     "Extra nocturna dominical": "OVERTIME_NIGHT_REST",
 }
 SCHEDULE_CHANGE_WEEKLY_MINUTES = 42 * 60
+SCHEDULE_CHANGE_DAILY_LUNCH_MINUTES = 60
 
 PUNCH_ACTION_FIELDS = ("check_in", "check_out", "break_start", "break_end")
 PUNCH_ACTION_NUMERIC_CODES = {
@@ -184,8 +185,58 @@ def _schedule_weekly_minutes(parsed_days) -> int:
             continue
         start = day["expected_start_time"]
         end = day["expected_end_time"]
-        total += max((end.hour * 60 + end.minute) - (start.hour * 60 + start.minute), 0)
+        gross_minutes = max((end.hour * 60 + end.minute) - (start.hour * 60 + start.minute), 0)
+        if gross_minutes <= SCHEDULE_CHANGE_DAILY_LUNCH_MINUTES:
+            raise BusinessRuleViolation("Cada día laboral debe durar más de 1 hora para descontar el almuerzo.")
+        total += gross_minutes - SCHEDULE_CHANGE_DAILY_LUNCH_MINUTES
     return total
+
+
+def _time_to_minutes(value) -> int:
+    return value.hour * 60 + value.minute
+
+
+def _minutes_to_time(value: int):
+    value = max(0, min(value, 23 * 60 + 59))
+    return datetime.strptime(f"{value // 60:02d}:{value % 60:02d}", "%H:%M").time()
+
+
+def _lunch_window(start_minutes: int, end_minutes: int) -> tuple[int, int]:
+    noon_start = 12 * 60
+    noon_end = 13 * 60
+    if start_minutes < noon_start and noon_end < end_minutes:
+        return noon_start, noon_end
+
+    lunch_start = start_minutes + ((end_minutes - start_minutes - SCHEDULE_CHANGE_DAILY_LUNCH_MINUTES) // 2)
+    lunch_start = max(start_minutes + 1, min(lunch_start, end_minutes - SCHEDULE_CHANGE_DAILY_LUNCH_MINUTES - 1))
+    return lunch_start, lunch_start + SCHEDULE_CHANGE_DAILY_LUNCH_MINUTES
+
+
+def schedule_change_days_with_lunch_break(parsed_days) -> list[dict]:
+    expanded_days = []
+    for day in parsed_days:
+        if not day.get("is_working_day", True):
+            continue
+
+        start_minutes = _time_to_minutes(day["expected_start_time"])
+        end_minutes = _time_to_minutes(day["expected_end_time"])
+        if end_minutes - start_minutes <= SCHEDULE_CHANGE_DAILY_LUNCH_MINUTES:
+            raise BusinessRuleViolation("Cada día laboral debe durar más de 1 hora para descontar el almuerzo.")
+
+        lunch_start, lunch_end = _lunch_window(start_minutes, end_minutes)
+        expanded_days.append({
+            **day,
+            "slot": 1,
+            "expected_start_time": day["expected_start_time"],
+            "expected_end_time": _minutes_to_time(lunch_start),
+        })
+        expanded_days.append({
+            **day,
+            "slot": 2,
+            "expected_start_time": _minutes_to_time(lunch_end),
+            "expected_end_time": day["expected_end_time"],
+        })
+    return expanded_days
 
 
 def validate_schedule_change_42_hours(days_data):
@@ -195,7 +246,7 @@ def validate_schedule_change_42_hours(days_data):
     if total_minutes != SCHEDULE_CHANGE_WEEKLY_MINUTES:
         total_hours = total_minutes / 60
         raise BusinessRuleViolation(
-            f"El horario solicitado debe sumar exactamente 42 horas laborales semanales; actualmente suma {total_hours:g}."
+            f"El horario solicitado debe sumar exactamente 42 horas laborales semanales descontando 1 hora de almuerzo por día; actualmente suma {total_hours:g}."
         )
     return payload, parsed_days
 
@@ -565,10 +616,11 @@ class ResolveVacationRequestByRole:
         ):
             if vacation.requested_work_schedule_days:
                 _, parsed_days = validate_schedule_change_42_hours(vacation.requested_work_schedule_days)
+                schedule_days = schedule_change_days_with_lunch_break(parsed_days)
                 SetEmployeeWorkSchedule().execute(
                     employee=vacation.employee,
                     start_date=vacation.start_date,
-                    days_data=parsed_days,
+                    days_data=schedule_days,
                     actor=reviewer,
                     notes=f"Aplicado automáticamente al aprobar solicitud {vacation.request_number or vacation.id}.",
                 )

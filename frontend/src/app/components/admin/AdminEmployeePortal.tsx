@@ -50,6 +50,7 @@ import { SignaturePad } from './SignaturePad';
 const REQUESTS_PAGE_SIZE_OPTIONS = [5, 10, 20, 50];
 const REASON_TRUNCATE_LENGTH = 90;
 const REQUIRED_SCHEDULE_CHANGE_HOURS = 42;
+const SCHEDULE_CHANGE_DAILY_LUNCH_MINUTES = 60;
 const WEEKDAY_LABELS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
 type ScheduleDayDraft = {
@@ -182,7 +183,7 @@ function minutesBetween(start: string, end: string): number {
 function scheduleDraftWeeklyHours(days: ScheduleDayDraft[]): number {
   const minutes = days.reduce((total, day) => {
     if (!day.is_working_day) return total;
-    return total + minutesBetween(day.expected_start_time, day.expected_end_time);
+    return total + Math.max(minutesBetween(day.expected_start_time, day.expected_end_time) - SCHEDULE_CHANGE_DAILY_LUNCH_MINUTES, 0);
   }, 0);
   return minutes / 60;
 }
@@ -191,7 +192,7 @@ function scheduleInputWeeklyHours(days: EmployeeWorkScheduleDayInput[] | undefin
   if (!days?.length) return 0;
   const minutes = days.reduce((total, day) => {
     if (day.is_working_day === false) return total;
-    return total + minutesBetween(day.expected_start_time, day.expected_end_time);
+    return total + Math.max(minutesBetween(day.expected_start_time, day.expected_end_time) - SCHEDULE_CHANGE_DAILY_LUNCH_MINUTES, 0);
   }, 0);
   return minutes / 60;
 }
@@ -582,6 +583,10 @@ export function AdminEmployeePortal() {
       toast.error('Cada día seleccionado debe tener una hora final posterior a la hora de inicio');
       return;
     }
+    if (requestedScheduleDays.some((day) => minutesBetween(day.expected_start_time, day.expected_end_time) <= SCHEDULE_CHANGE_DAILY_LUNCH_MINUTES)) {
+      toast.error('Cada día laboral debe durar más de 1 hora para descontar el almuerzo');
+      return;
+    }
     if (scheduleChangeWeeklyHours !== REQUIRED_SCHEDULE_CHANGE_HOURS) {
       toast.error(`El horario debe sumar exactamente ${REQUIRED_SCHEDULE_CHANGE_HOURS} horas laborales semanales`);
       return;
@@ -951,7 +956,7 @@ export function AdminEmployeePortal() {
                   <div className="flex items-center justify-between gap-3 mb-2">
                     <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 block">Horario que solicitas</label>
                     <Badge
-                      label={`${scheduleChangeWeeklyHours.toFixed(1)} / ${REQUIRED_SCHEDULE_CHANGE_HOURS} h`}
+                      label={`${scheduleChangeWeeklyHours.toFixed(1)} / ${REQUIRED_SCHEDULE_CHANGE_HOURS} h laborales`}
                       color={scheduleChangeWeeklyHours === REQUIRED_SCHEDULE_CHANGE_HOURS ? 'green' : 'yellow'}
                     />
                   </div>
@@ -999,6 +1004,7 @@ export function AdminEmployeePortal() {
                       </div>
                     ))}
                   </div>
+                  <p className="text-[11px] text-gray-400 mt-2">El total descuenta automáticamente 1 hora de almuerzo por cada día laboral seleccionado.</p>
                 </div>
                 <div>
                   <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Desde cuándo</label>

@@ -509,11 +509,13 @@ function minutesBetween(start: string, end: string): number {
   return Math.max((endHour * 60 + endMinute) - (startHour * 60 + startMinute), 0);
 }
 
+const SCHEDULE_CHANGE_DAILY_LUNCH_MINUTES = 60;
+
 function requestScheduleWeeklyHours(request: VacationRequest): number {
   if (!request.requested_work_schedule_days?.length) return 0;
   const minutes = request.requested_work_schedule_days.reduce((total, day) => {
     if (day.is_working_day === false) return total;
-    return total + minutesBetween(day.expected_start_time, day.expected_end_time);
+    return total + Math.max(minutesBetween(day.expected_start_time, day.expected_end_time) - SCHEDULE_CHANGE_DAILY_LUNCH_MINUTES, 0);
   }, 0);
   return minutes / 60;
 }
@@ -4572,7 +4574,7 @@ export function AdminHR() {
               <Card className="p-4">
                 <div className="flex items-center justify-between gap-3 mb-3">
                   <div className="text-sm font-semibold text-gray-900">Horario solicitado</div>
-                  <Badge label={`${requestScheduleWeeklyHours(viewingRequest).toFixed(1)} h/semana`} color={requestScheduleWeeklyHours(viewingRequest) === 42 ? 'green' : 'yellow'} />
+                  <Badge label={`${requestScheduleWeeklyHours(viewingRequest).toFixed(1)} h laborales/semana`} color={requestScheduleWeeklyHours(viewingRequest) === 42 ? 'green' : 'yellow'} />
                 </div>
                 <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 text-xs">
                   {[...viewingRequest.requested_work_schedule_days]
@@ -4584,6 +4586,7 @@ export function AdminHR() {
                       </div>
                     ))}
                 </div>
+                <p className="text-[11px] text-gray-400 mt-2">El total descuenta automáticamente 1 hora de almuerzo por día laboral.</p>
               </Card>
             )}
             <div className="grid md:grid-cols-3 gap-4">
