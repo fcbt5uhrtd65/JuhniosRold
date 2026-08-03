@@ -1771,7 +1771,16 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
     return enumerateDates(start, end);
   }, [previewRows, uploadDateFrom, uploadDateTo]);
 
+  const previewRangeLabel = useMemo(() => {
+    if (previewDateRange.length === 0) return 'Sin rango';
+    return `${formatDate(previewDateRange[0])} a ${formatDate(previewDateRange[previewDateRange.length - 1])}`;
+  }, [previewDateRange]);
+
   const previewCalendarMonths = useMemo(() => groupDatesByMonth(previewDateRange), [previewDateRange]);
+
+  const biometricMappingByCode = useMemo(() => {
+    return new Map(mappings.filter((mapping) => mapping.is_active).map((mapping) => [mapping.biometric_code, mapping]));
+  }, [mappings]);
 
   const previewYears = useMemo(() => {
     const years = new Set<number>();
@@ -2014,7 +2023,65 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
           )}
           {previewRows.length === 0 ? (
             <EmptyState title={previewParsing ? 'Analizando TXT...' : 'Sin marcaciones para mostrar'} />
-          ) : previewMode === 'calendar' ? (
+          ) : (
+            <>
+              <div className="mb-4 rounded-lg border border-gray-100 bg-gray-50/60 p-3">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-900">Resumen por empleado del filtro</p>
+                    <p className="text-[11px] text-gray-500">Periodo analizado: {previewRangeLabel}</p>
+                  </div>
+                  <Badge label={`${previewByCode.length} empleado/codigo`} color="gray" />
+                </div>
+                <div className="overflow-x-auto rounded-lg border border-gray-100 bg-white">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-left text-[10px] uppercase text-gray-400 border-b border-gray-100">
+                        <th className="py-2 px-3">Empleado</th>
+                        <th className="py-2 px-3">Codigo</th>
+                        <th className="py-2 px-3">Periodo</th>
+                        <th className="py-2 px-3">Dias</th>
+                        <th className="py-2 px-3">Horas</th>
+                        <th className="py-2 px-3">Diurnas</th>
+                        <th className="py-2 px-3">Nocturnas</th>
+                        <th className="py-2 px-3">Faltas</th>
+                        <th className="py-2 px-3">Revisar</th>
+                        <th className="py-2 px-3">Festivos</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {previewByCode.map((group) => {
+                        const mapping = biometricMappingByCode.get(group.code);
+                        const employee = mapping ? employeeById.get(mapping.employee) : undefined;
+                        return (
+                          <tr key={`summary-${group.code}`} className="border-b border-gray-50">
+                            <td className="py-2 px-3 min-w-[220px]">
+                              <p className="font-semibold text-gray-900">{employee ? employeeName(employee) : 'Sin empleado asociado'}</p>
+                              <p className="text-[10px] text-gray-400">{employee?.employee_code ?? 'Mapea el codigo para asociarlo'}</p>
+                            </td>
+                            <td className="py-2 px-3 font-mono font-semibold">{group.code}</td>
+                            <td className="py-2 px-3 whitespace-nowrap">{previewRangeLabel}</td>
+                            <td className="py-2 px-3">{group.rows.length}</td>
+                            <td className="py-2 px-3 font-semibold">{group.totalHours.toFixed(2)}</td>
+                            <td className="py-2 px-3 text-emerald-700">{group.dayHours.toFixed(2)}</td>
+                            <td className="py-2 px-3 text-indigo-700">{group.nightHours.toFixed(2)}</td>
+                            <td className="py-2 px-3">
+                              <Badge label={group.missingWorkDays} color={group.missingWorkDays > 0 ? 'red' : 'green'} />
+                            </td>
+                            <td className="py-2 px-3">
+                              <Badge label={group.reviewDays} color={group.reviewDays > 0 ? 'yellow' : 'green'} />
+                            </td>
+                            <td className="py-2 px-3">
+                              <Badge label={group.holidayDays} color={group.holidayDays > 0 ? 'blue' : 'gray'} />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              {previewMode === 'calendar' ? (
             <div className="max-h-[640px] overflow-auto space-y-3 pr-1">
               {previewByCode.map((group) => {
                 const rowsByDate = new Map(group.rows.map((row) => [row.date, row]));
@@ -2114,7 +2181,7 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
                 );
               })}
             </div>
-          ) : (
+              ) : (
             <div className="overflow-auto max-h-[520px] border border-gray-100 rounded-lg">
               <table className="w-full text-xs">
                 <thead className="sticky top-0 bg-white z-10">
@@ -2241,6 +2308,8 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
                 </tbody>
               </table>
             </div>
+              )}
+            </>
           )}
         </Card>
       )}
