@@ -399,6 +399,26 @@ class EmployeeBiometricIdSerializer(serializers.ModelSerializer):
         model = EmployeeBiometricId
         fields = "__all__"
 
+    def validate(self, attrs):
+        instance = self.instance
+        biometric_code = attrs.get("biometric_code", getattr(instance, "biometric_code", None))
+        device = attrs.get("device", getattr(instance, "device", None))
+        is_active = attrs.get("is_active", getattr(instance, "is_active", True))
+        if biometric_code and is_active:
+            queryset = EmployeeBiometricId.objects.filter(
+                biometric_code=biometric_code,
+                is_active=True,
+                deleted_at__isnull=True,
+            )
+            queryset = queryset.filter(device=device) if device else queryset.filter(device__isnull=True)
+            if instance:
+                queryset = queryset.exclude(pk=instance.pk)
+            if queryset.exists():
+                raise serializers.ValidationError({
+                    "biometric_code": ["Este código activo ya está asignado a otro empleado para ese dispositivo."],
+                })
+        return attrs
+
 
 class RawBiometricPunchSerializer(serializers.ModelSerializer):
     class Meta:

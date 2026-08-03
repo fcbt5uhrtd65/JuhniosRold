@@ -584,6 +584,11 @@ function employeeName(employee: Employee | undefined): string {
   return `${employee.first_name} ${employee.last_name}`.trim() || employee.employee_code;
 }
 
+function biometricCodeDisplayName(code: string, employeeByBiometricCode: Map<string, Employee>): string {
+  const employee = employeeByBiometricCode.get(code);
+  return employee ? employeeName(employee) : `Codigo ${code}`;
+}
+
 function describeApiError(error: unknown, fallback: string): string {
   if (isAbortError(error)) {
     return 'La operación está tardando más de lo esperado. Espera un momento y vuelve a intentarlo; si el archivo es muy grande, prueba dividirlo.';
@@ -1266,12 +1271,13 @@ function buildBiometricPreviewXlsx(
     [xlsxCell('Codigos', 3), xlsxCell(codeGroups.length)],
     [xlsxCell('Dias del rango', 3), xlsxCell(exportRange.length)],
     [],
-    ['Codigo', 'Dias con marca', 'Faltas laborales', 'Festivos', 'Dias por revisar', 'Marcas utiles', 'Marcas originales', 'Repetidas limpiadas', 'Horas trabajadas', 'Horas diurnas', 'Horas nocturnas'].map((label) => xlsxCell(label, 2)),
+    ['Empleado', 'Codigo', 'Dias con marca', 'Faltas laborales', 'Festivos', 'Dias por revisar', 'Marcas utiles', 'Marcas originales', 'Repetidas limpiadas', 'Horas trabajadas', 'Horas diurnas', 'Horas nocturnas'].map((label) => xlsxCell(label, 2)),
   ];
 
   const codeSheets = codeGroups.map(([code, codeRows]) => {
     const summary = summarizeBiometricCodeRows(codeRows, holidaysByDate, exportRange);
     const employee = employeeByBiometricCode.get(code);
+    const displayName = biometricCodeDisplayName(code, employeeByBiometricCode);
     const baseSalary = numberValue(employee?.base_salary) || numberValue(parameter?.minimum_wage);
     const rates = biometricHourlyRates(baseSalary, parameter);
     const values = {
@@ -1285,6 +1291,7 @@ function buildBiometricPreviewXlsx(
       sundayExtraNight: summary.payroll.sundayExtraNightHours * rates.sundayExtraNight,
     };
     summaryRows.push([
+      xlsxCell(biometricCodeDisplayName(code, employeeByBiometricCode)),
       xlsxCell(code),
       xlsxCell(summary.daysWithMarks),
       xlsxCell(summary.missingWorkDays),
@@ -1369,7 +1376,7 @@ function buildBiometricPreviewXlsx(
       name: uniqueSheetName(`COD ${code}`, usedSheetNames),
       widths: [10, 22, 22, 16, 17, 12, 18, 16, 11, 19, 18, 16, 21, 25, 21, 24, 14, 13, 24, 14, 20, 44, 36],
       rows: [
-        [xlsxCell(`Codigo ${code}`, 1), xlsxCell(employee ? employeeName(employee) : 'Sin empleado asociado'), xlsxCell(fileName || 'TXT biometrico')],
+        [xlsxCell(displayName, 1), xlsxCell(`Codigo ${code}`), xlsxCell(fileName || 'TXT biometrico')],
         [xlsxCell('Periodo', 3), xlsxCell(exportRange.length ? `${formatDate(exportRange[0])} - ${formatDate(exportRange[exportRange.length - 1])}` : 'Sin rango'), xlsxCell('Salario base', 3), xlsxCell(baseSalary)],
         [],
         [
@@ -1422,7 +1429,7 @@ function buildBiometricPreviewXlsx(
   const sheets: XlsxSheet[] = [
     {
       name: uniqueSheetName('Resumen', usedSheetNames),
-      widths: [15, 15, 16, 12, 16, 14, 17, 19, 18, 15, 16],
+      widths: [30, 15, 15, 16, 12, 16, 14, 17, 19, 18, 15, 16],
       rows: summaryRows,
     },
     ...codeSheets,
@@ -2542,6 +2549,7 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
   const employeeByBiometricCode = useMemo(() => {
     const byCode = new Map<string, Employee>();
     mappings.forEach((mapping) => {
+      if (!mapping.is_active) return;
       const employee = employeeById.get(mapping.employee);
       if (employee && !byCode.has(mapping.biometric_code)) {
         byCode.set(mapping.biometric_code, employee);
@@ -2873,13 +2881,14 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
             <div className="max-h-[640px] overflow-auto space-y-3 pr-1">
               {previewByCode.map((group) => {
                 const rowsByDate = new Map(group.rows.map((row) => [row.date, row]));
+                const mappedEmployee = employeeByBiometricCode.get(group.code);
                 return (
                   <div key={group.code} className="rounded-lg border border-gray-100 bg-white">
                     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-3 py-2">
                       <div>
-                        <p className="font-mono text-sm font-semibold text-gray-900">Codigo {group.code}</p>
+                        <p className="text-sm font-semibold text-gray-900">{biometricCodeDisplayName(group.code, employeeByBiometricCode)}</p>
                         <p className="text-[11px] text-gray-500">
-                          {group.rows.length} dias con marca - {group.missingWorkDays} faltas laborales - {group.holidayDays} festivos en rango
+                          Codigo {group.code}{mappedEmployee?.employee_code ? ` - ${mappedEmployee.employee_code}` : ''} - {group.rows.length} dias con marca - {group.missingWorkDays} faltas laborales - {group.holidayDays} festivos en rango
                         </p>
                       </div>
                       <button
@@ -2974,7 +2983,7 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
               <table className="w-full text-xs">
                 <thead className="sticky top-0 bg-white z-10">
                   <tr className="text-left text-[10px] uppercase text-gray-400 border-b border-gray-100">
-                    <th className="py-2 px-3">Codigo</th>
+                    <th className="py-2 px-3">Empleado / codigo</th>
                     <th className="py-2 px-3">Dias</th>
                     <th className="py-2 px-3">Marcas</th>
                     <th className="py-2 px-3">Rep.</th>
@@ -2990,10 +2999,16 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
                 <tbody>
                   {previewByCode.map((group) => {
                     const expanded = expandedPreviewCodes.has(group.code);
+                    const mappedEmployee = employeeByBiometricCode.get(group.code);
                     return (
                       <Fragment key={group.code}>
                         <tr key={group.code} className="border-b border-gray-50 bg-white">
-                          <td className="py-3 px-3 font-mono text-sm font-semibold text-gray-900">{group.code}</td>
+                          <td className="py-3 px-3">
+                            <div className="text-sm font-semibold text-gray-900">{biometricCodeDisplayName(group.code, employeeByBiometricCode)}</div>
+                            <div className="mt-1 font-mono text-[11px] text-gray-400">
+                              Codigo {group.code}{mappedEmployee?.employee_code ? ` - ${mappedEmployee.employee_code}` : ''}
+                            </div>
+                          </td>
                           <td className="py-3 px-3">{group.rows.length}</td>
                           <td className="py-3 px-3">{group.markCount}/{group.rawMarkCount}</td>
                           <td className="py-3 px-3">
@@ -3021,7 +3036,7 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
                                 onClick={() => exportPreviewRows(group.rows, group.code)}
                                 className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-[11px] font-semibold text-[#2a4038] hover:bg-gray-50"
                               >
-                                <Download size={12} /> CSV
+                                <Download size={12} /> Excel
                               </button>
                             <button
                               type="button"
@@ -3164,10 +3179,10 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
         open={showMappingModal}
         employees={employees}
         devices={devices}
+        mappings={mappings}
         initialCode={mappingInitialCode}
         onClose={() => setShowMappingModal(false)}
         onCreated={async () => {
-          setShowMappingModal(false);
           await load();
         }}
       />
@@ -3276,6 +3291,7 @@ function NewBiometricMappingModal({
   open,
   employees,
   devices,
+  mappings,
   initialCode,
   onClose,
   onCreated,
@@ -3283,6 +3299,7 @@ function NewBiometricMappingModal({
   open: boolean;
   employees: Employee[];
   devices: BiometricDevice[];
+  mappings: EmployeeBiometricId[];
   initialCode?: string;
   onClose: () => void;
   onCreated: () => Promise<void>;
@@ -3292,14 +3309,24 @@ function NewBiometricMappingModal({
   const [deviceId, setDeviceId] = useState('');
   const [biometricCode, setBiometricCode] = useState('');
   const [saving, setSaving] = useState(false);
+  const [lastSavedCode, setLastSavedCode] = useState('');
 
   useEffect(() => {
     if (open) {
       setEmployeeId('');
       setDeviceId('');
       setBiometricCode(initialCode ?? '');
+      setLastSavedCode('');
     }
   }, [open, initialCode]);
+
+  const deviceById = useMemo(() => new Map(devices.map((device) => [device.id, device])), [devices]);
+  const selectedEmployeeMappings = useMemo(() => {
+    if (!employeeId) return [];
+    return mappings
+      .filter((mapping) => mapping.employee === employeeId)
+      .sort((left, right) => left.biometric_code.localeCompare(right.biometric_code, 'es', { numeric: true }));
+  }, [mappings, employeeId]);
 
   const handleSubmit = async () => {
     if (!employeeId || !biometricCode.trim()) {
@@ -3308,8 +3335,11 @@ function NewBiometricMappingModal({
     }
     setSaving(true);
     try {
-      await createEmployeeBiometricId({ employee: employeeId, biometric_code: biometricCode.trim(), device: deviceId || null });
-      toast.success('Mapeo registrado');
+      const savedCode = biometricCode.trim();
+      await createEmployeeBiometricId({ employee: employeeId, biometric_code: savedCode, device: deviceId || null });
+      setLastSavedCode(savedCode);
+      setBiometricCode('');
+      toast.success(`Mapeo registrado: codigo ${savedCode}`);
       await onCreated();
     } catch (error) {
       console.error(error);
@@ -3322,6 +3352,11 @@ function NewBiometricMappingModal({
   return (
     <Modal title="Nuevo mapeo de código biométrico" open={open} onClose={onClose}>
       <div className="space-y-4">
+        {lastSavedCode && (
+          <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">
+            Guardado codigo {lastSavedCode}. Puedes ingresar otro codigo para el mismo empleado.
+          </div>
+        )}
         <label className="block">
           <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Empleado</span>
           <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className={selectCls}>
@@ -3331,6 +3366,24 @@ function NewBiometricMappingModal({
             ))}
           </select>
         </label>
+        {employeeId && (
+          <div className="rounded-lg border border-gray-100 bg-gray-50/70 p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Codigos guardados de este empleado</p>
+            {selectedEmployeeMappings.length === 0 ? (
+              <p className="mt-2 text-xs text-gray-500">Todavia no tiene codigos biometricos guardados.</p>
+            ) : (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {selectedEmployeeMappings.map((mapping) => (
+                  <span key={mapping.id} className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs text-gray-700">
+                    <span className="font-mono font-semibold">{mapping.biometric_code}</span>
+                    <span className="text-gray-400">{mapping.device ? deviceById.get(mapping.device)?.name ?? 'Dispositivo' : 'Sin dispositivo'}</span>
+                    {!mapping.is_active && <span className="text-red-500">Inactivo</span>}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         <label className="block">
           <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Código en el reloj biométrico</span>
           <input value={biometricCode} onChange={(e) => setBiometricCode(e.target.value)} placeholder="Ej: 610" className={inputCls} />
@@ -3345,9 +3398,9 @@ function NewBiometricMappingModal({
           </select>
         </label>
         <div className="flex justify-end gap-2">
-          <SecondaryButton onClick={onClose}>Cancelar</SecondaryButton>
+          <SecondaryButton onClick={onClose}>Cerrar</SecondaryButton>
           <PrimaryButton onClick={() => void handleSubmit()} disabled={saving}>
-            {saving ? 'Guardando...' : 'Registrar mapeo'}
+            {saving ? 'Guardando...' : 'Guardar codigo'}
           </PrimaryButton>
         </div>
       </div>
