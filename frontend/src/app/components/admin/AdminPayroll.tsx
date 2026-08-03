@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Banknote,
   Calculator,
@@ -33,7 +33,6 @@ import {
   applyWorkScheduleTemplate,
   approvePayrollPeriod,
   calculatePayrollPeriod,
-  consolidateBiometricBatch,
   correctAttendance,
   createBiometricDevice,
   createEmployeeBiometricId,
@@ -44,7 +43,6 @@ import {
   generateYearHolidays,
   getAttendanceIntelligenceSettings,
   getBiometricDevices,
-  getBiometricImportBatches,
   getEmployeeBiometricIds,
   getEmployeeWorkSchedules,
   getPayrollLegalParameters,
@@ -62,7 +60,6 @@ import {
   type Attendance,
   type AttendanceIntelligenceSettings,
   type BiometricDevice,
-  type BiometricImportBatch,
   type EmployeeBiometricId,
   type EmployeeWorkSchedule,
   type PayrollLegalParameter,
@@ -161,6 +158,9 @@ type BiometricPreviewRow = {
   breakStart: string;
   breakEnd: string;
   checkOut: string;
+  workedHours: number;
+  dayHours: number;
+  nightHours: number;
   status: 'Completo' | 'Incompleto' | 'Revisar';
   marks: string;
 };
@@ -238,6 +238,71 @@ function lastActionTime(punches: BiometricPreviewPunch[], action: BiometricPrevi
   return [...punches].reverse().find((punch) => punch.action === action)?.time ?? '-';
 }
 
+function timeToMinutes(value: string): number | null {
+  if (!value || value === '-') return null;
+  const match = value.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) return null;
+  return hours * 60 + minutes;
+}
+
+function normalizePreviewTime(value: string): string {
+  if (!value) return '-';
+  const [hours = '00', minutes = '00'] = value.split(':');
+  return `${twoDigits(Number(hours))}:${twoDigits(Number(minutes))}:00`;
+}
+
+function dayMinutesInSegment(start: number, end: number): number {
+  const normalizedEnd = end >= start ? end : end + 1440;
+  let total = 0;
+  const firstDay = Math.floor(start / 1440);
+  const lastDay = Math.floor(Math.max(start, normalizedEnd - 1) / 1440);
+  for (let day = firstDay; day <= lastDay; day += 1) {
+    const dayStart = day * 1440 + 360;
+    const dayEnd = day * 1440 + 1140;
+    total += Math.max(0, Math.min(normalizedEnd, dayEnd) - Math.max(start, dayStart));
+  }
+  return total;
+}
+
+function calculatePreviewHours(row: Pick<BiometricPreviewRow, 'checkIn' | 'breakStart' | 'breakEnd' | 'checkOut'>) {
+  const checkIn = timeToMinutes(row.checkIn);
+  const checkOutRaw = timeToMinutes(row.checkOut);
+  if (checkIn === null || checkOutRaw === null) {
+    return { workedHours: 0, dayHours: 0, nightHours: 0 };
+  }
+  const checkOut = checkOutRaw >= checkIn ? checkOutRaw : checkOutRaw + 1440;
+  const breakStartRaw = timeToMinutes(row.breakStart);
+  const breakEndRaw = timeToMinutes(row.breakEnd);
+  const segments: Array<[number, number]> = [];
+
+  if (breakStartRaw !== null && breakEndRaw !== null) {
+    const breakStart = breakStartRaw >= checkIn ? breakStartRaw : breakStartRaw + 1440;
+    const breakEnd = breakEndRaw >= breakStartRaw ? breakEndRaw : breakEndRaw + 1440;
+    if (checkIn < breakStart && breakStart < breakEnd && breakEnd < checkOut) {
+      segments.push([checkIn, breakStart], [breakEnd, checkOut]);
+    } else {
+      segments.push([checkIn, checkOut]);
+    }
+  } else {
+    segments.push([checkIn, checkOut]);
+  }
+
+  const workedMinutes = segments.reduce((sum, [start, end]) => sum + Math.max(0, end - start), 0);
+  const dayMinutes = segments.reduce((sum, [start, end]) => sum + dayMinutesInSegment(start, end), 0);
+  return {
+    workedHours: Number((workedMinutes / 60).toFixed(2)),
+    dayHours: Number((dayMinutes / 60).toFixed(2)),
+    nightHours: Number(((workedMinutes - dayMinutes) / 60).toFixed(2)),
+  };
+}
+
+function enrichPreviewRow(row: Omit<BiometricPreviewRow, 'workedHours' | 'dayHours' | 'nightHours'>): BiometricPreviewRow {
+  return { ...row, ...calculatePreviewHours(row) };
+}
+
 function buildBiometricPreviewRows(groups: Map<string, { code: string; date: string; punches: BiometricPreviewPunch[] }>): BiometricPreviewRow[] {
   return [...groups.values()]
     .map((group) => {
@@ -274,7 +339,7 @@ function buildBiometricPreviewRows(groups: Map<string, { code: string; date: str
         status = 'Revisar';
       }
 
-      return {
+      return enrichPreviewRow({
         key: `${group.code}-${group.date}`,
         code: group.code,
         date: group.date,
@@ -285,7 +350,7 @@ function buildBiometricPreviewRows(groups: Map<string, { code: string; date: str
         checkOut,
         status,
         marks: punches.map((punch) => punch.time).join(', '),
-      };
+      });
     })
     .sort((left, right) => left.code.localeCompare(right.code, 'es', { numeric: true }) || left.date.localeCompare(right.date));
 }
@@ -1214,7 +1279,6 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
   const toast = useToast();
   const [devices, setDevices] = useState<BiometricDevice[]>([]);
   const [mappings, setMappings] = useState<EmployeeBiometricId[]>([]);
-  const [batches, setBatches] = useState<BiometricImportBatch[]>([]);
   const [pending, setPending] = useState<Attendance[]>([]);
   const [unmatchedCodes, setUnmatchedCodes] = useState<UnmatchedBiometricCode[]>([]);
   const [intelligenceSettings, setIntelligenceSettings] = useState<AttendanceIntelligenceSettings | null>(null);
@@ -1232,22 +1296,20 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
   const [previewParsing, setPreviewParsing] = useState(false);
   const [previewFileName, setPreviewFileName] = useState('');
   const [uploading, setUploading] = useState(false);
-  const [consolidatingId, setConsolidatingId] = useState<string | null>(null);
+  const [expandedPreviewCodes, setExpandedPreviewCodes] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [devicesRes, mappingsRes, batchesRes, pendingRes, unmatchedRes, intelligenceRes] = await Promise.allSettled([
+      const [devicesRes, mappingsRes, pendingRes, unmatchedRes, intelligenceRes] = await Promise.allSettled([
         getBiometricDevices(),
         getEmployeeBiometricIds(),
-        getBiometricImportBatches(),
         getPendingCorrectionAttendance(),
         getUnmatchedBiometricCodes(),
         getAttendanceIntelligenceSettings(),
       ]);
       if (devicesRes.status === 'fulfilled') setDevices(devicesRes.value);
       if (mappingsRes.status === 'fulfilled') setMappings(mappingsRes.value);
-      if (batchesRes.status === 'fulfilled') setBatches(batchesRes.value);
       if (pendingRes.status === 'fulfilled') setPending(pendingRes.value);
       if (unmatchedRes.status === 'fulfilled') setUnmatchedCodes(unmatchedRes.value);
       if (intelligenceRes.status === 'fulfilled') setIntelligenceSettings(intelligenceRes.value);
@@ -1324,20 +1386,6 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
     }
   };
 
-  const handleConsolidate = async (batchId: string) => {
-    setConsolidatingId(batchId);
-    try {
-      const summary = await consolidateBiometricBatch(batchId);
-      toast.success(`Asistencia consolidada: ${summary.created} creadas, ${summary.updated} actualizadas, ${summary.incomplete} incompletas.`);
-      await load();
-    } catch (error) {
-      console.error(error);
-      toast.error(describeApiError(error, 'No se pudo consolidar la importación'));
-    } finally {
-      setConsolidatingId(null);
-    }
-  };
-
   const handleDeleteMapping = async (id: string) => {
     try {
       await deleteEmployeeBiometricId(id);
@@ -1347,6 +1395,74 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
       console.error(error);
       toast.error('No se pudo eliminar el mapeo');
     }
+  };
+
+  const previewByCode = useMemo(() => {
+    const groups = new Map<
+      string,
+      {
+        code: string;
+        rows: BiometricPreviewRow[];
+        markCount: number;
+        totalHours: number;
+        dayHours: number;
+        nightHours: number;
+        reviewDays: number;
+      }
+    >();
+
+    for (const row of previewRows) {
+      const group = groups.get(row.code) ?? {
+        code: row.code,
+        rows: [],
+        markCount: 0,
+        totalHours: 0,
+        dayHours: 0,
+        nightHours: 0,
+        reviewDays: 0,
+      };
+      group.rows.push(row);
+      group.markCount += row.markCount;
+      group.totalHours += row.workedHours;
+      group.dayHours += row.dayHours;
+      group.nightHours += row.nightHours;
+      if (row.status !== 'Completo') group.reviewDays += 1;
+      groups.set(row.code, group);
+    }
+
+    return [...groups.values()]
+      .map((group) => ({
+        ...group,
+        rows: group.rows.sort((left, right) => left.date.localeCompare(right.date)),
+        totalHours: Number(group.totalHours.toFixed(2)),
+        dayHours: Number(group.dayHours.toFixed(2)),
+        nightHours: Number(group.nightHours.toFixed(2)),
+      }))
+      .sort((left, right) => left.code.localeCompare(right.code, 'es', { numeric: true }));
+  }, [previewRows]);
+
+  const togglePreviewCode = (code: string) => {
+    setExpandedPreviewCodes((current) => {
+      const next = new Set(current);
+      if (next.has(code)) next.delete(code);
+      else next.add(code);
+      return next;
+    });
+  };
+
+  const updatePreviewTime = (
+    rowKey: string,
+    field: 'checkIn' | 'breakStart' | 'breakEnd' | 'checkOut',
+    value: string,
+  ) => {
+    setPreviewRows((rows) =>
+      rows.map((row) => {
+        if (row.key !== rowKey) return row;
+        const next = enrichPreviewRow({ ...row, [field]: normalizePreviewTime(value) });
+        next.status = next.checkIn !== '-' && next.checkOut !== '-' ? 'Completo' : 'Incompleto';
+        return next;
+      }),
+    );
   };
 
   if (loading) return <LoadingState label="Cargando información biométrica..." />;
@@ -1408,14 +1524,19 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
 
       {(previewFileName || previewRows.length > 0) && (
         <Card className="p-5">
-          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-3">
+          <div className="flex flex-col gap-3 mb-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <p className="text-sm font-semibold text-gray-900">Tabla analizada del TXT</p>
               <p className="text-[11px] text-gray-500">
-                {previewFileName || 'Archivo seleccionado'} · {previewProgress.parsed} marcaciones tomadas · {previewRows.length} codigo/dia
+                {previewFileName || 'Archivo seleccionado'} - {previewProgress.parsed} marcaciones tomadas - {previewByCode.length} codigos - {previewRows.length} dias
               </p>
             </div>
-            {previewParsing && <Badge label={`Leyendo ${previewProgress.processed}/${previewProgress.total}`} color="yellow" />}
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge label={`${previewRows.reduce((sum, row) => sum + row.workedHours, 0).toFixed(2)} hrs trabajadas`} color="gray" />
+              <Badge label={`${previewRows.reduce((sum, row) => sum + row.dayHours, 0).toFixed(2)} diurnas`} color="green" />
+              <Badge label={`${previewRows.reduce((sum, row) => sum + row.nightHours, 0).toFixed(2)} nocturnas`} color="blue" />
+              {previewParsing && <Badge label={`Leyendo ${previewProgress.processed}/${previewProgress.total}`} color="yellow" />}
+            </div>
           </div>
           {previewProgress.total > 0 && (
             <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-3">
@@ -1428,71 +1549,107 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
           {previewRows.length === 0 ? (
             <EmptyState title={previewParsing ? 'Analizando TXT...' : 'Sin marcaciones para mostrar'} />
           ) : (
-            <div className="overflow-auto max-h-[420px] border border-gray-100 rounded-lg">
+            <div className="overflow-auto max-h-[520px] border border-gray-100 rounded-lg">
               <table className="w-full text-xs">
-                <thead className="sticky top-0 bg-white">
+                <thead className="sticky top-0 bg-white z-10">
                   <tr className="text-left text-[10px] uppercase text-gray-400 border-b border-gray-100">
                     <th className="py-2 px-3">Codigo</th>
-                    <th className="py-2 px-3">Dia</th>
+                    <th className="py-2 px-3">Dias</th>
                     <th className="py-2 px-3">Marcas</th>
-                    <th className="py-2 px-3">Entrada</th>
-                    <th className="py-2 px-3">Inicio almuerzo</th>
-                    <th className="py-2 px-3">Fin almuerzo</th>
-                    <th className="py-2 px-3">Salida</th>
-                    <th className="py-2 px-3">Estado</th>
-                    <th className="py-2 px-3">Todas las horas</th>
+                    <th className="py-2 px-3">Hrs</th>
+                    <th className="py-2 px-3">Diurnas</th>
+                    <th className="py-2 px-3">Nocturnas</th>
+                    <th className="py-2 px-3">Revision</th>
+                    <th className="py-2 px-3 text-right">Accion</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {previewRows.map((row) => (
-                    <tr key={row.key} className="border-b border-gray-50">
-                      <td className="py-2 px-3 font-mono font-semibold">{row.code}</td>
-                      <td className="py-2 px-3">{formatDate(row.date)}</td>
-                      <td className="py-2 px-3">{row.markCount}</td>
-                      <td className="py-2 px-3">{row.checkIn}</td>
-                      <td className="py-2 px-3">{row.breakStart}</td>
-                      <td className="py-2 px-3">{row.breakEnd}</td>
-                      <td className="py-2 px-3">{row.checkOut}</td>
-                      <td className="py-2 px-3">
-                        <Badge label={row.status} color={row.status === 'Completo' ? 'green' : row.status === 'Incompleto' ? 'yellow' : 'gray'} />
-                      </td>
-                      <td className="py-2 px-3 text-gray-500 min-w-[180px]">{row.marks}</td>
-                    </tr>
-                  ))}
+                  {previewByCode.map((group) => {
+                    const expanded = expandedPreviewCodes.has(group.code);
+                    return (
+                      <Fragment key={group.code}>
+                        <tr key={group.code} className="border-b border-gray-50 bg-white">
+                          <td className="py-3 px-3 font-mono text-sm font-semibold text-gray-900">{group.code}</td>
+                          <td className="py-3 px-3">{group.rows.length}</td>
+                          <td className="py-3 px-3">{group.markCount}</td>
+                          <td className="py-3 px-3 font-semibold">{group.totalHours.toFixed(2)}</td>
+                          <td className="py-3 px-3 text-emerald-700">{group.dayHours.toFixed(2)}</td>
+                          <td className="py-3 px-3 text-indigo-700">{group.nightHours.toFixed(2)}</td>
+                          <td className="py-3 px-3">
+                            <Badge
+                              label={group.reviewDays > 0 ? `${group.reviewDays} dia(s)` : 'OK'}
+                              color={group.reviewDays > 0 ? 'yellow' : 'green'}
+                            />
+                          </td>
+                          <td className="py-3 px-3 text-right">
+                            <button
+                              type="button"
+                              onClick={() => togglePreviewCode(group.code)}
+                              className="rounded-lg border border-gray-200 px-3 py-1.5 text-[11px] font-semibold text-[#2a4038] hover:bg-gray-50"
+                            >
+                              {expanded ? 'Ocultar' : 'Ver mas'}
+                            </button>
+                          </td>
+                        </tr>
+                        {expanded && (
+                          <tr key={`${group.code}-detail`} className="border-b border-gray-100 bg-gray-50/60">
+                            <td colSpan={8} className="px-3 py-3">
+                              <div className="overflow-x-auto rounded-lg border border-gray-100 bg-white">
+                                <table className="w-full text-xs">
+                                  <thead>
+                                    <tr className="text-left text-[10px] uppercase text-gray-400 border-b border-gray-100">
+                                      <th className="py-2 px-3">Dia</th>
+                                      <th className="py-2 px-3">Marcas</th>
+                                      <th className="py-2 px-3">Entrada</th>
+                                      <th className="py-2 px-3">Inicio almuerzo</th>
+                                      <th className="py-2 px-3">Fin almuerzo</th>
+                                      <th className="py-2 px-3">Salida</th>
+                                      <th className="py-2 px-3">Hrs</th>
+                                      <th className="py-2 px-3">Diurnas</th>
+                                      <th className="py-2 px-3">Nocturnas</th>
+                                      <th className="py-2 px-3">Estado</th>
+                                      <th className="py-2 px-3 min-w-[180px]">Todas</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {group.rows.map((row) => (
+                                      <tr key={row.key} className="border-b border-gray-50 last:border-0">
+                                        <td className="py-2 px-3 whitespace-nowrap">{formatDate(row.date)}</td>
+                                        <td className="py-2 px-3">{row.markCount}</td>
+                                        {(['checkIn', 'breakStart', 'breakEnd', 'checkOut'] as const).map((field) => (
+                                          <td key={field} className="py-2 px-3">
+                                            <input
+                                              type="time"
+                                              value={row[field] === '-' ? '' : row[field].slice(0, 5)}
+                                              onChange={(event) => updatePreviewTime(row.key, field, event.target.value)}
+                                              className="w-[96px] rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#2a4038]/20"
+                                            />
+                                          </td>
+                                        ))}
+                                        <td className="py-2 px-3 font-semibold">{row.workedHours.toFixed(2)}</td>
+                                        <td className="py-2 px-3 text-emerald-700">{row.dayHours.toFixed(2)}</td>
+                                        <td className="py-2 px-3 text-indigo-700">{row.nightHours.toFixed(2)}</td>
+                                        <td className="py-2 px-3">
+                                          <Badge label={row.status} color={row.status === 'Completo' ? 'green' : row.status === 'Incompleto' ? 'yellow' : 'gray'} />
+                                        </td>
+                                        <td className="py-2 px-3 text-gray-500">{row.marks}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           )}
         </Card>
       )}
-
-      <Card className="p-5">
-        <p className="text-sm font-semibold text-gray-900 mb-3">Importaciones recientes</p>
-        {batches.length === 0 ? (
-          <EmptyState title="Sin importaciones todavía" />
-        ) : (
-          <div className="space-y-2">
-            {batches.map((batch) => (
-              <div key={batch.id} className="flex items-center justify-between gap-3 border border-gray-100 rounded-lg p-3">
-                <div>
-                  <p className="text-xs font-semibold text-gray-900">{formatDateTime(batch.created_at)}</p>
-                  <p className="text-[11px] text-gray-400">
-                    {batch.total_rows} por codigo · {batch.unmatched_rows} pendientes de relacionar · {batch.duplicate_rows} duplicadas
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge label={batch.status} color={batch.status === 'COMPLETED' ? 'green' : batch.status === 'FAILED' ? 'red' : 'yellow'} />
-                  {batch.status === 'COMPLETED' && batch.matched_rows > 0 && (
-                    <SecondaryButton onClick={() => void handleConsolidate(batch.id)} disabled={consolidatingId === batch.id}>
-                      {consolidatingId === batch.id ? 'Consolidando...' : 'Consolidar en asistencia'}
-                    </SecondaryButton>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
 
       {unmatchedCodes.length > 0 && (
         <Card className="p-5 border-amber-200 bg-amber-50/40">
