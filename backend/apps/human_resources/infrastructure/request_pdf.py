@@ -157,22 +157,31 @@ def _text(c, x, y, text, size=9, bold=False, align="left", color=TEXT):
         c.drawString(x, y, text)
 
 
-def _fit_text(text, max_width, font_name=FONT, font_size=9):
-    text = _safe(text, "")
-    if stringWidth(text, font_name, font_size) <= max_width:
-        return text
-    suffix = "..."
-    while text and stringWidth(text + suffix, font_name, font_size) > max_width:
-        text = text[:-1]
-    return text + suffix if text else suffix
-
-
 def _wrap_lines(text, max_width, font_name=FONT, font_size=9):
     text = _safe(text, "")
     words = text.split()
     lines = []
     current = ""
     for word in words:
+        if stringWidth(word, font_name, font_size) > max_width:
+            if current:
+                lines.append(current)
+                current = ""
+            pieces = []
+            piece = ""
+            for char in word:
+                candidate = f"{piece}{char}"
+                if not piece or stringWidth(candidate, font_name, font_size) <= max_width:
+                    piece = candidate
+                else:
+                    pieces.append(piece)
+                    piece = char
+            if piece:
+                pieces.append(piece)
+            if len(pieces) > 1:
+                lines.extend(pieces[:-1])
+            current = pieces[-1] if pieces else ""
+            continue
         candidate = word if not current else f"{current} {word}"
         if stringWidth(candidate, font_name, font_size) <= max_width:
             current = candidate
@@ -193,6 +202,21 @@ def _draw_wrapped_text(c, x, y, text, max_width, size=9, leading=None, color=TEX
     for idx, line in enumerate(lines):
         c.drawString(x, y - (idx * leading), line)
     return y - (len(lines) * leading)
+
+
+def _draw_key_value_cell(c, x, y, label, value, cell_width, label_width=118):
+    value_x = x + label_width
+    value_width = max(cell_width - label_width - 8, 48)
+    value_size = 9
+    leading = 11.5
+
+    _text(c, x, y, f"{label}:", size=8.6, bold=True, color=MUTED)
+    lines = _wrap_lines(value, value_width, FONT, value_size)
+    c.setFillColor(TEXT)
+    c.setFont(FONT, value_size)
+    for index, line in enumerate(lines):
+        c.drawString(value_x, y - (index * leading), line)
+    return max(leading, len(lines) * leading)
 
 
 def _parse_runs(parts):
@@ -361,14 +385,13 @@ def _draw_loan_details(c, x0, x1, y, vacation, employee):
     _text(c, x0, y, "Datos del préstamo", size=10.5, bold=True, color=TEXT)
     y -= 20
     col_w = w / 2
-    for index, (label, value) in enumerate(rows):
-        col = index % 2
-        row = index // 2
-        col_x = x0 + col * col_w
-        row_y = y - row * 16
-        _text(c, col_x, row_y, f"{label}:", size=8.6, bold=True, color=MUTED)
-        _text(c, col_x + 118, row_y, _fit_text(value, col_w - 122, FONT, 9), size=9, color=TEXT)
-    y -= (((len(rows) + 1) // 2) * 16) + 20
+    for row_start in range(0, len(rows), 2):
+        row_height = 0
+        for col, (label, value) in enumerate(rows[row_start:row_start + 2]):
+            col_x = x0 + col * col_w
+            row_height = max(row_height, _draw_key_value_cell(c, col_x, y, label, value, col_w))
+        y -= row_height + 5
+    y -= 15
 
     frequency_label = _loan_frequency_label(vacation).lower()
     installments = vacation.loan_installments_count or "-"

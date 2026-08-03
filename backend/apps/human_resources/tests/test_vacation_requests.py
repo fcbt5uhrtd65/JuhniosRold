@@ -170,6 +170,32 @@ class VacationRequestPortalTests(TestCase):
         self.assertIn("Firmas de aprob", text)
         self.assertNotIn("firmas registradas", text)
 
+    def test_loan_request_pdf_wraps_long_requester_name_without_ellipsis(self):
+        requester_name = "Leonardo Fabio Mendoza Castillo Supervisor Principal De Produccion"
+        vacation = VacationRequest.objects.create(
+            employee=self.employee,
+            request_type=VacationRequest.RequestType.LOAN,
+            start_date="2026-08-03",
+            end_date="2026-08-03",
+            is_full_day=True,
+            loan_amount="500",
+            loan_requester_name=requester_name,
+            loan_requester_document="72294048",
+            loan_city="Barranquilla",
+            loan_position="Operario de maquina",
+            loan_concept="Negocio",
+            loan_frequency="BIWEEKLY",
+            loan_installments_count=10,
+            loan_expense_number="EGR-202608-0001",
+        )
+
+        pdf_buffer = render_request_pdf(vacation)
+        text = "\n".join(page.extract_text() or "" for page in PdfReader(pdf_buffer).pages)
+        normalized_text = " ".join(text.split())
+
+        self.assertNotIn("...", text)
+        self.assertIn(requester_name, normalized_text)
+
     def test_request_pdf_appends_pdf_support_document_as_extra_page(self):
         support_buffer = io.BytesIO()
         support_writer = PdfWriter()
