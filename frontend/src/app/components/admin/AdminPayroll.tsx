@@ -147,6 +147,149 @@ function describeApiError(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
+type BiometricPreviewPunch = {
+  time: string;
+  action: 'check_in' | 'break_start' | 'break_end' | 'check_out' | null;
+};
+
+type BiometricPreviewRow = {
+  key: string;
+  code: string;
+  date: string;
+  markCount: number;
+  checkIn: string;
+  breakStart: string;
+  breakEnd: string;
+  checkOut: string;
+  status: 'Completo' | 'Incompleto' | 'Revisar';
+  marks: string;
+};
+
+function twoDigits(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
+function parseBiometricTimestamp(raw: string): { date: string; time: string } | null {
+  const text = raw.trim();
+  let match = text.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})[ T]+(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (match) {
+    const [, year, month, day, hour, minute, second = '00'] = match;
+    return {
+      date: `${year}-${twoDigits(Number(month))}-${twoDigits(Number(day))}`,
+      time: `${twoDigits(Number(hour))}:${twoDigits(Number(minute))}:${twoDigits(Number(second))}`,
+    };
+  }
+  match = text.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})[ T]+(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (!match) return null;
+  const [, day, month, year, hour, minute, second = '00'] = match;
+  return {
+    date: `${year}-${twoDigits(Number(month))}-${twoDigits(Number(day))}`,
+    time: `${twoDigits(Number(hour))}:${twoDigits(Number(minute))}:${twoDigits(Number(second))}`,
+  };
+}
+
+function punchActionFromColumns(columns: string[]): BiometricPreviewPunch['action'] {
+  const normalized = columns.join(' ').trim().toLowerCase();
+  if (!normalized) return null;
+  if (/\b(check[_ -]?in|entrada|ingreso)\b/.test(normalized)) return 'check_in';
+  if (/\b(check[_ -]?out|salida)\b/.test(normalized)) return 'check_out';
+  if (/\b(break[_ -]?start|inicio almuerzo|inicio descanso)\b/.test(normalized)) return 'break_start';
+  if (/\b(break[_ -]?end|fin almuerzo|fin descanso)\b/.test(normalized)) return 'break_end';
+  const nonEmptyNumeric = columns.map((item) => item.trim()).filter(Boolean);
+  if (nonEmptyNumeric.length === 1) {
+    if (nonEmptyNumeric[0] === '1') return 'check_in';
+    if (nonEmptyNumeric[0] === '2') return 'check_out';
+    if (nonEmptyNumeric[0] === '3') return 'break_start';
+    if (nonEmptyNumeric[0] === '4') return 'break_end';
+  }
+  return null;
+}
+
+function parseBiometricLine(line: string): { code: string; date: string; time: string; action: BiometricPreviewPunch['action'] } | null {
+  const stripped = line.trim();
+  if (!stripped) return null;
+  const tabColumns = stripped.split('\t').map((item) => item.trim());
+  if (tabColumns.length >= 2) {
+    let timestampRaw = tabColumns[1];
+    let rest = tabColumns.slice(2);
+    if (rest[0] && /^\d{1,2}:\d{2}(?::\d{2})?$/.test(rest[0])) {
+      timestampRaw = `${timestampRaw} ${rest[0]}`;
+      rest = rest.slice(1);
+    }
+    const timestamp = parseBiometricTimestamp(timestampRaw);
+    if (timestamp && tabColumns[0]) {
+      return { code: tabColumns[0], ...timestamp, action: punchActionFromColumns(rest) };
+    }
+  }
+
+  const match = stripped.match(/^(\S+)\s+(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{4})\s+(\d{1,2}:\d{2}(?::\d{2})?)(?:\s+(.*))?$/);
+  if (!match) return null;
+  const [, code, datePart, timePart, rest = ''] = match;
+  const timestamp = parseBiometricTimestamp(`${datePart} ${timePart}`);
+  if (!timestamp) return null;
+  return { code, ...timestamp, action: punchActionFromColumns(rest.split(/\s+/)) };
+}
+
+function firstActionTime(punches: BiometricPreviewPunch[], action: BiometricPreviewPunch['action']): string {
+  return punches.find((punch) => punch.action === action)?.time ?? '-';
+}
+
+function lastActionTime(punches: BiometricPreviewPunch[], action: BiometricPreviewPunch['action']): string {
+  return [...punches].reverse().find((punch) => punch.action === action)?.time ?? '-';
+}
+
+function buildBiometricPreviewRows(groups: Map<string, { code: string; date: string; punches: BiometricPreviewPunch[] }>): BiometricPreviewRow[] {
+  return [...groups.values()]
+    .map((group) => {
+      const punches = [...group.punches].sort((left, right) => left.time.localeCompare(right.time));
+      const hasActions = punches.some((punch) => punch.action);
+      let checkIn = '-';
+      let checkOut = '-';
+      let breakStart = '-';
+      let breakEnd = '-';
+      let status: BiometricPreviewRow['status'] = 'Revisar';
+
+      if (hasActions) {
+        checkIn = firstActionTime(punches, 'check_in');
+        checkOut = lastActionTime(punches, 'check_out');
+        breakStart = firstActionTime(punches, 'break_start');
+        breakEnd = lastActionTime(punches, 'break_end');
+        status = checkIn !== '-' && checkOut !== '-' ? 'Completo' : 'Incompleto';
+      } else if (punches.length === 1) {
+        checkIn = punches[0].time;
+        status = 'Incompleto';
+      } else if (punches.length === 2) {
+        checkIn = punches[0].time;
+        checkOut = punches[1].time;
+        status = 'Completo';
+      } else if (punches.length === 4) {
+        checkIn = punches[0].time;
+        breakStart = punches[1].time;
+        breakEnd = punches[2].time;
+        checkOut = punches[3].time;
+        status = 'Completo';
+      } else {
+        checkIn = punches[0]?.time ?? '-';
+        checkOut = punches[punches.length - 1]?.time ?? '-';
+        status = 'Revisar';
+      }
+
+      return {
+        key: `${group.code}-${group.date}`,
+        code: group.code,
+        date: group.date,
+        markCount: punches.length,
+        checkIn,
+        breakStart,
+        breakEnd,
+        checkOut,
+        status,
+        marks: punches.map((punch) => punch.time).join(', '),
+      };
+    })
+    .sort((left, right) => left.code.localeCompare(right.code, 'es', { numeric: true }) || left.date.localeCompare(right.date));
+}
+
 export function AdminPayroll() {
   const [activeSection, setActiveSection] = useState<PayrollSection>('periods');
   const { employees, employeeById, loading: loadingEmployees } = useEmployeeDirectory();
@@ -1084,6 +1227,10 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
   const [uploadingDevice, setUploadingDevice] = useState('');
   const [uploadDateFrom, setUploadDateFrom] = useState('');
   const [uploadDateTo, setUploadDateTo] = useState('');
+  const [previewRows, setPreviewRows] = useState<BiometricPreviewRow[]>([]);
+  const [previewProgress, setPreviewProgress] = useState({ processed: 0, total: 0, parsed: 0 });
+  const [previewParsing, setPreviewParsing] = useState(false);
+  const [previewFileName, setPreviewFileName] = useState('');
   const [uploading, setUploading] = useState(false);
   const [consolidatingId, setConsolidatingId] = useState<string | null>(null);
 
@@ -1120,6 +1267,46 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
     if (uploadDateFrom && uploadDateTo && uploadDateTo < uploadDateFrom) {
       toast.error('La fecha hasta no puede ser anterior a la fecha desde.');
       return;
+    }
+    setPreviewRows([]);
+    setPreviewFileName(file.name);
+    setPreviewProgress({ processed: 0, total: 0, parsed: 0 });
+    setPreviewParsing(true);
+    const groups = new Map<string, { code: string; date: string; punches: BiometricPreviewPunch[] }>();
+    try {
+      const text = await file.text();
+      const lines = text.split(/\r?\n/);
+      let parsed = 0;
+      for (let index = 0; index < lines.length; index += 1) {
+        const parsedLine = parseBiometricLine(lines[index]);
+        if (parsedLine) {
+          const inRange =
+            (!uploadDateFrom || parsedLine.date >= uploadDateFrom) &&
+            (!uploadDateTo || parsedLine.date <= uploadDateTo);
+          if (inRange) {
+            const key = `${parsedLine.code}-${parsedLine.date}`;
+            const group = groups.get(key) ?? { code: parsedLine.code, date: parsedLine.date, punches: [] };
+            group.punches.push({ time: parsedLine.time, action: parsedLine.action });
+            groups.set(key, group);
+            parsed += 1;
+          }
+        }
+        if ((index + 1) % 500 === 0 || index === lines.length - 1) {
+          setPreviewRows(buildBiometricPreviewRows(groups));
+          setPreviewProgress({ processed: index + 1, total: lines.length, parsed });
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+      }
+      if (parsed === 0) {
+        toast.error('No se encontraron marcaciones del TXT para el rango seleccionado.');
+        return;
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo analizar el TXT del huellero.');
+      return;
+    } finally {
+      setPreviewParsing(false);
     }
     setUploading(true);
     try {
@@ -1218,6 +1405,66 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
           </label>
         </div>
       </Card>
+
+      {(previewFileName || previewRows.length > 0) && (
+        <Card className="p-5">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-3">
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Tabla analizada del TXT</p>
+              <p className="text-[11px] text-gray-500">
+                {previewFileName || 'Archivo seleccionado'} · {previewProgress.parsed} marcaciones tomadas · {previewRows.length} codigo/dia
+              </p>
+            </div>
+            {previewParsing && <Badge label={`Leyendo ${previewProgress.processed}/${previewProgress.total}`} color="yellow" />}
+          </div>
+          {previewProgress.total > 0 && (
+            <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-3">
+              <div
+                className="h-full bg-[#2a4038] transition-all"
+                style={{ width: `${Math.min(100, Math.round((previewProgress.processed / previewProgress.total) * 100))}%` }}
+              />
+            </div>
+          )}
+          {previewRows.length === 0 ? (
+            <EmptyState title={previewParsing ? 'Analizando TXT...' : 'Sin marcaciones para mostrar'} />
+          ) : (
+            <div className="overflow-auto max-h-[420px] border border-gray-100 rounded-lg">
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 bg-white">
+                  <tr className="text-left text-[10px] uppercase text-gray-400 border-b border-gray-100">
+                    <th className="py-2 px-3">Codigo</th>
+                    <th className="py-2 px-3">Dia</th>
+                    <th className="py-2 px-3">Marcas</th>
+                    <th className="py-2 px-3">Entrada</th>
+                    <th className="py-2 px-3">Inicio almuerzo</th>
+                    <th className="py-2 px-3">Fin almuerzo</th>
+                    <th className="py-2 px-3">Salida</th>
+                    <th className="py-2 px-3">Estado</th>
+                    <th className="py-2 px-3">Todas las horas</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {previewRows.map((row) => (
+                    <tr key={row.key} className="border-b border-gray-50">
+                      <td className="py-2 px-3 font-mono font-semibold">{row.code}</td>
+                      <td className="py-2 px-3">{formatDate(row.date)}</td>
+                      <td className="py-2 px-3">{row.markCount}</td>
+                      <td className="py-2 px-3">{row.checkIn}</td>
+                      <td className="py-2 px-3">{row.breakStart}</td>
+                      <td className="py-2 px-3">{row.breakEnd}</td>
+                      <td className="py-2 px-3">{row.checkOut}</td>
+                      <td className="py-2 px-3">
+                        <Badge label={row.status} color={row.status === 'Completo' ? 'green' : row.status === 'Incompleto' ? 'yellow' : 'gray'} />
+                      </td>
+                      <td className="py-2 px-3 text-gray-500 min-w-[180px]">{row.marks}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      )}
 
       <Card className="p-5">
         <p className="text-sm font-semibold text-gray-900 mb-3">Importaciones recientes</p>
