@@ -51,7 +51,6 @@ import {
   getPayrollPeriods,
   getPendingCorrectionAttendance,
   getPublicHolidays,
-  getUnmatchedBiometricCodes,
   getWorkScheduleTemplates,
   markPayrollPeriodPaid,
   setEmployeeWorkSchedule,
@@ -69,7 +68,6 @@ import {
   type PayrollPeriodStatus,
   type PublicHoliday,
   type WorkScheduleTemplate,
-  type UnmatchedBiometricCode,
 } from '../../services/human-resources.service';
 import { getEmployees, type Employee } from '../../services/employees.service';
 import { isAbortError } from '../../services/api';
@@ -353,10 +351,41 @@ function enrichPreviewRow(row: Omit<BiometricPreviewRow, 'workedHours' | 'dayHou
   return { ...row, ...calculatePreviewHours(row) };
 }
 
-function buildBiometricPreviewRows(groups: Map<string, { code: string; date: string; punches: BiometricPreviewPunch[] }>): BiometricPreviewRow[] {
+function compactRepeatedPreviewPunches(punches: BiometricPreviewPunch[], windowMinutes: number): BiometricPreviewPunch[] {
+  const sorted = [...punches].sort((left, right) => left.time.localeCompare(right.time));
+  if (sorted.length <= 1) return sorted;
+
+  const compacted: BiometricPreviewPunch[] = [];
+  let current = sorted[0];
+
+  for (const punch of sorted.slice(1)) {
+    const currentMinutes = timeToMinutes(current.time);
+    const punchMinutes = timeToMinutes(punch.time);
+    const sameAction = current.action === punch.action || !current.action || !punch.action;
+    const closeEnough =
+      currentMinutes !== null &&
+      punchMinutes !== null &&
+      Math.abs(punchMinutes - currentMinutes) < windowMinutes;
+
+    if (sameAction && closeEnough) {
+      current = punch;
+    } else {
+      compacted.push(current);
+      current = punch;
+    }
+  }
+
+  compacted.push(current);
+  return compacted;
+}
+
+function buildBiometricPreviewRows(
+  groups: Map<string, { code: string; date: string; punches: BiometricPreviewPunch[] }>,
+  duplicateWindowMinutes = 15,
+): BiometricPreviewRow[] {
   return [...groups.values()]
     .map((group) => {
-      const punches = [...group.punches].sort((left, right) => left.time.localeCompare(right.time));
+      const punches = compactRepeatedPreviewPunches(group.punches, duplicateWindowMinutes);
       const hasActions = punches.some((punch) => punch.action);
       let checkIn = '-';
       let checkOut = '-';
@@ -1384,7 +1413,6 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
   const [devices, setDevices] = useState<BiometricDevice[]>([]);
   const [mappings, setMappings] = useState<EmployeeBiometricId[]>([]);
   const [pending, setPending] = useState<Attendance[]>([]);
-  const [unmatchedCodes, setUnmatchedCodes] = useState<UnmatchedBiometricCode[]>([]);
   const [intelligenceSettings, setIntelligenceSettings] = useState<AttendanceIntelligenceSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [showMappingModal, setShowMappingModal] = useState(false);
@@ -1407,17 +1435,15 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [devicesRes, mappingsRes, pendingRes, unmatchedRes, intelligenceRes] = await Promise.allSettled([
+      const [devicesRes, mappingsRes, pendingRes, intelligenceRes] = await Promise.allSettled([
         getBiometricDevices(),
         getEmployeeBiometricIds(),
         getPendingCorrectionAttendance(),
-        getUnmatchedBiometricCodes(),
         getAttendanceIntelligenceSettings(),
       ]);
       if (devicesRes.status === 'fulfilled') setDevices(devicesRes.value);
       if (mappingsRes.status === 'fulfilled') setMappings(mappingsRes.value);
       if (pendingRes.status === 'fulfilled') setPending(pendingRes.value);
-      if (unmatchedRes.status === 'fulfilled') setUnmatchedCodes(unmatchedRes.value);
       if (intelligenceRes.status === 'fulfilled') setIntelligenceSettings(intelligenceRes.value);
     } catch (error) {
       console.error(error);
@@ -1441,6 +1467,7 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
     setPreviewProgress({ processed: 0, total: 0, parsed: 0 });
     setPreviewParsing(true);
     const groups = new Map<string, { code: string; date: string; punches: BiometricPreviewPunch[] }>();
+    const duplicateWindowMinutes = intelligenceSettings?.duplicate_punch_window_minutes ?? 15;
     try {
       const text = await file.text();
       const lines = text.split(/\r?\n/);
@@ -1460,7 +1487,7 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
           }
         }
         if ((index + 1) % 500 === 0 || index === lines.length - 1) {
-          setPreviewRows(buildBiometricPreviewRows(groups));
+          setPreviewRows(buildBiometricPreviewRows(groups, duplicateWindowMinutes));
           setPreviewProgress({ processed: index + 1, total: lines.length, parsed });
           await new Promise((resolve) => setTimeout(resolve, 0));
         }
@@ -1927,49 +1954,6 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
               </table>
             </div>
           )}
-        </Card>
-      )}
-
-      {unmatchedCodes.length > 0 && (
-        <Card className="p-5 border-amber-200 bg-amber-50/40">
-          <div className="mb-3">
-            <p className="text-sm font-semibold text-gray-900">Códigos sin mapear</p>
-            <p className="text-[11px] text-gray-500">Estos códigos llegaron en archivos importados pero no están asociados a ningún empleado. Asígnalos para que sus marcaciones cuenten en la asistencia.</p>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="text-left text-[10px] uppercase text-gray-400 border-b border-amber-200">
-                  <th className="py-2 pr-3">Código del reloj</th>
-                  <th className="py-2 pr-3">Veces visto</th>
-                  <th className="py-2 pr-3">Última marcación</th>
-                  <th className="py-2 pr-3">Dispositivo</th>
-                  <th className="py-2 pr-3" />
-                </tr>
-              </thead>
-              <tbody>
-                {unmatchedCodes.map((entry) => (
-                  <tr key={entry.biometric_code} className="border-b border-amber-100">
-                    <td className="py-2 pr-3 font-mono font-semibold">{entry.biometric_code}</td>
-                    <td className="py-2 pr-3">{entry.occurrences}</td>
-                    <td className="py-2 pr-3 text-gray-500">{formatDateTime(entry.last_seen)}</td>
-                    <td className="py-2 pr-3 text-gray-500">{entry.device_name || 'Sin especificar'}</td>
-                    <td className="py-2 pr-3 text-right">
-                      <button
-                        onClick={() => {
-                          setMappingInitialCode(entry.biometric_code);
-                          setShowMappingModal(true);
-                        }}
-                        className="text-[#2a4038] font-semibold hover:underline"
-                      >
-                        Asignar empleado
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
         </Card>
       )}
 
