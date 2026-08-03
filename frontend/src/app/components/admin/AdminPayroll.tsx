@@ -266,6 +266,28 @@ function enumerateDates(start: string, end: string): string[] {
   return dates;
 }
 
+function formatMonthTitle(monthKey: string): string {
+  return parseLocalDate(`${monthKey}-01`).toLocaleDateString('es-CO', { month: 'long', year: 'numeric' });
+}
+
+function groupDatesByMonth(dates: string[]): Array<{ key: string; title: string; cells: Array<string | null> }> {
+  const grouped = new Map<string, string[]>();
+  dates.forEach((date) => {
+    const key = date.slice(0, 7);
+    const items = grouped.get(key) ?? [];
+    items.push(date);
+    grouped.set(key, items);
+  });
+  return [...grouped.entries()].map(([key, monthDates]) => ({
+    key,
+    title: formatMonthTitle(key),
+    cells: [
+      ...Array.from({ length: mondayWeekdayIndex(monthDates[0]) }, () => null as string | null),
+      ...monthDates,
+    ],
+  }));
+}
+
 function mondayWeekdayIndex(value: string): number {
   const day = parseLocalDate(value).getDay();
   return day === 0 ? 6 : day - 1;
@@ -334,6 +356,8 @@ type BiometricPreviewRow = {
   code: string;
   date: string;
   markCount: number;
+  rawMarkCount: number;
+  ignoredMarkCount: number;
   checkIn: string;
   breakStart: string;
   breakEnd: string;
@@ -342,6 +366,7 @@ type BiometricPreviewRow = {
   dayHours: number;
   nightHours: number;
   status: 'Completo' | 'Incompleto' | 'Revisar';
+  analysis: string;
   marks: string;
 };
 
@@ -511,56 +536,122 @@ function compactRepeatedPreviewPunches(punches: BiometricPreviewPunch[], windowM
   return compacted;
 }
 
+function chooseLunchPair(punches: BiometricPreviewPunch[]): [BiometricPreviewPunch, BiometricPreviewPunch] | null {
+  const candidates = punches
+    .slice(1, -1)
+    .map((punch) => ({ punch, minutes: timeToMinutes(punch.time) }))
+    .filter((item): item is { punch: BiometricPreviewPunch; minutes: number } => item.minutes !== null);
+  let best: { pair: [BiometricPreviewPunch, BiometricPreviewPunch]; score: number } | null = null;
+
+  for (let index = 0; index < candidates.length - 1; index += 1) {
+    for (let nextIndex = index + 1; nextIndex < candidates.length; nextIndex += 1) {
+      const start = candidates[index];
+      const end = candidates[nextIndex];
+      const duration = end.minutes - start.minutes;
+      const startsNearLunch = start.minutes >= 10 * 60 && start.minutes <= 15 * 60 + 30;
+      const reasonableDuration = duration >= 20 && duration <= 180;
+      if (!startsNearLunch || !reasonableDuration) continue;
+      const center = (start.minutes + end.minutes) / 2;
+      const score = Math.abs(center - 13 * 60) + Math.abs(duration - 60) * 0.8;
+      if (!best || score < best.score) best = { pair: [start.punch, end.punch], score };
+    }
+  }
+
+  return best?.pair ?? null;
+}
+
+function classifyPreviewPunches(punches: BiometricPreviewPunch[], rawMarkCount: number): Omit<BiometricPreviewRow, 'key' | 'code' | 'date' | 'workedHours' | 'dayHours' | 'nightHours'> {
+  const analysis: string[] = [];
+  const ignoredMarkCount = Math.max(0, rawMarkCount - punches.length);
+  if (ignoredMarkCount > 0) analysis.push(`${ignoredMarkCount} marca(s) repetida(s) limpiada(s)`);
+
+  const hasActions = punches.some((punch) => punch.action);
+  let checkIn = '-';
+  let checkOut = '-';
+  let breakStart = '-';
+  let breakEnd = '-';
+  let status: BiometricPreviewRow['status'] = 'Revisar';
+
+  if (hasActions) {
+    checkIn = firstActionTime(punches, 'check_in');
+    checkOut = lastActionTime(punches, 'check_out');
+    breakStart = firstActionTime(punches, 'break_start');
+    breakEnd = lastActionTime(punches, 'break_end');
+    status = checkIn !== '-' && checkOut !== '-' ? 'Completo' : 'Incompleto';
+    if (status === 'Incompleto') analysis.push('El reloj envio acciones, pero falta entrada o salida');
+  } else if (punches.length === 0) {
+    analysis.push('Sin marcas utiles');
+    status = 'Incompleto';
+  } else if (punches.length === 1) {
+    checkIn = punches[0].time;
+    status = 'Incompleto';
+    analysis.push('Solo hay una marca; falta salida');
+  } else {
+    checkIn = punches[0].time;
+    checkOut = punches[punches.length - 1].time;
+
+    if (punches.length === 2) {
+      status = 'Completo';
+      analysis.push('Entrada y salida detectadas');
+    } else if (punches.length === 3) {
+      const middle = punches[1];
+      const middleMinutes = timeToMinutes(middle.time);
+      if (middleMinutes !== null && middleMinutes >= 10 * 60 && middleMinutes <= 15 * 60 + 30) {
+        breakStart = middle.time;
+        analysis.push('Hay una sola marca de almuerzo; falta regreso de almuerzo');
+      } else {
+        analysis.push('Hay una marca intermedia fuera de almuerzo; revisar');
+      }
+      status = 'Revisar';
+    } else if (punches.length === 4) {
+      breakStart = punches[1].time;
+      breakEnd = punches[2].time;
+      status = 'Completo';
+      analysis.push('Entrada, almuerzo y salida detectados');
+    } else {
+      const lunchPair = chooseLunchPair(punches);
+      if (lunchPair) {
+        breakStart = lunchPair[0].time;
+        breakEnd = lunchPair[1].time;
+        const extraCount = Math.max(0, punches.length - 4);
+        status = extraCount > 0 ? 'Revisar' : 'Completo';
+        analysis.push(`Almuerzo inferido; ${extraCount} marca(s) adicional(es) quedan para revisar`);
+      } else {
+        status = 'Revisar';
+        analysis.push('Muchas marcas sin par claro de almuerzo; se uso primera entrada y ultima salida');
+      }
+    }
+  }
+
+  return {
+    markCount: punches.length,
+    rawMarkCount,
+    ignoredMarkCount,
+    checkIn,
+    breakStart,
+    breakEnd,
+    checkOut,
+    status,
+    analysis: analysis.join('. '),
+    marks: punches.map((punch) => punch.time).join(', '),
+  };
+}
+
 function buildBiometricPreviewRows(
   groups: Map<string, { code: string; date: string; punches: BiometricPreviewPunch[] }>,
   duplicateWindowMinutes = 15,
 ): BiometricPreviewRow[] {
   return [...groups.values()]
     .map((group) => {
+      const rawMarkCount = group.punches.length;
       const punches = compactRepeatedPreviewPunches(group.punches, duplicateWindowMinutes);
-      const hasActions = punches.some((punch) => punch.action);
-      let checkIn = '-';
-      let checkOut = '-';
-      let breakStart = '-';
-      let breakEnd = '-';
-      let status: BiometricPreviewRow['status'] = 'Revisar';
-
-      if (hasActions) {
-        checkIn = firstActionTime(punches, 'check_in');
-        checkOut = lastActionTime(punches, 'check_out');
-        breakStart = firstActionTime(punches, 'break_start');
-        breakEnd = lastActionTime(punches, 'break_end');
-        status = checkIn !== '-' && checkOut !== '-' ? 'Completo' : 'Incompleto';
-      } else if (punches.length === 1) {
-        checkIn = punches[0].time;
-        status = 'Incompleto';
-      } else if (punches.length === 2) {
-        checkIn = punches[0].time;
-        checkOut = punches[1].time;
-        status = 'Completo';
-      } else if (punches.length === 4) {
-        checkIn = punches[0].time;
-        breakStart = punches[1].time;
-        breakEnd = punches[2].time;
-        checkOut = punches[3].time;
-        status = 'Completo';
-      } else {
-        checkIn = punches[0]?.time ?? '-';
-        checkOut = punches[punches.length - 1]?.time ?? '-';
-        status = 'Revisar';
-      }
+      const classification = classifyPreviewPunches(punches, rawMarkCount);
 
       return enrichPreviewRow({
         key: `${group.code}-${group.date}`,
         code: group.code,
         date: group.date,
-        markCount: punches.length,
-        checkIn,
-        breakStart,
-        breakEnd,
-        checkOut,
-        status,
-        marks: punches.map((punch) => punch.time).join(', '),
+        ...classification,
       });
     })
     .sort((left, right) => left.code.localeCompare(right.code, 'es', { numeric: true }) || left.date.localeCompare(right.date));
@@ -572,7 +663,9 @@ function buildBiometricPreviewCsv(rows: BiometricPreviewRow[], holidaysByDate: M
     'fecha',
     'dia',
     'festivo',
-    'marcas',
+    'marcas_utiles',
+    'marcas_originales',
+    'marcas_repetidas_limpiadas',
     'entrada',
     'inicio_almuerzo',
     'fin_almuerzo',
@@ -582,6 +675,7 @@ function buildBiometricPreviewCsv(rows: BiometricPreviewRow[], holidaysByDate: M
     'horas_nocturnas',
     'estado',
     'observacion',
+    'analisis',
     'todas_las_marcas',
   ];
   const rowsByCode = new Map<string, Map<string, BiometricPreviewRow>>();
@@ -604,6 +698,8 @@ function buildBiometricPreviewCsv(rows: BiometricPreviewRow[], holidaysByDate: M
         WEEKDAY_LABELS[mondayWeekdayIndex(date)],
         holiday?.name ?? '',
         row?.markCount ?? 0,
+        row?.rawMarkCount ?? 0,
+        row?.ignoredMarkCount ?? 0,
         row?.checkIn ?? '-',
         row?.breakStart ?? '-',
         row?.breakEnd ?? '-',
@@ -613,6 +709,7 @@ function buildBiometricPreviewCsv(rows: BiometricPreviewRow[], holidaysByDate: M
         row?.nightHours.toFixed(2) ?? '0.00',
         row?.status ?? (holiday ? 'Festivo' : weekend ? 'Descanso' : 'Falto'),
         observation,
+        row?.analysis ?? '',
         row?.marks ?? '',
       ].map(csvEscape).join(';');
     }),
@@ -1597,7 +1694,7 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
       toast.error('La fecha hasta no puede ser anterior a la fecha desde.');
       return;
     }
-    setPreviewRows([]);
+    const previousFileName = previewFileName;
     setPreviewFileName(file.name);
     setPreviewProgress({ processed: 0, total: 0, parsed: 0 });
     setPreviewParsing(true);
@@ -1622,17 +1719,19 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
           }
         }
         if ((index + 1) % 500 === 0 || index === lines.length - 1) {
-          setPreviewRows(buildBiometricPreviewRows(groups, duplicateWindowMinutes));
+          if (parsed > 0) setPreviewRows(buildBiometricPreviewRows(groups, duplicateWindowMinutes));
           setPreviewProgress({ processed: index + 1, total: lines.length, parsed });
           await new Promise((resolve) => setTimeout(resolve, 0));
         }
       }
       if (parsed === 0) {
+        setPreviewFileName(previousFileName);
         toast.error('No se encontraron marcaciones del TXT para el rango seleccionado.');
         return;
       }
     } catch (error) {
       console.error(error);
+      setPreviewFileName(previousFileName);
       toast.error('No se pudo analizar el TXT del huellero.');
       return;
     } finally {
@@ -1672,13 +1771,7 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
     return enumerateDates(start, end);
   }, [previewRows, uploadDateFrom, uploadDateTo]);
 
-  const previewCalendarCells = useMemo(() => {
-    if (previewDateRange.length === 0) return [];
-    return [
-      ...Array.from({ length: mondayWeekdayIndex(previewDateRange[0]) }, () => null as string | null),
-      ...previewDateRange,
-    ];
-  }, [previewDateRange]);
+  const previewCalendarMonths = useMemo(() => groupDatesByMonth(previewDateRange), [previewDateRange]);
 
   const previewYears = useMemo(() => {
     const years = new Set<number>();
@@ -1730,6 +1823,8 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
         code: string;
         rows: BiometricPreviewRow[];
         markCount: number;
+        rawMarkCount: number;
+        ignoredMarkCount: number;
         totalHours: number;
         dayHours: number;
         nightHours: number;
@@ -1744,6 +1839,8 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
         code: row.code,
         rows: [],
         markCount: 0,
+        rawMarkCount: 0,
+        ignoredMarkCount: 0,
         totalHours: 0,
         dayHours: 0,
         nightHours: 0,
@@ -1753,6 +1850,8 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
       };
       group.rows.push(row);
       group.markCount += row.markCount;
+      group.rawMarkCount += row.rawMarkCount;
+      group.ignoredMarkCount += row.ignoredMarkCount;
       group.totalHours += row.workedHours;
       group.dayHours += row.dayHours;
       group.nightHours += row.nightHours;
@@ -1795,6 +1894,7 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
         if (row.key !== rowKey) return row;
         const next = enrichPreviewRow({ ...row, [field]: normalizePreviewTime(value) });
         next.status = next.checkIn !== '-' && next.checkOut !== '-' ? 'Completo' : 'Incompleto';
+        next.analysis = `${row.analysis ? `${row.analysis}. ` : ''}Editado manualmente`;
         return next;
       }),
     );
@@ -1935,68 +2035,80 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
                         <Download size={12} /> Exportar codigo
                       </button>
                     </div>
-                    <div className="grid min-w-[1120px] grid-cols-7 border-b border-gray-100 bg-gray-50 text-center text-[10px] font-semibold uppercase text-gray-400">
-                      {WEEKDAY_LABELS.map((day) => (
-                        <div key={day} className="px-2 py-2">{day.slice(0, 3)}</div>
-                      ))}
-                    </div>
-                    <div className="grid min-w-[1120px] grid-cols-7">
-                      {previewCalendarCells.map((date, index) => {
-                        if (!date) return <div key={`empty-${group.code}-${index}`} className="min-h-[164px] border-b border-r border-gray-50 bg-gray-50/50" />;
-                        const row = rowsByDate.get(date);
-                        const holiday = previewHolidaysByDate.get(date);
-                        const parameter = previewParametersByYear.get(Number(date.slice(0, 4)));
-                        const holidayRate = parameter?.sunday_holiday_surcharge_pct ? `${parameter.sunday_holiday_surcharge_pct}%` : 'param. default';
-                        const weekend = isWeekendDate(date);
-                        const missing = !row;
-                        const statusLabel = row
-                          ? `${row.workedHours.toFixed(1)}h`
-                          : holiday
-                            ? 'Festivo'
-                            : weekend
-                              ? 'Descanso'
-                              : 'Falto';
-                        const statusColor: BadgeColor = row ? (row.status === 'Completo' ? 'green' : 'yellow') : holiday ? 'blue' : weekend ? 'gray' : 'red';
-                        return (
-                          <div
-                            key={`${group.code}-${date}`}
-                            className={`min-h-[164px] border-b border-r border-gray-50 p-2 ${missing && !holiday && !weekend ? 'bg-red-50/50' : holiday ? 'bg-blue-50/40' : 'bg-white'}`}
-                          >
-                            <div className="flex items-start justify-between gap-1">
-                              <span className="text-[11px] font-semibold text-gray-900">{parseLocalDate(date).getDate()}</span>
-                              <Badge label={statusLabel} color={statusColor} />
-                            </div>
-                            <p className="mt-1 truncate text-[10px] text-gray-500">{WEEKDAY_LABELS[mondayWeekdayIndex(date)]}</p>
-                            {holiday && (
-                              <p className="mt-1 line-clamp-2 text-[10px] font-semibold text-blue-700">
-                                {holiday.name} · {holidayRate}
-                              </p>
-                            )}
-                            {row ? (
-                              <div className="mt-2 grid grid-cols-2 gap-1.5">
-                                {([
-                                  ['checkIn', 'Ent.'],
-                                  ['breakStart', 'Alm.'],
-                                  ['breakEnd', 'Reg.'],
-                                  ['checkOut', 'Sal.'],
-                                ] as const).map(([field, label]) => (
-                                  <label key={field} className="block">
-                                    <span className="block text-[9px] font-semibold uppercase text-gray-400">{label}</span>
-                                    <input
-                                      type="time"
-                                      value={row[field] === '-' ? '' : row[field].slice(0, 5)}
-                                      onChange={(event) => updatePreviewTime(row.key, field, event.target.value)}
-                                      className="mt-0.5 w-full rounded-md border border-gray-200 px-1.5 py-1 text-[11px] text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#2a4038]/20"
-                                    />
-                                  </label>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="mt-2 text-[10px] text-gray-400">Sin marca</p>
-                            )}
+                    <div className="space-y-3 p-3">
+                      {previewCalendarMonths.map((month) => (
+                        <div key={`${group.code}-${month.key}`} className="overflow-x-auto rounded-lg border border-gray-100">
+                          <div className="border-b border-gray-100 bg-gray-50 px-3 py-2 text-xs font-semibold capitalize text-gray-700">
+                            {month.title}
                           </div>
-                        );
-                      })}
+                          <div className="grid min-w-[1120px] grid-cols-7 border-b border-gray-100 bg-gray-50 text-center text-[10px] font-semibold uppercase text-gray-400">
+                            {WEEKDAY_LABELS.map((day) => (
+                              <div key={day} className="px-2 py-2">{day.slice(0, 3)}</div>
+                            ))}
+                          </div>
+                          <div className="grid min-w-[1120px] grid-cols-7">
+                            {month.cells.map((date, index) => {
+                              if (!date) return <div key={`empty-${group.code}-${month.key}-${index}`} className="min-h-[174px] border-b border-r border-gray-50 bg-gray-50/50" />;
+                              const row = rowsByDate.get(date);
+                              const holiday = previewHolidaysByDate.get(date);
+                              const parameter = previewParametersByYear.get(Number(date.slice(0, 4)));
+                              const holidayRate = parameter?.sunday_holiday_surcharge_pct ? `${parameter.sunday_holiday_surcharge_pct}%` : 'param. default';
+                              const weekend = isWeekendDate(date);
+                              const missing = !row;
+                              const statusLabel = row
+                                ? `${row.workedHours.toFixed(1)}h`
+                                : holiday
+                                  ? 'Festivo'
+                                  : weekend
+                                    ? 'Descanso'
+                                    : 'Falto';
+                              const statusColor: BadgeColor = row ? (row.status === 'Completo' ? 'green' : 'yellow') : holiday ? 'blue' : weekend ? 'gray' : 'red';
+                              return (
+                                <div
+                                  key={`${group.code}-${date}`}
+                                  className={`min-h-[174px] border-b border-r border-gray-50 p-2 ${missing && !holiday && !weekend ? 'bg-red-50/50' : holiday ? 'bg-blue-50/40' : 'bg-white'}`}
+                                >
+                                  <div className="flex items-start justify-between gap-1">
+                                    <span className="text-[11px] font-semibold text-gray-900">{parseLocalDate(date).getDate()}</span>
+                                    <Badge label={statusLabel} color={statusColor} />
+                                  </div>
+                                  <p className="mt-1 truncate text-[10px] text-gray-500">{WEEKDAY_LABELS[mondayWeekdayIndex(date)]}</p>
+                                  {holiday && (
+                                    <p className="mt-1 line-clamp-2 text-[10px] font-semibold text-blue-700">
+                                      {holiday.name} · {holidayRate}
+                                    </p>
+                                  )}
+                                  {row ? (
+                                    <>
+                                      <div className="mt-2 grid grid-cols-2 gap-1.5">
+                                        {([
+                                          ['checkIn', 'Ent.'],
+                                          ['breakStart', 'Alm.'],
+                                          ['breakEnd', 'Reg.'],
+                                          ['checkOut', 'Sal.'],
+                                        ] as const).map(([field, label]) => (
+                                          <label key={field} className="block">
+                                            <span className="block text-[9px] font-semibold uppercase text-gray-400">{label}</span>
+                                            <input
+                                              type="time"
+                                              value={row[field] === '-' ? '' : row[field].slice(0, 5)}
+                                              onChange={(event) => updatePreviewTime(row.key, field, event.target.value)}
+                                              className="mt-0.5 w-full rounded-md border border-gray-200 px-1.5 py-1 text-[11px] text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#2a4038]/20"
+                                            />
+                                          </label>
+                                        ))}
+                                      </div>
+                                      {row.analysis && <p className="mt-1 line-clamp-2 text-[10px] text-amber-700">{row.analysis}</p>}
+                                    </>
+                                  ) : (
+                                    <p className="mt-2 text-[10px] text-gray-400">Sin marca</p>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 );
@@ -2010,6 +2122,7 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
                     <th className="py-2 px-3">Codigo</th>
                     <th className="py-2 px-3">Dias</th>
                     <th className="py-2 px-3">Marcas</th>
+                    <th className="py-2 px-3">Rep.</th>
                     <th className="py-2 px-3">Hrs</th>
                     <th className="py-2 px-3">Diurnas</th>
                     <th className="py-2 px-3">Nocturnas</th>
@@ -2027,7 +2140,10 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
                         <tr key={group.code} className="border-b border-gray-50 bg-white">
                           <td className="py-3 px-3 font-mono text-sm font-semibold text-gray-900">{group.code}</td>
                           <td className="py-3 px-3">{group.rows.length}</td>
-                          <td className="py-3 px-3">{group.markCount}</td>
+                          <td className="py-3 px-3">{group.markCount}/{group.rawMarkCount}</td>
+                          <td className="py-3 px-3">
+                            <Badge label={group.ignoredMarkCount} color={group.ignoredMarkCount > 0 ? 'yellow' : 'gray'} />
+                          </td>
                           <td className="py-3 px-3 font-semibold">{group.totalHours.toFixed(2)}</td>
                           <td className="py-3 px-3 text-emerald-700">{group.dayHours.toFixed(2)}</td>
                           <td className="py-3 px-3 text-indigo-700">{group.nightHours.toFixed(2)}</td>
@@ -2064,7 +2180,7 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
                         </tr>
                         {expanded && (
                           <tr key={`${group.code}-detail`} className="border-b border-gray-100 bg-gray-50/60">
-                            <td colSpan={10} className="px-3 py-3">
+                            <td colSpan={11} className="px-3 py-3">
                               <div className="overflow-x-auto rounded-lg border border-gray-100 bg-white">
                                 <table className="w-full text-xs">
                                   <thead>
@@ -2080,6 +2196,7 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
                                       <th className="py-2 px-3">Nocturnas</th>
                                       <th className="py-2 px-3">Festivo</th>
                                       <th className="py-2 px-3">Estado</th>
+                                      <th className="py-2 px-3 min-w-[220px]">Analisis</th>
                                       <th className="py-2 px-3 min-w-[180px]">Todas</th>
                                     </tr>
                                   </thead>
@@ -2087,7 +2204,10 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
                                     {group.rows.map((row) => (
                                       <tr key={row.key} className="border-b border-gray-50 last:border-0">
                                         <td className="py-2 px-3 whitespace-nowrap">{formatDate(row.date)}</td>
-                                        <td className="py-2 px-3">{row.markCount}</td>
+                                        <td className="py-2 px-3">
+                                          {row.markCount}/{row.rawMarkCount}
+                                          {row.ignoredMarkCount > 0 && <span className="ml-1 text-amber-600">(-{row.ignoredMarkCount})</span>}
+                                        </td>
                                         {(['checkIn', 'breakStart', 'breakEnd', 'checkOut'] as const).map((field) => (
                                           <td key={field} className="py-2 px-3">
                                             <input
@@ -2105,6 +2225,7 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
                                         <td className="py-2 px-3">
                                           <Badge label={row.status} color={row.status === 'Completo' ? 'green' : row.status === 'Incompleto' ? 'yellow' : 'gray'} />
                                         </td>
+                                        <td className="py-2 px-3 text-amber-700">{row.analysis || '-'}</td>
                                         <td className="py-2 px-3 text-gray-500">{row.marks}</td>
                                       </tr>
                                     ))}
