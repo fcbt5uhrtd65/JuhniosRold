@@ -111,6 +111,7 @@ import {
   getEmployeeDocuments,
   getHRNotifications,
   getRequestsDashboard,
+  getVacationRequestById,
   getVacationRequests,
   openVacationRequestPdf,
   rejectVacationRequest,
@@ -2189,6 +2190,12 @@ export function AdminHR() {
   const openRequestDetailModal = (request: VacationRequest) => {
     setViewingRequest(request);
     setShowRequestDetailModal(true);
+    void getVacationRequestById(request.id)
+      .then(setViewingRequest)
+      .catch((error) => {
+        console.error(error);
+        toast.error('No se pudo cargar el detalle completo de la solicitud');
+      });
   };
 
   const resetEmployeeModal = () => {

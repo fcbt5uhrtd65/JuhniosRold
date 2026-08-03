@@ -219,7 +219,21 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        if self.action != "list":
+        if self.action == "dashboard":
+            return VacationRequest.objects.select_related(
+                "employee",
+                "employee__department",
+                "employee__branch",
+            )
+        if self.action == "list":
+            queryset = VacationRequest.objects.select_related(
+                "employee",
+                "employee__department",
+                "employee__position",
+                "employee__branch",
+                "reviewed_by",
+            ).prefetch_related("overtime_shifts")
+        else:
             return queryset
         # Filtro por rango de fecha de la SOLICITUD (start_date/end_date, el
         # periodo del permiso/vacación/etc.), no la fecha en que se creó el
@@ -231,6 +245,12 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
         if start_to:
             queryset = queryset.filter(end_date__lte=start_to)
         return queryset
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        if self.action == "list":
+            context["include_request_related"] = False
+        return context
 
     def get_permissions(self):
         if self.action in {"me", "team", "loans", "approve", "reject", "destroy", "correct_schedule", "set_remuneration"}:

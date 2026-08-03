@@ -206,6 +206,8 @@ class VacationRequestSerializer(serializers.ModelSerializer):
         return attrs
 
     def _serialize_related(self, obj, related_name, serializer_class):
+        if self.context.get("include_request_related") is False:
+            return []
         try:
             related = getattr(obj, related_name).all()
             return serializer_class(related, many=True, context=self.context).data
