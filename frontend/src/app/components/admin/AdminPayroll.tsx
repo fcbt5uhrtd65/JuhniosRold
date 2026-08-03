@@ -5,9 +5,11 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock3,
+  Download,
   Fingerprint,
   Pencil,
   Plus,
+  RotateCw,
   UploadCloud,
   Users,
 } from 'lucide-react';
@@ -111,6 +113,54 @@ function formatDate(value: string | null): string {
 function formatDateTime(value: string | null): string {
   if (!value) return '-';
   return new Date(value).toLocaleString('es-CO');
+}
+
+function parseLocalDate(value: string): Date {
+  return new Date(`${value}T00:00:00`);
+}
+
+function addDays(value: string, days: number): string {
+  const date = parseLocalDate(value);
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function enumerateDates(start: string, end: string): string[] {
+  if (!start || !end || end < start) return [];
+  const dates: string[] = [];
+  let current = start;
+  while (current <= end) {
+    dates.push(current);
+    current = addDays(current, 1);
+  }
+  return dates;
+}
+
+function mondayWeekdayIndex(value: string): number {
+  const day = parseLocalDate(value).getDay();
+  return day === 0 ? 6 : day - 1;
+}
+
+function isWeekendDate(value: string): boolean {
+  const day = parseLocalDate(value).getDay();
+  return day === 0 || day === 6;
+}
+
+function csvEscape(value: string | number | null | undefined): string {
+  const text = String(value ?? '');
+  return /[;"\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function downloadTextFile(filename: string, content: string, mime = 'text/csv;charset=utf-8'): void {
+  const blob = new Blob([`\uFEFF${content}`], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }
 
 function useEmployeeDirectory() {
@@ -353,6 +403,60 @@ function buildBiometricPreviewRows(groups: Map<string, { code: string; date: str
       });
     })
     .sort((left, right) => left.code.localeCompare(right.code, 'es', { numeric: true }) || left.date.localeCompare(right.date));
+}
+
+function buildBiometricPreviewCsv(rows: BiometricPreviewRow[], holidaysByDate: Map<string, PublicHoliday>, dateRange?: string[]): string {
+  const header = [
+    'codigo',
+    'fecha',
+    'dia',
+    'festivo',
+    'marcas',
+    'entrada',
+    'inicio_almuerzo',
+    'fin_almuerzo',
+    'salida',
+    'horas_trabajadas',
+    'horas_diurnas',
+    'horas_nocturnas',
+    'estado',
+    'observacion',
+    'todas_las_marcas',
+  ];
+  const rowsByCode = new Map<string, Map<string, BiometricPreviewRow>>();
+  rows.forEach((row) => {
+    const codeRows = rowsByCode.get(row.code) ?? new Map<string, BiometricPreviewRow>();
+    codeRows.set(row.date, row);
+    rowsByCode.set(row.code, codeRows);
+  });
+  const fallbackRange = [...new Set(rows.map((row) => row.date))].sort();
+  const exportRange = dateRange && dateRange.length > 0 ? dateRange : fallbackRange;
+  const body = [...rowsByCode.entries()].flatMap(([code, codeRows]) =>
+    exportRange.map((date) => {
+      const row = codeRows.get(date);
+      const holiday = holidaysByDate.get(date);
+      const weekend = isWeekendDate(date);
+      const observation = row ? 'Con marcacion' : holiday ? 'Festivo sin marca' : weekend ? 'Descanso sin marca' : 'Falto sin marca';
+      return [
+        code,
+        date,
+        WEEKDAY_LABELS[mondayWeekdayIndex(date)],
+        holiday?.name ?? '',
+        row?.markCount ?? 0,
+        row?.checkIn ?? '-',
+        row?.breakStart ?? '-',
+        row?.breakEnd ?? '-',
+        row?.checkOut ?? '-',
+        row?.workedHours.toFixed(2) ?? '0.00',
+        row?.dayHours.toFixed(2) ?? '0.00',
+        row?.nightHours.toFixed(2) ?? '0.00',
+        row?.status ?? (holiday ? 'Festivo' : weekend ? 'Descanso' : 'Falto'),
+        observation,
+        row?.marks ?? '',
+      ].map(csvEscape).join(';');
+    }),
+  );
+  return ['sep=;', header.map(csvEscape).join(';'), ...body].join('\n');
 }
 
 export function AdminPayroll() {
@@ -1297,6 +1401,8 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
   const [previewFileName, setPreviewFileName] = useState('');
   const [uploading, setUploading] = useState(false);
   const [expandedPreviewCodes, setExpandedPreviewCodes] = useState<Set<string>>(new Set());
+  const [previewMode, setPreviewMode] = useState<'table' | 'calendar'>('table');
+  const [previewHolidays, setPreviewHolidays] = useState<PublicHoliday[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1397,6 +1503,55 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
     }
   };
 
+  const previewDateRange = useMemo(() => {
+    const dates = previewRows.map((row) => row.date).sort();
+    const start = uploadDateFrom || dates[0] || '';
+    const end = uploadDateTo || dates[dates.length - 1] || '';
+    return enumerateDates(start, end);
+  }, [previewRows, uploadDateFrom, uploadDateTo]);
+
+  const previewCalendarCells = useMemo(() => {
+    if (previewDateRange.length === 0) return [];
+    return [
+      ...Array.from({ length: mondayWeekdayIndex(previewDateRange[0]) }, () => null as string | null),
+      ...previewDateRange,
+    ];
+  }, [previewDateRange]);
+
+  const previewYears = useMemo(() => {
+    const years = new Set<number>();
+    previewDateRange.forEach((date) => {
+      const year = Number(date.slice(0, 4));
+      if (Number.isFinite(year)) years.add(year);
+    });
+    return [...years].sort();
+  }, [previewDateRange]);
+
+  useEffect(() => {
+    if (previewYears.length === 0) {
+      setPreviewHolidays([]);
+      return;
+    }
+
+    let active = true;
+    void (async () => {
+      try {
+        const holidays = await Promise.all(previewYears.map((year) => getPublicHolidays({ year }).catch(() => [])));
+        if (active) setPreviewHolidays(holidays.flat().filter((holiday) => holiday.is_active));
+      } catch (error) {
+        console.error(error);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [previewYears]);
+
+  const previewHolidaysByDate = useMemo(() => {
+    return new Map(previewHolidays.map((holiday) => [holiday.civil_date, holiday]));
+  }, [previewHolidays]);
+
   const previewByCode = useMemo(() => {
     const groups = new Map<
       string,
@@ -1408,6 +1563,8 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
         dayHours: number;
         nightHours: number;
         reviewDays: number;
+        missingWorkDays: number;
+        holidayDays: number;
       }
     >();
 
@@ -1420,6 +1577,8 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
         dayHours: 0,
         nightHours: 0,
         reviewDays: 0,
+        missingWorkDays: 0,
+        holidayDays: 0,
       };
       group.rows.push(row);
       group.markCount += row.markCount;
@@ -1437,9 +1596,14 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
         totalHours: Number(group.totalHours.toFixed(2)),
         dayHours: Number(group.dayHours.toFixed(2)),
         nightHours: Number(group.nightHours.toFixed(2)),
+        missingWorkDays: previewDateRange.filter((date) => {
+          const hasMarks = group.rows.some((row) => row.date === date);
+          return !hasMarks && !isWeekendDate(date) && !previewHolidaysByDate.has(date);
+        }).length,
+        holidayDays: previewDateRange.filter((date) => previewHolidaysByDate.has(date)).length,
       }))
       .sort((left, right) => left.code.localeCompare(right.code, 'es', { numeric: true }));
-  }, [previewRows]);
+  }, [previewRows, previewDateRange, previewHolidaysByDate]);
 
   const togglePreviewCode = (code: string) => {
     setExpandedPreviewCodes((current) => {
@@ -1463,6 +1627,22 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
         return next;
       }),
     );
+  };
+
+  const exportPreviewRows = (rows: BiometricPreviewRow[], code?: string) => {
+    if (rows.length === 0) {
+      toast.warning('No hay marcaciones para exportar.');
+      return;
+    }
+    const orderedRows = [...rows].sort((left, right) => left.code.localeCompare(right.code, 'es', { numeric: true }) || left.date.localeCompare(right.date));
+    const start = orderedRows[0]?.date ?? uploadDateFrom;
+    const end = orderedRows[orderedRows.length - 1]?.date ?? uploadDateTo;
+    const cleanCode = code ? code.replace(/[^a-zA-Z0-9_-]/g, '_') : 'todos';
+    downloadTextFile(
+      `biometrico_${cleanCode}_${start || 'inicio'}_${end || 'fin'}.csv`,
+      buildBiometricPreviewCsv(orderedRows, previewHolidaysByDate, previewDateRange),
+    );
+    toast.success(code ? `Exportado el codigo ${code}.` : 'Exportada la tabla analizada.');
   };
 
   if (loading) return <LoadingState label="Cargando información biométrica..." />;
@@ -1535,6 +1715,21 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
               <Badge label={`${previewRows.reduce((sum, row) => sum + row.workedHours, 0).toFixed(2)} hrs trabajadas`} color="gray" />
               <Badge label={`${previewRows.reduce((sum, row) => sum + row.dayHours, 0).toFixed(2)} diurnas`} color="green" />
               <Badge label={`${previewRows.reduce((sum, row) => sum + row.nightHours, 0).toFixed(2)} nocturnas`} color="blue" />
+              <SecondaryButton onClick={() => setPreviewMode((mode) => (mode === 'table' ? 'calendar' : 'table'))} icon={<RotateCw size={13} />}>
+                {previewMode === 'table' ? 'Girar a calendario' : 'Girar a tabla'}
+              </SecondaryButton>
+              {previewMode === 'table' && (
+                <SecondaryButton
+                  onClick={() => setExpandedPreviewCodes((current) => (
+                    current.size === previewByCode.length ? new Set() : new Set(previewByCode.map((group) => group.code))
+                  ))}
+                >
+                  {expandedPreviewCodes.size === previewByCode.length ? 'Ocultar todos' : 'Ver todos'}
+                </SecondaryButton>
+              )}
+              <SecondaryButton onClick={() => exportPreviewRows(previewRows)} icon={<Download size={13} />}>
+                Exportar todo
+              </SecondaryButton>
               {previewParsing && <Badge label={`Leyendo ${previewProgress.processed}/${previewProgress.total}`} color="yellow" />}
             </div>
           </div>
@@ -1548,6 +1743,71 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
           )}
           {previewRows.length === 0 ? (
             <EmptyState title={previewParsing ? 'Analizando TXT...' : 'Sin marcaciones para mostrar'} />
+          ) : previewMode === 'calendar' ? (
+            <div className="max-h-[640px] overflow-auto space-y-3 pr-1">
+              {previewByCode.map((group) => {
+                const rowsByDate = new Map(group.rows.map((row) => [row.date, row]));
+                return (
+                  <div key={group.code} className="rounded-lg border border-gray-100 bg-white">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-3 py-2">
+                      <div>
+                        <p className="font-mono text-sm font-semibold text-gray-900">Codigo {group.code}</p>
+                        <p className="text-[11px] text-gray-500">
+                          {group.rows.length} dias con marca - {group.missingWorkDays} faltas laborales - {group.holidayDays} festivos en rango
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => exportPreviewRows(group.rows, group.code)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-[11px] font-semibold text-[#2a4038] hover:bg-gray-50"
+                      >
+                        <Download size={12} /> Exportar codigo
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-7 border-b border-gray-100 bg-gray-50 text-center text-[10px] font-semibold uppercase text-gray-400">
+                      {WEEKDAY_LABELS.map((day) => (
+                        <div key={day} className="px-2 py-2">{day.slice(0, 3)}</div>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-7">
+                      {previewCalendarCells.map((date, index) => {
+                        if (!date) return <div key={`empty-${group.code}-${index}`} className="min-h-[86px] border-b border-r border-gray-50 bg-gray-50/50" />;
+                        const row = rowsByDate.get(date);
+                        const holiday = previewHolidaysByDate.get(date);
+                        const weekend = isWeekendDate(date);
+                        const missing = !row;
+                        const statusLabel = row
+                          ? `${row.workedHours.toFixed(1)}h`
+                          : holiday
+                            ? 'Festivo'
+                            : weekend
+                              ? 'Descanso'
+                              : 'Falto';
+                        const statusColor: BadgeColor = row ? (row.status === 'Completo' ? 'green' : 'yellow') : holiday ? 'blue' : weekend ? 'gray' : 'red';
+                        return (
+                          <div
+                            key={`${group.code}-${date}`}
+                            className={`min-h-[86px] border-b border-r border-gray-50 p-2 ${missing && !holiday && !weekend ? 'bg-red-50/50' : holiday ? 'bg-blue-50/40' : 'bg-white'}`}
+                          >
+                            <div className="flex items-start justify-between gap-1">
+                              <span className="text-[11px] font-semibold text-gray-900">{parseLocalDate(date).getDate()}</span>
+                              <Badge label={statusLabel} color={statusColor} />
+                            </div>
+                            <p className="mt-1 truncate text-[10px] text-gray-500">{WEEKDAY_LABELS[mondayWeekdayIndex(date)]}</p>
+                            {holiday && <p className="mt-1 line-clamp-2 text-[10px] font-semibold text-blue-700">{holiday.name}</p>}
+                            {row && (
+                              <p className="mt-1 text-[10px] text-gray-500">
+                                {row.checkIn.slice(0, 5)} - {row.checkOut === '-' ? '--:--' : row.checkOut.slice(0, 5)}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           ) : (
             <div className="overflow-auto max-h-[520px] border border-gray-100 rounded-lg">
               <table className="w-full text-xs">
@@ -1559,6 +1819,8 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
                     <th className="py-2 px-3">Hrs</th>
                     <th className="py-2 px-3">Diurnas</th>
                     <th className="py-2 px-3">Nocturnas</th>
+                    <th className="py-2 px-3">Faltas</th>
+                    <th className="py-2 px-3">Festivos</th>
                     <th className="py-2 px-3">Revision</th>
                     <th className="py-2 px-3 text-right">Accion</th>
                   </tr>
@@ -1576,12 +1838,26 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
                           <td className="py-3 px-3 text-emerald-700">{group.dayHours.toFixed(2)}</td>
                           <td className="py-3 px-3 text-indigo-700">{group.nightHours.toFixed(2)}</td>
                           <td className="py-3 px-3">
+                            <Badge label={group.missingWorkDays} color={group.missingWorkDays > 0 ? 'red' : 'green'} />
+                          </td>
+                          <td className="py-3 px-3">
+                            <Badge label={group.holidayDays} color={group.holidayDays > 0 ? 'blue' : 'gray'} />
+                          </td>
+                          <td className="py-3 px-3">
                             <Badge
                               label={group.reviewDays > 0 ? `${group.reviewDays} dia(s)` : 'OK'}
                               color={group.reviewDays > 0 ? 'yellow' : 'green'}
                             />
                           </td>
-                          <td className="py-3 px-3 text-right">
+                          <td className="py-3 px-3">
+                            <div className="flex justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => exportPreviewRows(group.rows, group.code)}
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-[11px] font-semibold text-[#2a4038] hover:bg-gray-50"
+                              >
+                                <Download size={12} /> CSV
+                              </button>
                             <button
                               type="button"
                               onClick={() => togglePreviewCode(group.code)}
@@ -1589,11 +1865,12 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
                             >
                               {expanded ? 'Ocultar' : 'Ver mas'}
                             </button>
+                            </div>
                           </td>
                         </tr>
                         {expanded && (
                           <tr key={`${group.code}-detail`} className="border-b border-gray-100 bg-gray-50/60">
-                            <td colSpan={8} className="px-3 py-3">
+                            <td colSpan={10} className="px-3 py-3">
                               <div className="overflow-x-auto rounded-lg border border-gray-100 bg-white">
                                 <table className="w-full text-xs">
                                   <thead>
@@ -1607,6 +1884,7 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
                                       <th className="py-2 px-3">Hrs</th>
                                       <th className="py-2 px-3">Diurnas</th>
                                       <th className="py-2 px-3">Nocturnas</th>
+                                      <th className="py-2 px-3">Festivo</th>
                                       <th className="py-2 px-3">Estado</th>
                                       <th className="py-2 px-3 min-w-[180px]">Todas</th>
                                     </tr>
@@ -1629,6 +1907,7 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
                                         <td className="py-2 px-3 font-semibold">{row.workedHours.toFixed(2)}</td>
                                         <td className="py-2 px-3 text-emerald-700">{row.dayHours.toFixed(2)}</td>
                                         <td className="py-2 px-3 text-indigo-700">{row.nightHours.toFixed(2)}</td>
+                                        <td className="py-2 px-3 text-blue-700">{previewHolidaysByDate.get(row.date)?.name ?? '-'}</td>
                                         <td className="py-2 px-3">
                                           <Badge label={row.status} color={row.status === 'Completo' ? 'green' : row.status === 'Incompleto' ? 'yellow' : 'gray'} />
                                         </td>
