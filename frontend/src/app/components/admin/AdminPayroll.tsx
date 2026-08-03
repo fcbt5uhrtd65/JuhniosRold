@@ -10,6 +10,7 @@ import {
   Pencil,
   Plus,
   RotateCw,
+  Save,
   UploadCloud,
   Users,
 } from 'lucide-react';
@@ -369,6 +370,35 @@ type BiometricPreviewRow = {
   analysis: string;
   marks: string;
 };
+
+type SavedBiometricAnalysis = {
+  id: string;
+  name: string;
+  fileName: string;
+  dateFrom: string;
+  dateTo: string;
+  parsed: number;
+  rows: BiometricPreviewRow[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+const BIOMETRIC_ANALYSES_STORAGE_KEY = 'juhnios.biometric.savedAnalyses.v1';
+
+function loadSavedBiometricAnalyses(): SavedBiometricAnalysis[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(BIOMETRIC_ANALYSES_STORAGE_KEY) ?? '[]');
+    return Array.isArray(parsed) ? parsed.filter((item) => item?.id && item?.name && Array.isArray(item?.rows)) : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistSavedBiometricAnalyses(items: SavedBiometricAnalysis[]): void {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(BIOMETRIC_ANALYSES_STORAGE_KEY, JSON.stringify(items));
+}
 
 function twoDigits(value: number): string {
   return String(value).padStart(2, '0');
@@ -1661,6 +1691,9 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
   const [previewMode, setPreviewMode] = useState<'table' | 'calendar'>('table');
   const [previewHolidays, setPreviewHolidays] = useState<PublicHoliday[]>([]);
   const [previewLegalParameters, setPreviewLegalParameters] = useState<PayrollLegalParameter[]>([]);
+  const [savedAnalyses, setSavedAnalyses] = useState<SavedBiometricAnalysis[]>([]);
+  const [selectedSavedAnalysisId, setSelectedSavedAnalysisId] = useState('');
+  const [currentSavedAnalysisId, setCurrentSavedAnalysisId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1689,12 +1722,19 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
     void load();
   }, [load]);
 
+  useEffect(() => {
+    const items = loadSavedBiometricAnalyses();
+    setSavedAnalyses(items);
+    setSelectedSavedAnalysisId(items[0]?.id ?? '');
+  }, []);
+
   const handleUpload = async (file: File) => {
     if (uploadDateFrom && uploadDateTo && uploadDateTo < uploadDateFrom) {
       toast.error('La fecha hasta no puede ser anterior a la fecha desde.');
       return;
     }
     const previousFileName = previewFileName;
+    setCurrentSavedAnalysisId(null);
     setPreviewFileName(file.name);
     setPreviewProgress({ processed: 0, total: 0, parsed: 0 });
     setPreviewParsing(true);
@@ -1771,16 +1811,7 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
     return enumerateDates(start, end);
   }, [previewRows, uploadDateFrom, uploadDateTo]);
 
-  const previewRangeLabel = useMemo(() => {
-    if (previewDateRange.length === 0) return 'Sin rango';
-    return `${formatDate(previewDateRange[0])} a ${formatDate(previewDateRange[previewDateRange.length - 1])}`;
-  }, [previewDateRange]);
-
   const previewCalendarMonths = useMemo(() => groupDatesByMonth(previewDateRange), [previewDateRange]);
-
-  const biometricMappingByCode = useMemo(() => {
-    return new Map(mappings.filter((mapping) => mapping.is_active).map((mapping) => [mapping.biometric_code, mapping]));
-  }, [mappings]);
 
   const previewYears = useMemo(() => {
     const years = new Set<number>();
@@ -1925,6 +1956,89 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
     toast.success(code ? `Exportado el codigo ${code}.` : 'Exportada la tabla analizada.');
   };
 
+  const updateSavedAnalyses = (items: SavedBiometricAnalysis[]) => {
+    setSavedAnalyses(items);
+    persistSavedBiometricAnalyses(items);
+    if (items.length > 0 && !items.some((item) => item.id === selectedSavedAnalysisId)) {
+      setSelectedSavedAnalysisId(items[0].id);
+    }
+    if (items.length === 0) setSelectedSavedAnalysisId('');
+  };
+
+  const handleSaveAnalysis = () => {
+    if (previewRows.length === 0) {
+      toast.warning('Primero analiza un TXT para guardarlo.');
+      return;
+    }
+    const now = new Date().toISOString();
+    const existing = currentSavedAnalysisId ? savedAnalyses.find((item) => item.id === currentSavedAnalysisId) : undefined;
+    const defaultName = existing?.name || previewFileName || `Analisis ${formatDate(previewDateRange[0] ?? now.slice(0, 10))}`;
+    const name = existing?.name || window.prompt('Nombre del analisis', defaultName)?.trim();
+    if (!name) return;
+
+    const saved: SavedBiometricAnalysis = {
+      id: existing?.id ?? `${Date.now()}`,
+      name,
+      fileName: previewFileName || 'Analisis biometrico',
+      dateFrom: uploadDateFrom,
+      dateTo: uploadDateTo,
+      parsed: previewProgress.parsed,
+      rows: previewRows,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    const next = existing
+      ? savedAnalyses.map((item) => (item.id === existing.id ? saved : item))
+      : [saved, ...savedAnalyses];
+    updateSavedAnalyses(next);
+    setCurrentSavedAnalysisId(saved.id);
+    setSelectedSavedAnalysisId(saved.id);
+    toast.success(existing ? 'Analisis actualizado.' : 'Analisis guardado.');
+  };
+
+  const handleOpenSavedAnalysis = () => {
+    const saved = savedAnalyses.find((item) => item.id === selectedSavedAnalysisId);
+    if (!saved) {
+      toast.warning('Selecciona un analisis guardado.');
+      return;
+    }
+    setPreviewRows(saved.rows);
+    setPreviewFileName(saved.fileName || saved.name);
+    setUploadDateFrom(saved.dateFrom);
+    setUploadDateTo(saved.dateTo);
+    setPreviewProgress({ processed: saved.parsed, total: saved.parsed, parsed: saved.parsed });
+    setCurrentSavedAnalysisId(saved.id);
+    toast.success(`Analisis abierto: ${saved.name}`);
+  };
+
+  const handleRenameSavedAnalysis = () => {
+    const saved = savedAnalyses.find((item) => item.id === selectedSavedAnalysisId);
+    if (!saved) {
+      toast.warning('Selecciona un analisis guardado.');
+      return;
+    }
+    const name = window.prompt('Nuevo nombre del analisis', saved.name)?.trim();
+    if (!name) return;
+    const next = savedAnalyses.map((item) => (
+      item.id === saved.id ? { ...item, name, updatedAt: new Date().toISOString() } : item
+    ));
+    updateSavedAnalyses(next);
+    toast.success('Nombre actualizado.');
+  };
+
+  const handleDeleteSavedAnalysis = () => {
+    const saved = savedAnalyses.find((item) => item.id === selectedSavedAnalysisId);
+    if (!saved) {
+      toast.warning('Selecciona un analisis guardado.');
+      return;
+    }
+    if (!window.confirm(`Eliminar "${saved.name}"?`)) return;
+    const next = savedAnalyses.filter((item) => item.id !== saved.id);
+    updateSavedAnalyses(next);
+    if (currentSavedAnalysisId === saved.id) setCurrentSavedAnalysisId(null);
+    toast.success('Analisis eliminado.');
+  };
+
   if (loading) return <LoadingState label="Cargando información biométrica..." />;
 
   return (
@@ -1982,6 +2096,31 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
         </div>
       </Card>
 
+      <Card className="p-5">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <label className="block flex-1">
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Analisis guardados</span>
+            <select
+              value={selectedSavedAnalysisId}
+              onChange={(event) => setSelectedSavedAnalysisId(event.target.value)}
+              className={selectCls}
+            >
+              <option value="">Sin analisis guardados</option>
+              {savedAnalyses.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name} - {item.rows.length} dia(s)
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <SecondaryButton onClick={handleOpenSavedAnalysis} disabled={!selectedSavedAnalysisId}>Abrir</SecondaryButton>
+            <SecondaryButton onClick={handleRenameSavedAnalysis} disabled={!selectedSavedAnalysisId}>Cambiar nombre</SecondaryButton>
+            <SecondaryButton onClick={handleDeleteSavedAnalysis} disabled={!selectedSavedAnalysisId}>Eliminar</SecondaryButton>
+          </div>
+        </div>
+      </Card>
+
       {(previewFileName || previewRows.length > 0) && (
         <Card className="p-5">
           <div className="flex flex-col gap-3 mb-3 lg:flex-row lg:items-start lg:justify-between">
@@ -1997,6 +2136,9 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
               <Badge label={`${previewRows.reduce((sum, row) => sum + row.nightHours, 0).toFixed(2)} nocturnas`} color="blue" />
               <SecondaryButton onClick={() => setPreviewMode((mode) => (mode === 'table' ? 'calendar' : 'table'))} icon={<RotateCw size={13} />}>
                 {previewMode === 'table' ? 'Girar a calendario' : 'Girar a tabla'}
+              </SecondaryButton>
+              <SecondaryButton onClick={handleSaveAnalysis} icon={<Save size={13} />}>
+                Guardar
               </SecondaryButton>
               {previewMode === 'table' && (
                 <SecondaryButton
@@ -2025,62 +2167,6 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
             <EmptyState title={previewParsing ? 'Analizando TXT...' : 'Sin marcaciones para mostrar'} />
           ) : (
             <>
-              <div className="mb-4 rounded-lg border border-gray-100 bg-gray-50/60 p-3">
-                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <p className="text-xs font-semibold text-gray-900">Resumen por empleado del filtro</p>
-                    <p className="text-[11px] text-gray-500">Periodo analizado: {previewRangeLabel}</p>
-                  </div>
-                  <Badge label={`${previewByCode.length} empleado/codigo`} color="gray" />
-                </div>
-                <div className="overflow-x-auto rounded-lg border border-gray-100 bg-white">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="text-left text-[10px] uppercase text-gray-400 border-b border-gray-100">
-                        <th className="py-2 px-3">Empleado</th>
-                        <th className="py-2 px-3">Codigo</th>
-                        <th className="py-2 px-3">Periodo</th>
-                        <th className="py-2 px-3">Dias</th>
-                        <th className="py-2 px-3">Horas</th>
-                        <th className="py-2 px-3">Diurnas</th>
-                        <th className="py-2 px-3">Nocturnas</th>
-                        <th className="py-2 px-3">Faltas</th>
-                        <th className="py-2 px-3">Revisar</th>
-                        <th className="py-2 px-3">Festivos</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {previewByCode.map((group) => {
-                        const mapping = biometricMappingByCode.get(group.code);
-                        const employee = mapping ? employeeById.get(mapping.employee) : undefined;
-                        return (
-                          <tr key={`summary-${group.code}`} className="border-b border-gray-50">
-                            <td className="py-2 px-3 min-w-[220px]">
-                              <p className="font-semibold text-gray-900">{employee ? employeeName(employee) : 'Sin empleado asociado'}</p>
-                              <p className="text-[10px] text-gray-400">{employee?.employee_code ?? 'Mapea el codigo para asociarlo'}</p>
-                            </td>
-                            <td className="py-2 px-3 font-mono font-semibold">{group.code}</td>
-                            <td className="py-2 px-3 whitespace-nowrap">{previewRangeLabel}</td>
-                            <td className="py-2 px-3">{group.rows.length}</td>
-                            <td className="py-2 px-3 font-semibold">{group.totalHours.toFixed(2)}</td>
-                            <td className="py-2 px-3 text-emerald-700">{group.dayHours.toFixed(2)}</td>
-                            <td className="py-2 px-3 text-indigo-700">{group.nightHours.toFixed(2)}</td>
-                            <td className="py-2 px-3">
-                              <Badge label={group.missingWorkDays} color={group.missingWorkDays > 0 ? 'red' : 'green'} />
-                            </td>
-                            <td className="py-2 px-3">
-                              <Badge label={group.reviewDays} color={group.reviewDays > 0 ? 'yellow' : 'green'} />
-                            </td>
-                            <td className="py-2 px-3">
-                              <Badge label={group.holidayDays} color={group.holidayDays > 0 ? 'blue' : 'gray'} />
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
               {previewMode === 'calendar' ? (
             <div className="max-h-[640px] overflow-auto space-y-3 pr-1">
               {previewByCode.map((group) => {
