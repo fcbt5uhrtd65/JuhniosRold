@@ -1,10 +1,13 @@
 from datetime import timedelta
 
 from django.conf import settings
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.validators import validate_email
 from django.contrib.auth.hashers import make_password
 from django.db import IntegrityError
 from django.utils import timezone
 from rest_framework import serializers
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.customers.infrastructure.models import Customer
@@ -25,6 +28,37 @@ from .tasks import (
     send_password_reset_code_email,
     send_registration_verification_email,
 )
+
+
+class SpecificTokenObtainPairSerializer(TokenObtainPairSerializer):
+    def validate(self, attrs):
+        email = str(attrs.get(self.username_field) or attrs.get("email") or "").strip().lower()
+        password = str(attrs.get("password") or "")
+
+        if not email:
+            raise serializers.ValidationError({"email": ["Ingresa el correo electronico."]})
+        try:
+            validate_email(email)
+        except DjangoValidationError:
+            raise serializers.ValidationError({"email": ["El correo esta erroneo. Revisa el formato."]})
+        if not password:
+            raise serializers.ValidationError({"password": ["Ingresa la contrasena."]})
+
+        user = User.objects.filter(email__iexact=email).first()
+        if not user:
+            raise serializers.ValidationError({"email": ["El usuario no existe. Revisa el correo ingresado."]})
+        if not user.is_active:
+            raise serializers.ValidationError({"email": ["El usuario existe, pero esta inactivo. Contacta al administrador."]})
+        if not user.has_usable_password():
+            raise serializers.ValidationError({"password": ["Este usuario no tiene contrasena configurada. Ingresa con Google o solicita restablecerla."]})
+        if not user.check_password(password):
+            raise serializers.ValidationError({"password": ["La contrasena es incorrecta."]})
+
+        refresh = self.get_token(user)
+        return {
+            "refresh": str(refresh),
+            "access": str(refresh.access_token),
+        }
 
 
 class ComponentSerializer(serializers.ModelSerializer):

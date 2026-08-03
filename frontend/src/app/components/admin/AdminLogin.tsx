@@ -15,10 +15,10 @@ export function AdminLogin() {
     e.preventDefault();
     setError('');
     setIsSubmitting(true);
-    const success = await login(email, password);
+    const result = await login(email, password);
     setIsSubmitting(false);
-    if (!success) {
-      setError('Credenciales inválidas');
+    if (result !== true) {
+      setError(typeof result === 'object' && result.message ? result.message : 'No fue posible iniciar sesion.');
     }
   };
 

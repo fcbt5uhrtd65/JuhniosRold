@@ -8,7 +8,7 @@ from rest_framework.test import APIClient
 from unittest.mock import patch
 
 from apps.customers.infrastructure.models import Customer, CustomerAddress
-from apps.identity.infrastructure.models import EmailVerificationCode
+from apps.identity.infrastructure.models import EmailVerificationCode, User
 
 
 class IdentityApiTests(TestCase):
@@ -91,6 +91,37 @@ class IdentityApiTests(TestCase):
                 is_default=True,
             ).exists()
         )
+
+    def test_login_returns_specific_errors(self):
+        User.objects.create_user(
+            email="persona@example.com",
+            password="password-correcto",
+            first_name="Persona",
+            last_name="Prueba",
+        )
+
+        invalid_email_response = self.client.post(
+            "/api/v1/auth/login/",
+            {"email": "correo-mal", "password": "password-correcto"},
+            format="json",
+        )
+        missing_user_response = self.client.post(
+            "/api/v1/auth/login/",
+            {"email": "noexiste@example.com", "password": "password-correcto"},
+            format="json",
+        )
+        wrong_password_response = self.client.post(
+            "/api/v1/auth/login/",
+            {"email": "persona@example.com", "password": "password-incorrecto"},
+            format="json",
+        )
+
+        self.assertEqual(invalid_email_response.status_code, 400)
+        self.assertIn("El correo esta erroneo", invalid_email_response.data["email"][0])
+        self.assertEqual(missing_user_response.status_code, 400)
+        self.assertIn("El usuario no existe", missing_user_response.data["email"][0])
+        self.assertEqual(wrong_password_response.status_code, 400)
+        self.assertIn("La contrasena es incorrecta", wrong_password_response.data["password"][0])
 
     def test_registration_without_location_does_not_create_address(self):
         with (

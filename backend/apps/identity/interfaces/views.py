@@ -2,6 +2,7 @@ from django.conf import settings
 from rest_framework import generics, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework_simplejwt.views import TokenObtainPairView
 
 from apps.customers.infrastructure.models import Customer
 from apps.identity.infrastructure.models import Component, Role, RoleComponentPermission, User
@@ -16,6 +17,7 @@ from apps.identity.infrastructure.serializers import (
     RegisterVerifySerializer,
     RoleComponentPermissionSerializer,
     RoleSerializer,
+    SpecificTokenObtainPairSerializer,
     UserSerializer,
 )
 
@@ -35,6 +37,10 @@ def _verification_response_data(verification, message):
     if settings.DEBUG and hasattr(verification, "debug_code"):
         data["debug_code"] = verification.debug_code
     return data
+
+
+class SpecificTokenObtainPairView(TokenObtainPairView):
+    serializer_class = SpecificTokenObtainPairSerializer
 
 
 class CheckAvailabilityView(generics.GenericAPIView):

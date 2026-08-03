@@ -54,7 +54,7 @@ interface AdminContextType {
   customers: Customer[];
   isLoading: boolean;
   backendOnline: boolean;
-  login: (email: string, password: string) => boolean | Promise<boolean>;
+  login: (email: string, password: string) => boolean | Promise<boolean | { ok: false; message: string }>;
   logout: () => void;
   addProduct: (product: Omit<Product, 'id'>) => void | Promise<void>;
   updateProduct: (id: string, product: Partial<Product>) => void | Promise<void>;
@@ -597,13 +597,13 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   }, [currentUser, backendOnline, refreshData]);
 
   // ---- LOGIN ----
-  const login = useCallback(async (email: string, password: string): Promise<boolean> => {
+  const login = useCallback(async (email: string, password: string): Promise<boolean | { ok: false; message: string }> => {
     try {
       const apiUser = await loginUser({ email, password });
       setBackendOnline(true);
       if (!INTERNAL_ROLES.has(apiUser.role)) {
         clearTokens();
-        return false;
+        return { ok: false, message: 'Esta cuenta pertenece a clientes. Usa el inicio de sesión de la tienda.' };
       }
 
       const adminUser = mapAdminUser(apiUser);
@@ -614,7 +614,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       if (error instanceof ApiError) {
         setBackendOnline(true);
         clearTokens();
-        return false;
+        return { ok: false, message: error.errors?.join(' ') || error.message };
       }
       setBackendOnline(false);
     }

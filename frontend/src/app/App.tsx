@@ -149,7 +149,8 @@ function AppContent() {
   }, []);
 
   const handleAdminAccess = async (email: string, password: string) => {
-    const success = await login(email, password);
+    const result = await login(email, password);
+    const success = result === true;
     if (success) {
       setShowLoginModal(false);
     }
