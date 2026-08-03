@@ -8,7 +8,7 @@ from django.http import FileResponse
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.decorators import action
-from rest_framework.exceptions import NotFound
+from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -887,11 +887,42 @@ class VacationRequestAttachmentViewSet(SoftDeleteModelViewSet):
     filterset_fields = ("request", "attachment_type", "uploaded_by")
 
     def get_permissions(self):
+        if self.action == "create":
+            return (IsAuthenticated(),)
         self.required_component_action = "view" if self.action in {"list", "retrieve"} else "edit"
         return super().get_permissions()
 
+    def _has_management_edit_access(self):
+        self.required_component_action = "edit"
+        return HasComponentAccess().has_permission(self.request, self)
+
     def perform_create(self, serializer):
-        attachment = serializer.save(uploaded_by=self.request.user)
+        request_obj = serializer.validated_data["request"]
+        employee = getattr(self.request.user, "employee_profile", None)
+        is_owner = bool(employee and request_obj.employee_id == employee.id)
+
+        if is_owner:
+            allowed_statuses = {
+                VacationRequest.Status.PENDING,
+                VacationRequest.Status.IN_REVIEW,
+                VacationRequest.Status.PENDING_HR,
+                VacationRequest.Status.PENDING_ADMIN,
+                VacationRequest.Status.APPROVED,
+            }
+            if request_obj.request_type != VacationRequest.RequestType.PERMISSION or request_obj.subtype != VacationRequest.RequestSubtype.MEDICAL:
+                raise PermissionDenied("Solo puedes adjuntar constancias a tus propias solicitudes de cita medica.")
+            if request_obj.status not in allowed_statuses:
+                raise ValidationError("Solo puedes adjuntar la constancia mientras la solicitud este pendiente o aprobada.")
+            attachment = serializer.save(
+                uploaded_by=self.request.user,
+                attachment_type=VacationRequestAttachment.AttachmentType.MEDICAL_SUPPORT,
+                name="Constancia de cita",
+            )
+        else:
+            if not self._has_management_edit_access():
+                raise PermissionDenied("No tienes permiso para adjuntar documentos a esta solicitud.")
+            attachment = serializer.save(uploaded_by=self.request.user)
+
         VacationRequestHistory.objects.create(
             request=attachment.request,
             action=VacationRequestHistory.Action.UPDATED,

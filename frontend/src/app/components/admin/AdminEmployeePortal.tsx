@@ -28,6 +28,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { getEmployees, exportMyEmployeeCertificatePdf, type Employee } from '../../services/employees.service';
 import {
   approveVacationRequest,
+  createVacationRequestAttachment,
   createMyOvertimeRequest,
   createMyVacationRequest,
   deleteVacationRequest,
@@ -36,6 +37,7 @@ import {
   openVacationRequestPdf,
   rejectVacationRequest,
   type EmployeeWorkScheduleDayInput,
+  type HRRequestSubtype,
   type LoanFrequency,
   type OvertimeShiftInput,
   type VacationRequest,
@@ -88,6 +90,7 @@ type RequestTimeMode = 'FULL_DAY' | 'FROM_TIME' | 'TIME_RANGE';
 
 interface VacationFormState {
   request_type: VacationRequestType;
+  subtype: HRRequestSubtype;
   period_mode: RequestPeriodMode;
   time_mode: RequestTimeMode;
   single_date: string;
@@ -111,6 +114,7 @@ interface VacationFormState {
 
 const EMPTY_FORM: VacationFormState = {
   request_type: 'PERMISSION',
+  subtype: 'PERSONAL',
   period_mode: 'SINGLE_DAY',
   time_mode: 'FULL_DAY',
   single_date: '',
@@ -300,8 +304,19 @@ const REQUEST_TYPE_LABELS: Record<VacationRequestType, string> = {
   OTHER: 'Otro',
 };
 
+const PERMISSION_SUBTYPE_LABELS: Record<'PERSONAL' | 'MEDICAL' | 'FAMILY' | 'ACADEMIC' | 'OTHER', string> = {
+  PERSONAL: 'Personal',
+  MEDICAL: 'Cita medica',
+  FAMILY: 'Familiar',
+  ACADEMIC: 'Academico',
+  OTHER: 'Otro',
+};
+
 function getRequestTypeLabel(type: VacationRequestType, subtype?: string): string {
   if (type === 'SCHEDULE_CHANGE' || subtype === 'SCHEDULE_CHANGE') return 'Cambio de horario empleado';
+  if (type === 'PERMISSION' && subtype && subtype in PERMISSION_SUBTYPE_LABELS) {
+    return `Permiso ${PERMISSION_SUBTYPE_LABELS[subtype as keyof typeof PERMISSION_SUBTYPE_LABELS].toLowerCase()}`;
+  }
   return REQUEST_TYPE_LABELS[type] ?? type;
 }
 
@@ -343,6 +358,30 @@ function getRequestScheduleLabel(request: VacationRequest): string {
   return `${dateLabel} · Horario parcial`;
 }
 
+const MEDICAL_CONSTANCY_STATUSES = new Set<VacationRequestStatus>([
+  'PENDING',
+  'IN_REVIEW',
+  'PENDING_HR',
+  'PENDING_ADMIN',
+  'APPROVED',
+]);
+
+function isMedicalPermissionRequest(request: VacationRequest): boolean {
+  return request.request_type === 'PERMISSION' && request.subtype === 'MEDICAL';
+}
+
+function canUploadMedicalConstancy(request: VacationRequest): boolean {
+  return isMedicalPermissionRequest(request) && MEDICAL_CONSTANCY_STATUSES.has(request.status);
+}
+
+function hasMedicalConstancy(request: VacationRequest): boolean {
+  return request.attachments.some(
+    (attachment) =>
+      attachment.attachment_type === 'MEDICAL_SUPPORT' &&
+      attachment.name.toLowerCase().includes('constancia'),
+  );
+}
+
 function getEmployeeName(employee: Employee): string {
   return `${employee.first_name} ${employee.last_name}`.trim() || employee.employee_code;
 }
@@ -366,6 +405,7 @@ export function AdminEmployeePortal() {
   const [selectedRequest, setSelectedRequest] = useState<VacationRequest | null>(null);
   const [downloadingCertificate, setDownloadingCertificate] = useState(false);
   const [downloadingRequestPdfId, setDownloadingRequestPdfId] = useState<string | null>(null);
+  const [uploadingMedicalConstancyRequestId, setUploadingMedicalConstancyRequestId] = useState<string | null>(null);
   const [showCertificateModal, setShowCertificateModal] = useState(false);
   const [allEmployees, setAllEmployees] = useState<Employee[]>([]);
   const [teamRequests, setTeamRequests] = useState<VacationRequest[]>([]);
@@ -670,10 +710,18 @@ export function AdminEmployeePortal() {
       return;
     }
 
+    if (form.request_type === 'PERMISSION' && form.subtype === 'PERSONAL') {
+      const confirmed = window.confirm(
+        'Advertencia: la empresa solo otorgara hasta 3 permisos personales. Deseas enviar esta solicitud?',
+      );
+      if (!confirmed) return;
+    }
+
     setSaving(true);
     try {
       await createMyVacationRequest({
         request_type: form.request_type,
+        ...(form.request_type === 'PERMISSION' ? { subtype: form.subtype || 'PERSONAL' } : {}),
         start_date,
         end_date,
         is_full_day,
@@ -709,6 +757,49 @@ export function AdminEmployeePortal() {
       toast.error(error instanceof Error ? error.message : 'No se pudo eliminar la solicitud');
     } finally {
       setDeletingRequestId(null);
+    }
+  };
+
+  const handleUploadMedicalConstancy = async (request: VacationRequest, file: File | null) => {
+    if (!file || !canUploadMedicalConstancy(request)) return;
+    if (!isAllowedSupportDocument(file)) {
+      toast.error('La constancia debe ser PDF o una imagen PNG/JPG');
+      return;
+    }
+
+    setUploadingMedicalConstancyRequestId(request.id);
+    try {
+      const attachment = await createVacationRequestAttachment({
+        request: request.id,
+        attachment_type: 'MEDICAL_SUPPORT',
+        name: 'Constancia de cita',
+        file,
+      });
+      setSelectedRequest((current) =>
+        current?.id === request.id
+          ? {
+              ...current,
+              attachments: [...current.attachments, attachment],
+            }
+          : current,
+      );
+      setRequests((current) =>
+        current.map((item) =>
+          item.id === request.id
+            ? {
+                ...item,
+                attachments: [...item.attachments, attachment],
+              }
+            : item,
+        ),
+      );
+      toast.success('Constancia de cita cargada');
+      await loadData();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo subir la constancia');
+    } finally {
+      setUploadingMedicalConstancyRequestId(null);
     }
   };
 
@@ -935,7 +1026,13 @@ export function AdminEmployeePortal() {
                     <button
                       key={value}
                       type="button"
-                      onClick={() => setForm({ ...form, request_type: value })}
+                      onClick={() =>
+                        setForm({
+                          ...form,
+                          request_type: value,
+                          subtype: value === 'PERMISSION' ? form.subtype || 'PERSONAL' : '',
+                        })
+                      }
                       className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-medium transition-colors ${
                         active
                           ? 'border-[#2a4038] bg-[#2a4038]/5 text-[#2a4038]'
@@ -949,6 +1046,35 @@ export function AdminEmployeePortal() {
                 })}
               </div>
             </div>
+
+            {form.request_type === 'PERMISSION' && (
+              <div className="space-y-3">
+                <div>
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Tipo de permiso</label>
+                  <select
+                    value={form.subtype || 'PERSONAL'}
+                    onChange={(event) => setForm({ ...form, subtype: event.target.value as HRRequestSubtype })}
+                    className={selectCls}
+                  >
+                    {Object.entries(PERMISSION_SUBTYPE_LABELS).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {form.subtype === 'PERSONAL' && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-800">
+                    Advertencia: la empresa solo otorgara hasta 3 permisos personales. Revisa tu historial antes de enviar la solicitud.
+                  </div>
+                )}
+                {form.subtype === 'MEDICAL' && (
+                  <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs leading-relaxed text-sky-800">
+                    Para citas medicas puedes adjuntar el soporte inicial ahora. Cuando la solicitud este pendiente o aprobada, podras subir la Constancia de cita entregada por el medico.
+                  </div>
+                )}
+              </div>
+            )}
 
             {form.request_type === 'SCHEDULE_CHANGE' ? (
               <div className="space-y-4">
@@ -1342,7 +1468,11 @@ export function AdminEmployeePortal() {
                       <p className="font-medium text-gray-900">
                         {form.support_document ? form.support_document.name : 'Subir PDF, PNG o JPG'}
                       </p>
-                      <p className="text-xs text-gray-400">Adjunta soportes como cita médica, certificado o constancia.</p>
+                      <p className="text-xs text-gray-400">
+                        {form.request_type === 'PERMISSION' && form.subtype === 'MEDICAL'
+                          ? 'Adjunta el soporte inicial de la cita. La constancia de asistencia se sube despues.'
+                          : 'Adjunta soportes como certificado, soporte medico o constancia.'}
+                      </p>
                     </div>
                     {form.support_document && (
                       <button
@@ -1724,6 +1854,44 @@ export function AdminEmployeePortal() {
                     <p className="text-xs text-gray-400">Sin documentos adjuntos.</p>
                   )}
                 </div>
+                {canUploadMedicalConstancy(selectedRequest) && (
+                  <div className="mt-3 rounded-xl border border-sky-100 bg-sky-50 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold text-sky-900">Constancia de cita</p>
+                        <p className="mt-1 text-xs leading-relaxed text-sky-700">
+                          Sube aqui la constancia de asistencia entregada por el medico.
+                        </p>
+                      </div>
+                      {hasMedicalConstancy(selectedRequest) && <Badge label="Cargada" color="green" />}
+                    </div>
+                    <label
+                      className={`mt-3 inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${
+                        uploadingMedicalConstancyRequestId === selectedRequest.id
+                          ? 'cursor-not-allowed border-gray-200 bg-white/70 text-gray-400'
+                          : 'cursor-pointer border-sky-200 bg-white text-sky-800 hover:bg-sky-100'
+                      }`}
+                    >
+                      <Paperclip size={13} />
+                      {uploadingMedicalConstancyRequestId === selectedRequest.id
+                        ? 'Subiendo...'
+                        : hasMedicalConstancy(selectedRequest)
+                          ? 'Subir nueva constancia'
+                          : 'Subir constancia de cita'}
+                      <input
+                        type="file"
+                        accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+                        disabled={uploadingMedicalConstancyRequestId === selectedRequest.id}
+                        onChange={(event) => {
+                          const file = event.target.files?.[0] ?? null;
+                          event.currentTarget.value = '';
+                          void handleUploadMedicalConstancy(selectedRequest, file);
+                        }}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                )}
               </div>
             </div>
             {isRequestDeletableByOwner(selectedRequest) && (
