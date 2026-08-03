@@ -123,6 +123,138 @@ function addDays(value: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
+function dateToIsoLocal(value: Date): string {
+  return value.toISOString().slice(0, 10);
+}
+
+function easterSunday(year: number): Date {
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(year, month - 1, day);
+}
+
+function nextMondayOnOrAfter(value: Date): Date {
+  const date = new Date(value);
+  const weekday = date.getDay();
+  const offset = weekday === 1 ? 0 : (8 - weekday) % 7;
+  date.setDate(date.getDate() + offset);
+  return date;
+}
+
+function addCalendarDays(value: Date, days: number): Date {
+  const date = new Date(value);
+  date.setDate(date.getDate() + days);
+  return date;
+}
+
+function generatedColombianHolidays(year: number): PublicHoliday[] {
+  const easter = easterSunday(year);
+  const fixedNoMove: Array<[string, Date]> = [
+    ['Año Nuevo', new Date(year, 0, 1)],
+    ['Día del Trabajo', new Date(year, 4, 1)],
+    ['Independencia de Colombia', new Date(year, 6, 20)],
+    ['Batalla de Boyacá', new Date(year, 7, 7)],
+    ['Inmaculada Concepción', new Date(year, 11, 8)],
+    ['Navidad', new Date(year, 11, 25)],
+  ];
+  const fixedMoved: Array<[string, Date]> = [
+    ['Reyes Magos', new Date(year, 0, 6)],
+    ['San José', new Date(year, 2, 19)],
+    ['San Pedro y San Pablo', new Date(year, 5, 29)],
+    ['Asunción de la Virgen', new Date(year, 7, 15)],
+    ['Día de la Raza', new Date(year, 9, 12)],
+    ['Todos los Santos', new Date(year, 10, 1)],
+    ['Independencia de Cartagena', new Date(year, 10, 11)],
+  ];
+  const easterNoMove: Array<[string, Date]> = [
+    ['Jueves Santo', addCalendarDays(easter, -3)],
+    ['Viernes Santo', addCalendarDays(easter, -2)],
+  ];
+  const easterMoved: Array<[string, Date]> = [
+    ['Ascensión del Señor', addCalendarDays(easter, 39)],
+    ['Corpus Christi', addCalendarDays(easter, 60)],
+    ['Sagrado Corazón de Jesús', addCalendarDays(easter, 68)],
+  ];
+
+  const holidayRows: PublicHoliday[] = [];
+  fixedNoMove.forEach(([name, civilDate]) => {
+    holidayRows.push({
+      id: `generated-${year}-${dateToIsoLocal(civilDate)}`,
+      year,
+      name,
+      kind: 'FIXED',
+      civil_date: dateToIsoLocal(civilDate),
+      original_date: null,
+      is_active: true,
+      notes: 'Calculado automaticamente para vista previa',
+      created_at: '',
+      updated_at: '',
+      deleted_at: null,
+    });
+  });
+  fixedMoved.forEach(([name, originalDate]) => {
+    const civilDate = nextMondayOnOrAfter(originalDate);
+    holidayRows.push({
+      id: `generated-${year}-${dateToIsoLocal(civilDate)}`,
+      year,
+      name,
+      kind: 'FIXED_MOVED_TO_MONDAY',
+      civil_date: dateToIsoLocal(civilDate),
+      original_date: dateToIsoLocal(civilDate) === dateToIsoLocal(originalDate) ? null : dateToIsoLocal(originalDate),
+      is_active: true,
+      notes: 'Calculado automaticamente para vista previa',
+      created_at: '',
+      updated_at: '',
+      deleted_at: null,
+    });
+  });
+  easterNoMove.forEach(([name, civilDate]) => {
+    holidayRows.push({
+      id: `generated-${year}-${dateToIsoLocal(civilDate)}`,
+      year,
+      name,
+      kind: 'EASTER_BASED',
+      civil_date: dateToIsoLocal(civilDate),
+      original_date: null,
+      is_active: true,
+      notes: 'Calculado automaticamente para vista previa',
+      created_at: '',
+      updated_at: '',
+      deleted_at: null,
+    });
+  });
+  easterMoved.forEach(([name, originalDate]) => {
+    const civilDate = nextMondayOnOrAfter(originalDate);
+    holidayRows.push({
+      id: `generated-${year}-${dateToIsoLocal(civilDate)}`,
+      year,
+      name,
+      kind: 'EASTER_BASED',
+      civil_date: dateToIsoLocal(civilDate),
+      original_date: dateToIsoLocal(civilDate) === dateToIsoLocal(originalDate) ? null : dateToIsoLocal(originalDate),
+      is_active: true,
+      notes: 'Calculado automaticamente para vista previa',
+      created_at: '',
+      updated_at: '',
+      deleted_at: null,
+    });
+  });
+
+  return holidayRows.sort((left, right) => left.civil_date.localeCompare(right.civil_date));
+}
+
 function enumerateDates(start: string, end: string): string[] {
   if (!start || !end || end < start) return [];
   const dates: string[] = [];
@@ -1431,20 +1563,23 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
   const [expandedPreviewCodes, setExpandedPreviewCodes] = useState<Set<string>>(new Set());
   const [previewMode, setPreviewMode] = useState<'table' | 'calendar'>('table');
   const [previewHolidays, setPreviewHolidays] = useState<PublicHoliday[]>([]);
+  const [previewLegalParameters, setPreviewLegalParameters] = useState<PayrollLegalParameter[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [devicesRes, mappingsRes, pendingRes, intelligenceRes] = await Promise.allSettled([
+      const [devicesRes, mappingsRes, pendingRes, intelligenceRes, parametersRes] = await Promise.allSettled([
         getBiometricDevices(),
         getEmployeeBiometricIds(),
         getPendingCorrectionAttendance(),
         getAttendanceIntelligenceSettings(),
+        getPayrollLegalParameters(),
       ]);
       if (devicesRes.status === 'fulfilled') setDevices(devicesRes.value);
       if (mappingsRes.status === 'fulfilled') setMappings(mappingsRes.value);
       if (pendingRes.status === 'fulfilled') setPending(pendingRes.value);
       if (intelligenceRes.status === 'fulfilled') setIntelligenceSettings(intelligenceRes.value);
+      if (parametersRes.status === 'fulfilled') setPreviewLegalParameters(parametersRes.value);
     } catch (error) {
       console.error(error);
       toast.error('No se pudo cargar la información biométrica');
@@ -1576,8 +1711,17 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
   }, [previewYears]);
 
   const previewHolidaysByDate = useMemo(() => {
-    return new Map(previewHolidays.map((holiday) => [holiday.civil_date, holiday]));
-  }, [previewHolidays]);
+    const holidays = new Map<string, PublicHoliday>();
+    previewYears.forEach((year) => {
+      generatedColombianHolidays(year).forEach((holiday) => holidays.set(holiday.civil_date, holiday));
+    });
+    previewHolidays.forEach((holiday) => holidays.set(holiday.civil_date, holiday));
+    return holidays;
+  }, [previewHolidays, previewYears]);
+
+  const previewParametersByYear = useMemo(() => {
+    return new Map(previewLegalParameters.map((parameter) => [parameter.year, parameter]));
+  }, [previewLegalParameters]);
 
   const previewByCode = useMemo(() => {
     const groups = new Map<
@@ -1791,16 +1935,18 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
                         <Download size={12} /> Exportar codigo
                       </button>
                     </div>
-                    <div className="grid grid-cols-7 border-b border-gray-100 bg-gray-50 text-center text-[10px] font-semibold uppercase text-gray-400">
+                    <div className="grid min-w-[1120px] grid-cols-7 border-b border-gray-100 bg-gray-50 text-center text-[10px] font-semibold uppercase text-gray-400">
                       {WEEKDAY_LABELS.map((day) => (
                         <div key={day} className="px-2 py-2">{day.slice(0, 3)}</div>
                       ))}
                     </div>
-                    <div className="grid grid-cols-7">
+                    <div className="grid min-w-[1120px] grid-cols-7">
                       {previewCalendarCells.map((date, index) => {
-                        if (!date) return <div key={`empty-${group.code}-${index}`} className="min-h-[86px] border-b border-r border-gray-50 bg-gray-50/50" />;
+                        if (!date) return <div key={`empty-${group.code}-${index}`} className="min-h-[164px] border-b border-r border-gray-50 bg-gray-50/50" />;
                         const row = rowsByDate.get(date);
                         const holiday = previewHolidaysByDate.get(date);
+                        const parameter = previewParametersByYear.get(Number(date.slice(0, 4)));
+                        const holidayRate = parameter?.sunday_holiday_surcharge_pct ? `${parameter.sunday_holiday_surcharge_pct}%` : 'param. default';
                         const weekend = isWeekendDate(date);
                         const missing = !row;
                         const statusLabel = row
@@ -1814,18 +1960,39 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
                         return (
                           <div
                             key={`${group.code}-${date}`}
-                            className={`min-h-[86px] border-b border-r border-gray-50 p-2 ${missing && !holiday && !weekend ? 'bg-red-50/50' : holiday ? 'bg-blue-50/40' : 'bg-white'}`}
+                            className={`min-h-[164px] border-b border-r border-gray-50 p-2 ${missing && !holiday && !weekend ? 'bg-red-50/50' : holiday ? 'bg-blue-50/40' : 'bg-white'}`}
                           >
                             <div className="flex items-start justify-between gap-1">
                               <span className="text-[11px] font-semibold text-gray-900">{parseLocalDate(date).getDate()}</span>
                               <Badge label={statusLabel} color={statusColor} />
                             </div>
                             <p className="mt-1 truncate text-[10px] text-gray-500">{WEEKDAY_LABELS[mondayWeekdayIndex(date)]}</p>
-                            {holiday && <p className="mt-1 line-clamp-2 text-[10px] font-semibold text-blue-700">{holiday.name}</p>}
-                            {row && (
-                              <p className="mt-1 text-[10px] text-gray-500">
-                                {row.checkIn.slice(0, 5)} - {row.checkOut === '-' ? '--:--' : row.checkOut.slice(0, 5)}
+                            {holiday && (
+                              <p className="mt-1 line-clamp-2 text-[10px] font-semibold text-blue-700">
+                                {holiday.name} · {holidayRate}
                               </p>
+                            )}
+                            {row ? (
+                              <div className="mt-2 grid grid-cols-2 gap-1.5">
+                                {([
+                                  ['checkIn', 'Ent.'],
+                                  ['breakStart', 'Alm.'],
+                                  ['breakEnd', 'Reg.'],
+                                  ['checkOut', 'Sal.'],
+                                ] as const).map(([field, label]) => (
+                                  <label key={field} className="block">
+                                    <span className="block text-[9px] font-semibold uppercase text-gray-400">{label}</span>
+                                    <input
+                                      type="time"
+                                      value={row[field] === '-' ? '' : row[field].slice(0, 5)}
+                                      onChange={(event) => updatePreviewTime(row.key, field, event.target.value)}
+                                      className="mt-0.5 w-full rounded-md border border-gray-200 px-1.5 py-1 text-[11px] text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#2a4038]/20"
+                                    />
+                                  </label>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="mt-2 text-[10px] text-gray-400">Sin marca</p>
                             )}
                           </div>
                         );
