@@ -534,8 +534,16 @@ function getRequestScheduleLabel(request: VacationRequest): string {
   }
 
   if (request.request_type === 'OVERTIME' && request.overtime_shifts?.length) {
-    const count = request.overtime_shifts.length;
-    return `${dateLabel} · ${count} turno${count === 1 ? '' : 's'} · ${Number(request.hours_count ?? 0).toFixed(1)} h`;
+    const sortedShifts = [...request.overtime_shifts].sort((left, right) => `${left.date} ${left.start_time}`.localeCompare(`${right.date} ${right.start_time}`));
+    const shiftsLabel = sortedShifts
+      .slice(0, 2)
+      .map((shift) => {
+        const shiftDate = shift.date === request.start_date && request.start_date === request.end_date ? '' : `${parseDate(shift.date)} · `;
+        return `${shiftDate}${formatTime(shift.start_time)} - ${formatTime(shift.end_time)}`;
+      })
+      .join(' | ');
+    const remaining = sortedShifts.length > 2 ? ` +${sortedShifts.length - 2} turno(s)` : '';
+    return `${shiftsLabel}${remaining} · ${Number(request.hours_count ?? 0).toFixed(1)} h`;
   }
 
   if (request.request_type === 'SCHEDULE_CHANGE' || request.subtype === 'SCHEDULE_CHANGE') {
