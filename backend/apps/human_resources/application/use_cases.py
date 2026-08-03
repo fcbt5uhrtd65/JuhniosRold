@@ -39,7 +39,6 @@ from ..infrastructure.payroll_engine import (
     health_deduction_for,
     hourly_rate_for,
     pension_deduction_for,
-    resolve_base_salary,
     transport_allowance_for,
 )
 
@@ -1351,13 +1350,11 @@ class CalculateEmployeePayrollForPeriod:
       - las novedades aprobadas dentro del período (VacationRequest: vacaciones,
         incapacidades, permisos no remunerados, préstamos, horas extra).
 
-    Regla de horas extra (confirmada explícitamente): el tiempo trabajado
-    de más detectado por marcación (biométrico o manual) NUNCA genera
-    devengado de horas extra automáticamente — solo se registra como
-    informativo. Las horas extra que sí se pagan son las de
-    VacationRequest(request_type=OVERTIME, status=APPROVED) con sus
-    OvertimeShift dentro del período. Esto evita pagar de más por errores de
-    marcación o quedarse tarde sin autorización.
+    Regla de horas extra: el exceso trabajado segun la asistencia consolidada
+    se liquida contra el horario esperado vigente del dia y se clasifica como
+    extra diurna/nocturna/dominical segun la hora real. Las solicitudes de
+    horas extra aprobadas siguen siendo validas; si una solicitud cubre una
+    fecha, no se duplica la extra detectada por asistencia de ese mismo dia.
 
     Recalculo idempotente: borra los PayrollItem con source != MANUAL del
     cálculo anterior de ese empleado/período antes de regenerar, preservando
@@ -1369,7 +1366,8 @@ class CalculateEmployeePayrollForPeriod:
             raise BusinessRuleViolation("Solo se puede calcular un período que esté Abierto o ya Calculado.")
 
         legal_parameter = PayrollLegalParameter.objects.filter(year=period.period_start.year).first()
-        base_salary = resolve_base_salary(employee, period.period_start)
+        period_days = Decimal((period.period_end - period.period_start).days + 1)
+        period_base_salary = (daily_rate_for(employee, period.period_start) * period_days).quantize(Decimal("0.01"))
         hourly_rate = hourly_rate_for(employee, period.period_start, legal_parameter)
 
         holiday_dates = frozenset(
@@ -1390,7 +1388,7 @@ class CalculateEmployeePayrollForPeriod:
             defaults={
                 "period_start": period.period_start,
                 "period_end": period.period_end,
-                "base_salary": base_salary,
+                "base_salary": period_base_salary,
                 "status": Payroll.Status.DRAFT,
             },
         )
@@ -1402,6 +1400,15 @@ class CalculateEmployeePayrollForPeriod:
         worked_days, ordinary_minutes = self._count_worked_days(employee, period)
 
         new_items = []
+        if period_base_salary > 0:
+            new_items.append(PayrollItem(
+                payroll=payroll,
+                item_type=PayrollItem.Type.EARNING,
+                concept=f"Salario ordinario ({period_days:.0f} dia(s))",
+                amount=period_base_salary,
+                source=PayrollItem.Source.SYSTEM,
+                concept_code="BASE_SALARY",
+            ))
         for (label, surcharge_pct), minutes in recharge_minutes.items():
             if minutes <= 0:
                 continue
@@ -1418,24 +1425,38 @@ class CalculateEmployeePayrollForPeriod:
                 concept_code=RECHARGE_LABEL_TO_CONCEPT_CODE.get(label, "OTHER_HOURS"),
             ))
 
-        overtime_amount, overtime_hours = self._approved_overtime_items(payroll, employee, period, hourly_rate, holiday_dates, new_items, rates)
+        _, approved_overtime_hours, approved_overtime_dates = self._approved_overtime_items(
+            payroll, employee, period, hourly_rate, holiday_dates, new_items, rates
+        )
+        _, attendance_overtime_hours = self._attendance_overtime_items(
+            payroll,
+            employee,
+            period,
+            hourly_rate,
+            holiday_dates,
+            new_items,
+            rates,
+            skip_dates=approved_overtime_dates,
+        )
+        overtime_hours = (approved_overtime_hours + attendance_overtime_hours).quantize(Decimal("0.01"))
         new_items.extend(self._vacation_request_items(payroll, employee, period, actor))
 
-        transport = transport_allowance_for(employee, legal_parameter) if legal_parameter else Decimal("0")
+        monthly_transport = transport_allowance_for(employee, legal_parameter) if legal_parameter else Decimal("0")
+        transport = (monthly_transport / Decimal("30") * period_days).quantize(Decimal("0.01")) if monthly_transport > 0 else Decimal("0")
         if transport > 0:
             new_items.append(PayrollItem(
                 payroll=payroll, item_type=PayrollItem.Type.EARNING, concept="Auxilio de transporte",
                 amount=transport, source=PayrollItem.Source.SYSTEM, concept_code="TRANSPORT_ALLOWANCE",
             ))
 
-        health = health_deduction_for(base_salary, legal_parameter) if legal_parameter else Decimal("0")
+        health = health_deduction_for(period_base_salary, legal_parameter) if legal_parameter else Decimal("0")
         if health > 0:
             new_items.append(PayrollItem(
                 payroll=payroll, item_type=PayrollItem.Type.DEDUCTION, concept="Salud (empleado)",
                 amount=health, source=PayrollItem.Source.SYSTEM, concept_code="HEALTH",
             ))
 
-        pension = pension_deduction_for(base_salary, legal_parameter) if legal_parameter else Decimal("0")
+        pension = pension_deduction_for(period_base_salary, legal_parameter) if legal_parameter else Decimal("0")
         if pension > 0:
             new_items.append(PayrollItem(
                 payroll=payroll, item_type=PayrollItem.Type.DEDUCTION, concept="Pensión (empleado)",
@@ -1461,7 +1482,7 @@ class CalculateEmployeePayrollForPeriod:
             Decimal("0"),
         )
         payroll.deductions = deductions_total
-        payroll.net_salary = (base_salary + gross - deductions_total).quantize(Decimal("0.01"))
+        payroll.net_salary = (gross - deductions_total).quantize(Decimal("0.01"))
         if not payroll.payslip_number:
             payroll.payslip_number = self._generate_payslip_number(period)
         payroll.save()
@@ -1469,9 +1490,9 @@ class CalculateEmployeePayrollForPeriod:
 
     def _accumulate_recharge_minutes(self, employee, period, holiday_dates, rates=None) -> dict:
         """Recorre cada día del período con asistencia consolidada y acumula
-        minutos por (label, surcharge_pct) usando classify_shift — solo para
-        el tramo que cabe dentro del horario esperado del día (ordinario);
-        el exceso se cuenta aparte como informativo, no se paga aquí."""
+        minutos por (label, surcharge_pct) usando classify_shift, solo para
+        el tramo que cabe dentro del horario esperado del dia. El exceso se
+        liquida aparte en _attendance_overtime_items."""
         totals: dict[tuple, int] = {}
         cursor = period.period_start
         while cursor <= period.period_end:
@@ -1521,9 +1542,18 @@ class CalculateEmployeePayrollForPeriod:
             attendance = Attendance.objects.filter(employee=employee, date=cursor).first()
             if attendance and attendance.check_in and attendance.check_out:
                 worked_days += 1
+                schedule = get_schedule_for(employee, cursor)
+                expected_minutes = schedule.expected_minutes_for(cursor.weekday()) if schedule else None
+                remaining_ordinary = expected_minutes if expected_minutes is not None else None
                 segments = self._work_segments(attendance)
                 for seg_start, seg_end in segments:
-                    ordinary_minutes += max(int((seg_end - seg_start).total_seconds() // 60), 0)
+                    seg_minutes = max(int((seg_end - seg_start).total_seconds() // 60), 0)
+                    if remaining_ordinary is None:
+                        ordinary_minutes += seg_minutes
+                        continue
+                    ordinary_in_segment = min(max(remaining_ordinary, 0), seg_minutes)
+                    ordinary_minutes += ordinary_in_segment
+                    remaining_ordinary -= ordinary_in_segment
             cursor += timedelta(days=1)
         return worked_days, ordinary_minutes
 
@@ -1540,10 +1570,12 @@ class CalculateEmployeePayrollForPeriod:
 
         totals: dict[tuple, int] = {}
         total_minutes = 0
+        overtime_dates = set()
         for request in overtime_requests:
             for shift in request.overtime_shifts.all():
                 if shift.date < period.period_start or shift.date > period.period_end:
                     continue
+                overtime_dates.add(shift.date)
                 shift_start = datetime.combine(shift.date, shift.start_time)
                 shift_end = datetime.combine(shift.date, shift.end_time)
                 for label, pct, minutes in self._classify_range(shift_start, shift_end, holiday_dates, is_extra=True, rates=rates):
@@ -1564,6 +1596,76 @@ class CalculateEmployeePayrollForPeriod:
                 payroll=payroll,
                 item_type=PayrollItem.Type.EARNING,
                 concept=f"{label} ({100 + pct:.0f}%)",
+                amount=amount,
+                source=PayrollItem.Source.ATTENDANCE,
+                concept_code=RECHARGE_LABEL_TO_CONCEPT_CODE.get(label, "OTHER_HOURS"),
+            ))
+
+        overtime_hours = (Decimal(total_minutes) / Decimal(60)).quantize(Decimal("0.01"))
+        return overtime_amount, overtime_hours, overtime_dates
+
+    def _attendance_overtime_items(
+        self,
+        payroll,
+        employee,
+        period,
+        hourly_rate,
+        holiday_dates,
+        new_items,
+        rates=None,
+        skip_dates=None,
+    ) -> tuple:
+        """Liquida extras desde asistencia cuando las marcas superan el horario
+        esperado del dia. Si ese dia ya tiene una solicitud de extra aprobada,
+        se omite para no duplicar el pago."""
+        totals: dict[tuple, int] = {}
+        total_minutes = 0
+        skip_dates = skip_dates or set()
+        cursor = period.period_start
+        while cursor <= period.period_end:
+            if cursor in skip_dates:
+                cursor += timedelta(days=1)
+                continue
+
+            attendance = Attendance.objects.filter(employee=employee, date=cursor).first()
+            if not attendance or not attendance.check_in or not attendance.check_out:
+                cursor += timedelta(days=1)
+                continue
+
+            schedule = get_schedule_for(employee, cursor)
+            if not schedule:
+                cursor += timedelta(days=1)
+                continue
+
+            remaining_ordinary = schedule.expected_minutes_for(cursor.weekday())
+            for seg_start, seg_end in self._work_segments(attendance):
+                seg_minutes = max(int((seg_end - seg_start).total_seconds() // 60), 0)
+                if seg_minutes <= 0:
+                    continue
+                ordinary_in_segment = min(max(remaining_ordinary, 0), seg_minutes)
+                extra_start = seg_start + timedelta(minutes=ordinary_in_segment)
+                remaining_ordinary -= ordinary_in_segment
+                if extra_start >= seg_end:
+                    continue
+                for label, pct, minutes in self._classify_range(extra_start, seg_end, holiday_dates, is_extra=True, rates=rates):
+                    key = (label, pct)
+                    totals[key] = totals.get(key, 0) + minutes
+                    total_minutes += minutes
+            cursor += timedelta(days=1)
+
+        overtime_amount = Decimal("0")
+        for (label, pct), minutes in totals.items():
+            if minutes <= 0:
+                continue
+            hours = Decimal(minutes) / Decimal(60)
+            amount = (hourly_rate * (Decimal(100) + pct) / Decimal(100) * hours).quantize(Decimal("0.01"))
+            if amount <= 0:
+                continue
+            overtime_amount += amount
+            new_items.append(PayrollItem(
+                payroll=payroll,
+                item_type=PayrollItem.Type.EARNING,
+                concept=f"{label} asistencia ({100 + pct:.0f}%)",
                 amount=amount,
                 source=PayrollItem.Source.ATTENDANCE,
                 concept_code=RECHARGE_LABEL_TO_CONCEPT_CODE.get(label, "OTHER_HOURS"),
