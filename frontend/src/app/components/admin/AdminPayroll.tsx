@@ -299,13 +299,7 @@ function isWeekendDate(value: string): boolean {
   return day === 0 || day === 6;
 }
 
-function csvEscape(value: string | number | null | undefined): string {
-  const text = String(value ?? '');
-  return /[;"\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
-
-function downloadTextFile(filename: string, content: string, mime = 'text/csv;charset=utf-8'): void {
-  const blob = new Blob([`\uFEFF${content}`], { type: mime });
+function downloadBlob(filename: string, blob: Blob): void {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
@@ -314,6 +308,256 @@ function downloadTextFile(filename: string, content: string, mime = 'text/csv;ch
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(url);
+}
+
+type XlsxCellValue = string | number | null | undefined;
+
+type XlsxCell = {
+  value: XlsxCellValue;
+  style?: number;
+};
+
+type XlsxSheet = {
+  name: string;
+  rows: XlsxCell[][];
+  widths?: number[];
+};
+
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+const CRC32_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let index = 0; index < 256; index += 1) {
+    let value = index;
+    for (let bit = 0; bit < 8; bit += 1) {
+      value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+    }
+    table[index] = value >>> 0;
+  }
+  return table;
+})();
+
+function xlsxCell(value: XlsxCellValue, style = 0): XlsxCell {
+  return { value, style };
+}
+
+function xmlEscape(value: XlsxCellValue): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function sheetNameEscape(value: string): string {
+  return xmlEscape(value.replace(/[\[\]:*?/\\]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 31) || 'Hoja');
+}
+
+function uniqueSheetName(base: string, used: Set<string>): string {
+  const clean = base.replace(/[\[\]:*?/\\]/g, ' ').replace(/\s+/g, ' ').trim() || 'Hoja';
+  let candidate = clean.slice(0, 31);
+  let index = 2;
+  while (used.has(candidate.toLowerCase())) {
+    const suffix = ` ${index}`;
+    candidate = clean.slice(0, 31 - suffix.length) + suffix;
+    index += 1;
+  }
+  used.add(candidate.toLowerCase());
+  return candidate;
+}
+
+function xlsxColumnName(index: number): string {
+  let value = index + 1;
+  let label = '';
+  while (value > 0) {
+    const modulo = (value - 1) % 26;
+    label = String.fromCharCode(65 + modulo) + label;
+    value = Math.floor((value - modulo) / 26);
+  }
+  return label;
+}
+
+function buildWorksheetXml(sheet: XlsxSheet): string {
+  const cols = sheet.widths?.length
+    ? `<cols>${sheet.widths.map((width, index) => `<col min="${index + 1}" max="${index + 1}" width="${width}" customWidth="1"/>`).join('')}</cols>`
+    : '';
+  const rows = sheet.rows.map((row, rowIndex) => {
+    const cells = row.map((cell, columnIndex) => {
+      if (cell.value === null || cell.value === undefined || cell.value === '') return '';
+      const reference = `${xlsxColumnName(columnIndex)}${rowIndex + 1}`;
+      const style = cell.style ? ` s="${cell.style}"` : '';
+      if (typeof cell.value === 'number' && Number.isFinite(cell.value)) {
+        return `<c r="${reference}"${style}><v>${cell.value}</v></c>`;
+      }
+      return `<c r="${reference}" t="inlineStr"${style}><is><t>${xmlEscape(cell.value)}</t></is></c>`;
+    }).join('');
+    return `<row r="${rowIndex + 1}">${cells}</row>`;
+  }).join('');
+
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheetViews><sheetView workbookViewId="0"/></sheetViews>
+  <sheetFormatPr defaultRowHeight="15"/>
+  ${cols}
+  <sheetData>${rows}</sheetData>
+</worksheet>`;
+}
+
+function buildWorkbookXml(sheets: XlsxSheet[]): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets>
+    ${sheets.map((sheet, index) => `<sheet name="${sheetNameEscape(sheet.name)}" sheetId="${index + 1}" r:id="rId${index + 1}"/>`).join('')}
+  </sheets>
+</workbook>`;
+}
+
+function buildWorkbookRelsXml(sheets: XlsxSheet[]): string {
+  const worksheetRels = sheets
+    .map((_, index) => `<Relationship Id="rId${index + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${index + 1}.xml"/>`)
+    .join('');
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  ${worksheetRels}
+  <Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`;
+}
+
+function buildContentTypesXml(sheets: XlsxSheet[]): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+  ${sheets.map((_, index) => `<Override PartName="/xl/worksheets/sheet${index + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')}
+</Types>`;
+}
+
+function buildStylesXml(): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>
+  <fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFEFF4F1"/><bgColor indexed="64"/></patternFill></fill></fills>
+  <borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/><diagonal/></border></borders>
+  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+  <cellXfs count="4">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>
+    <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/>
+    <xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"/>
+  </cellXfs>
+  <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>`;
+}
+
+function crc32(bytes: Uint8Array): number {
+  let crc = 0xffffffff;
+  for (const byte of bytes) {
+    crc = CRC32_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function dosTimestamp(date = new Date()): { time: number; date: number } {
+  return {
+    time: (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2),
+    date: ((date.getFullYear() - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate(),
+  };
+}
+
+function pushUint16(target: number[], value: number): void {
+  target.push(value & 0xff, (value >>> 8) & 0xff);
+}
+
+function pushUint32(target: number[], value: number): void {
+  target.push(value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff, (value >>> 24) & 0xff);
+}
+
+function concatBytes(parts: Uint8Array[]): Uint8Array {
+  const total = parts.reduce((sum, part) => sum + part.length, 0);
+  const output = new Uint8Array(total);
+  let offset = 0;
+  for (const part of parts) {
+    output.set(part, offset);
+    offset += part.length;
+  }
+  return output;
+}
+
+function createZip(entries: Array<{ path: string; content: string }>): Uint8Array {
+  const encoder = new TextEncoder();
+  const parts: Uint8Array[] = [];
+  const centralParts: Uint8Array[] = [];
+  const timestamp = dosTimestamp();
+  let offset = 0;
+
+  entries.forEach((entry) => {
+    const nameBytes = encoder.encode(entry.path);
+    const contentBytes = encoder.encode(entry.content);
+    const checksum = crc32(contentBytes);
+    const localHeader: number[] = [];
+    pushUint32(localHeader, 0x04034b50);
+    pushUint16(localHeader, 20);
+    pushUint16(localHeader, 0x0800);
+    pushUint16(localHeader, 0);
+    pushUint16(localHeader, timestamp.time);
+    pushUint16(localHeader, timestamp.date);
+    pushUint32(localHeader, checksum);
+    pushUint32(localHeader, contentBytes.length);
+    pushUint32(localHeader, contentBytes.length);
+    pushUint16(localHeader, nameBytes.length);
+    pushUint16(localHeader, 0);
+    const localBytes = new Uint8Array([...localHeader, ...nameBytes]);
+    parts.push(localBytes, contentBytes);
+
+    const centralHeader: number[] = [];
+    pushUint32(centralHeader, 0x02014b50);
+    pushUint16(centralHeader, 20);
+    pushUint16(centralHeader, 20);
+    pushUint16(centralHeader, 0x0800);
+    pushUint16(centralHeader, 0);
+    pushUint16(centralHeader, timestamp.time);
+    pushUint16(centralHeader, timestamp.date);
+    pushUint32(centralHeader, checksum);
+    pushUint32(centralHeader, contentBytes.length);
+    pushUint32(centralHeader, contentBytes.length);
+    pushUint16(centralHeader, nameBytes.length);
+    pushUint16(centralHeader, 0);
+    pushUint16(centralHeader, 0);
+    pushUint16(centralHeader, 0);
+    pushUint16(centralHeader, 0);
+    pushUint32(centralHeader, 0);
+    pushUint32(centralHeader, offset);
+    centralParts.push(new Uint8Array([...centralHeader, ...nameBytes]));
+    offset += localBytes.length + contentBytes.length;
+  });
+
+  const centralDirectory = concatBytes(centralParts);
+  const centralOffset = offset;
+  const endHeader: number[] = [];
+  pushUint32(endHeader, 0x06054b50);
+  pushUint16(endHeader, 0);
+  pushUint16(endHeader, 0);
+  pushUint16(endHeader, entries.length);
+  pushUint16(endHeader, entries.length);
+  pushUint32(endHeader, centralDirectory.length);
+  pushUint32(endHeader, centralOffset);
+  pushUint16(endHeader, 0);
+  return concatBytes([...parts, centralDirectory, new Uint8Array(endHeader)]);
+}
+
+function createXlsxBlob(sheets: XlsxSheet[]): Blob {
+  const entries = [
+    { path: '[Content_Types].xml', content: buildContentTypesXml(sheets) },
+    { path: '_rels/.rels', content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>' },
+    { path: 'xl/workbook.xml', content: buildWorkbookXml(sheets) },
+    { path: 'xl/_rels/workbook.xml.rels', content: buildWorkbookRelsXml(sheets) },
+    { path: 'xl/styles.xml', content: buildStylesXml() },
+    ...sheets.map((sheet, index) => ({ path: `xl/worksheets/sheet${index + 1}.xml`, content: buildWorksheetXml(sheet) })),
+  ];
+  return new Blob([createZip(entries)], { type: XLSX_MIME });
 }
 
 function useEmployeeDirectory() {
@@ -687,64 +931,171 @@ function buildBiometricPreviewRows(
     .sort((left, right) => left.code.localeCompare(right.code, 'es', { numeric: true }) || left.date.localeCompare(right.date));
 }
 
-function buildBiometricPreviewCsv(rows: BiometricPreviewRow[], holidaysByDate: Map<string, PublicHoliday>, dateRange?: string[]): string {
-  const header = [
-    'codigo',
-    'fecha',
-    'dia',
-    'festivo',
-    'marcas_utiles',
-    'marcas_originales',
-    'marcas_repetidas_limpiadas',
-    'entrada',
-    'inicio_almuerzo',
-    'fin_almuerzo',
-    'salida',
-    'horas_trabajadas',
-    'horas_diurnas',
-    'horas_nocturnas',
-    'estado',
-    'observacion',
-    'analisis',
-    'todas_las_marcas',
-  ];
-  const rowsByCode = new Map<string, Map<string, BiometricPreviewRow>>();
-  rows.forEach((row) => {
-    const codeRows = rowsByCode.get(row.code) ?? new Map<string, BiometricPreviewRow>();
-    codeRows.set(row.date, row);
-    rowsByCode.set(row.code, codeRows);
+function biometricExportDateRange(rows: BiometricPreviewRow[], dateRange?: string[]): string[] {
+  if (dateRange && dateRange.length > 0) return dateRange;
+  return [...new Set(rows.map((row) => row.date))].sort();
+}
+
+function biometricObservation(row: BiometricPreviewRow | undefined, holiday: PublicHoliday | undefined, weekend: boolean): string {
+  if (row) return 'Con marcacion';
+  if (holiday) return 'Festivo sin marca';
+  if (weekend) return 'Descanso sin marca';
+  return 'Falto sin marca';
+}
+
+function biometricStatus(row: BiometricPreviewRow | undefined, holiday: PublicHoliday | undefined, weekend: boolean): string {
+  if (row) return row.status;
+  if (holiday) return 'Festivo';
+  if (weekend) return 'Descanso';
+  return 'Falto';
+}
+
+function buildBiometricCodeDayRows(
+  code: string,
+  rows: BiometricPreviewRow[],
+  holidaysByDate: Map<string, PublicHoliday>,
+  dateRange: string[],
+): XlsxCell[][] {
+  const rowsByDate = new Map(rows.map((row) => [row.date, row]));
+  return dateRange.map((date) => {
+    const row = rowsByDate.get(date);
+    const holiday = holidaysByDate.get(date);
+    const weekend = isWeekendDate(date);
+    return [
+      xlsxCell(date),
+      xlsxCell(WEEKDAY_LABELS[mondayWeekdayIndex(date)]),
+      xlsxCell(holiday?.name ?? ''),
+      xlsxCell(weekend ? 'Si' : 'No'),
+      xlsxCell(row?.markCount ?? 0),
+      xlsxCell(row?.rawMarkCount ?? 0),
+      xlsxCell(row?.ignoredMarkCount ?? 0),
+      xlsxCell(row?.checkIn ?? '-'),
+      xlsxCell(row?.breakStart ?? '-'),
+      xlsxCell(row?.breakEnd ?? '-'),
+      xlsxCell(row?.checkOut ?? '-'),
+      xlsxCell(row ? Number(row.workedHours.toFixed(2)) : 0),
+      xlsxCell(row ? Number(row.dayHours.toFixed(2)) : 0),
+      xlsxCell(row ? Number(row.nightHours.toFixed(2)) : 0),
+      xlsxCell(biometricStatus(row, holiday, weekend)),
+      xlsxCell(biometricObservation(row, holiday, weekend)),
+      xlsxCell(row?.analysis ?? ''),
+      xlsxCell(row?.marks ?? ''),
+      xlsxCell(code),
+    ];
   });
-  const fallbackRange = [...new Set(rows.map((row) => row.date))].sort();
-  const exportRange = dateRange && dateRange.length > 0 ? dateRange : fallbackRange;
-  const body = [...rowsByCode.entries()].flatMap(([code, codeRows]) =>
-    exportRange.map((date) => {
-      const row = codeRows.get(date);
-      const holiday = holidaysByDate.get(date);
-      const weekend = isWeekendDate(date);
-      const observation = row ? 'Con marcacion' : holiday ? 'Festivo sin marca' : weekend ? 'Descanso sin marca' : 'Falto sin marca';
-      return [
-        code,
-        date,
-        WEEKDAY_LABELS[mondayWeekdayIndex(date)],
-        holiday?.name ?? '',
-        row?.markCount ?? 0,
-        row?.rawMarkCount ?? 0,
-        row?.ignoredMarkCount ?? 0,
-        row?.checkIn ?? '-',
-        row?.breakStart ?? '-',
-        row?.breakEnd ?? '-',
-        row?.checkOut ?? '-',
-        row?.workedHours.toFixed(2) ?? '0.00',
-        row?.dayHours.toFixed(2) ?? '0.00',
-        row?.nightHours.toFixed(2) ?? '0.00',
-        row?.status ?? (holiday ? 'Festivo' : weekend ? 'Descanso' : 'Falto'),
-        observation,
-        row?.analysis ?? '',
-        row?.marks ?? '',
-      ].map(csvEscape).join(';');
-    }),
-  );
-  return ['sep=;', header.map(csvEscape).join(';'), ...body].join('\n');
+}
+
+function summarizeBiometricCodeRows(
+  rows: BiometricPreviewRow[],
+  holidaysByDate: Map<string, PublicHoliday>,
+  dateRange: string[],
+) {
+  return {
+    daysWithMarks: rows.length,
+    missingWorkDays: dateRange.filter((date) => !rows.some((row) => row.date === date) && !isWeekendDate(date) && !holidaysByDate.has(date)).length,
+    holidayDays: dateRange.filter((date) => holidaysByDate.has(date)).length,
+    reviewDays: rows.filter((row) => row.status !== 'Completo').length,
+    markCount: rows.reduce((sum, row) => sum + row.markCount, 0),
+    rawMarkCount: rows.reduce((sum, row) => sum + row.rawMarkCount, 0),
+    ignoredMarkCount: rows.reduce((sum, row) => sum + row.ignoredMarkCount, 0),
+    totalHours: Number(rows.reduce((sum, row) => sum + row.workedHours, 0).toFixed(2)),
+    dayHours: Number(rows.reduce((sum, row) => sum + row.dayHours, 0).toFixed(2)),
+    nightHours: Number(rows.reduce((sum, row) => sum + row.nightHours, 0).toFixed(2)),
+  };
+}
+
+function buildBiometricPreviewXlsx(
+  rows: BiometricPreviewRow[],
+  holidaysByDate: Map<string, PublicHoliday>,
+  dateRange: string[],
+  fileName: string,
+): Blob {
+  const exportRange = biometricExportDateRange(rows, dateRange);
+  const byCode = new Map<string, BiometricPreviewRow[]>();
+  rows.forEach((row) => {
+    const group = byCode.get(row.code) ?? [];
+    group.push(row);
+    byCode.set(row.code, group);
+  });
+
+  const usedSheetNames = new Set<string>();
+  const codeGroups = [...byCode.entries()]
+    .map(([code, codeRows]) => [code, [...codeRows].sort((left, right) => left.date.localeCompare(right.date))] as const)
+    .sort(([left], [right]) => left.localeCompare(right, 'es', { numeric: true }));
+  const summaryRows: XlsxCell[][] = [
+    [xlsxCell('Resumen de analisis biometrico', 1)],
+    [xlsxCell('Archivo', 3), xlsxCell(fileName || 'TXT biometrico')],
+    [xlsxCell('Periodo', 3), xlsxCell(exportRange.length ? `${formatDate(exportRange[0])} - ${formatDate(exportRange[exportRange.length - 1])}` : 'Sin rango')],
+    [xlsxCell('Codigos', 3), xlsxCell(codeGroups.length)],
+    [xlsxCell('Dias del rango', 3), xlsxCell(exportRange.length)],
+    [],
+    ['Codigo', 'Dias con marca', 'Faltas laborales', 'Festivos', 'Dias por revisar', 'Marcas utiles', 'Marcas originales', 'Repetidas limpiadas', 'Horas trabajadas', 'Horas diurnas', 'Horas nocturnas'].map((label) => xlsxCell(label, 2)),
+  ];
+
+  const codeSheets = codeGroups.map(([code, codeRows]) => {
+    const summary = summarizeBiometricCodeRows(codeRows, holidaysByDate, exportRange);
+    summaryRows.push([
+      xlsxCell(code),
+      xlsxCell(summary.daysWithMarks),
+      xlsxCell(summary.missingWorkDays),
+      xlsxCell(summary.holidayDays),
+      xlsxCell(summary.reviewDays),
+      xlsxCell(summary.markCount),
+      xlsxCell(summary.rawMarkCount),
+      xlsxCell(summary.ignoredMarkCount),
+      xlsxCell(summary.totalHours),
+      xlsxCell(summary.dayHours),
+      xlsxCell(summary.nightHours),
+    ]);
+
+    const detailHeader = [
+      'Fecha',
+      'Dia',
+      'Festivo',
+      'Fin de semana',
+      'Marcas utiles',
+      'Marcas originales',
+      'Repetidas limpiadas',
+      'Entrada',
+      'Inicio almuerzo',
+      'Fin almuerzo',
+      'Salida',
+      'Horas trabajadas',
+      'Horas diurnas',
+      'Horas nocturnas',
+      'Estado',
+      'Observacion',
+      'Analisis del sistema',
+      'Todas las marcas',
+      'Codigo',
+    ];
+
+    return {
+      name: uniqueSheetName(`COD ${code}`, usedSheetNames),
+      widths: [13, 12, 24, 14, 13, 16, 18, 12, 16, 14, 12, 17, 15, 16, 14, 20, 42, 36, 12],
+      rows: [
+        [xlsxCell(`Codigo ${code}`, 1)],
+        [xlsxCell('Archivo', 3), xlsxCell(fileName || 'TXT biometrico')],
+        [xlsxCell('Periodo', 3), xlsxCell(exportRange.length ? `${formatDate(exportRange[0])} - ${formatDate(exportRange[exportRange.length - 1])}` : 'Sin rango')],
+        [xlsxCell('Dias con marca', 3), xlsxCell(summary.daysWithMarks), xlsxCell('Faltas laborales', 3), xlsxCell(summary.missingWorkDays), xlsxCell('Festivos', 3), xlsxCell(summary.holidayDays)],
+        [xlsxCell('Horas trabajadas', 3), xlsxCell(summary.totalHours), xlsxCell('Diurnas', 3), xlsxCell(summary.dayHours), xlsxCell('Nocturnas', 3), xlsxCell(summary.nightHours)],
+        [xlsxCell('Marcas utiles', 3), xlsxCell(summary.markCount), xlsxCell('Originales', 3), xlsxCell(summary.rawMarkCount), xlsxCell('Repetidas limpiadas', 3), xlsxCell(summary.ignoredMarkCount)],
+        [],
+        detailHeader.map((label) => xlsxCell(label, 2)),
+        ...buildBiometricCodeDayRows(code, codeRows, holidaysByDate, exportRange),
+      ],
+    };
+  });
+
+  const sheets: XlsxSheet[] = [
+    {
+      name: uniqueSheetName('Resumen', usedSheetNames),
+      widths: [15, 15, 16, 12, 16, 14, 17, 19, 18, 15, 16],
+      rows: summaryRows,
+    },
+    ...codeSheets,
+  ];
+  return createXlsxBlob(sheets);
 }
 
 export function AdminPayroll() {
@@ -1946,14 +2297,15 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
       return;
     }
     const orderedRows = [...rows].sort((left, right) => left.code.localeCompare(right.code, 'es', { numeric: true }) || left.date.localeCompare(right.date));
-    const start = orderedRows[0]?.date ?? uploadDateFrom;
-    const end = orderedRows[orderedRows.length - 1]?.date ?? uploadDateTo;
+    const exportRange = biometricExportDateRange(orderedRows, previewDateRange);
+    const start = exportRange[0] ?? orderedRows[0]?.date ?? uploadDateFrom;
+    const end = exportRange[exportRange.length - 1] ?? orderedRows[orderedRows.length - 1]?.date ?? uploadDateTo;
     const cleanCode = code ? code.replace(/[^a-zA-Z0-9_-]/g, '_') : 'todos';
-    downloadTextFile(
-      `biometrico_${cleanCode}_${start || 'inicio'}_${end || 'fin'}.csv`,
-      buildBiometricPreviewCsv(orderedRows, previewHolidaysByDate, previewDateRange),
+    downloadBlob(
+      `biometrico_${cleanCode}_${start || 'inicio'}_${end || 'fin'}.xlsx`,
+      buildBiometricPreviewXlsx(orderedRows, previewHolidaysByDate, previewDateRange, previewFileName),
     );
-    toast.success(code ? `Exportado el codigo ${code}.` : 'Exportada la tabla analizada.');
+    toast.success(code ? `Exportado el Excel del codigo ${code}.` : 'Exportado el Excel por codigo.');
   };
 
   const updateSavedAnalyses = (items: SavedBiometricAnalysis[]) => {
