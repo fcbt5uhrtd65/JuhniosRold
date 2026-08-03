@@ -238,6 +238,15 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
         self.required_component_action = "view" if self.action in {"list", "retrieve", "dashboard"} else "edit"
         return super().get_permissions()
 
+    def update(self, request, *args, **kwargs):
+        vacation = self.get_object()
+        if vacation.request_type == VacationRequest.RequestType.LOAN and not getattr(request.user, "can_manage_loans", False):
+            return Response(
+                {"detail": "Solo Tesoreria o el Administrador pueden editar solicitudes de prestamo."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return super().update(request, *args, **kwargs)
+
     def _self_service_queryset(self):
         return VacationRequest.objects.select_related(
             "employee",

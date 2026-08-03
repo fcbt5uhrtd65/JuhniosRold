@@ -1556,6 +1556,7 @@ export function AdminHR() {
   const { currentUser } = useAdmin();
   const isAdmin = currentUser?.rol === 'ADMIN';
   const canManageAccessCredentials = currentUser?.rol === 'ADMIN' || currentUser?.rol === 'RRHH';
+  const canManageLoans = Boolean(currentUser?.canManageLoans);
   const [activeTab, setActiveTab] = useState<HRTab>('employees');
   const [employeeModalTab, setEmployeeModalTab] = useState<EmployeeModalTab>('personal');
   const [searchQuery, setSearchQuery] = useState('');
@@ -2567,6 +2568,10 @@ export function AdminHR() {
   };
 
   const handleVacationAction = (request: VacationRequest, action: 'approve' | 'reject') => {
+    if (request.request_type === 'LOAN' && !canManageLoans) {
+      toast.error('Solo Tesorería o el Administrador pueden gestionar préstamos.');
+      return;
+    }
     setDecisionSignatureFile(null);
     if (action === 'reject') {
       setRejectingRequest(request);
@@ -2768,6 +2773,10 @@ export function AdminHR() {
   };
 
   const openEditRequestModal = (request: VacationRequest) => {
+    if (request.request_type === 'LOAN' && !canManageLoans) {
+      toast.error('Solo Tesorería o el Administrador pueden editar préstamos.');
+      return;
+    }
     setEditingRequest(request);
     setEditingRequestForm({
       reason: request.reason ?? '',
@@ -4142,6 +4151,10 @@ export function AdminHR() {
                   <tbody>
                     {paginatedVacationRequests.map((request) => {
                       const employee = employeeById.get(request.employee);
+                      const canManageThisRequest = request.request_type !== 'LOAN' || canManageLoans;
+                      const canResolveThisRequest =
+                        canManageThisRequest &&
+                        ['PENDING', 'IN_REVIEW', 'PENDING_HR', 'PENDING_ADMIN'].includes(request.status);
                       return (
                         <tr key={request.id} className="hover:bg-gray-50/50">
                           <Td>
@@ -4196,7 +4209,7 @@ export function AdminHR() {
                                     link.click();
                                   } },
                                 ] : []),
-                                ...(canManageAccessCredentials ? [{
+                                ...(canManageAccessCredentials && canManageThisRequest ? [{
                                   label: 'Editar',
                                   icon: Edit2,
                                   onClick: () => openEditRequestModal(request),
@@ -4212,18 +4225,18 @@ export function AdminHR() {
                                   icon: Wallet,
                                   onClick: () => openRemunerationModal(request),
                                 }] : []),
-                                {
+                                ...(canManageThisRequest ? [{
                                   label: 'Aprobar',
                                   icon: Check,
                                   onClick: () => handleVacationAction(request, 'approve'),
-                                  disabled: !['PENDING', 'IN_REVIEW', 'PENDING_HR', 'PENDING_ADMIN'].includes(request.status) || vacationActionId === request.id,
+                                  disabled: !canResolveThisRequest || vacationActionId === request.id,
                                 },
                                 {
                                   label: 'Rechazar',
                                   icon: XCircle,
                                   onClick: () => handleVacationAction(request, 'reject'),
-                                  disabled: !['PENDING', 'IN_REVIEW', 'PENDING_HR', 'PENDING_ADMIN'].includes(request.status) || vacationActionId === request.id,
-                                },
+                                  disabled: !canResolveThisRequest || vacationActionId === request.id,
+                                }] : []),
                                 ...(isAdmin ? [{
                                   label: 'Eliminar solicitud',
                                   icon: Trash2,

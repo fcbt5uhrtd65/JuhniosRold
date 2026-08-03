@@ -284,3 +284,37 @@ class VacationRequestPortalTests(TestCase):
         self.assertEqual(approve_response.data["hr_decision"], "APPROVED")
         self.assertEqual(approve_response.data["admin_decision"], "")
         self.assertEqual(approve_response.data["loan_approved_amount"], "450000.00")
+
+    def test_hr_can_view_but_not_manage_loan_requests(self):
+        vacation = VacationRequest.objects.create(
+            employee=self.employee,
+            request_type=VacationRequest.RequestType.LOAN,
+            start_date="2026-08-03",
+            end_date="2026-08-03",
+            is_full_day=True,
+            loan_amount="500000",
+            loan_requester_name="Ana Perez",
+            loan_requester_document="1234567890",
+            loan_city="Bogota",
+            loan_position="Auxiliar operativo",
+            loan_concept="Calamidad domestica",
+            loan_frequency="BIWEEKLY",
+            loan_installments_count=4,
+        )
+        self.client.force_authenticate(
+            get_user_model().objects.create_user(
+                email="rrhh-prestamos@example.com",
+                password="SecurePass123!",
+                role=Role.objects.get(code="RRHH"),
+            )
+        )
+
+        list_response = self.client.get("/api/v1/hr/vacations/loans/")
+        approve_response = self.client.post(f"/api/v1/hr/vacations/{vacation.id}/approve/", {"comment": "Aprobado"}, format="json")
+        reject_response = self.client.post(f"/api/v1/hr/vacations/{vacation.id}/reject/", {"comment": "Rechazado"}, format="json")
+        edit_response = self.client.patch(f"/api/v1/hr/vacations/{vacation.id}/", {"reason": "Cambio"}, format="json")
+
+        self.assertEqual(list_response.status_code, 200)
+        self.assertEqual(approve_response.status_code, 403)
+        self.assertEqual(reject_response.status_code, 403)
+        self.assertEqual(edit_response.status_code, 403)
