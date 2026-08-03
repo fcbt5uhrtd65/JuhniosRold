@@ -502,6 +502,22 @@ function formatTime(value: string | null | undefined): string {
   return parsed.toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit', hour12: true });
 }
 
+function minutesBetween(start: string, end: string): number {
+  if (!start || !end || end <= start) return 0;
+  const [startHour, startMinute] = start.split(':').map(Number);
+  const [endHour, endMinute] = end.split(':').map(Number);
+  return Math.max((endHour * 60 + endMinute) - (startHour * 60 + startMinute), 0);
+}
+
+function requestScheduleWeeklyHours(request: VacationRequest): number {
+  if (!request.requested_work_schedule_days?.length) return 0;
+  const minutes = request.requested_work_schedule_days.reduce((total, day) => {
+    if (day.is_working_day === false) return total;
+    return total + minutesBetween(day.expected_start_time, day.expected_end_time);
+  }, 0);
+  return minutes / 60;
+}
+
 /** Rango de fechas de la solicitud, con la hora que digitó el empleado cuando la
  * solicitud no es de jornada completa (permisos parciales, horas extra). */
 function getRequestScheduleLabel(request: VacationRequest): string {
@@ -517,6 +533,11 @@ function getRequestScheduleLabel(request: VacationRequest): string {
   if (request.request_type === 'OVERTIME' && request.overtime_shifts?.length) {
     const count = request.overtime_shifts.length;
     return `${dateLabel} · ${count} turno${count === 1 ? '' : 's'} · ${Number(request.hours_count ?? 0).toFixed(1)} h`;
+  }
+
+  if (request.request_type === 'SCHEDULE_CHANGE' || request.subtype === 'SCHEDULE_CHANGE') {
+    const hours = requestScheduleWeeklyHours(request);
+    return `${dateLabel} · ${hours ? `${hours.toFixed(1)} h/semana` : 'Horario solicitado'}`;
   }
 
   if (request.is_full_day) {
@@ -4544,6 +4565,24 @@ export function AdminHR() {
                       <div className="text-gray-700">{value}</div>
                     </div>
                   ))}
+                </div>
+              </Card>
+            )}
+            {(viewingRequest.request_type === 'SCHEDULE_CHANGE' || viewingRequest.subtype === 'SCHEDULE_CHANGE') && viewingRequest.requested_work_schedule_days?.length > 0 && (
+              <Card className="p-4">
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <div className="text-sm font-semibold text-gray-900">Horario solicitado</div>
+                  <Badge label={`${requestScheduleWeeklyHours(viewingRequest).toFixed(1)} h/semana`} color={requestScheduleWeeklyHours(viewingRequest) === 42 ? 'green' : 'yellow'} />
+                </div>
+                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 text-xs">
+                  {[...viewingRequest.requested_work_schedule_days]
+                    .sort((a, b) => a.weekday - b.weekday)
+                    .map((day) => (
+                      <div key={`${day.weekday}-${day.slot ?? 1}`} className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 bg-gray-50/60 px-3 py-2">
+                        <span className="font-medium text-gray-700">{['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'][day.weekday]}</span>
+                        <span className="font-mono text-gray-500">{day.expected_start_time.slice(0, 5)} - {day.expected_end_time.slice(0, 5)}</span>
+                      </div>
+                    ))}
                 </div>
               </Card>
             )}

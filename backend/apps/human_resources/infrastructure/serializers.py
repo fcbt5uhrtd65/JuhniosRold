@@ -4,6 +4,9 @@ from django.db import DatabaseError
 from rest_framework import serializers
 
 from apps.notifications.infrastructure.models import StaffNotification
+from shared.domain.exceptions import BusinessRuleViolation
+
+from ..application.use_cases import validate_schedule_change_42_hours
 
 from .models import (
     Attendance,
@@ -135,6 +138,10 @@ class VacationRequestSerializer(serializers.ModelSerializer):
             "requested_work_schedule_template",
             getattr(instance, "requested_work_schedule_template", None),
         )
+        requested_work_schedule_days = attrs.get(
+            "requested_work_schedule_days",
+            getattr(instance, "requested_work_schedule_days", None),
+        )
 
         errors = {}
         is_schedule_change = (
@@ -166,8 +173,16 @@ class VacationRequestSerializer(serializers.ModelSerializer):
             if loan_amount is not None and loan_amount <= 0:
                 errors["loan_amount"] = ["El monto debe ser mayor a cero."]
         elif is_schedule_change:
-            if requested_work_schedule_template is None:
-                errors["requested_work_schedule_template"] = ["Selecciona el nuevo horario solicitado."]
+            if not str(attrs.get("reason", getattr(instance, "reason", "")) or "").strip():
+                errors["reason"] = ["Indica el motivo del cambio de horario."]
+            if requested_work_schedule_days:
+                try:
+                    normalized_days, _ = validate_schedule_change_42_hours(requested_work_schedule_days)
+                    attrs["requested_work_schedule_days"] = normalized_days
+                except BusinessRuleViolation as exc:
+                    errors["requested_work_schedule_days"] = [str(exc)]
+            elif requested_work_schedule_template is None:
+                errors["requested_work_schedule_days"] = ["Selecciona el nuevo horario solicitado."]
             if not is_full_day:
                 errors["is_full_day"] = ["El cambio de horario se solicita como jornada completa desde la fecha indicada."]
             if start_time is not None:

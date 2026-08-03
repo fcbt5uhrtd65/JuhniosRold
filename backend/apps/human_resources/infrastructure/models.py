@@ -137,13 +137,9 @@ class VacationRequest(BaseModel):
         validators=[FileExtensionValidator(allowed_extensions=("png", "jpg", "jpeg"))],
     )
 
-    # ── Dato exclusivo de solicitudes de tipo "Cambio de horario" ───────────────
-    # El empleado elige una plantilla ya creada por RRHH (no arma franjas sueltas),
-    # así RRHH sigue controlando qué horarios son válidos para ofrecer. Al aprobar
-    # (ver ResolveVacationRequestByRole), si subtype=SCHEDULE_CHANGE y este campo
-    # está definido, se aplica automáticamente vía ApplyWorkScheduleTemplate —
-    # mismo espíritu que loan_approved_amount: el "efecto secundario" vive en el
-    # propio flujo de aprobación, no en un sistema aparte.
+    # ── Datos exclusivos de solicitudes de tipo "Cambio de horario empleado" ────
+    # El empleado puede proponer sus franjas semanales (deben sumar 42 horas).
+    # Se conserva la plantilla como compatibilidad para solicitudes antiguas.
     requested_work_schedule_template = models.ForeignKey(
         "human_resources.WorkScheduleTemplate",
         on_delete=models.SET_NULL,
@@ -151,6 +147,7 @@ class VacationRequest(BaseModel):
         blank=True,
         related_name="schedule_change_requests",
     )
+    requested_work_schedule_days = models.JSONField(default=list, blank=True)
 
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)

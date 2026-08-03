@@ -1,3 +1,4 @@
+import json
 import re
 import unicodedata
 from datetime import datetime, timedelta
@@ -52,6 +53,7 @@ RECHARGE_LABEL_TO_CONCEPT_CODE = {
     "Extra diurna dominical": "OVERTIME_DAY_REST",
     "Extra nocturna dominical": "OVERTIME_NIGHT_REST",
 }
+SCHEDULE_CHANGE_WEEKLY_MINUTES = 42 * 60
 
 PUNCH_ACTION_FIELDS = ("check_in", "check_out", "break_start", "break_end")
 PUNCH_ACTION_NUMERIC_CODES = {
@@ -162,6 +164,40 @@ def is_schedule_change_request(vacation) -> bool:
         vacation.request_type == VacationRequest.RequestType.SCHEDULE_CHANGE
         or vacation.subtype == VacationRequest.RequestSubtype.SCHEDULE_CHANGE
     )
+
+
+def _coerce_schedule_days_payload(days_data):
+    if isinstance(days_data, str):
+        try:
+            days_data = json.loads(days_data)
+        except ValueError as exc:
+            raise BusinessRuleViolation("El horario solicitado debe ser una lista JSON válida.") from exc
+    if not isinstance(days_data, list):
+        raise BusinessRuleViolation("El horario solicitado debe ser una lista de días y horas.")
+    return days_data
+
+
+def _schedule_weekly_minutes(parsed_days) -> int:
+    total = 0
+    for day in parsed_days:
+        if not day.get("is_working_day", True):
+            continue
+        start = day["expected_start_time"]
+        end = day["expected_end_time"]
+        total += max((end.hour * 60 + end.minute) - (start.hour * 60 + start.minute), 0)
+    return total
+
+
+def validate_schedule_change_42_hours(days_data):
+    payload = _coerce_schedule_days_payload(days_data)
+    parsed_days = _parse_schedule_days(payload)
+    total_minutes = _schedule_weekly_minutes(parsed_days)
+    if total_minutes != SCHEDULE_CHANGE_WEEKLY_MINUTES:
+        total_hours = total_minutes / 60
+        raise BusinessRuleViolation(
+            f"El horario solicitado debe sumar exactamente 42 horas laborales semanales; actualmente suma {total_hours:g}."
+        )
+    return payload, parsed_days
 
 
 class RegisterCheckIn:
@@ -396,9 +432,10 @@ class ResolveVacationRequestByRole:
         if (
             is_schedule_change
             and decision == VacationRequest.Status.APPROVED
+            and not vacation.requested_work_schedule_days
             and not vacation.requested_work_schedule_template_id
         ):
-            raise BusinessRuleViolation("La solicitud de cambio de horario debe tener una plantilla de horario seleccionada.")
+            raise BusinessRuleViolation("La solicitud de cambio de horario debe tener un horario seleccionado.")
 
         # Para trazabilidad: el slot "HR" normalmente es RRHH, pero en préstamos lo
         # ocupa Tesorería — hr_slot_label permite que el historial diga el nombre
@@ -525,15 +562,24 @@ class ResolveVacationRequestByRole:
         if (
             is_schedule_change
             and vacation.status == VacationRequest.Status.APPROVED
-            and vacation.requested_work_schedule_template_id
         ):
-            ApplyWorkScheduleTemplate().execute(
-                template=vacation.requested_work_schedule_template,
-                employee_ids=[vacation.employee_id],
-                start_date=vacation.start_date,
-                actor=reviewer,
-                notes=f"Aplicado automáticamente al aprobar solicitud {vacation.request_number or vacation.id}.",
-            )
+            if vacation.requested_work_schedule_days:
+                _, parsed_days = validate_schedule_change_42_hours(vacation.requested_work_schedule_days)
+                SetEmployeeWorkSchedule().execute(
+                    employee=vacation.employee,
+                    start_date=vacation.start_date,
+                    days_data=parsed_days,
+                    actor=reviewer,
+                    notes=f"Aplicado automáticamente al aprobar solicitud {vacation.request_number or vacation.id}.",
+                )
+            elif vacation.requested_work_schedule_template_id:
+                ApplyWorkScheduleTemplate().execute(
+                    template=vacation.requested_work_schedule_template,
+                    employee_ids=[vacation.employee_id],
+                    start_date=vacation.start_date,
+                    actor=reviewer,
+                    notes=f"Aplicado automáticamente al aprobar solicitud {vacation.request_number or vacation.id}.",
+                )
 
         step_code = (
             VacationRequestApprovalStep.Step.FINAL
@@ -639,7 +685,12 @@ def _parse_schedule_days(days_data) -> list[dict]:
         weekday = entry.get("weekday")
         start_time = entry.get("expected_start_time")
         end_time = entry.get("expected_end_time")
-        if weekday is None or not (0 <= int(weekday) <= 6):
+        try:
+            weekday = int(weekday)
+            slot = int(entry.get("slot", 1))
+        except (TypeError, ValueError) as exc:
+            raise BusinessRuleViolation("Día de la semana o franja inválida.") from exc
+        if not (0 <= weekday <= 6):
             raise BusinessRuleViolation("Día de la semana inválido (debe ser 0=lunes..6=domingo).")
         if not start_time or not end_time:
             raise BusinessRuleViolation("Cada franja requiere hora de inicio y hora de fin.")
@@ -652,12 +703,15 @@ def _parse_schedule_days(days_data) -> list[dict]:
             raise BusinessRuleViolation("Cada franja debe tener horas HH:MM válidas.") from exc
         if end_time <= start_time:
             raise BusinessRuleViolation("La hora de fin debe ser posterior a la hora de inicio en cada franja.")
+        is_working_day = entry.get("is_working_day", True)
+        if isinstance(is_working_day, str):
+            is_working_day = is_working_day.strip().lower() not in ("false", "0", "no")
         parsed_days.append({
-            "weekday": int(weekday),
-            "slot": int(entry.get("slot", 1)),
+            "weekday": weekday,
+            "slot": slot,
             "expected_start_time": start_time,
             "expected_end_time": end_time,
-            "is_working_day": entry.get("is_working_day", True),
+            "is_working_day": bool(is_working_day),
         })
     return parsed_days
 

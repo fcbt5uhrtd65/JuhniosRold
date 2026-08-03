@@ -33,15 +33,14 @@ import {
   deleteVacationRequest,
   getMyVacationRequests,
   getTeamVacationRequests,
-  getWorkScheduleTemplatesForEmployee,
   openVacationRequestPdf,
   rejectVacationRequest,
+  type EmployeeWorkScheduleDayInput,
   type LoanFrequency,
   type OvertimeShiftInput,
   type VacationRequest,
   type VacationRequestStatus,
   type VacationRequestType,
-  type WorkScheduleTemplate,
 } from '../../services/human-resources.service';
 import { Card, KpiCard, Badge, type BadgeColor, LoadingState, EmptyState, Modal, inputCls, selectCls } from './AdminUI';
 import { Pagination } from './Pagination';
@@ -50,6 +49,22 @@ import { SignaturePad } from './SignaturePad';
 
 const REQUESTS_PAGE_SIZE_OPTIONS = [5, 10, 20, 50];
 const REASON_TRUNCATE_LENGTH = 90;
+const REQUIRED_SCHEDULE_CHANGE_HOURS = 42;
+const WEEKDAY_LABELS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+
+type ScheduleDayDraft = {
+  weekday: number;
+  is_working_day: boolean;
+  expected_start_time: string;
+  expected_end_time: string;
+};
+
+const DEFAULT_SCHEDULE_CHANGE_DAYS: ScheduleDayDraft[] = WEEKDAY_LABELS.map((_, weekday) => ({
+  weekday,
+  is_working_day: weekday < 6,
+  expected_start_time: '07:00',
+  expected_end_time: '14:00',
+}));
 
 const REQUEST_TYPE_ICONS: Record<VacationRequestType, React.ComponentType<{ size?: number; className?: string }>> = {
   PERMISSION: FileCheck2,
@@ -89,7 +104,7 @@ interface VacationFormState {
   loan_concept: string;
   loan_frequency: LoanFrequency | '';
   loan_installments_count: string;
-  requested_work_schedule_template: string;
+  requested_work_schedule_days: ScheduleDayDraft[];
   schedule_change_start_date: string;
 }
 
@@ -112,7 +127,7 @@ const EMPTY_FORM: VacationFormState = {
   loan_concept: '',
   loan_frequency: '',
   loan_installments_count: '',
-  requested_work_schedule_template: '',
+  requested_work_schedule_days: DEFAULT_SCHEDULE_CHANGE_DAYS,
   schedule_change_start_date: '',
 };
 
@@ -155,6 +170,42 @@ function formatTime(value: string | null | undefined): string {
     minute: '2-digit',
     hour12: true,
   });
+}
+
+function minutesBetween(start: string, end: string): number {
+  if (!start || !end || end <= start) return 0;
+  const [startHour, startMinute] = start.split(':').map(Number);
+  const [endHour, endMinute] = end.split(':').map(Number);
+  return Math.max((endHour * 60 + endMinute) - (startHour * 60 + startMinute), 0);
+}
+
+function scheduleDraftWeeklyHours(days: ScheduleDayDraft[]): number {
+  const minutes = days.reduce((total, day) => {
+    if (!day.is_working_day) return total;
+    return total + minutesBetween(day.expected_start_time, day.expected_end_time);
+  }, 0);
+  return minutes / 60;
+}
+
+function scheduleInputWeeklyHours(days: EmployeeWorkScheduleDayInput[] | undefined | null): number {
+  if (!days?.length) return 0;
+  const minutes = days.reduce((total, day) => {
+    if (day.is_working_day === false) return total;
+    return total + minutesBetween(day.expected_start_time, day.expected_end_time);
+  }, 0);
+  return minutes / 60;
+}
+
+function scheduleDraftToInput(days: ScheduleDayDraft[]): EmployeeWorkScheduleDayInput[] {
+  return days
+    .filter((day) => day.is_working_day)
+    .map((day) => ({
+      weekday: day.weekday,
+      slot: 1,
+      expected_start_time: day.expected_start_time,
+      expected_end_time: day.expected_end_time,
+      is_working_day: true,
+    }));
 }
 
 function getStatusLabel(status: VacationRequestStatus): string {
@@ -271,6 +322,11 @@ function getRequestScheduleLabel(request: VacationRequest): string {
     return `${dateLabel} · ${count} turno${count === 1 ? '' : 's'} · ${Number(request.hours_count ?? 0).toFixed(1)} h`;
   }
 
+  if (request.request_type === 'SCHEDULE_CHANGE' || request.subtype === 'SCHEDULE_CHANGE') {
+    const hours = scheduleInputWeeklyHours(request.requested_work_schedule_days);
+    return `${dateLabel} · ${hours ? `${hours.toFixed(1)} h/semana` : 'Horario solicitado'}`;
+  }
+
   if (request.is_full_day) {
     return `${dateLabel} · Jornada completa`;
   }
@@ -316,16 +372,14 @@ export function AdminEmployeePortal() {
   const [teamDecisionRequest, setTeamDecisionRequest] = useState<{ request: VacationRequest; decision: 'approve' | 'reject' } | null>(null);
   const [teamDecisionComment, setTeamDecisionComment] = useState('');
   const [teamDecisionSignature, setTeamDecisionSignature] = useState<File | null>(null);
-  const [scheduleTemplates, setScheduleTemplates] = useState<WorkScheduleTemplate[]>([]);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [employeesRes, requestsRes, teamRequestsRes, templatesRes] = await Promise.allSettled([
+      const [employeesRes, requestsRes, teamRequestsRes] = await Promise.allSettled([
         getEmployees({ limit: 200 }),
         getMyVacationRequests({ limit: 200 }),
         getTeamVacationRequests({ limit: 200 }),
-        getWorkScheduleTemplatesForEmployee(),
       ]);
 
       if (employeesRes.status === 'fulfilled') {
@@ -342,9 +396,6 @@ export function AdminEmployeePortal() {
         setTeamRequests(teamRequestsRes.value.data);
       }
 
-      if (templatesRes.status === 'fulfilled') {
-        setScheduleTemplates(templatesRes.value);
-      }
     } catch (error) {
       console.error(error);
       toast.error('No se pudo cargar tu portal de solicitudes');
@@ -401,6 +452,10 @@ export function AdminEmployeePortal() {
       return total + (minutes > 0 ? minutes / 60 : 0);
     }, 0);
   }, [overtimeShifts]);
+  const scheduleChangeWeeklyHours = useMemo(
+    () => scheduleDraftWeeklyHours(form.requested_work_schedule_days),
+    [form.requested_work_schedule_days],
+  );
 
   const handleAddShift = () => {
     if (!shiftDraft.date || !shiftDraft.start_time || !shiftDraft.end_time) {
@@ -518,12 +573,29 @@ export function AdminEmployeePortal() {
       toast.error('Tu usuario no tiene un perfil de empleado asociado');
       return;
     }
-    if (!form.requested_work_schedule_template) {
-      toast.error('Selecciona el horario que quieres solicitar');
+    const requestedScheduleDays = scheduleDraftToInput(form.requested_work_schedule_days);
+    if (requestedScheduleDays.length === 0) {
+      toast.error('Selecciona al menos un día laboral');
+      return;
+    }
+    if (requestedScheduleDays.some((day) => !day.expected_start_time || !day.expected_end_time || day.expected_end_time <= day.expected_start_time)) {
+      toast.error('Cada día seleccionado debe tener una hora final posterior a la hora de inicio');
+      return;
+    }
+    if (scheduleChangeWeeklyHours !== REQUIRED_SCHEDULE_CHANGE_HOURS) {
+      toast.error(`El horario debe sumar exactamente ${REQUIRED_SCHEDULE_CHANGE_HOURS} horas laborales semanales`);
       return;
     }
     if (!form.schedule_change_start_date) {
       toast.error('Indica desde cuándo quieres que aplique el nuevo horario');
+      return;
+    }
+    if (!form.reason.trim()) {
+      toast.error('Indica el motivo del cambio de horario');
+      return;
+    }
+    if (form.support_document && !isAllowedSupportDocument(form.support_document)) {
+      toast.error('El soporte debe ser PDF o una imagen PNG/JPG');
       return;
     }
 
@@ -535,8 +607,8 @@ export function AdminEmployeePortal() {
         start_date: form.schedule_change_start_date,
         end_date: form.schedule_change_start_date,
         is_full_day: true,
-        requested_work_schedule_template: form.requested_work_schedule_template,
-        reason: form.reason,
+        requested_work_schedule_days: requestedScheduleDays,
+        reason: form.reason.trim(),
         support_document: form.support_document,
       });
       toast.success('Solicitud de cambio de horario enviada a RRHH');
@@ -876,35 +948,57 @@ export function AdminEmployeePortal() {
             {form.request_type === 'SCHEDULE_CHANGE' ? (
               <div className="space-y-4">
                 <div>
-                  <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Horario que solicitas</label>
-                  {scheduleTemplates.length === 0 ? (
-                    <p className="text-xs text-gray-400 border border-dashed border-gray-200 rounded-lg p-3">
-                      RRHH todavía no ha creado plantillas de horario disponibles.
-                    </p>
-                  ) : (
-                    <select
-                      value={form.requested_work_schedule_template}
-                      onChange={(event) => setForm({ ...form, requested_work_schedule_template: event.target.value })}
-                      className={selectCls}
-                    >
-                      <option value="">Selecciona un horario...</option>
-                      {scheduleTemplates.map((template) => (
-                        <option key={template.id} value={template.id}>{template.name}</option>
-                      ))}
-                    </select>
-                  )}
-                  {form.requested_work_schedule_template && (
-                    <div className="mt-2 space-y-0.5 border border-gray-100 rounded-lg p-2.5">
-                      {scheduleTemplates
-                        .find((t) => t.id === form.requested_work_schedule_template)
-                        ?.days.map((day) => (
-                          <div key={day.id} className="flex items-center justify-between text-[11px] text-gray-600">
-                            <span>{['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'][day.weekday]}</span>
-                            <span className="font-mono">{day.expected_start_time.slice(0, 5)} - {day.expected_end_time.slice(0, 5)}</span>
-                          </div>
-                        ))}
-                    </div>
-                  )}
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 block">Horario que solicitas</label>
+                    <Badge
+                      label={`${scheduleChangeWeeklyHours.toFixed(1)} / ${REQUIRED_SCHEDULE_CHANGE_HOURS} h`}
+                      color={scheduleChangeWeeklyHours === REQUIRED_SCHEDULE_CHANGE_HOURS ? 'green' : 'yellow'}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    {form.requested_work_schedule_days.map((day) => (
+                      <div key={day.weekday} className="grid grid-cols-[1fr_92px_92px] sm:grid-cols-[1fr_120px_120px] items-center gap-2 rounded-lg border border-gray-100 p-2.5">
+                        <label className="flex items-center gap-2 text-xs font-medium text-gray-700 min-w-0">
+                          <input
+                            type="checkbox"
+                            checked={day.is_working_day}
+                            onChange={(event) => {
+                              const days = form.requested_work_schedule_days.map((item) =>
+                                item.weekday === day.weekday ? { ...item, is_working_day: event.target.checked } : item,
+                              );
+                              setForm({ ...form, requested_work_schedule_days: days });
+                            }}
+                            className="h-4 w-4 rounded border-gray-300 text-[#2a4038]"
+                          />
+                          <span className="truncate">{WEEKDAY_LABELS[day.weekday]}</span>
+                        </label>
+                        <input
+                          type="time"
+                          value={day.expected_start_time}
+                          disabled={!day.is_working_day}
+                          onChange={(event) => {
+                            const days = form.requested_work_schedule_days.map((item) =>
+                              item.weekday === day.weekday ? { ...item, expected_start_time: event.target.value } : item,
+                            );
+                            setForm({ ...form, requested_work_schedule_days: days });
+                          }}
+                          className={inputCls}
+                        />
+                        <input
+                          type="time"
+                          value={day.expected_end_time}
+                          disabled={!day.is_working_day}
+                          onChange={(event) => {
+                            const days = form.requested_work_schedule_days.map((item) =>
+                              item.weekday === day.weekday ? { ...item, expected_end_time: event.target.value } : item,
+                            );
+                            setForm({ ...form, requested_work_schedule_days: days });
+                          }}
+                          className={inputCls}
+                        />
+                      </div>
+                    ))}
+                  </div>
                 </div>
                 <div>
                   <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Desde cuándo</label>
@@ -1318,6 +1412,14 @@ export function AdminEmployeePortal() {
                     ['Tipo', REQUEST_TYPE_LABELS[form.request_type]],
                     ['Turnos agregados', overtimeShifts.length ? `${overtimeShifts.length}` : '—'],
                     ['Total de horas', overtimeShifts.length ? `${overtimeTotalHours.toFixed(1)} h` : '—'],
+                    ['Documento', form.support_document ? form.support_document.name : '—'],
+                  ]
+                : form.request_type === 'SCHEDULE_CHANGE'
+                ? [
+                    ['Tipo', REQUEST_TYPE_LABELS[form.request_type]],
+                    ['Desde', form.schedule_change_start_date ? formatDate(form.schedule_change_start_date) : '—'],
+                    ['Horas semanales', `${scheduleChangeWeeklyHours.toFixed(1)} / ${REQUIRED_SCHEDULE_CHANGE_HOURS} h`],
+                    ['Días laborales', `${form.requested_work_schedule_days.filter((day) => day.is_working_day).length}`],
                     ['Documento', form.support_document ? form.support_document.name : '—'],
                   ]
                 : [

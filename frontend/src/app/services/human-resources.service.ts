@@ -60,13 +60,14 @@ function normalizeListResponse<T>(payload: T[] | PaginatedResponse<T> | undefine
 
 function buildVacationRequestBody(
   payload: Omit<VacationRequestPayload, 'employee'>,
-): FormData | Record<string, string | boolean | number> {
+): FormData | Record<string, unknown> {
   const hasFile = Object.values(payload).some((value) => value instanceof Blob);
   if (hasFile) {
     const formData = new FormData();
     Object.entries(payload).forEach(([key, value]) => {
       if (value === null || value === undefined || value === '') return;
       if (value instanceof Blob) formData.append(key, value);
+      else if (Array.isArray(value) || typeof value === 'object') formData.append(key, JSON.stringify(value));
       else formData.append(key, String(value));
     });
     return formData;
@@ -260,6 +261,7 @@ export interface VacationRequest {
   loan_expense_number: string;
   loan_requester_signature: string | null;
   requested_work_schedule_template: string | null;
+  requested_work_schedule_days: EmployeeWorkScheduleDayInput[];
   is_remunerated: boolean | null;
   remuneration_decided_by: string | null;
   remuneration_decided_at: string | null;
@@ -406,6 +408,14 @@ export interface EmployeeWorkScheduleDay {
   expected_start_time: string;
   expected_end_time: string;
   is_working_day: boolean;
+}
+
+export interface EmployeeWorkScheduleDayInput {
+  weekday: number;
+  slot?: number;
+  expected_start_time: string;
+  expected_end_time: string;
+  is_working_day?: boolean;
 }
 
 export interface EmployeeWorkSchedule {
@@ -582,6 +592,7 @@ export interface VacationRequestPayload {
   loan_installments_count?: number | null;
   loan_requester_signature?: File | null;
   requested_work_schedule_template?: string | null;
+  requested_work_schedule_days?: EmployeeWorkScheduleDayInput[];
 }
 
 export interface PayrollPayload {
