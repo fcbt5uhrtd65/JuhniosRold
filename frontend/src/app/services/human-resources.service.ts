@@ -98,7 +98,7 @@ export type HRRequestStatus =
   | 'FINALIZED'
   | 'EXPIRED';
 export type VacationRequestStatus = HRRequestStatus;
-export type VacationRequestType = 'PERMISSION' | 'OVERTIME' | 'LEAVE' | 'INCAPACITY' | 'VACATION' | 'LOAN' | 'OTHER';
+export type VacationRequestType = 'PERMISSION' | 'OVERTIME' | 'LEAVE' | 'INCAPACITY' | 'VACATION' | 'LOAN' | 'SCHEDULE_CHANGE' | 'OTHER';
 export type LoanFrequency = 'BIWEEKLY' | 'MONTHLY';
 export type HRRequestSubtype =
   | 'PERSONAL'

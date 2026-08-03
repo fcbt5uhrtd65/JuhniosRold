@@ -125,13 +125,24 @@ class VacationRequestSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         instance = self.instance
         request_type = attrs.get("request_type", getattr(instance, "request_type", None))
+        subtype = attrs.get("subtype", getattr(instance, "subtype", ""))
         start_date = attrs.get("start_date", getattr(instance, "start_date", None))
         end_date = attrs.get("end_date", getattr(instance, "end_date", None))
         is_full_day = attrs.get("is_full_day", getattr(instance, "is_full_day", True))
         start_time = attrs.get("start_time", getattr(instance, "start_time", None))
         end_time = attrs.get("end_time", getattr(instance, "end_time", None))
+        requested_work_schedule_template = attrs.get(
+            "requested_work_schedule_template",
+            getattr(instance, "requested_work_schedule_template", None),
+        )
 
         errors = {}
+        is_schedule_change = (
+            request_type == VacationRequest.RequestType.SCHEDULE_CHANGE
+            or subtype == VacationRequest.RequestSubtype.SCHEDULE_CHANGE
+        )
+        if request_type == VacationRequest.RequestType.SCHEDULE_CHANGE and not attrs.get("subtype"):
+            attrs["subtype"] = VacationRequest.RequestSubtype.SCHEDULE_CHANGE
 
         if start_date and end_date and end_date < start_date:
             errors["end_date"] = ["La fecha final no puede ser anterior a la fecha inicial."]
@@ -154,6 +165,15 @@ class VacationRequestSerializer(serializers.ModelSerializer):
             loan_amount = attrs.get("loan_amount", getattr(instance, "loan_amount", None))
             if loan_amount is not None and loan_amount <= 0:
                 errors["loan_amount"] = ["El monto debe ser mayor a cero."]
+        elif is_schedule_change:
+            if requested_work_schedule_template is None:
+                errors["requested_work_schedule_template"] = ["Selecciona el nuevo horario solicitado."]
+            if not is_full_day:
+                errors["is_full_day"] = ["El cambio de horario se solicita como jornada completa desde la fecha indicada."]
+            if start_time is not None:
+                errors["start_time"] = ["No se debe enviar hora de inicio en un cambio de horario."]
+            if end_time is not None:
+                errors["end_time"] = ["No se debe enviar hora fin en un cambio de horario."]
         elif is_full_day:
             if start_time is not None:
                 errors["start_time"] = ["No se debe enviar hora de inicio cuando la solicitud es de jornada completa."]

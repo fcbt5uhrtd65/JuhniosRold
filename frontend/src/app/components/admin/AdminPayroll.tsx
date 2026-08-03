@@ -1162,8 +1162,8 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
           <div>
             <p className="text-sm font-semibold text-gray-900">Inteligencia de marcaciones</p>
             <p className="text-[11px] text-gray-500 mt-0.5">
-              Marcaciones separadas por menos de <strong>{intelligenceSettings?.duplicate_punch_window_minutes ?? 15} min</strong> se tratan como el mismo evento repetido por error.
-              Con 1 sola marcación en el día, se compara contra el horario esperado del empleado (tolerancia de <strong>{intelligenceSettings?.schedule_proximity_minutes ?? 120} min</strong>) para decidir si fue entrada o salida.
+              Si el archivo trae acción explícita, se usa para ubicar entrada, salida y almuerzo; si no, marcaciones separadas por menos de <strong>{intelligenceSettings?.duplicate_punch_window_minutes ?? 15} min</strong> se tratan como el mismo evento repetido.
+              Con 1 sola marcación en el día, se compara contra el horario esperado del empleado (tolerancia de <strong>{intelligenceSettings?.schedule_proximity_minutes ?? 120} min</strong>).
             </p>
           </div>
           <SecondaryButton onClick={() => setShowIntelligenceModal(true)}>Ajustar</SecondaryButton>

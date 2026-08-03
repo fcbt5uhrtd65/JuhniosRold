@@ -58,6 +58,7 @@ const REQUEST_TYPE_ICONS: Record<VacationRequestType, React.ComponentType<{ size
   INCAPACITY: HeartPulse,
   LEAVE: Briefcase,
   LOAN: HandCoins,
+  SCHEDULE_CHANGE: CalendarCog,
   OTHER: FileText,
 };
 
@@ -69,14 +70,8 @@ const LOAN_FREQUENCY_LABELS: Record<LoanFrequency, string> = {
 type RequestPeriodMode = 'SINGLE_DAY' | 'DATE_RANGE';
 type RequestTimeMode = 'FULL_DAY' | 'FROM_TIME' | 'TIME_RANGE';
 
-// 'SCHEDULE_CHANGE' es una pseudo-categoría solo de UI: en el backend se
-// guarda como request_type=OTHER + subtype=SCHEDULE_CHANGE (ver
-// ResolveVacationRequestByRole), que es lo que dispara la aplicación
-// automática del horario al aprobar. No es un VacationRequestType real.
-type FormRequestType = VacationRequestType | 'SCHEDULE_CHANGE';
-
 interface VacationFormState {
-  request_type: FormRequestType;
+  request_type: VacationRequestType;
   period_mode: RequestPeriodMode;
   time_mode: RequestTimeMode;
   single_date: string;
@@ -249,10 +244,12 @@ const REQUEST_TYPE_LABELS: Record<VacationRequestType, string> = {
   INCAPACITY: 'Incapacidad',
   LEAVE: 'Licencia',
   LOAN: 'Préstamo',
+  SCHEDULE_CHANGE: 'Cambio de horario empleado',
   OTHER: 'Otro',
 };
 
-function getRequestTypeLabel(type: VacationRequestType): string {
+function getRequestTypeLabel(type: VacationRequestType, subtype?: string): string {
+  if (type === 'SCHEDULE_CHANGE' || subtype === 'SCHEDULE_CHANGE') return 'Cambio de horario empleado';
   return REQUEST_TYPE_LABELS[type] ?? type;
 }
 
@@ -372,7 +369,7 @@ export function AdminEmployeePortal() {
     const query = requestsQuery.toLowerCase().trim();
     if (!query) return requests;
     return requests.filter((request) =>
-      getRequestTypeLabel(request.request_type).toLowerCase().includes(query) ||
+      getRequestTypeLabel(request.request_type, request.subtype).toLowerCase().includes(query) ||
       (request.reason ?? '').toLowerCase().includes(query) ||
       getStatusLabel(request.status).toLowerCase().includes(query),
     );
@@ -533,7 +530,7 @@ export function AdminEmployeePortal() {
     setSaving(true);
     try {
       await createMyVacationRequest({
-        request_type: 'OTHER',
+        request_type: 'SCHEDULE_CHANGE',
         subtype: 'SCHEDULE_CHANGE',
         start_date: form.schedule_change_start_date,
         end_date: form.schedule_change_start_date,
@@ -794,7 +791,7 @@ export function AdminEmployeePortal() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-gray-900 truncate">{requester ? getEmployeeName(requester) : request.employee}</p>
-                      <p className="text-xs text-gray-400 truncate">{getRequestTypeLabel(request.request_type)} · {getRequestScheduleLabel(request)}</p>
+                      <p className="text-xs text-gray-400 truncate">{getRequestTypeLabel(request.request_type, request.subtype)} · {getRequestScheduleLabel(request)}</p>
                       {request.reason && (
                         <p className="text-xs text-gray-400 truncate mt-0.5">{request.reason}</p>
                       )}
@@ -873,18 +870,6 @@ export function AdminEmployeePortal() {
                     </button>
                   );
                 })}
-                <button
-                  type="button"
-                  onClick={() => setForm({ ...form, request_type: 'SCHEDULE_CHANGE' })}
-                  className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-medium transition-colors ${
-                    form.request_type === 'SCHEDULE_CHANGE'
-                      ? 'border-[#2a4038] bg-[#2a4038]/5 text-[#2a4038]'
-                      : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-                  }`}
-                >
-                  <CalendarCog size={14} className={form.request_type === 'SCHEDULE_CHANGE' ? 'text-[#2a4038]' : 'text-gray-400'} />
-                  Cambio de horario
-                </button>
               </div>
             </div>
 
@@ -1421,7 +1406,7 @@ export function AdminEmployeePortal() {
                       <Icon size={15} />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-gray-900">{getRequestTypeLabel(request.request_type)}</p>
+                      <p className="text-sm font-medium text-gray-900">{getRequestTypeLabel(request.request_type, request.subtype)}</p>
                       <p className="text-xs text-gray-400 truncate">{getRequestScheduleLabel(request)}</p>
                     </div>
                     <div className="flex-shrink-0 whitespace-nowrap">
@@ -1508,7 +1493,7 @@ export function AdminEmployeePortal() {
                   const Icon = REQUEST_TYPE_ICONS[selectedRequest.request_type];
                   return <Icon size={16} className="text-gray-400" />;
                 })()}
-                <h3 className="font-semibold text-gray-900">{getRequestTypeLabel(selectedRequest.request_type)}</h3>
+                <h3 className="font-semibold text-gray-900">{getRequestTypeLabel(selectedRequest.request_type, selectedRequest.subtype)}</h3>
               </div>
               <button onClick={() => setSelectedRequest(null)} className="p-2.5 rounded-lg hover:bg-gray-200 flex-shrink-0"><X size={16} /></button>
             </div>
@@ -1680,7 +1665,7 @@ export function AdminEmployeePortal() {
             <p className="text-xs text-gray-500">
               {(() => {
                 const requester = employeeById.get(teamDecisionRequest.request.employee);
-                return `Solicitud de ${requester ? getEmployeeName(requester) : teamDecisionRequest.request.employee} · ${getRequestTypeLabel(teamDecisionRequest.request.request_type)}.`;
+                return `Solicitud de ${requester ? getEmployeeName(requester) : teamDecisionRequest.request.employee} · ${getRequestTypeLabel(teamDecisionRequest.request.request_type, teamDecisionRequest.request.subtype)}.`;
               })()}
               {' '}Tu firma queda registrada como jefe inmediato; el Administrador conserva la decisión final.
             </p>

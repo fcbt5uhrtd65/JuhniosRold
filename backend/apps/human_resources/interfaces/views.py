@@ -290,6 +290,28 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
                 )
             return
 
+        if (
+            vacation.request_type == VacationRequest.RequestType.SCHEDULE_CHANGE
+            or vacation.subtype == VacationRequest.RequestSubtype.SCHEDULE_CHANGE
+        ):
+            flow = (
+                (VacationRequestApprovalStep.Step.REQUESTER, 1, requester or vacation.employee.user, VacationRequest.Status.APPROVED, "Solicitud creada"),
+                (VacationRequestApprovalStep.Step.HR, 2, None, VacationRequest.Status.PENDING, ""),
+            )
+            for step, sequence, user, step_status, comment in flow:
+                VacationRequestApprovalStep.objects.get_or_create(
+                    request=vacation,
+                    step=step,
+                    defaults={
+                        "sequence": sequence,
+                        "user": user,
+                        "status": step_status,
+                        "acted_at": timezone.now() if step == VacationRequestApprovalStep.Step.REQUESTER else None,
+                        "comment": comment,
+                    },
+                )
+            return
+
         manager = getattr(vacation.employee, "manager", None)
         manager_user = getattr(manager, "user", None)
 
@@ -464,6 +486,14 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
             return "ADMIN"
         if getattr(user, "role_code", None) == "RRHH":
             return "HR"
+        if (
+            vacation is not None
+            and (
+                vacation.request_type == VacationRequest.RequestType.SCHEDULE_CHANGE
+                or vacation.subtype == VacationRequest.RequestSubtype.SCHEDULE_CHANGE
+            )
+        ):
+            return None
         if vacation is not None:
             requester_employee = vacation.employee
             manager = getattr(requester_employee, "manager", None)

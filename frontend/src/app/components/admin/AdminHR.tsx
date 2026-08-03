@@ -760,13 +760,14 @@ const REQUEST_TYPE_PDF_COLORS: Record<VacationRequestType, { fill: PdfRgb; strok
   LEAVE: { fill: [237, 233, 254], stroke: [124, 58, 237], text: [91, 33, 182] },
   INCAPACITY: { fill: [254, 226, 226], stroke: [239, 68, 68], text: [153, 27, 27] },
   LOAN: { fill: [252, 231, 243], stroke: [219, 39, 119], text: [157, 23, 77] },
+  SCHEDULE_CHANGE: { fill: [220, 252, 231], stroke: [34, 197, 94], text: [22, 101, 52] },
   OTHER: { fill: [243, 244, 246], stroke: [107, 114, 128], text: [55, 65, 81] },
 };
 
 function getCalendarPdfEventLabel(event: CalendarRequestEvent, dateKey: string): string {
   const { request, employee } = event;
   const employeeName = employee ? getEmployeeName(employee) : 'Empleado';
-  const typeLabel = getRequestTypeLabel(request.request_type);
+  const typeLabel = getRequestTypeLabel(request.request_type, request.subtype);
 
   if (request.request_type === 'OVERTIME') {
     const shifts = request.overtime_shifts?.filter((item) => item.date === dateKey) ?? [];
@@ -808,7 +809,7 @@ function getCalendarPdfDetailLines(event: CalendarRequestEvent, dateKey: string)
 function getCalendarPdfEventShortLabel(event: CalendarRequestEvent): string {
   const { request, employee } = event;
   const employeeName = employee ? getEmployeeName(employee) : 'Empleado';
-  const typeLabel = getRequestTypeLabel(request.request_type);
+  const typeLabel = getRequestTypeLabel(request.request_type, request.subtype);
   return `${employeeName} - ${typeLabel}`;
 }
 
@@ -859,7 +860,7 @@ async function exportRequestsCalendarPdf({
     pdf.setFontSize(7);
     pdf.text(`Filtros: ${typeFilterLabel} | ${departmentFilterLabel} | Eventos: ${totalEvents}`, margin, metaY);
 
-    const legendItems: VacationRequestType[] = ['PERMISSION', 'OVERTIME', 'VACATION', 'LEAVE', 'INCAPACITY', 'LOAN', 'OTHER'];
+    const legendItems: VacationRequestType[] = ['PERMISSION', 'OVERTIME', 'VACATION', 'LEAVE', 'INCAPACITY', 'LOAN', 'SCHEDULE_CHANGE', 'OTHER'];
     let legendX = margin;
     for (const type of legendItems) {
       const colors = REQUEST_TYPE_PDF_COLORS[type];
@@ -1082,7 +1083,8 @@ function documentStatusLabel(status: EmployeeDocumentStatus): string {
   return labels[status];
 }
 
-function getRequestTypeLabel(type: string): string {
+function getRequestTypeLabel(type: string, subtype?: string): string {
+  if (type === 'SCHEDULE_CHANGE' || subtype === 'SCHEDULE_CHANGE') return 'Cambio de horario empleado';
   const labels: Record<string, string> = {
     PERMISSION: 'Permiso',
     OVERTIME: 'Horas extras',
@@ -1090,12 +1092,13 @@ function getRequestTypeLabel(type: string): string {
     INCAPACITY: 'Incapacidad',
     VACATION: 'Vacaciones',
     LOAN: 'Préstamo',
+    SCHEDULE_CHANGE: 'Cambio de horario empleado',
     OTHER: 'Otro',
   };
   return labels[type] ?? type;
 }
 
-const REQUEST_TYPE_FILTER_OPTIONS: VacationRequestType[] = ['PERMISSION', 'OVERTIME', 'LEAVE', 'INCAPACITY', 'VACATION', 'LOAN', 'OTHER'];
+const REQUEST_TYPE_FILTER_OPTIONS: VacationRequestType[] = ['PERMISSION', 'OVERTIME', 'LEAVE', 'INCAPACITY', 'VACATION', 'LOAN', 'SCHEDULE_CHANGE', 'OTHER'];
 
 function getRequestSubtypeLabel(subtype: string): string {
   const labels: Record<string, string> = {
@@ -1917,6 +1920,7 @@ export function AdminHR() {
     LEAVE: 'purple',
     INCAPACITY: 'red',
     LOAN: 'pink',
+    SCHEDULE_CHANGE: 'green',
     OTHER: 'pink',
   };
 
@@ -2556,7 +2560,7 @@ export function AdminHR() {
   const handleDeleteVacationRequest = async (request: VacationRequest) => {
     const employee = employeeById.get(request.employee);
     const label = employee ? getEmployeeName(employee) : request.employee;
-    if (!window.confirm(`¿Eliminar la solicitud de ${label} (${getRequestTypeLabel(request.request_type)})? Esta acción no se puede deshacer.`)) return;
+    if (!window.confirm(`¿Eliminar la solicitud de ${label} (${getRequestTypeLabel(request.request_type, request.subtype)})? Esta acción no se puede deshacer.`)) return;
     setDeletingVacationId(request.id);
     try {
       await deleteVacationRequest(request.id);
@@ -2592,7 +2596,7 @@ export function AdminHR() {
     // "Remunerado" es exclusivo de Admin, y solo se puede definir mientras
     // sigue sin decidir (is_remunerated === null) — una vez guardada queda
     // bloqueada permanentemente, sin importar el estado de la solicitud.
-    const canDecideRemuneration = isAdmin && approvingRequest.request_type !== 'LOAN' && approvingRequest.request_type !== 'OVERTIME' && approvingRequest.is_remunerated === null;
+    const canDecideRemuneration = isAdmin && !['LOAN', 'OVERTIME', 'SCHEDULE_CHANGE'].includes(approvingRequest.request_type) && approvingRequest.is_remunerated === null;
     try {
       await approveVacationRequest(
         approvingRequest.id,
@@ -4122,7 +4126,7 @@ export function AdminHR() {
                             <div className="text-gray-400 text-[11px] mt-1">{employee?.employee_code ?? 'Sin código'}</div>
                           </Td>
                           <Td>
-                            <div>{getRequestTypeLabel(request.request_type)}</div>
+                            <div>{getRequestTypeLabel(request.request_type, request.subtype)}</div>
                             <div className="text-gray-400 text-[11px] mt-1">{getRequestSubtypeLabel(request.subtype)}</div>
                           </Td>
                           <Td>
@@ -4180,7 +4184,7 @@ export function AdminHR() {
                                   onClick: () => openCorrectScheduleModal(request),
                                   disabled: !CORRECTABLE_STATUSES.includes(request.status),
                                 }] : []),
-                                ...(isAdmin && request.request_type !== 'LOAN' && request.request_type !== 'OVERTIME' && request.is_remunerated === null ? [{
+                                ...(isAdmin && !['LOAN', 'OVERTIME', 'SCHEDULE_CHANGE'].includes(request.request_type) && request.is_remunerated === null ? [{
                                   label: 'Definir remuneración',
                                   icon: Wallet,
                                   onClick: () => openRemunerationModal(request),
@@ -4305,7 +4309,7 @@ export function AdminHR() {
                             {visible.map(({ request, employee }) => (
                               <CalendarChip
                                 key={request.id}
-                                label={`${employee ? getEmployeeName(employee) : 'Empleado'} · ${getRequestTypeLabel(request.request_type)}`}
+                                label={`${employee ? getEmployeeName(employee) : 'Empleado'} · ${getRequestTypeLabel(request.request_type, request.subtype)}`}
                                 color={REQUEST_TYPE_CALENDAR_COLOR[request.request_type]}
                                 onClick={() => openRequestDetailModal(request)}
                               />
@@ -4480,7 +4484,7 @@ export function AdminHR() {
       <Modal title={viewingRequest ? `Solicitud ${viewingRequest.request_number ?? viewingRequest.id}` : ''} open={showRequestDetailModal && Boolean(viewingRequest)} onClose={() => setShowRequestDetailModal(false)} wide>
         {viewingRequest && (
           <div className="space-y-6">
-            <p className="text-xs text-gray-500">{getRequestTypeLabel(viewingRequest.request_type)} · {getRequestSubtypeLabel(viewingRequest.subtype)}</p>
+            <p className="text-xs text-gray-500">{getRequestTypeLabel(viewingRequest.request_type, viewingRequest.subtype)} · {getRequestSubtypeLabel(viewingRequest.subtype)}</p>
             {(() => {
               const employee = employeeById.get(viewingRequest.employee);
               return (
@@ -4671,7 +4675,7 @@ export function AdminHR() {
               >
                 <div className="min-w-0">
                   <p className="text-xs font-semibold text-gray-900 truncate">{employee ? getEmployeeName(employee) : 'Empleado'}</p>
-                  <p className="text-[10px] text-gray-400">{getRequestTypeLabel(request.request_type)} · {requestStatusLabel(request.status)}</p>
+                  <p className="text-[10px] text-gray-400">{getRequestTypeLabel(request.request_type, request.subtype)} · {requestStatusLabel(request.status)}</p>
                 </div>
                 <Badge label={requestStatusLabel(request.status)} color={statusBadge(request.status)} />
               </button>
@@ -4701,7 +4705,7 @@ export function AdminHR() {
             onChange={setApproveComment}
             placeholder="Comentario opcional que verá el empleado"
           />
-          {isAdmin && approvingRequest?.request_type !== 'LOAN' && approvingRequest?.request_type !== 'OVERTIME' && (
+          {isAdmin && approvingRequest && !['LOAN', 'OVERTIME', 'SCHEDULE_CHANGE'].includes(approvingRequest.request_type) && (
             approvingRequest?.is_remunerated === null ? (
               <div>
                 <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">

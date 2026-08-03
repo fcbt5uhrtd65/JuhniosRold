@@ -1,3 +1,5 @@
+import re
+import unicodedata
 from datetime import datetime, timedelta
 from decimal import Decimal
 
@@ -50,6 +52,116 @@ RECHARGE_LABEL_TO_CONCEPT_CODE = {
     "Extra diurna dominical": "OVERTIME_DAY_REST",
     "Extra nocturna dominical": "OVERTIME_NIGHT_REST",
 }
+
+PUNCH_ACTION_FIELDS = ("check_in", "check_out", "break_start", "break_end")
+PUNCH_ACTION_NUMERIC_CODES = {
+    "1": "check_in",
+    "2": "check_out",
+    "3": "break_start",
+    "4": "break_end",
+}
+PUNCH_ACTION_ALIASES = {
+    "check_in": (
+        "entrada",
+        "ingreso",
+        "entrada laboral",
+        "inicio jornada",
+        "check in",
+        "checkin",
+        "clock in",
+    ),
+    "check_out": (
+        "salida",
+        "egreso",
+        "salida laboral",
+        "fin jornada",
+        "check out",
+        "checkout",
+        "clock out",
+    ),
+    "break_start": (
+        "inicio almuerzo",
+        "salida almuerzo",
+        "inicio descanso",
+        "salida descanso",
+        "inicio break",
+        "break out",
+        "meal out",
+        "lunch out",
+    ),
+    "break_end": (
+        "fin almuerzo",
+        "entrada almuerzo",
+        "regreso almuerzo",
+        "fin descanso",
+        "entrada descanso",
+        "fin break",
+        "break in",
+        "meal in",
+        "lunch in",
+    ),
+}
+PUNCH_ACTION_PHRASES = tuple(
+    sorted(
+        (
+            (alias, field)
+            for field, aliases in PUNCH_ACTION_ALIASES.items()
+            for alias in aliases
+        ),
+        key=lambda item: len(item[0]),
+        reverse=True,
+    )
+)
+
+
+def _normalize_punch_action_text(value) -> str:
+    normalized = unicodedata.normalize("NFKD", str(value or ""))
+    ascii_text = normalized.encode("ascii", "ignore").decode("ascii").lower()
+    ascii_text = re.sub(r"[^a-z0-9]+", " ", ascii_text)
+    return re.sub(r"\s+", " ", ascii_text).strip()
+
+
+def biometric_punch_action(punch) -> str | None:
+    """Devuelve el campo Attendance que representa la accion explicita del
+    huellero, si la fila la trae de forma clara.
+
+    Las exportaciones antiguas vistas traen columnas como "1 0 1 0" cuyo
+    significado no estaba confirmado. Esas filas se consideran ambiguas y
+    conservan la inferencia por orden, mientras que acciones textuales o un
+    unico codigo numerico simple si se respetan.
+    """
+    raw_values = [
+        getattr(punch, "raw_col3", ""),
+        getattr(punch, "raw_col4", ""),
+        getattr(punch, "raw_col5", ""),
+        getattr(punch, "raw_col6", ""),
+    ]
+
+    matches = set()
+    for raw_value in raw_values:
+        normalized = _normalize_punch_action_text(raw_value)
+        if not normalized:
+            continue
+        for phrase, field in PUNCH_ACTION_PHRASES:
+            if re.search(rf"(^| ){re.escape(phrase)}($| )", normalized):
+                matches.add(field)
+                break
+    if len(matches) == 1:
+        return matches.pop()
+    if len(matches) > 1:
+        return None
+
+    non_empty = [str(value).strip() for value in raw_values if str(value or "").strip()]
+    if len(non_empty) == 1:
+        return PUNCH_ACTION_NUMERIC_CODES.get(non_empty[0])
+    return None
+
+
+def is_schedule_change_request(vacation) -> bool:
+    return (
+        vacation.request_type == VacationRequest.RequestType.SCHEDULE_CHANGE
+        or vacation.subtype == VacationRequest.RequestSubtype.SCHEDULE_CHANGE
+    )
 
 
 class RegisterCheckIn:
@@ -278,6 +390,15 @@ class ResolveVacationRequestByRole:
     def execute(self, vacation, decision, reviewer, role, comment="", signature_override=None, is_remunerated=None, hr_slot_label="RRHH", approved_amount=None):
         if role not in ("ADMIN", "HR", "MANAGER"):
             raise BusinessRuleViolation("Rol no autorizado para resolver solicitudes.")
+        is_schedule_change = is_schedule_change_request(vacation)
+        if is_schedule_change and role == "MANAGER":
+            raise BusinessRuleViolation("El cambio de horario empleado solo puede aprobarlo Recursos Humanos o el Administrador.")
+        if (
+            is_schedule_change
+            and decision == VacationRequest.Status.APPROVED
+            and not vacation.requested_work_schedule_template_id
+        ):
+            raise BusinessRuleViolation("La solicitud de cambio de horario debe tener una plantilla de horario seleccionada.")
 
         # Para trazabilidad: el slot "HR" normalmente es RRHH, pero en préstamos lo
         # ocupa Tesorería — hr_slot_label permite que el historial diga el nombre
@@ -383,7 +504,7 @@ class ResolveVacationRequestByRole:
             vacation.status = VacationRequest.Status.REJECTED
         elif role == "ADMIN":
             vacation.status = VacationRequest.Status.APPROVED
-        elif is_loan:
+        elif is_loan or is_schedule_change:
             vacation.status = VacationRequest.Status.APPROVED
         else:  # role == "HR", decision == APPROVED
             if vacation.admin_decision == VacationRequest.Status.APPROVED:
@@ -402,7 +523,7 @@ class ResolveVacationRequestByRole:
         # espíritu que loan_approved_amount arriba, el cambio vive dentro del propio
         # flujo de aprobación en vez de requerir un paso manual aparte en Nómina.
         if (
-            vacation.subtype == VacationRequest.RequestSubtype.SCHEDULE_CHANGE
+            is_schedule_change
             and vacation.status == VacationRequest.Status.APPROVED
             and vacation.requested_work_schedule_template_id
         ):
@@ -419,11 +540,14 @@ class ResolveVacationRequestByRole:
             if role == "ADMIN"
             else VacationRequestApprovalStep.Step.HR
         )
+        step_sequence = 3 if is_schedule_change and step_code == VacationRequestApprovalStep.Step.FINAL else (
+            4 if step_code == VacationRequestApprovalStep.Step.FINAL else 3
+        )
         VacationRequestApprovalStep.objects.update_or_create(
             request=vacation,
             step=step_code,
             defaults={
-                "sequence": 4 if step_code == VacationRequestApprovalStep.Step.FINAL else 3,
+                "sequence": step_sequence,
                 "status": decision,
                 "user": reviewer,
                 "acted_at": now,
@@ -965,6 +1089,10 @@ class ConsolidateAttendanceFromPunches:
         return collapsed
 
     def _infer_attendance(self, day_punches, schedule=None, day=None) -> dict:
+        action_values = self._infer_attendance_from_punch_actions(day_punches)
+        if action_values is not None:
+            return action_values
+
         count = len(day_punches)
         times = [p.punched_at for p in day_punches]
 
@@ -1002,6 +1130,50 @@ class ConsolidateAttendanceFromPunches:
             "break_start": None, "break_end": None,
             "has_incomplete_marks": True,
         }
+
+    def _infer_attendance_from_punch_actions(self, day_punches) -> dict | None:
+        action_punches = {field: [] for field in PUNCH_ACTION_FIELDS}
+        unknown_punches = []
+        for punch in day_punches:
+            action = biometric_punch_action(punch)
+            if action in action_punches:
+                action_punches[action].append(punch)
+            else:
+                unknown_punches.append(punch)
+
+        if not any(action_punches.values()):
+            return None
+
+        check_in = self._first_punch_time(action_punches["check_in"])
+        check_out = self._last_punch_time(action_punches["check_out"])
+        break_start = self._first_punch_time(action_punches["break_start"])
+        break_end = self._last_punch_time(action_punches["break_end"])
+
+        has_incomplete_marks = bool(unknown_punches) or not (check_in and check_out)
+        if check_in and check_out and check_out <= check_in:
+            has_incomplete_marks = True
+        if (break_start and not break_end) or (break_end and not break_start):
+            has_incomplete_marks = True
+        if break_start and break_end and break_end <= break_start:
+            has_incomplete_marks = True
+
+        return {
+            "check_in": check_in,
+            "check_out": check_out,
+            "break_start": break_start,
+            "break_end": break_end,
+            "has_incomplete_marks": has_incomplete_marks,
+        }
+
+    def _first_punch_time(self, punches):
+        if not punches:
+            return None
+        return min(punch.punched_at for punch in punches)
+
+    def _last_punch_time(self, punches):
+        if not punches:
+            return None
+        return max(punch.punched_at for punch in punches)
 
 
 class CorrectAttendance:
