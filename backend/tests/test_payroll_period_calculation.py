@@ -1,11 +1,17 @@
 from decimal import Decimal
 from datetime import datetime, time
+from unittest.mock import patch
 
 from django.test import TestCase
 from django.utils import timezone
 
 from apps.employees.infrastructure.models import Employee
-from apps.human_resources.application.use_cases import CalculateEmployeePayrollForPeriod
+from apps.human_resources.application.use_cases import (
+    AddManualPayrollItem,
+    ApprovePayrollPeriod,
+    CalculateEmployeePayrollForPeriod,
+    CalculatePayrollPeriod,
+)
 from apps.human_resources.infrastructure.models import (
     Attendance,
     EmployeeWorkSchedule,
@@ -14,6 +20,7 @@ from apps.human_resources.infrastructure.models import (
     PayrollLegalParameter,
     PayrollPeriod,
 )
+from shared.domain.exceptions import BusinessRuleViolation
 
 
 class PayrollPeriodCalculationTests(TestCase):
@@ -102,3 +109,82 @@ class PayrollPeriodCalculationTests(TestCase):
         self.assertEqual(payroll.ordinary_hours, Decimal("9.00"))
         self.assertEqual(payroll.overtime_hours, Decimal("1.00"))
         self.assertEqual(overtime_item.amount, Decimal("9948.32"))
+
+    def test_manual_payroll_item_does_not_double_count_base_salary(self):
+        employee = Employee.objects.create(
+            employee_code="EMP-LEGACY-206",
+            first_name="Alexandra",
+            last_name="Prueba",
+            base_salary=Decimal("3000"),
+            status=Employee.Status.ACTIVE,
+        )
+        period = PayrollPeriod.objects.create(
+            period_start="2026-04-20",
+            period_end="2026-04-20",
+            label="Nomina prueba ajuste",
+        )
+
+        payroll = CalculateEmployeePayrollForPeriod().execute(period=period, employee=employee)
+        AddManualPayrollItem().execute(
+            payroll=payroll,
+            item_type=PayrollItem.Type.EARNING,
+            concept="Bono puntual",
+            amount=Decimal("10"),
+        )
+        payroll.refresh_from_db()
+
+        self.assertEqual(payroll.gross_earnings, Decimal("110.00"))
+        self.assertEqual(payroll.net_salary, Decimal("110.00"))
+
+    def test_calculate_period_with_employee_errors_stays_open(self):
+        employee = Employee.objects.create(
+            employee_code="EMP-LEGACY-207",
+            first_name="Alexandra",
+            last_name="Prueba",
+            base_salary=Decimal("3000"),
+            status=Employee.Status.ACTIVE,
+        )
+        period = PayrollPeriod.objects.create(
+            period_start="2026-04-20",
+            period_end="2026-04-21",
+            label="Nomina prueba error",
+        )
+
+        with patch(
+            "apps.human_resources.application.use_cases.CalculateEmployeePayrollForPeriod.execute",
+            side_effect=BusinessRuleViolation("Faltan datos de prueba"),
+        ):
+            result = CalculatePayrollPeriod().execute(period=period, employee_queryset=Employee.objects.filter(id=employee.id))
+
+        period.refresh_from_db()
+        self.assertEqual(result["calculated"], 0)
+        self.assertEqual(len(result["errors"]), 1)
+        self.assertEqual(period.status, PayrollPeriod.Status.OPEN)
+
+    def test_approve_period_requires_all_active_employees_calculated(self):
+        employee = Employee.objects.create(
+            employee_code="EMP-LEGACY-208",
+            first_name="Alexandra",
+            last_name="Prueba",
+            base_salary=Decimal("3000"),
+            status=Employee.Status.ACTIVE,
+        )
+        Employee.objects.create(
+            employee_code="EMP-LEGACY-209",
+            first_name="Carlos",
+            last_name="Pendiente",
+            base_salary=Decimal("3000"),
+            status=Employee.Status.ACTIVE,
+        )
+        period = PayrollPeriod.objects.create(
+            period_start="2026-04-20",
+            period_end="2026-04-21",
+            label="Nomina prueba parcial",
+            status=PayrollPeriod.Status.CALCULATED,
+        )
+        CalculateEmployeePayrollForPeriod().execute(period=period, employee=employee)
+        period.status = PayrollPeriod.Status.CALCULATED
+        period.save(update_fields=("status", "updated_at"))
+
+        with self.assertRaises(BusinessRuleViolation):
+            ApprovePayrollPeriod().execute(period=period)

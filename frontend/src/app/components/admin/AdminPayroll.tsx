@@ -75,6 +75,7 @@ import { getEmployees, type Employee } from '../../services/employees.service';
 import { isAbortError } from '../../services/api';
 
 type PayrollSection = 'periods' | 'schedules' | 'biometric' | 'holidays';
+type PayrollCalculationError = { employee_id: string; employee: string; error: string };
 
 const PAYROLL_SECTIONS: Array<{ id: PayrollSection; label: string; icon: typeof Banknote }> = [
   { id: 'periods', label: 'Períodos de nómina', icon: Banknote },
@@ -105,6 +106,12 @@ function periodStatusColor(status: PayrollPeriodStatus): BadgeColor {
 function formatMoney(value: string | number | null | undefined): string {
   const num = Number(value ?? 0);
   return num.toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
+}
+
+function payrollGross(payroll: { gross_earnings: string; base_salary: string; bonuses: string }): number {
+  const gross = Number(payroll.gross_earnings || 0);
+  if (gross > 0) return gross;
+  return Number(payroll.base_salary || 0) + Number(payroll.bonuses || 0);
 }
 
 function formatDate(value: string | null): string {
@@ -1487,6 +1494,7 @@ function PeriodsSection({ employeeById }: { employeeById: Map<string, Employee> 
   const [showNewModal, setShowNewModal] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<PayrollPeriod | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [calculationErrors, setCalculationErrors] = useState<Record<string, PayrollCalculationError[]>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1514,8 +1522,10 @@ function PeriodsSection({ employeeById }: { employeeById: Map<string, Employee> 
     try {
       const result = await calculatePayrollPeriod(period.id);
       if (result.errors.length > 0) {
+        setCalculationErrors((current) => ({ ...current, [period.id]: result.errors }));
         toast.warning(`Calculado con ${result.errors.length} error(es). Revisa el detalle.`);
       } else {
+        setCalculationErrors((current) => ({ ...current, [period.id]: [] }));
         toast.success(`Nómina calculada para ${result.calculated} empleado(s)`);
       }
       await load();
@@ -1593,6 +1603,7 @@ function PeriodsSection({ employeeById }: { employeeById: Map<string, Employee> 
               period={selectedPeriod}
               employeeById={employeeById}
               busy={busyAction === selectedPeriod.id}
+              calculationErrors={calculationErrors[selectedPeriod.id] ?? []}
               onCalculate={() => void handleCalculate(selectedPeriod)}
               onApprove={() => void handleApprove(selectedPeriod)}
               onMarkPaid={() => void handleMarkPaid(selectedPeriod)}
@@ -1619,6 +1630,7 @@ function PeriodDetail({
   period,
   employeeById,
   busy,
+  calculationErrors,
   onCalculate,
   onApprove,
   onMarkPaid,
@@ -1626,12 +1638,13 @@ function PeriodDetail({
   period: PayrollPeriod;
   employeeById: Map<string, Employee>;
   busy: boolean;
+  calculationErrors: PayrollCalculationError[];
   onCalculate: () => void;
   onApprove: () => void;
   onMarkPaid: () => void;
 }) {
   const totalNet = period.payrolls.reduce((sum, p) => sum + Number(p.net_salary || 0), 0);
-  const totalGross = period.payrolls.reduce((sum, p) => sum + Number(p.gross_earnings || 0) + Number(p.base_salary || 0), 0);
+  const totalGross = period.payrolls.reduce((sum, p) => sum + payrollGross(p), 0);
   const totalDeductions = period.payrolls.reduce((sum, p) => sum + Number(p.total_deductions || 0), 0);
 
   return (
@@ -1667,6 +1680,19 @@ function PeriodDetail({
           </div>
         </div>
 
+        {calculationErrors.length > 0 && (
+          <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3">
+            <p className="text-xs font-semibold text-amber-900">Pendiente por corregir antes de aprobar</p>
+            <div className="mt-2 space-y-1">
+              {calculationErrors.map((item) => (
+                <p key={`${item.employee_id}-${item.error}`} className="text-[11px] text-amber-800">
+                  <span className="font-semibold">{item.employee}</span>: {item.error}
+                </p>
+              ))}
+            </div>
+          </div>
+        )}
+
         {period.payrolls.length === 0 ? (
           <EmptyState title="Sin nóminas calculadas" description="Usa 'Calcular' para generar la liquidación de cada empleado activo." />
         ) : (
@@ -1691,7 +1717,7 @@ function PeriodDetail({
                     <td className="py-2 pr-3 text-gray-400">{payroll.payslip_number || '-'}</td>
                     <td className="py-2 pr-3">{payroll.worked_days ?? '-'}</td>
                     <td className="py-2 pr-3">{payroll.overtime_hours}</td>
-                    <td className="py-2 pr-3">{formatMoney(Number(payroll.base_salary) + Number(payroll.gross_earnings))}</td>
+                    <td className="py-2 pr-3">{formatMoney(payrollGross(payroll))}</td>
                     <td className="py-2 pr-3 text-amber-600">{formatMoney(payroll.total_deductions)}</td>
                     <td className="py-2 pr-3 font-semibold text-gray-900">{formatMoney(payroll.net_salary)}</td>
                     <td className="py-2 pr-3">

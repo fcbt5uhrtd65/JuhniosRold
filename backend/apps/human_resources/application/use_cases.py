@@ -1772,7 +1772,7 @@ class CalculatePayrollPeriod:
             except BusinessRuleViolation as exc:
                 errors.append({"employee_id": str(employee.id), "employee": str(employee), "error": str(exc)})
 
-        period.status = PayrollPeriod.Status.CALCULATED
+        period.status = PayrollPeriod.Status.OPEN if errors else PayrollPeriod.Status.CALCULATED
         period.calculated_at = timezone.now()
         period.calculated_by = actor if getattr(actor, "is_authenticated", False) else None
         period.save(update_fields=("status", "calculated_at", "calculated_by", "updated_at"))
@@ -1788,10 +1788,27 @@ class ApprovePayrollPeriod:
 
     @transaction.atomic
     def execute(self, *, period, actor=None):
+        if period.status != PayrollPeriod.Status.CALCULATED:
+            raise BusinessRuleViolation("Solo se puede aprobar un periodo que este Calculado y sin errores pendientes.")
+
+        from apps.employees.infrastructure.models import Employee
+
         errors = []
         payrolls = list(period.payrolls.all())
         if not payrolls:
             errors.append("El período no tiene ninguna nómina calculada todavía.")
+
+        active_employees = list(Employee.objects.filter(status=Employee.Status.ACTIVE))
+        payroll_employee_ids = {payroll.employee_id for payroll in payrolls}
+        missing_employees = [employee for employee in active_employees if employee.id not in payroll_employee_ids]
+        if missing_employees:
+            sample = ", ".join(str(employee) for employee in missing_employees[:5])
+            if len(missing_employees) > 5:
+                sample = f"{sample}, ..."
+            errors.append(
+                "El periodo no tiene nomina calculada para todos los empleados activos. "
+                f"Faltan {len(missing_employees)} empleado(s): {sample}."
+            )
 
         pending_remuneration = VacationRequest.objects.filter(
             request_type=VacationRequest.RequestType.VACATION,
@@ -1883,6 +1900,6 @@ class AddManualPayrollItem:
         payroll.gross_earnings = gross
         payroll.total_deductions = deductions_total
         payroll.deductions = deductions_total
-        payroll.net_salary = (payroll.base_salary + gross - deductions_total).quantize(Decimal("0.01"))
+        payroll.net_salary = (gross - deductions_total).quantize(Decimal("0.01"))
         payroll.save(update_fields=("gross_earnings", "total_deductions", "deductions", "net_salary", "updated_at"))
         return item
