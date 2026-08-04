@@ -11,6 +11,10 @@ function employeeName(employee: Employee): string {
   return `${employee.first_name} ${employee.last_name}`.trim() || employee.employee_code;
 }
 
+function primaryManagerId(employee: Employee): string | null {
+  return employee.immediate_managers?.[0] ?? employee.manager ?? null;
+}
+
 /** Arma el bosque jerárquico (uno o más árboles raíz) a partir de la lista plana de
  * empleados, usando employee.manager. Empleados sin manager Y sin nadie a cargo se
  * devuelven aparte en `unassigned`, para no ensuciar el árbol con nodos sueltos. */
@@ -20,10 +24,11 @@ export function buildOrgForest(employees: Employee[]): { roots: OrgChartNode[]; 
   const childrenByManager = new Map<string, Employee[]>();
 
   activeEmployees.forEach((employee) => {
-    if (employee.manager && byId.has(employee.manager)) {
-      const list = childrenByManager.get(employee.manager) ?? [];
+    const managerId = primaryManagerId(employee);
+    if (managerId && byId.has(managerId)) {
+      const list = childrenByManager.get(managerId) ?? [];
       list.push(employee);
-      childrenByManager.set(employee.manager, list);
+      childrenByManager.set(managerId, list);
     }
   });
 
@@ -35,13 +40,19 @@ export function buildOrgForest(employees: Employee[]): { roots: OrgChartNode[]; 
   });
 
   const roots = activeEmployees
-    .filter((employee) => !employee.manager || !byId.has(employee.manager))
+    .filter((employee) => {
+      const managerId = primaryManagerId(employee);
+      return !managerId || !byId.has(managerId);
+    })
     .filter((employee) => (childrenByManager.get(employee.id) ?? []).length > 0)
     .sort((a, b) => employeeName(a).localeCompare(employeeName(b)))
     .map(buildNode);
 
   const unassigned = activeEmployees
-    .filter((employee) => (!employee.manager || !byId.has(employee.manager)) && !(childrenByManager.get(employee.id) ?? []).length)
+    .filter((employee) => {
+      const managerId = primaryManagerId(employee);
+      return (!managerId || !byId.has(managerId)) && !(childrenByManager.get(employee.id) ?? []).length;
+    })
     .sort((a, b) => employeeName(a).localeCompare(employeeName(b)));
 
   return { roots, unassigned };

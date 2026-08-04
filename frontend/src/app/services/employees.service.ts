@@ -214,6 +214,7 @@ export interface Employee {
   department: string | null;
   position: string | null;
   manager: string | null;
+  immediate_managers: string[];
   employment_type: EmploymentType;
   contract_type: ContractType;
   hire_date: string | null;
@@ -326,6 +327,7 @@ export interface EmployeePayload {
   department?: string | null;
   position?: string | null;
   manager?: string | null;
+  immediate_managers?: string[];
   employment_type?: EmploymentType;
   contract_type?: ContractType;
   hire_date?: string | null;
@@ -370,6 +372,17 @@ export interface ListEmployeesParams {
   profile_status?: EmployeeProfileStatus;
   branch?: string;
   employment_type?: EmploymentType;
+}
+
+export interface AssignEmployeeManagersPayload {
+  branch?: string | null;
+  employee_ids: string[];
+  manager_ids: string[];
+}
+
+export interface AssignEmployeeManagersResponse {
+  updated: number;
+  employees: Employee[];
 }
 
 export interface ListDepartmentsParams {
@@ -663,6 +676,12 @@ export async function createEmployee(payload: EmployeePayload): Promise<Employee
 
 export async function updateEmployee(id: string, payload: Partial<EmployeePayload>): Promise<Employee> {
   const res = await api.patch<Employee>(`${EMPLOYEES_PATH}${id}/`, toRequestBody(payload as Record<string, unknown>));
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
+export async function assignEmployeeManagers(payload: AssignEmployeeManagersPayload): Promise<AssignEmployeeManagersResponse> {
+  const res = await api.post<AssignEmployeeManagersResponse>(`${EMPLOYEES_PATH}assign-managers/`, payload);
   if (res.data) return res.data;
   throw new Error(res.message);
 }

@@ -229,6 +229,7 @@ class Employee(BaseModel):
     department = models.ForeignKey(Department, on_delete=models.PROTECT, related_name="employees", null=True, blank=True)
     position = models.ForeignKey(Position, on_delete=models.PROTECT, related_name="employees", null=True, blank=True)
     manager = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="reports")
+    immediate_managers = models.ManyToManyField("self", blank=True, symmetrical=False, related_name="managed_employees")
     employment_type = models.CharField(max_length=30, choices=EmploymentType.choices, default=EmploymentType.EMPLOYEE)
     contract_type = models.CharField(max_length=30, choices=ContractType.choices, default=ContractType.INDEFINITE)
     hire_date = models.DateField(null=True, blank=True)
@@ -290,6 +291,20 @@ class Employee(BaseModel):
 
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
+
+    def get_immediate_managers(self):
+        managers = list(self.immediate_managers.all())
+        legacy_manager = getattr(self, "manager", None)
+        if legacy_manager and all(manager.id != legacy_manager.id for manager in managers):
+            managers.insert(0, legacy_manager)
+        return managers
+
+    def is_managed_by(self, manager_employee):
+        if manager_employee is None:
+            return False
+        if self.manager_id == manager_employee.id:
+            return True
+        return self.immediate_managers.filter(id=manager_employee.id).exists()
 
     def save(self, *args, **kwargs):
         update_fields = kwargs.get("update_fields")

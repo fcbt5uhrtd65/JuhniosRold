@@ -223,6 +223,14 @@ class EmployeeSerializer(serializers.ModelSerializer):
         if "base_salary" in attrs and attrs["base_salary"] is not None and attrs["base_salary"] <= 0:
             raise serializers.ValidationError({"base_salary": ["El salario debe ser mayor a cero."]})
 
+        manager = attrs.get("manager")
+        immediate_managers = attrs.get("immediate_managers")
+        if self.instance:
+            if manager is not None and manager.id == self.instance.id:
+                raise serializers.ValidationError({"manager": ["Un empleado no puede ser su propio jefe inmediato."]})
+            if immediate_managers and any(manager_employee.id == self.instance.id for manager_employee in immediate_managers):
+                raise serializers.ValidationError({"immediate_managers": ["Un empleado no puede ser su propio jefe inmediato."]})
+
         return attrs
 
     def _current_user(self):
@@ -359,6 +367,9 @@ class EmployeeSerializer(serializers.ModelSerializer):
             )
 
     def create(self, validated_data):
+        legacy_manager_touched = "manager" in validated_data
+        immediate_managers_touched = "immediate_managers" in validated_data
+        immediate_managers = list(validated_data.get("immediate_managers") or [])
         user = validated_data.pop("user", None)
         role_code = str(validated_data.pop("user_role", "") or "").strip().upper()
         user_email = str(validated_data.pop("user_email", "") or "").strip().lower()
@@ -368,11 +379,19 @@ class EmployeeSerializer(serializers.ModelSerializer):
         additional_role_codes = validated_data.pop("user_additional_roles", None)
         with transaction.atomic():
             employee = super().create(validated_data)
+            if immediate_managers_touched:
+                employee.manager = immediate_managers[0] if immediate_managers else None
+                employee.save(update_fields=("manager", "updated_at"))
+            elif legacy_manager_touched:
+                employee.immediate_managers.set([employee.manager] if employee.manager_id else [])
             employee = self._sync_employee_user(employee, user, role_code, password, user_email, additional_role_codes)
             self._create_initial_history(employee)
             return employee
 
     def update(self, instance, validated_data):
+        legacy_manager_touched = "manager" in validated_data
+        immediate_managers_touched = "immediate_managers" in validated_data
+        immediate_managers = list(validated_data.get("immediate_managers") or [])
         user = validated_data.pop("user", None)
         role_code = str(validated_data.pop("user_role", "") or "").strip().upper()
         user_email = str(validated_data.pop("user_email", "") or "").strip().lower()
@@ -386,6 +405,11 @@ class EmployeeSerializer(serializers.ModelSerializer):
         }
         with transaction.atomic():
             employee = super().update(instance, validated_data)
+            if immediate_managers_touched:
+                employee.manager = immediate_managers[0] if immediate_managers else None
+                employee.save(update_fields=("manager", "updated_at"))
+            elif legacy_manager_touched:
+                employee.immediate_managers.set([employee.manager] if employee.manager_id else [])
             employee = self._sync_employee_user(employee, user, role_code, password, user_email, additional_role_codes)
             self._create_change_history(employee, previous_values)
             return employee
@@ -413,6 +437,7 @@ class EmployeeSelfServiceSerializer(EmployeeSerializer):
         "department",
         "position",
         "manager",
+        "immediate_managers",
         "employment_type",
         "contract_type",
         "hire_date",

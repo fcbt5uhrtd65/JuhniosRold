@@ -90,6 +90,35 @@ from ..infrastructure.serializers import (
 )
 
 
+def get_employee_immediate_managers(employee):
+    if employee is None:
+        return []
+    managers = list(employee.immediate_managers.all())
+    legacy_manager = getattr(employee, "manager", None)
+    if legacy_manager and all(manager.id != legacy_manager.id for manager in managers):
+        managers.insert(0, legacy_manager)
+    return managers
+
+
+def employee_has_immediate_manager(employee, manager_employee):
+    if employee is None or manager_employee is None:
+        return False
+    if getattr(employee, "manager_id", None) == manager_employee.id:
+        return True
+    return employee.immediate_managers.filter(id=manager_employee.id).exists()
+
+
+def get_employee_immediate_manager_users(employee):
+    users = []
+    seen_user_ids = set()
+    for manager in get_employee_immediate_managers(employee):
+        user = getattr(manager, "user", None)
+        if user and user.id not in seen_user_ids:
+            users.append(user)
+            seen_user_ids.add(user.id)
+    return users
+
+
 class HumanResourcesBaseViewSet(SoftDeleteModelViewSet):
     """Base compartida para los ViewSets nuevos del módulo de nómina, con el
     mismo patrón de auditoría ya usado por ManufacturingBaseViewSet. Los
@@ -207,7 +236,7 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
             "employee__branch",
             "reviewed_by",
         )
-        .prefetch_related("attachments", "approval_steps", "history")
+        .prefetch_related("attachments", "approval_steps", "history", "employee__immediate_managers__user")
     )
     serializer_class = VacationRequestSerializer
     permission_classes = (HasComponentAccess,)
@@ -225,7 +254,7 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
                 "employee",
                 "employee__department",
                 "employee__branch",
-            )
+            ).prefetch_related("employee__immediate_managers__user")
         if self.action == "list":
             queryset = VacationRequest.objects.select_related(
                 "employee",
@@ -233,7 +262,7 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
                 "employee__position",
                 "employee__branch",
                 "reviewed_by",
-            ).prefetch_related("overtime_shifts")
+            ).prefetch_related("overtime_shifts", "employee__immediate_managers__user")
         else:
             return queryset
         # Filtro por rango de fecha de la SOLICITUD (start_date/end_date, el
@@ -275,7 +304,7 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
             "employee__position",
             "employee__branch",
             "reviewed_by",
-        )
+        ).prefetch_related("employee__immediate_managers__user")
 
     def destroy(self, request, *args, **kwargs):
         # El Administrador puede eliminar cualquier solicitud (borrado administrativo
@@ -342,14 +371,16 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
                 )
             return
 
-        manager = getattr(vacation.employee, "manager", None)
-        manager_user = getattr(manager, "user", None)
+        manager_users = get_employee_immediate_manager_users(vacation.employee)
+        manager_user = next((user for user in manager_users if not getattr(user, "has_full_access", False)), None)
+        if manager_user is None and manager_users:
+            manager_user = manager_users[0]
 
         # Si el jefe inmediato es también el Administrador, su firma como jefe y
         # como Admin serían la misma persona firmando dos veces por lo mismo: el
         # paso "Jefe inmediato" no aplica en ese caso (queda registrado como tal,
         # no como pendiente eterno) y el flujo real se reduce a RRHH + ese Admin.
-        manager_is_admin = bool(manager_user and getattr(manager_user, "has_full_access", False))
+        manager_is_admin = bool(manager_users and all(getattr(user, "has_full_access", False) for user in manager_users))
 
         if manager_is_admin:
             manager_status = VacationRequest.Status.CANCELLED
@@ -465,7 +496,12 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        queryset = self._self_service_queryset().filter(employee__manager=employee).order_by("-created_at")
+        queryset = (
+            self._self_service_queryset()
+            .filter(Q(employee__manager=employee) | Q(employee__immediate_managers=employee))
+            .distinct()
+            .order_by("-created_at")
+        )
         if not getattr(request.user, "can_view_loans", False):
             queryset = queryset.exclude(request_type=VacationRequest.RequestType.LOAN)
         page = self.paginate_queryset(queryset)
@@ -526,8 +562,7 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
             return None
         if vacation is not None:
             requester_employee = vacation.employee
-            manager = getattr(requester_employee, "manager", None)
-            if manager is not None and getattr(manager, "user_id", None) == user.id:
+            if any(getattr(manager_user, "id", None) == user.id for manager_user in get_employee_immediate_manager_users(requester_employee)):
                 return "MANAGER"
         return None
 
@@ -1452,7 +1487,7 @@ class VacationRequestPdfView(APIView):
         queryset = VacationRequest.objects.select_related(
             "employee", "employee__department", "employee__position", "employee__branch",
             "admin_decided_by", "hr_decided_by",
-        ).prefetch_related("approval_steps__user__employee_profile", "overtime_shifts")
+        ).prefetch_related("approval_steps__user__employee_profile", "overtime_shifts", "employee__immediate_managers")
         vacation = get_object_or_404(queryset, pk=pk)
 
         user = request.user
@@ -1468,8 +1503,7 @@ class VacationRequestPdfView(APIView):
             # el jefe inmediato queda excluido salvo que tenga acceso especial a préstamos.
             requester_employee = getattr(user, "employee_profile", None)
             is_owner = requester_employee is not None and vacation.employee_id == requester_employee.id
-            manager = getattr(vacation.employee, "manager", None)
-            is_manager = requester_employee is not None and manager is not None and manager.id == requester_employee.id
+            is_manager = employee_has_immediate_manager(vacation.employee, requester_employee)
             if is_manager and is_loan and not getattr(user, "can_view_loans", False):
                 is_manager = False
             if not (is_owner or is_manager):

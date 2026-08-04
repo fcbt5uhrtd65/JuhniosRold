@@ -1,6 +1,7 @@
 import logging
 
 from apps.identity.interfaces.permissions import HasComponentAccess
+from django.db import transaction
 from django.http import FileResponse
 from django.utils import timezone
 from django.utils.crypto import get_random_string
@@ -8,7 +9,7 @@ from shared.interfaces.viewsets import SoftDeleteModelViewSet
 from django.db.models import Count
 from rest_framework import status
 from rest_framework.decorators import action
-from rest_framework.exceptions import NotFound
+from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -158,7 +159,7 @@ class EmployeeViewSet(SoftDeleteModelViewSet):
             "updated_by",
             "access_password_updated_by",
         )
-        .prefetch_related("contracts", "working_days")
+        .prefetch_related("contracts", "working_days", "immediate_managers")
     )
     serializer_class = EmployeeSerializer
     permission_classes = (HasComponentAccess,)
@@ -196,7 +197,7 @@ class EmployeeViewSet(SoftDeleteModelViewSet):
         try:
             employee = Employee.objects.select_related(
                 "department", "position", "manager", "branch",
-            ).prefetch_related("contracts", "working_days").get(user=request.user)
+            ).prefetch_related("contracts", "working_days", "immediate_managers").get(user=request.user)
         except Employee.DoesNotExist:
             raise NotFound("Tu usuario no tiene un perfil de empleado asociado.")
 
@@ -213,6 +214,63 @@ class EmployeeViewSet(SoftDeleteModelViewSet):
             extra_fields["signature_updated_at"] = timezone.now()
         serializer.save(**extra_fields)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @staticmethod
+    def _clean_id_list(value):
+        if value in (None, ""):
+            return []
+        if isinstance(value, (list, tuple, set)):
+            raw_values = value
+        else:
+            raw_values = [value]
+        return [str(item).strip() for item in raw_values if str(item).strip()]
+
+    @action(detail=False, methods=("post",), url_path="assign-managers")
+    def assign_managers(self, request):
+        employee_ids = self._clean_id_list(request.data.get("employee_ids"))
+        manager_ids = self._clean_id_list(request.data.get("manager_ids"))
+        branch_id = str(request.data.get("branch") or request.data.get("branch_id") or "").strip()
+
+        if not employee_ids:
+            raise ValidationError({"employee_ids": ["Selecciona al menos un empleado."]})
+        if not manager_ids:
+            raise ValidationError({"manager_ids": ["Selecciona al menos un jefe inmediato."]})
+
+        managers = list(Employee.objects.filter(id__in=manager_ids, status=Employee.Status.ACTIVE))
+        found_manager_ids = {str(manager.id) for manager in managers}
+        missing_manager_ids = [manager_id for manager_id in manager_ids if manager_id not in found_manager_ids]
+        if missing_manager_ids:
+            raise ValidationError({"manager_ids": ["Hay jefes inmediatos inexistentes o inactivos."]})
+
+        employees_queryset = Employee.objects.filter(id__in=employee_ids)
+        if branch_id:
+            employees_queryset = employees_queryset.filter(branch_id=branch_id)
+        employees = list(employees_queryset)
+        found_employee_ids = {str(employee.id) for employee in employees}
+        missing_employee_ids = [employee_id for employee_id in employee_ids if employee_id not in found_employee_ids]
+        if missing_employee_ids:
+            raise ValidationError({"employee_ids": ["Hay empleados que no pertenecen a la sede filtrada o no existen."]})
+
+        manager_id_set = {str(manager.id) for manager in managers}
+        self_managed = [employee for employee in employees if str(employee.id) in manager_id_set]
+        if self_managed:
+            names = ", ".join(str(employee) for employee in self_managed[:3])
+            raise ValidationError({"manager_ids": [f"Un empleado no puede ser su propio jefe inmediato: {names}."]})
+
+        with transaction.atomic():
+            for employee in employees:
+                employee.immediate_managers.set(managers)
+                employee.manager = managers[0] if managers else None
+                employee.updated_by = request.user
+                employee.save(update_fields=("manager", "updated_by", "updated_at"))
+
+        serializer = self.get_serializer(
+            Employee.objects.filter(id__in=[employee.id for employee in employees])
+            .select_related("department", "position", "manager", "branch", "user")
+            .prefetch_related("contracts", "working_days", "immediate_managers"),
+            many=True,
+        )
+        return Response({"updated": len(employees), "employees": serializer.data}, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=("get",), url_path="export-pdf")
     def export_pdf(self, request):
