@@ -96,7 +96,7 @@ export function NewLineClearanceModal({
             ))}
           </select>
         </label>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid sm:grid-cols-2 gap-3">
           <label className="block">
             <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Área</span>
             <select value={area} onChange={(e) => setArea(e.target.value)} className={selectCls}>
@@ -116,7 +116,7 @@ export function NewLineClearanceModal({
             </select>
           </label>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid sm:grid-cols-2 gap-3">
           <label className="block">
             <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Producto anterior</span>
             <input value={previousProduct} onChange={(e) => setPreviousProduct(e.target.value)} className={inputCls} />
@@ -222,7 +222,7 @@ export function NewCleaningRecordModal({
             <input value={area} onChange={(e) => setArea(e.target.value)} className={inputCls} />
           </label>
         ) : (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid sm:grid-cols-2 gap-3">
             <label className="block">
               <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Equipo</span>
               <input value={equipment} onChange={(e) => setEquipment(e.target.value)} className={inputCls} />
@@ -237,7 +237,7 @@ export function NewCleaningRecordModal({
           <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Método de limpieza</span>
           <textarea value={cleaningMethod} onChange={(e) => setCleaningMethod(e.target.value)} rows={2} className={`${inputCls} resize-none`} />
         </label>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid sm:grid-cols-3 gap-3">
           <label className="block">
             <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Sanitizante</span>
             <input value={sanitizer} onChange={(e) => setSanitizer(e.target.value)} className={inputCls} placeholder="Ej: Alcohol etílico 70%" />
@@ -251,7 +251,7 @@ export function NewCleaningRecordModal({
             <input value={sanitizerBatch} onChange={(e) => setSanitizerBatch(e.target.value)} className={inputCls} />
           </label>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid sm:grid-cols-2 gap-3">
           <label className="block">
             <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Vencimiento del sanitizante</span>
             <input type="date" value={sanitizerExpiresAt} onChange={(e) => setSanitizerExpiresAt(e.target.value)} className={inputCls} />

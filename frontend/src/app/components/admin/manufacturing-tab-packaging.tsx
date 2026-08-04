@@ -382,7 +382,7 @@ function NewBatchLotMarkingModal({
           <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Número de lote impreso</span>
           <input value={printedBatchCode} onChange={(e) => setPrintedBatchCode(e.target.value)} className={inputCls} />
         </label>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid sm:grid-cols-2 gap-3">
           <label className="flex items-center gap-2 text-xs text-gray-700">
             <input type="checkbox" checked={isLegible} onChange={(e) => setIsLegible(e.target.checked)} />
             Legible

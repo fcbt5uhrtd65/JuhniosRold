@@ -411,7 +411,7 @@ function NewBatchModal({
                 </p>
               )}
             </label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid sm:grid-cols-2 gap-3">
               <label className="block">
                 <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Cantidad planificada <span className="text-red-500">*</span></span>
                 <input type="number" value={plannedQuantity} onChange={(e) => setPlannedQuantity(e.target.value)} className={inputCls} />
@@ -445,7 +445,7 @@ function NewBatchModal({
           Asignación (opcional, puedes completarla después)
         </p>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid sm:grid-cols-2 gap-3">
           <label className="block">
             <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Área</span>
             <select value={area} onChange={(e) => setArea(e.target.value)} className={selectCls}>
@@ -465,7 +465,7 @@ function NewBatchModal({
             </select>
           </label>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid sm:grid-cols-2 gap-3">
           <label className="block">
             <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Responsable de producción</span>
             <select value={productionManager} onChange={(e) => setProductionManager(e.target.value)} className={selectCls}>

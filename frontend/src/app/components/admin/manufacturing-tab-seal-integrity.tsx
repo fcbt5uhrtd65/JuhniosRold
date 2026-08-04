@@ -144,7 +144,7 @@ export function NewSealIntegrityControlModal({
               <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Equipo</span>
               <input value={equipment} onChange={(e) => setEquipment(e.target.value)} className={inputCls} />
             </label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid sm:grid-cols-2 gap-3">
               <label className="block">
                 <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Presión (bar)</span>
                 <input type="number" step="0.01" value={pressureBar} onChange={(e) => setPressureBar(e.target.value)} className={inputCls} />

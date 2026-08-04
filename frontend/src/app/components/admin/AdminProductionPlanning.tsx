@@ -195,7 +195,7 @@ export function AdminProductionPlanning({ onCreateBatch, refreshKey }: { onCreat
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-4 gap-4 mb-5">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
                 {[
                   { label: 'Pendientes', value: (data?.productionOrders ?? []).filter(o => o.status === 'PENDING').length, color: 'bg-amber-50 text-amber-600 border-amber-100' },
                   { label: 'En Proceso', value: (data?.productionOrders ?? []).filter(o => o.status === 'IN_PROGRESS').length, color: 'bg-blue-50 text-blue-600 border-blue-100' },
@@ -234,9 +234,9 @@ export function AdminProductionPlanning({ onCreateBatch, refreshKey }: { onCreat
 
           {/* Modal de Cierre de OP */}
           {cierreOP && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
               <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setCierreOP(null)} />
-              <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+              <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6">
                 <h3 className="font-bold text-gray-900 text-lg mb-1">Cerrar Orden de Producción</h3>
                 <p className="text-xs text-gray-500 mb-5">{cierreOP.number} · {itemName(data, cierreOP.output_item)}</p>
                 <div className="space-y-3 mb-6">
@@ -306,10 +306,10 @@ export function AdminProductionPlanning({ onCreateBatch, refreshKey }: { onCreat
             </div>
           ))}
           <Drawer title="Nueva Fórmula / Receta" open={drawerOpen} onClose={() => setDrawerOpen(false)} wide>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="Código" required><input className={inputCls} placeholder="FM-XXX-000" value={formulaForm.code} onChange={e => setFormulaForm(f => ({ ...f, code: e.target.value }))} /></Field>
-              <div className="col-span-2"><Field label="Nombre de la fórmula" required><input className={inputCls} placeholder="Nombre descriptivo" value={formulaForm.name} onChange={e => setFormulaForm(f => ({ ...f, name: e.target.value }))} /></Field></div>
-              <div className="col-span-2"><Field label="Producto resultante" required><select className={selectCls} value={formulaForm.outputItem} onChange={e => setFormulaForm(f => ({ ...f, outputItem: e.target.value }))}><option value="">Seleccionar producto terminado...</option>{(data?.items ?? []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field></div>
+              <div className="sm:col-span-2"><Field label="Nombre de la fórmula" required><input className={inputCls} placeholder="Nombre descriptivo" value={formulaForm.name} onChange={e => setFormulaForm(f => ({ ...f, name: e.target.value }))} /></Field></div>
+              <div className="sm:col-span-2"><Field label="Producto resultante" required><select className={selectCls} value={formulaForm.outputItem} onChange={e => setFormulaForm(f => ({ ...f, outputItem: e.target.value }))}><option value="">Seleccionar producto terminado...</option>{(data?.items ?? []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field></div>
               <Field label="Rendimiento base" required><input className={inputCls} type="number" placeholder="100" value={formulaForm.yieldQuantity} onChange={e => setFormulaForm(f => ({ ...f, yieldQuantity: e.target.value }))} /></Field>
               <Field label="Unidad del rendimiento"><select className={selectCls} value={formulaForm.yieldUnit} onChange={e => setFormulaForm(f => ({ ...f, yieldUnit: e.target.value }))}><option value="">Seleccionar...</option>{(data?.units ?? []).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}</select></Field>
             </div>
@@ -317,11 +317,11 @@ export function AdminProductionPlanning({ onCreateBatch, refreshKey }: { onCreat
               <div className="flex items-center justify-between mb-3"><p className="text-xs font-bold uppercase tracking-wider text-gray-500">Ingredientes</p><button onClick={handleAddFormulaLine} className="text-xs text-[#2a4038] font-semibold flex items-center gap-1"><Plus size={12} /> Agregar línea</button></div>
               <div className="space-y-2">
                 {formulaLines.map(line => (
-                  <div key={line.key} className="grid grid-cols-12 gap-2 items-center bg-gray-50 rounded-lg p-2">
-                    <div className="col-span-5"><select className={selectCls + ' text-xs py-2'} value={line.item} onChange={e => handleFormulaLineChange(line.key, 'item', e.target.value)}><option value="">Seleccionar materia prima...</option>{(data?.items ?? []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
-                    <div className="col-span-3"><input className={inputCls + ' text-xs py-2'} type="number" placeholder="Cantidad" value={line.quantity} onChange={e => handleFormulaLineChange(line.key, 'quantity', e.target.value)} /></div>
-                    <div className="col-span-2"><select className={selectCls + ' text-xs py-2'} value={maps.items.get(line.item)?.unit ?? ''} disabled>{(data?.units ?? []).map(u => <option key={u.id} value={u.id}>{u.abbreviation}</option>)}</select></div>
-                    <div className="col-span-2 flex justify-center"><button onClick={() => handleRemoveFormulaLine(line.key)} disabled={formulaLines.length === 1} className="p-1 text-red-400 hover:text-red-600 disabled:opacity-30 disabled:cursor-not-allowed"><X size={14} /></button></div>
+                  <div key={line.key} className="grid grid-cols-2 sm:grid-cols-12 gap-2 items-center bg-gray-50 rounded-lg p-2">
+                    <div className="col-span-2 sm:col-span-5"><select className={selectCls + ' text-xs py-2'} value={line.item} onChange={e => handleFormulaLineChange(line.key, 'item', e.target.value)}><option value="">Seleccionar materia prima...</option>{(data?.items ?? []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
+                    <div className="sm:col-span-3"><input className={inputCls + ' text-xs py-2'} type="number" placeholder="Cantidad" value={line.quantity} onChange={e => handleFormulaLineChange(line.key, 'quantity', e.target.value)} /></div>
+                    <div className="sm:col-span-2"><select className={selectCls + ' text-xs py-2'} value={maps.items.get(line.item)?.unit ?? ''} disabled>{(data?.units ?? []).map(u => <option key={u.id} value={u.id}>{u.abbreviation}</option>)}</select></div>
+                    <div className="sm:col-span-2 flex justify-center"><button onClick={() => handleRemoveFormulaLine(line.key)} disabled={formulaLines.length === 1} className="p-1 text-red-400 hover:text-red-600 disabled:opacity-30 disabled:cursor-not-allowed"><X size={14} /></button></div>
                   </div>
                 ))}
               </div>

@@ -117,7 +117,7 @@ export function WeightVolumeTab({ batch }: { batch: BatchRecord }) {
               </div>
             )}
 
-            <div className="grid grid-cols-3 gap-2 pt-2 border-t border-gray-100">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-gray-100">
               <input
                 type="number"
                 placeholder="N° muestra"
@@ -209,7 +209,7 @@ export function NewWeightVolumeControlModal({
           <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Tara</span>
           <input type="number" step="0.001" value={tare} onChange={(e) => setTare(e.target.value)} className={inputCls} />
         </label>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid sm:grid-cols-2 gap-3">
           <label className="block">
             <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Límite inferior</span>
             <input type="number" step="0.001" value={lowerLimit} onChange={(e) => setLowerLimit(e.target.value)} className={inputCls} />
