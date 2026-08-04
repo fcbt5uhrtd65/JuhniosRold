@@ -372,10 +372,37 @@ class MicrobiologyAnalysisSerializer(serializers.ModelSerializer):
 
 # ── Verificación documental ───────────────────────────────────────────────────
 
+# Documentos que corresponden a un único registro OneToOne por lote y por lo
+# tanto pueden generarse automáticamente con los datos ya cargados en el
+# sistema. Los que quedan fuera (despeje de línea, limpieza, identificación de
+# materia prima) tienen varios registros por lote —uno por fase o por línea—,
+# así que no existe "el" documento único a generar y solo se adjuntan a mano.
+SYSTEM_GENERATED_DOCUMENT_FIELDS = {
+    DocumentChecklistItem.DocumentCode.PRODUCTION_CONTROL: "production_control",
+    DocumentChecklistItem.DocumentCode.DISPENSING_ORDER: "dispensing_order",
+    DocumentChecklistItem.DocumentCode.ANALYSIS_CERTIFICATE: "analysis_certificate",
+    DocumentChecklistItem.DocumentCode.MICROBIOLOGY: "microbiology_analysis",
+    DocumentChecklistItem.DocumentCode.LINE_IDENTIFICATION: "line_identification",
+    DocumentChecklistItem.DocumentCode.FILLING_CONTROL: "filling_control",
+    DocumentChecklistItem.DocumentCode.RELEASE: "release",
+    DocumentChecklistItem.DocumentCode.PACKAGING_CONTROL: "packaging_control",
+    DocumentChecklistItem.DocumentCode.SEAL_INTEGRITY: "seal_integrity_control",
+    DocumentChecklistItem.DocumentCode.WEIGHT_VOLUME: "weight_volume_control",
+}
+
+
 class DocumentChecklistItemSerializer(serializers.ModelSerializer):
+    system_document_available = serializers.SerializerMethodField()
+
     class Meta:
         model = DocumentChecklistItem
         fields = "__all__"
+
+    def get_system_document_available(self, obj):
+        related_name = SYSTEM_GENERATED_DOCUMENT_FIELDS.get(obj.document_code)
+        if not related_name:
+            return False
+        return getattr(obj.batch, related_name, None) is not None
 
 
 class DocumentAttachmentSerializer(serializers.ModelSerializer):

@@ -99,6 +99,7 @@ from ..infrastructure.serializers import (
     DispensingOrderSerializer,
     DocumentAttachmentSerializer,
     DocumentChecklistItemSerializer,
+    SYSTEM_GENERATED_DOCUMENT_FIELDS,
     FillingControlSerializer,
     FillingLogEntrySerializer,
     FillingParticipantSerializer,
@@ -918,6 +919,23 @@ class ProductSpecificationTestViewSet(ManufacturingBaseViewSet):
 
 # ── Verificación documental ───────────────────────────────────────────────────
 
+# Emparejado con SYSTEM_GENERATED_DOCUMENT_FIELDS (infrastructure/serializers.py):
+# misma llave document_code, aquí con el render_fn y el prefijo de archivo que
+# ya usa cada ViewSet individual en su propio endpoint /export.
+RENDER_FN_BY_DOCUMENT_CODE = {
+    "PRODUCTION_CONTROL": (render_production_control_pdf, "control-produccion"),
+    "DISPENSING_ORDER": (render_dispensing_order_pdf, "orden-dispensacion"),
+    "ANALYSIS_CERTIFICATE": (render_analysis_certificate_pdf, "certificado-analisis"),
+    "MICROBIOLOGY": (render_microbiology_analysis_pdf, "analisis-microbiologico"),
+    "LINE_IDENTIFICATION": (render_line_identification_pdf, "identificacion-linea"),
+    "FILLING_CONTROL": (render_filling_control_pdf, "control-llenado"),
+    "RELEASE": (render_batch_release_pdf, "liberacion-lote"),
+    "PACKAGING_CONTROL": (render_packaging_control_pdf, "control-acondicionamiento"),
+    "SEAL_INTEGRITY": (render_seal_integrity_control_pdf, "control-hermeticidad"),
+    "WEIGHT_VOLUME": (render_weight_volume_control_pdf, "control-peso-volumen"),
+}
+
+
 class DocumentChecklistItemViewSet(ManufacturingBaseViewSet):
     queryset = DocumentChecklistItem.objects.select_related("batch", "responsible", "verifier")
     serializer_class = DocumentChecklistItemSerializer
@@ -960,6 +978,32 @@ class DocumentChecklistItemViewSet(ManufacturingBaseViewSet):
             render_fn=render_document_checklist_pdf,
             render_arg=batch,
             filename_prefix="verificacion-documental",
+        )
+
+    @action(detail=True, methods=("get",), url_path="generate")
+    def generate(self, request, pk=None):
+        item = self.get_object()
+        related_name = SYSTEM_GENERATED_DOCUMENT_FIELDS.get(item.document_code)
+        config = RENDER_FN_BY_DOCUMENT_CODE.get(item.document_code)
+        if not related_name or not config:
+            return Response(
+                {"detail": "Este documento tiene varios registros asociados (por fase o por línea); adjúntalo manualmente."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        record = getattr(item.batch, related_name, None)
+        if record is None:
+            return Response(
+                {"detail": "Aún no hay datos suficientes registrados para generar este documento."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        render_fn, filename_prefix = config
+        return self._export_single_document(
+            request,
+            batch=item.batch,
+            document_code=item.document_code,
+            render_fn=render_fn,
+            render_arg=record,
+            filename_prefix=filename_prefix,
         )
 
 

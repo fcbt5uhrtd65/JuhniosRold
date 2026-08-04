@@ -574,6 +574,7 @@ export interface DocumentChecklistItemRecord {
   observations: string;
   generated_file: string | null;
   blocks_release: boolean;
+  system_document_available: boolean;
 }
 
 export interface DocumentChecklistSummary {
@@ -932,6 +933,24 @@ export async function exportDocumentChecklist(batchId: string, batchCode: string
   await downloadBlob(`${BASE}/document-checklist-items/export/?batch=${batchId}`, `verificacion-documental-${batchCode}.pdf`);
 }
 
+export async function viewGeneratedChecklistDocument(itemId: string): Promise<void> {
+  const token = getAccessToken();
+  if (!token) {
+    throw new Error('Tu sesión expiró. Inicia sesión de nuevo.');
+  }
+  const response = await fetch(`${API_BASE_URL}${BASE}/document-checklist-items/${itemId}/generate/`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.detail || 'No se pudo generar el documento.');
+  }
+  const blob = await response.blob();
+  const blobUrl = URL.createObjectURL(blob);
+  window.open(blobUrl, '_blank');
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+}
+
 export async function getBatchAttachments(batchId: string): Promise<DocumentAttachmentRecord[]> {
   return getPage<DocumentAttachmentRecord>(`${BASE}/document-attachments/?batch=${batchId}`);
 }
@@ -945,6 +964,10 @@ export async function uploadBatchAttachment(input: { batch: string; document_cod
   if (input.description) formData.append('description', input.description);
   const { data } = await api.post<DocumentAttachmentRecord>(`${BASE}/document-attachments/`, formData);
   return data as DocumentAttachmentRecord;
+}
+
+export async function deleteBatchAttachment(id: string): Promise<void> {
+  await api.delete(`${BASE}/document-attachments/${id}/`);
 }
 
 // ── Liberación ────────────────────────────────────────────────────────────────

@@ -552,7 +552,7 @@ function BatchDetail({
       {activeTab === 'filling' && <FillingTab batch={batch} employeeById={employeeById} />}
       {activeTab === 'packaging' && <PackagingTab batch={batch} employeeById={employeeById} employees={Array.from(employeeById.values())} />}
       {activeTab === 'final_quality' && <FinalQualityTab batch={batch} />}
-      {activeTab === 'documents' && <DocumentsTab batch={batch} />}
+      {activeTab === 'documents' && <DocumentsTab batch={batch} onNavigateToTab={setActiveTab} />}
       {activeTab === 'release' && <ReleaseTab batch={batch} employeeById={employeeById} onRefresh={onRefresh} />}
       {activeTab === 'history' && <HistoryTab batch={batch} />}
     </div>
