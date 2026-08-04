@@ -630,7 +630,12 @@ function employeeName(employee: Employee | undefined): string {
 
 function biometricCodeDisplayName(code: string, employeeByBiometricCode: Map<string, Employee>): string {
   const employee = employeeByBiometricCode.get(code);
-  return employee ? employeeName(employee) : `Codigo ${code}`;
+  return employee ? employeeName(employee) : code;
+}
+
+function biometricCodePageName(code: string, employeeByBiometricCode: Map<string, Employee>): string {
+  const employee = employeeByBiometricCode.get(code);
+  return employee ? employeeName(employee) : code;
 }
 
 function describeApiError(error: unknown, fallback: string): string {
@@ -795,6 +800,8 @@ function dayMinutesInSegment(start: number, end: number): number {
   return total;
 }
 
+const FIXED_LUNCH_MINUTES = 60;
+
 function calculatePreviewHours(row: Pick<BiometricPreviewRow, 'checkIn' | 'breakStart' | 'breakEnd' | 'checkOut'>) {
   const checkIn = timeToMinutes(row.checkIn);
   const checkOutRaw = timeToMinutes(row.checkOut);
@@ -808,12 +815,16 @@ function calculatePreviewHours(row: Pick<BiometricPreviewRow, 'checkIn' | 'break
 
   if (breakStartRaw !== null && breakEndRaw !== null) {
     const breakStart = breakStartRaw >= checkIn ? breakStartRaw : breakStartRaw + 1440;
-    const breakEnd = breakEndRaw >= breakStartRaw ? breakEndRaw : breakEndRaw + 1440;
-    if (checkIn < breakStart && breakStart < breakEnd && breakEnd < checkOut) {
-      segments.push([checkIn, breakStart], [breakEnd, checkOut]);
+    if (checkIn < breakStart && breakStart < checkOut) {
+      const fixedBreakEnd = Math.min(checkOut, breakStart + FIXED_LUNCH_MINUTES);
+      segments.push([checkIn, breakStart], [fixedBreakEnd, checkOut]);
     } else {
       segments.push([checkIn, checkOut]);
     }
+  } else if (checkOut - checkIn >= 6 * 60) {
+    const lunchStart = Math.min(checkIn + 5 * 60, Math.max(checkIn, checkOut - FIXED_LUNCH_MINUTES));
+    const lunchEnd = Math.min(checkOut, lunchStart + FIXED_LUNCH_MINUTES);
+    segments.push(...([[checkIn, lunchStart], [lunchEnd, checkOut]].filter(([start, end]) => end > start) as Array<[number, number]>));
   } else {
     segments.push([checkIn, checkOut]);
   }
@@ -1090,14 +1101,14 @@ function biometricPayrollBreakdown(row: BiometricPreviewRow | undefined, holiday
   const breakEndRaw = timeToMinutes(row.breakEnd);
   const hasFullBreak = breakStartRaw !== null && breakEndRaw !== null;
   const breakStart = breakStartRaw !== null && breakStartRaw < checkIn ? breakStartRaw + 1440 : breakStartRaw;
-  const breakEnd = breakEndRaw !== null && breakStartRaw !== null && breakEndRaw < breakStartRaw ? breakEndRaw + 1440 : breakEndRaw;
-  const fallbackLunchMinutes = !hasFullBreak && rawMinutes >= 6 * 60 && expectedOrdinaryMinutesForPreview(row.date, holiday) > 0 ? 60 : 0;
+  const fallbackLunchMinutes = !hasFullBreak && rawMinutes >= 6 * 60 && expectedOrdinaryMinutesForPreview(row.date, holiday) > 0 ? FIXED_LUNCH_MINUTES : 0;
   let lunchMinutes = fallbackLunchMinutes;
   let segments: Array<[number, number]> = [[checkIn, checkOut]];
 
-  if (breakStart !== null && breakEnd !== null && checkIn < breakStart && breakStart < breakEnd && breakEnd < checkOut) {
-    lunchMinutes = Math.max(0, breakEnd - breakStart);
-    segments = [[checkIn, breakStart], [breakEnd, checkOut]];
+  if (breakStart !== null && breakEnd !== null && checkIn < breakStart && breakStart < checkOut) {
+    const fixedBreakEnd = Math.min(checkOut, breakStart + FIXED_LUNCH_MINUTES);
+    lunchMinutes = Math.max(0, fixedBreakEnd - breakStart);
+    segments = [[checkIn, breakStart], [fixedBreakEnd, checkOut]].filter(([start, end]) => end > start);
   } else if (fallbackLunchMinutes > 0) {
     const lunchStart = Math.min(checkIn + 5 * 60, Math.max(checkIn, checkOut - fallbackLunchMinutes));
     const lunchEnd = Math.min(checkOut, lunchStart + fallbackLunchMinutes);
@@ -1178,6 +1189,7 @@ function buildBiometricCodeDayRows(
   rows: BiometricPreviewRow[],
   holidaysByDate: Map<string, PublicHoliday>,
   dateRange: string[],
+  employeeLabel: string,
 ): XlsxCell[][] {
   const rowsByDate = new Map(rows.map((row) => [row.date, row]));
   return dateRange.map((date) => {
@@ -1187,7 +1199,7 @@ function buildBiometricCodeDayRows(
     const breakdown = biometricPayrollBreakdown(row, holiday);
     const rowStyle = row?.status === 'Revisar' || row?.status === 'Incompleto' ? XLSX_STYLE.warning : 3;
     return [
-      xlsxCell(row ? code : ''),
+      xlsxCell(row ? employeeLabel : ''),
       xlsxCell(formatDate(date)),
       xlsxCell(WEEKDAY_LABELS[mondayWeekdayIndex(date)]),
       xlsxCell(row?.checkIn === '-' ? '' : row?.checkIn ?? ''),
@@ -1353,7 +1365,7 @@ function buildBiometricPreviewXlsx(
     ]);
 
     const detailHeader = [
-      'COD',
+      'EMPLEADO/CODIGO',
       'FECHA',
       'DIA',
       'ENTRADA',
@@ -1380,7 +1392,8 @@ function buildBiometricPreviewXlsx(
       'TIMBRADAS',
       'TODAS LAS TIMBRADAS',
     ];
-    const dayRows = buildBiometricCodeDayRows(code, codeRows, holidaysByDate, exportRange);
+    const pageName = biometricCodePageName(code, employeeByBiometricCode);
+    const dayRows = buildBiometricCodeDayRows(code, codeRows, holidaysByDate, exportRange, pageName);
     const totalRow = [
       xlsxCell('TOTALES', XLSX_STYLE.total),
       xlsxCell(''),
@@ -1439,7 +1452,7 @@ function buildBiometricPreviewXlsx(
     ];
 
     return {
-      name: uniqueSheetName(`COD ${code}`, usedSheetNames),
+      name: uniqueSheetName(pageName, usedSheetNames),
       widths: [10, 14, 12, 13, 13, 13, 17, 12, 17, 16, 11, 18, 17, 16, 19, 21, 19, 21, 14, 14, 24, 14, 20, 42, 11, 42],
       rows: [
         [xlsxCell('NOMINA BIOMETRICA', XLSX_STYLE.title), xlsxCell(displayName, XLSX_STYLE.title), xlsxCell(`CODIGO ${code}`, XLSX_STYLE.title)],
@@ -1469,6 +1482,100 @@ function buildBiometricPreviewXlsx(
     ...codeSheets,
   ];
   return createXlsxBlob(sheets);
+}
+
+function buildBiometricCalendarXlsx(
+  rows: BiometricPreviewRow[],
+  holidaysByDate: Map<string, PublicHoliday>,
+  dateRange: string[],
+  fileName: string,
+  employeeByBiometricCode: Map<string, Employee>,
+): Blob {
+  const exportRange = biometricExportDateRange(rows, dateRange);
+  const months = groupDatesByMonth(exportRange);
+  const byCode = new Map<string, BiometricPreviewRow[]>();
+  rows.forEach((row) => {
+    const group = byCode.get(row.code) ?? [];
+    group.push(row);
+    byCode.set(row.code, group);
+  });
+  const codeGroups = [...byCode.entries()]
+    .map(([code, codeRows]) => [code, [...codeRows].sort((left, right) => left.date.localeCompare(right.date))] as const)
+    .sort(([left], [right]) => left.localeCompare(right, 'es', { numeric: true }));
+  const usedSheetNames = new Set<string>();
+  const summaryRows: XlsxCell[][] = [
+    [xlsxCell('CALENDARIO BIOMETRICO', XLSX_STYLE.title)],
+    [xlsxCell('Archivo', XLSX_STYLE.softHeader), xlsxCell(fileName || 'TXT biometrico')],
+    [xlsxCell('Periodo', XLSX_STYLE.softHeader), xlsxCell(exportRange.length ? `${formatDate(exportRange[0])} - ${formatDate(exportRange[exportRange.length - 1])}` : 'Sin rango')],
+    [],
+    ['Empleado/Codigo', 'Codigo reloj', 'Dias con marca', 'Faltas laborales', 'Festivos', 'Dias por revisar'].map((label) => xlsxCell(label, XLSX_STYLE.tableHeader)),
+  ];
+
+  const calendarSheets = codeGroups.map(([code, codeRows]) => {
+    const rowsByDate = new Map(codeRows.map((row) => [row.date, row]));
+    const summary = summarizeBiometricCodeRows(codeRows, holidaysByDate, exportRange);
+    const pageName = biometricCodePageName(code, employeeByBiometricCode);
+    summaryRows.push([
+      xlsxCell(pageName),
+      xlsxCell(code),
+      xlsxCell(summary.daysWithMarks),
+      xlsxCell(summary.missingWorkDays),
+      xlsxCell(summary.holidayDays),
+      xlsxCell(summary.reviewDays),
+    ].map((cell) => ({ ...cell, style: cell.style || (summary.reviewDays > 0 ? XLSX_STYLE.warning : 3) })));
+
+    const calendarRows: XlsxCell[][] = [
+      [xlsxCell('CALENDARIO BIOMETRICO', XLSX_STYLE.title), xlsxCell(pageName, XLSX_STYLE.title), xlsxCell(`CODIGO ${code}`, XLSX_STYLE.title)],
+      [xlsxCell('Archivo', XLSX_STYLE.softHeader), xlsxCell(fileName || 'TXT biometrico'), xlsxCell('Periodo', XLSX_STYLE.softHeader), xlsxCell(exportRange.length ? `${formatDate(exportRange[0])} - ${formatDate(exportRange[exportRange.length - 1])}` : 'Sin rango')],
+      [xlsxCell('Empleado/Codigo', XLSX_STYLE.softHeader), xlsxCell(pageName), xlsxCell('Dias por revisar', XLSX_STYLE.softHeader), xlsxCell(summary.reviewDays)],
+      [],
+    ];
+
+    months.forEach((month) => {
+      calendarRows.push([xlsxCell(month.title.toUpperCase(), XLSX_STYLE.darkHeader)]);
+      calendarRows.push(WEEKDAY_LABELS.map((label) => xlsxCell(label, XLSX_STYLE.tableHeader)));
+      const paddedCells = [...month.cells];
+      while (paddedCells.length % 7 !== 0) paddedCells.push(null);
+      for (let index = 0; index < paddedCells.length; index += 7) {
+        calendarRows.push(paddedCells.slice(index, index + 7).map((date) => {
+          if (!date) return xlsxCell('');
+          const row = rowsByDate.get(date);
+          const holiday = holidaysByDate.get(date);
+          const weekend = isWeekendDate(date);
+          const day = String(parseLocalDate(date).getDate());
+          if (!row) {
+            const label = holiday ? `${day} - ${holiday.name}` : weekend ? `${day} - Descanso` : `${day} - Sin marca`;
+            return xlsxCell(label, holiday || weekend ? 3 : XLSX_STYLE.warning);
+          }
+          const breakdown = biometricPayrollBreakdown(row, holiday);
+          const value = [
+            day,
+            `${row.checkIn} - ${row.checkOut}`,
+            `Almuerzo: ${breakdown.lunchHours || 0}h`,
+            `Trab: ${previewDurationLabel(row)}`,
+            biometricStatus(row, holiday, weekend),
+          ].join(' | ');
+          return xlsxCell(value, row.status === 'Completo' ? 3 : XLSX_STYLE.warning);
+        }));
+      }
+      calendarRows.push([]);
+    });
+
+    return {
+      name: uniqueSheetName(pageName, usedSheetNames),
+      widths: [24, 24, 24, 24, 24, 24, 24],
+      rows: calendarRows,
+    };
+  });
+
+  return createXlsxBlob([
+    {
+      name: uniqueSheetName('Resumen calendario', usedSheetNames),
+      widths: [32, 14, 16, 16, 12, 16],
+      rows: summaryRows,
+    },
+    ...calendarSheets,
+  ]);
 }
 
 export function AdminPayroll() {
@@ -2739,6 +2846,29 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
     toast.success(code ? `Exportado el Excel del codigo ${code}.` : 'Exportado el Excel por codigo.');
   };
 
+  const exportPreviewCalendarRows = (rows: BiometricPreviewRow[], code?: string) => {
+    if (rows.length === 0) {
+      toast.warning('No hay marcaciones para exportar.');
+      return;
+    }
+    const orderedRows = [...rows].sort((left, right) => left.code.localeCompare(right.code, 'es', { numeric: true }) || left.date.localeCompare(right.date));
+    const exportRange = biometricExportDateRange(orderedRows, previewDateRange);
+    const start = exportRange[0] ?? orderedRows[0]?.date ?? uploadDateFrom;
+    const end = exportRange[exportRange.length - 1] ?? orderedRows[orderedRows.length - 1]?.date ?? uploadDateTo;
+    const cleanCode = code ? code.replace(/[^a-zA-Z0-9_-]/g, '_') : 'todos';
+    downloadBlob(
+      `biometrico_calendario_${cleanCode}_${start || 'inicio'}_${end || 'fin'}.xlsx`,
+      buildBiometricCalendarXlsx(
+        orderedRows,
+        previewHolidaysByDate,
+        previewDateRange,
+        previewFileName,
+        employeeByBiometricCode,
+      ),
+    );
+    toast.success(code ? `Exportado el calendario del codigo ${code}.` : 'Exportado el calendario completo.');
+  };
+
   const updateSavedAnalyses = (items: SavedBiometricAnalysis[]) => {
     setSavedAnalyses(items);
     persistSavedBiometricAnalyses(items);
@@ -2955,8 +3085,8 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
                     {expandedPreviewCodes.size === previewByCode.length ? 'Ocultar todos' : 'Ver todos'}
                   </SecondaryButton>
                 )}
-                <SecondaryButton onClick={() => exportPreviewRows(previewRows)} icon={<Download size={13} />}>
-                  Exportar todo
+                <SecondaryButton onClick={() => (previewMode === 'calendar' ? exportPreviewCalendarRows(previewRows) : exportPreviewRows(previewRows))} icon={<Download size={13} />}>
+                  {previewMode === 'calendar' ? 'Exportar calendario' : 'Exportar todo'}
                 </SecondaryButton>
               </div>
             </div>
@@ -3012,10 +3142,10 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
                       </div>
                       <button
                         type="button"
-                        onClick={() => exportPreviewRows(group.rows, group.code)}
+                        onClick={() => exportPreviewCalendarRows(group.rows, group.code)}
                         className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-[11px] font-semibold text-[#2a4038] hover:bg-gray-50"
                       >
-                        <Download size={12} /> Exportar codigo
+                        <Download size={12} /> Exportar calendario
                       </button>
                     </div>
                     <div className="space-y-3 p-3">

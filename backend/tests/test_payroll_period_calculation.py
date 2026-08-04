@@ -110,6 +110,60 @@ class PayrollPeriodCalculationTests(TestCase):
         self.assertEqual(payroll.overtime_hours, Decimal("1.00"))
         self.assertEqual(overtime_item.amount, Decimal("9948.32"))
 
+    def test_attendance_payroll_always_discounts_one_lunch_hour(self):
+        employee = Employee.objects.create(
+            employee_code="EMP-LUNCH-001",
+            first_name="Almuerzo",
+            last_name="Fijo",
+            base_salary=Decimal("1750905"),
+            status=Employee.Status.ACTIVE,
+        )
+        PayrollLegalParameter.objects.create(
+            year=2026,
+            minimum_wage=Decimal("1423500"),
+            transport_allowance_amount=Decimal("0"),
+            health_employee_pct=Decimal("4"),
+            pension_employee_pct=Decimal("4"),
+            monthly_hours_divisor_default=Decimal("220"),
+            day_extra_surcharge_pct=Decimal("25"),
+        )
+        schedule = EmployeeWorkSchedule.objects.create(employee=employee, start_date="2026-04-01")
+        EmployeeWorkScheduleDay.objects.create(
+            schedule=schedule,
+            weekday=0,
+            slot=1,
+            expected_start_time=time(7, 0),
+            expected_end_time=time(12, 0),
+        )
+        EmployeeWorkScheduleDay.objects.create(
+            schedule=schedule,
+            weekday=0,
+            slot=2,
+            expected_start_time=time(13, 0),
+            expected_end_time=time(17, 0),
+        )
+        period = PayrollPeriod.objects.create(
+            period_start="2026-04-20",
+            period_end="2026-04-20",
+            label="Nomina almuerzo fijo",
+        )
+        Attendance.objects.create(
+            employee=employee,
+            date="2026-04-20",
+            check_in=timezone.make_aware(datetime(2026, 4, 20, 7, 0)),
+            break_start=timezone.make_aware(datetime(2026, 4, 20, 12, 0)),
+            break_end=timezone.make_aware(datetime(2026, 4, 20, 12, 30)),
+            check_out=timezone.make_aware(datetime(2026, 4, 20, 18, 0)),
+            source=Attendance.Source.BIOMETRIC,
+        )
+
+        payroll = CalculateEmployeePayrollForPeriod().execute(period=period, employee=employee)
+        overtime_item = payroll.items.get(concept_code="OVERTIME_DAY")
+
+        self.assertEqual(payroll.ordinary_hours, Decimal("9.00"))
+        self.assertEqual(payroll.overtime_hours, Decimal("1.00"))
+        self.assertEqual(overtime_item.amount, Decimal("9948.32"))
+
     def test_manual_payroll_item_does_not_double_count_base_salary(self):
         employee = Employee.objects.create(
             employee_code="EMP-LEGACY-206",

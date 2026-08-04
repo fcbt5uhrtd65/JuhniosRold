@@ -1498,10 +1498,32 @@ class CalculateEmployeePayrollForPeriod:
     def _work_segments(self, attendance) -> list:
         """[(inicio, fin)] de tramos trabajados de un Attendance consolidado,
         excluyendo el descanso si está registrado."""
-        if attendance.break_start and attendance.break_end:
+        lunch_minutes = SCHEDULE_CHANGE_DAILY_LUNCH_MINUTES
+        if attendance.break_start and attendance.break_end and attendance.check_in < attendance.break_start < attendance.check_out:
+            lunch_start = attendance.break_start
+            lunch_end = min(attendance.check_out, lunch_start + timedelta(minutes=lunch_minutes))
             return [
-                (attendance.check_in, attendance.break_start),
-                (attendance.break_end, attendance.check_out),
+                segment
+                for segment in (
+                    (attendance.check_in, lunch_start),
+                    (lunch_end, attendance.check_out),
+                )
+                if segment[1] > segment[0]
+            ]
+        total_minutes = int((attendance.check_out - attendance.check_in).total_seconds() // 60)
+        if total_minutes >= 6 * 60:
+            lunch_start = min(
+                attendance.check_in + timedelta(hours=5),
+                max(attendance.check_in, attendance.check_out - timedelta(minutes=lunch_minutes)),
+            )
+            lunch_end = min(attendance.check_out, lunch_start + timedelta(minutes=lunch_minutes))
+            return [
+                segment
+                for segment in (
+                    (attendance.check_in, lunch_start),
+                    (lunch_end, attendance.check_out),
+                )
+                if segment[1] > segment[0]
             ]
         return [(attendance.check_in, attendance.check_out)]
 
