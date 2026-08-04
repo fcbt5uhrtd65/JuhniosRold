@@ -951,6 +951,27 @@ class PayrollViewSet(SoftDeleteModelViewSet):
             resource_type=instance.__class__.__name__, resource_id=instance.pk,
         )
 
+    def create(self, request, *args, **kwargs):
+        return Response(
+            {"detail": "La nomina se genera desde periodos; usa el flujo de calculo de nomina."},
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
+    def update(self, request, *args, **kwargs):
+        return Response(
+            {"detail": "La nomina calculada no se edita directamente. Agrega ajustes manuales mientras este en borrador."},
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
+    def partial_update(self, request, *args, **kwargs):
+        return self.update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        return Response(
+            {"detail": "La nomina calculada no se elimina directamente desde este endpoint."},
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
     @action(detail=False, methods=("get",), url_path="me")
     def me(self, request):
         employee = getattr(request.user, "employee_profile", None)

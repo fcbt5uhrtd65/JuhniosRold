@@ -264,6 +264,26 @@ class PayrollSerializer(serializers.ModelSerializer):
     class Meta:
         model = Payroll
         fields = "__all__"
+        read_only_fields = (
+            "items",
+            "employee_name",
+            "status",
+            "period",
+            "payslip_number",
+            "worked_days",
+            "ordinary_hours",
+            "overtime_hours",
+            "transport_allowance",
+            "health_deduction",
+            "pension_deduction",
+            "gross_earnings",
+            "total_deductions",
+            "approved_by",
+            "approved_at",
+            "paid_at",
+            "payment_reference",
+            "signature",
+        )
 
     def get_employee_name(self, obj):
         employee = obj.employee
