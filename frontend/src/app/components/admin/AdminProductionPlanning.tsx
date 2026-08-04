@@ -13,7 +13,7 @@ import {
 import { getItemStocks, type ItemStockRecord } from '../../services/manufacturing.service';
 import { useToast } from '../../contexts/ToastContext';
 import {
-  Badge, Field, Table, Th, Td, Drawer, PageHeader, inputCls, selectCls,
+  Badge, Field, Table, Th, Td, Drawer, EmptyState, PageHeader, inputCls, selectCls,
 } from './AdminUI';
 
 /* ═══════════════════════════════════════════════════════
@@ -79,10 +79,6 @@ function unitLabel(data: InventoryWorkspace | null, unitId: string | null | unde
 
 function currentDateInput() {
   return new Date().toISOString().slice(0, 10);
-}
-
-function LoadingRow({ colSpan }: { colSpan: number }) {
-  return <tr><td colSpan={colSpan} className="px-4 py-8 text-center text-sm text-gray-400"><Loader2 size={16} className="inline animate-spin mr-2" /> Cargando...</td></tr>;
 }
 
 function EmptyRow({ colSpan, label }: { colSpan: number; label: string }) {
@@ -187,47 +183,54 @@ export function AdminProductionPlanning({ onCreateBatch, refreshKey }: { onCreat
       {/* ÓRDENES */}
       {tab === 'ordenes' && (
         <>
-          <PageHeader title="Órdenes de Producción" subtitle="Planificación y control del proceso productivo" onNew={onCreateBatch} newLabel="Nueva Orden" />
+          <PageHeader title="Órdenes de Producción" subtitle="Planificación y control del proceso productivo" onNew={onCreateBatch} newLabel="Nuevo lote" />
           <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 mb-5">
             <p className="text-xs text-blue-700 font-medium">
-              Las órdenes de producción se crean junto con su expediente de lote GMP desde "Expedientes de lote → Nuevo lote", para que toda orden quede desde el inicio bajo trazabilidad de calidad.
+              "Nuevo lote" crea la orden de producción y su expediente GMP en un solo paso, para que toda orden quede desde el inicio bajo trazabilidad de calidad. Para dispensar, fabricar, liberar y ver el detalle del proceso, ve a la pestaña "Expedientes de lote".
             </p>
           </div>
-          <div className="grid grid-cols-4 gap-4 mb-5">
-            {[
-              { label: 'Pendientes', value: (data?.productionOrders ?? []).filter(o => o.status === 'PENDING').length, color: 'bg-amber-50 text-amber-600 border-amber-100' },
-              { label: 'En Proceso', value: (data?.productionOrders ?? []).filter(o => o.status === 'IN_PROGRESS').length, color: 'bg-blue-50 text-blue-600 border-blue-100' },
-              { label: 'Cerradas (mes)', value: (data?.productionOrders ?? []).filter(o => o.status === 'CLOSED').length, color: 'bg-emerald-50 text-emerald-600 border-emerald-100' },
-              { label: 'Sin Recepción PT', value: (data?.productionOrders ?? []).filter(o => o.is_dispensed && !o.is_output_received && o.status !== 'PENDING').length, color: 'bg-red-50 text-red-600 border-red-100' },
-            ].map(s => <div key={s.label} className={`border rounded-2xl p-4 ${s.color}`}><p className="text-3xl font-bold">{s.value}</p><p className="text-xs font-medium mt-0.5">{s.label}</p></div>)}
-          </div>
-          <Table>
-            <thead><tr><Th>Número</Th><Th>Producto</Th><Th>Plan</Th><Th>Real</Th><Th>Estado</Th><Th>Dispensada</Th><Th>PT Recibido</Th><Th>Responsable</Th><Th>Acciones</Th></tr></thead>
-            <tbody>
-              {loading && <LoadingRow colSpan={9} />}
-              {!loading && (data?.productionOrders ?? []).map(op => (
-                <tr key={op.id} className="hover:bg-gray-50/50">
-                  <Td><span className="font-mono text-xs font-semibold text-[#2a4038]">{op.number}</span></Td>
-                  <Td className="font-medium text-gray-900">{itemName(data, op.output_item)}</Td>
-                  <Td className="font-bold">{numeric(op.planned_quantity).toLocaleString()}</Td>
-                  <Td className={numeric(op.actual_quantity) > 0 ? 'font-bold text-emerald-600' : 'text-gray-400'}>{numeric(op.actual_quantity) > 0 ? numeric(op.actual_quantity).toLocaleString() : '—'}</Td>
-                  <Td><Badge label={estadoApiLabel[op.status]} color={estadoApiColor[op.status]} /></Td>
-                  <Td>{op.is_dispensed ? <CheckCircle size={14} className="text-emerald-500" /> : <Clock size={14} className="text-gray-300" />}</Td>
-                  <Td>{op.is_output_received ? <CheckCircle size={14} className="text-emerald-500" /> : <Clock size={14} className="text-gray-300" />}</Td>
-                  <Td className="text-xs text-gray-500">{op.responsible || '—'}</Td>
-                  <Td>
-                    <div className="flex gap-1">
-                      <button className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600"><Eye size={13} /></button>
-                      {op.status === 'IN_PROGRESS' && op.is_dispensed && op.is_output_received && (
-                        <button onClick={() => { setCierreOP(op); setCierreForm({ actualQuantity: op.planned_quantity, notes: '' }); }} className="p-1.5 rounded-lg hover:bg-emerald-50 text-gray-400 hover:text-emerald-600" title="Cerrar orden"><ClipboardCheck size={13} /></button>
-                      )}
-                    </div>
-                  </Td>
-                </tr>
-              ))}
-              {!loading && (data?.productionOrders ?? []).length === 0 && <EmptyRow colSpan={9} label="Sin órdenes de producción registradas" />}
-            </tbody>
-          </Table>
+          {loading && !data ? (
+            <div className="bg-white border border-gray-100 rounded-2xl p-6 text-center text-sm text-gray-400">
+              <Loader2 size={16} className="inline animate-spin mr-2" /> Cargando órdenes de producción...
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-4 gap-4 mb-5">
+                {[
+                  { label: 'Pendientes', value: (data?.productionOrders ?? []).filter(o => o.status === 'PENDING').length, color: 'bg-amber-50 text-amber-600 border-amber-100' },
+                  { label: 'En Proceso', value: (data?.productionOrders ?? []).filter(o => o.status === 'IN_PROGRESS').length, color: 'bg-blue-50 text-blue-600 border-blue-100' },
+                  { label: 'Cerradas (mes)', value: (data?.productionOrders ?? []).filter(o => o.status === 'CLOSED').length, color: 'bg-emerald-50 text-emerald-600 border-emerald-100' },
+                  { label: 'Sin Recepción PT', value: (data?.productionOrders ?? []).filter(o => o.is_dispensed && !o.is_output_received && o.status !== 'PENDING').length, color: 'bg-red-50 text-red-600 border-red-100' },
+                ].map(s => <div key={s.label} className={`border rounded-2xl p-4 ${s.color}`}><p className="text-3xl font-bold">{s.value}</p><p className="text-xs font-medium mt-0.5">{s.label}</p></div>)}
+              </div>
+              <Table>
+                <thead><tr><Th>Número</Th><Th>Producto</Th><Th>Plan</Th><Th>Real</Th><Th>Estado</Th><Th>Dispensada</Th><Th>PT Recibido</Th><Th>Responsable</Th><Th>Acciones</Th></tr></thead>
+                <tbody>
+                  {(data?.productionOrders ?? []).map(op => (
+                    <tr key={op.id} className="hover:bg-gray-50/50">
+                      <Td><span className="font-mono text-xs font-semibold text-[#2a4038]">{op.number}</span></Td>
+                      <Td className="font-medium text-gray-900">{itemName(data, op.output_item)}</Td>
+                      <Td className="font-bold">{numeric(op.planned_quantity).toLocaleString()}</Td>
+                      <Td className={numeric(op.actual_quantity) > 0 ? 'font-bold text-emerald-600' : 'text-gray-400'}>{numeric(op.actual_quantity) > 0 ? numeric(op.actual_quantity).toLocaleString() : '—'}</Td>
+                      <Td><Badge label={estadoApiLabel[op.status]} color={estadoApiColor[op.status]} /></Td>
+                      <Td>{op.is_dispensed ? <CheckCircle size={14} className="text-emerald-500" /> : <Clock size={14} className="text-gray-300" />}</Td>
+                      <Td>{op.is_output_received ? <CheckCircle size={14} className="text-emerald-500" /> : <Clock size={14} className="text-gray-300" />}</Td>
+                      <Td className="text-xs text-gray-500">{op.responsible || '—'}</Td>
+                      <Td>
+                        <div className="flex gap-1">
+                          <button className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600"><Eye size={13} /></button>
+                          {op.status === 'IN_PROGRESS' && op.is_dispensed && op.is_output_received && (
+                            <button onClick={() => { setCierreOP(op); setCierreForm({ actualQuantity: op.planned_quantity, notes: '' }); }} className="p-1.5 rounded-lg hover:bg-emerald-50 text-gray-400 hover:text-emerald-600" title="Cerrar orden"><ClipboardCheck size={13} /></button>
+                          )}
+                        </div>
+                      </Td>
+                    </tr>
+                  ))}
+                  {(data?.productionOrders ?? []).length === 0 && <EmptyRow colSpan={9} label="Sin órdenes de producción registradas" />}
+                </tbody>
+              </Table>
+            </>
+          )}
 
           {/* Modal de Cierre de OP */}
           {cierreOP && (
@@ -266,6 +269,14 @@ export function AdminProductionPlanning({ onCreateBatch, refreshKey }: { onCreat
         <>
           <PageHeader title="Fórmulas y Recetas" subtitle="Composición de ingredientes por producto" onNew={() => setDrawerOpen(true)} newLabel="Nueva Fórmula" />
           {loading && <div className="bg-white border border-gray-100 rounded-2xl p-6 text-center text-sm text-gray-400"><Loader2 size={16} className="inline animate-spin mr-2" /> Cargando fórmulas...</div>}
+          {!loading && (data?.formulas ?? []).length === 0 && (
+            <div className="bg-white border border-gray-100 rounded-2xl shadow-sm">
+              <EmptyState
+                title="Sin fórmulas registradas"
+                description="Crea la primera fórmula para poder generar lotes: define el producto resultante, el rendimiento base y los ingredientes."
+              />
+            </div>
+          )}
           {!loading && (data?.formulas ?? []).map(f => (
             <div key={f.id} className="bg-white border border-gray-100 rounded-2xl shadow-sm mb-4">
               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">

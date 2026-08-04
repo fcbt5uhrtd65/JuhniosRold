@@ -119,6 +119,22 @@ export function batchProgressPercentage(status: BatchStatus): number {
   return index >= 0 ? Math.round(((index + 1) / STATUS_ORDER.length) * 100) : 100;
 }
 
+const TERMINAL_STATUS_LABELS: Partial<Record<BatchStatus, string>> = {
+  RELEASED: 'Lote liberado',
+  REJECTED: 'Lote rechazado',
+  CLOSED: 'Lote cerrado',
+  CANCELLED: 'Lote cancelado',
+};
+
+// Texto guía ("qué hacer ahora") para tarjetas de lista y encabezados de detalle,
+// derivado del mismo mapeo que resalta la pestaña activa (STATUS_TO_CURRENT_TAB).
+export function nextStepLabel(status: BatchStatus): string {
+  const terminal = TERMINAL_STATUS_LABELS[status];
+  if (terminal) return terminal;
+  const tab = BATCH_TABS.find((t) => t.id === STATUS_TO_CURRENT_TAB[status]);
+  return tab ? `Siguiente: ${tab.label}` : '';
+}
+
 export function getMediaUrl(url: string): string {
   try {
     const parsed = new URL(url);

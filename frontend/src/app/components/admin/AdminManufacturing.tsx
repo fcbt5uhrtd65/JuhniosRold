@@ -47,6 +47,7 @@ import {
   batchProgressPercentage,
   formatDate,
   getEmployeeName,
+  nextStepLabel,
   statusBadgeColor,
   type BatchTab,
   type ManufacturingSection,
@@ -68,7 +69,7 @@ import { FinalQualityTab, DocumentsTab, ReleaseTab, HistoryTab } from './manufac
 export function AdminManufacturing() {
   const toast = useToast();
   const [isLoading, setIsLoading] = useState(true);
-  const [activeSection, setActiveSection] = useState<ManufacturingSection>('batches');
+  const [activeSection, setActiveSection] = useState<ManufacturingSection>('planning');
   const [batches, setBatches] = useState<BatchRecord[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [productionOrders, setProductionOrders] = useState<ProductionOrderRecord[]>([]);
@@ -164,6 +165,11 @@ export function AdminManufacturing() {
       />
 
       <TabBar tabs={MANUFACTURING_SECTIONS} value={activeSection} onChange={setActiveSection} />
+      <p className="text-xs text-gray-400 -mt-4 mb-5">
+        {activeSection === 'planning'
+          ? 'Aquí defines fórmulas/recetas y consultas el estado general (Pendiente / En proceso / Cerrada) de las órdenes de producción.'
+          : 'Aquí ejecutas y documentas el proceso de cada lote paso a paso: dispensación, fabricación, calidad, llenado, acondicionamiento y liberación.'}
+      </p>
 
       {activeSection === 'planning' && (
         <AdminProductionPlanning
@@ -213,6 +219,7 @@ export function AdminManufacturing() {
                   </div>
                   <span className="text-[10px] font-semibold text-gray-400">{batchProgressPercentage(batch.status)}%</span>
                 </div>
+                <p className="text-[11px] font-semibold text-[#2a4038] mt-1.5">{nextStepLabel(batch.status)}</p>
               </div>
               <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
                 <button
@@ -381,7 +388,7 @@ function NewBatchModal({
               Se creará la orden de producción y el expediente del lote en un solo paso.
             </p>
             <label className="block">
-              <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Fórmula / Receta</span>
+              <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Fórmula / Receta <span className="text-red-500">*</span></span>
               <select value={formulaId} onChange={(e) => setFormulaId(e.target.value)} className={selectCls}>
                 <option value="">Seleccionar fórmula...</option>
                 {formulas.map((formula) => (
@@ -396,7 +403,7 @@ function NewBatchModal({
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
-                <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Cantidad planificada</span>
+                <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Cantidad planificada <span className="text-red-500">*</span></span>
                 <input type="number" value={plannedQuantity} onChange={(e) => setPlannedQuantity(e.target.value)} className={inputCls} />
               </label>
               <label className="block">
@@ -407,7 +414,7 @@ function NewBatchModal({
           </>
         ) : (
           <label className="block">
-            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Orden de producción</span>
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Orden de producción <span className="text-red-500">*</span></span>
             <select value={productionOrderId} onChange={(e) => setProductionOrderId(e.target.value)} className={selectCls}>
               <option value="">Seleccionar orden...</option>
               {productionOrders.map((order) => (
@@ -423,6 +430,10 @@ function NewBatchModal({
             )}
           </label>
         )}
+
+        <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 pt-2 border-t border-gray-100">
+          Asignación (opcional, puedes completarla después)
+        </p>
 
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
@@ -517,8 +528,11 @@ function BatchDetail({
           <h2 className="text-lg font-semibold text-gray-900">{batch.batch_code || batch.production_order_number}</h2>
           <p className="text-xs text-gray-500">{batch.production_order_number}</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge label={STATUS_LABELS[batch.status]} color={statusBadgeColor(batch.status)} />
+        <div className="flex items-center gap-3">
+          <div className="text-right">
+            <Badge label={STATUS_LABELS[batch.status]} color={statusBadgeColor(batch.status)} />
+            <p className="text-[11px] text-gray-400 mt-1">{nextStepLabel(batch.status)}</p>
+          </div>
           {!batch.actual_start_at && (
             <PrimaryButton onClick={() => void handleStart()} disabled={starting} icon={starting ? <Loader2 size={14} className="animate-spin" /> : <PlayCircle size={14} />}>
               {starting ? 'Iniciando...' : 'Iniciar lote'}
