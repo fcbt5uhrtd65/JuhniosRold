@@ -565,7 +565,7 @@ function BatchDetail({
       {activeTab === 'packaging_control' && <PackagingControlTab batch={batch} employeeById={employeeById} employees={Array.from(employeeById.values())} />}
       {activeTab === 'cleaning_early' && <CleaningEarlyTab batch={batch} />}
       {activeTab === 'dispensing' && <DispensingTab batch={batch} employeeById={employeeById} />}
-      {activeTab === 'manufacturing' && <ManufacturingTab batch={batch} employeeById={employeeById} />}
+      {activeTab === 'manufacturing' && <ManufacturingTab batch={batch} />}
       {activeTab === 'filling' && <FillingTab batch={batch} employeeById={employeeById} />}
       {activeTab === 'weight_volume' && <WeightVolumeTab batch={batch} />}
       {activeTab === 'clearance_late' && <ClearanceLateTab batch={batch} />}
