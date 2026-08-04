@@ -409,6 +409,9 @@ export function AdminEmployeePortal() {
   const [showCertificateModal, setShowCertificateModal] = useState(false);
   const [allEmployees, setAllEmployees] = useState<Employee[]>([]);
   const [teamRequests, setTeamRequests] = useState<VacationRequest[]>([]);
+  const [teamRequestsTotal, setTeamRequestsTotal] = useState(0);
+  const [teamRequestsPage, setTeamRequestsPage] = useState(1);
+  const [teamRequestsPageSize, setTeamRequestsPageSize] = useState(10);
   const [teamActionId, setTeamActionId] = useState<string | null>(null);
   const [teamDecisionRequest, setTeamDecisionRequest] = useState<{ request: VacationRequest; decision: 'approve' | 'reject' } | null>(null);
   const [teamDecisionComment, setTeamDecisionComment] = useState('');
@@ -420,7 +423,7 @@ export function AdminEmployeePortal() {
       const [employeesRes, requestsRes, teamRequestsRes] = await Promise.allSettled([
         getEmployees({ limit: 200 }),
         getMyVacationRequests({ limit: 200 }),
-        getTeamVacationRequests({ limit: 200 }),
+        getTeamVacationRequests({ page: teamRequestsPage, limit: teamRequestsPageSize }),
       ]);
 
       if (employeesRes.status === 'fulfilled') {
@@ -435,6 +438,7 @@ export function AdminEmployeePortal() {
 
       if (teamRequestsRes.status === 'fulfilled') {
         setTeamRequests(teamRequestsRes.value.data);
+        setTeamRequestsTotal(teamRequestsRes.value.total);
       }
 
     } catch (error) {
@@ -443,7 +447,7 @@ export function AdminEmployeePortal() {
     } finally {
       setIsLoading(false);
     }
-  }, [currentUser?.id, toast]);
+  }, [currentUser?.id, teamRequestsPage, teamRequestsPageSize, toast]);
 
   useEffect(() => {
     void loadData();
@@ -475,6 +479,7 @@ export function AdminEmployeePortal() {
     () => teamRequests.filter((request) => ['PENDING', 'IN_REVIEW', 'PENDING_HR', 'PENDING_ADMIN'].includes(request.status)),
     [teamRequests],
   );
+  const teamRequestsTotalPages = Math.max(1, Math.ceil(teamRequestsTotal / teamRequestsPageSize));
 
   const paginatedRequests = useMemo(() => {
     const start = (requestsPage - 1) * requestsPageSize;
@@ -484,6 +489,10 @@ export function AdminEmployeePortal() {
   useEffect(() => {
     setRequestsPage(1);
   }, [requestsQuery, requestsPageSize]);
+
+  useEffect(() => {
+    setTeamRequestsPage(1);
+  }, [teamRequestsPageSize]);
 
   const overtimeTotalHours = useMemo(() => {
     return overtimeShifts.reduce((total, shift) => {
@@ -917,16 +926,19 @@ export function AdminEmployeePortal() {
         <KpiCard label="Aprobadas" value={String(stats.approved)} icon={CheckCircle2} color="text-emerald-600 bg-emerald-50" />
       </div>
 
-      {teamRequests.length > 0 && (
+      {teamRequestsTotal > 0 && (
         <Card className="p-6 mb-6">
           <div className="flex items-center justify-between gap-3 mb-1">
             <div className="flex items-center gap-2">
               <Users size={15} className="text-gray-400" />
               <h3 className="text-sm font-semibold text-gray-900">Mi equipo a cargo</h3>
             </div>
-            {pendingTeamRequests.length > 0 && (
-              <Badge label={`${pendingTeamRequests.length} pendiente${pendingTeamRequests.length === 1 ? '' : 's'}`} color="yellow" />
-            )}
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Badge label={`${teamRequestsTotal} solicitud${teamRequestsTotal === 1 ? '' : 'es'}`} color="gray" />
+              {pendingTeamRequests.length > 0 && (
+                <Badge label={`${pendingTeamRequests.length} pendiente${pendingTeamRequests.length === 1 ? '' : 's'} en esta página`} color="yellow" />
+              )}
+            </div>
           </div>
           <p className="text-xs text-gray-500 mb-4">
             Como jefe inmediato puedes firmar tu visto bueno o rechazo. La decisión final siempre queda a cargo del Administrador. Las solicitudes ya resueltas se quedan en esta lista con su estado final.
@@ -993,6 +1005,15 @@ export function AdminEmployeePortal() {
                   </div>
                 );
               })}
+              <Pagination
+                currentPage={teamRequestsPage}
+                totalPages={teamRequestsTotalPages}
+                totalItems={teamRequestsTotal}
+                itemsPerPage={teamRequestsPageSize}
+                itemsPerPageOptions={REQUESTS_PAGE_SIZE_OPTIONS}
+                onPageChange={setTeamRequestsPage}
+                onItemsPerPageChange={setTeamRequestsPageSize}
+              />
             </div>
           )}
         </Card>

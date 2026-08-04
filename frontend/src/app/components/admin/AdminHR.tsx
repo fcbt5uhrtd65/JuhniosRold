@@ -619,6 +619,10 @@ function getEmployeeManagerIds(employee: Employee): string[] {
   return [...new Set(ids.filter(Boolean))];
 }
 
+function cleanIdList(ids: string[]): string[] {
+  return [...new Set(ids.map((id) => id.trim()).filter(Boolean))];
+}
+
 function getEmployeeManagerNames(employee: Employee, employeeById: Map<string, Employee>): string {
   const names = getEmployeeManagerIds(employee)
     .map((managerId) => {
@@ -1282,6 +1286,8 @@ function cleanNullable(value: string): string | null {
 }
 
 function buildEmployeePayload(form: EmployeeFormState): EmployeePayload {
+  const managerIds = cleanIdList(form.immediate_managers);
+  const fallbackManager = cleanNullable(form.manager);
   return {
     ...(form.user ? { user: form.user } : {}),
     ...(form.user_role ? { user_role: form.user_role } : {}),
@@ -1312,8 +1318,8 @@ function buildEmployeePayload(form: EmployeeFormState): EmployeePayload {
     marital_status: form.marital_status as EmployeePayload['marital_status'],
     department: cleanNullable(form.department),
     position: cleanNullable(form.position),
-    manager: cleanNullable(form.manager),
-    immediate_managers: form.immediate_managers.length ? form.immediate_managers : cleanNullable(form.manager) ? [cleanNullable(form.manager)!] : [],
+    manager: managerIds[0] ?? fallbackManager,
+    immediate_managers: managerIds.length ? managerIds : fallbackManager ? [fallbackManager] : [],
     employment_type: form.employment_type as EmployeePayload['employment_type'],
     contract_type: form.contract_type as EmployeePayload['contract_type'],
     hire_date: cleanNullable(form.hire_date),
@@ -1516,6 +1522,115 @@ export function SearchableSelectInput({
                 setQuery('');
               }}
               className={`px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 ${option.value === value ? 'bg-gray-50 font-medium' : ''}`}
+            >
+              {option.label}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function MultiSearchableSelectInput({
+  label,
+  values,
+  onChange,
+  options,
+  emptyLabel = 'Buscar y agregar',
+  disabled = false,
+}: {
+  label: string;
+  values: string[];
+  onChange: (values: string[]) => void;
+  options: Array<{ value: string; label: string }>;
+  emptyLabel?: string;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+  const selectedValues = [...new Set(values.filter(Boolean))];
+  const selectedValueSet = new Set(selectedValues);
+  const selectedOptions = selectedValues.map((value) => options.find((option) => option.value === value) ?? { value, label: 'Jefe no encontrado' });
+  const filteredOptions = options
+    .filter((option) => !selectedValueSet.has(option.value))
+    .filter((option) => !query || option.label.toLowerCase().includes(query.toLowerCase()));
+
+  useEffect(() => {
+    function onMouseDown(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+        setQuery('');
+      }
+    }
+    document.addEventListener('mousedown', onMouseDown);
+    return () => document.removeEventListener('mousedown', onMouseDown);
+  }, []);
+
+  const addValue = (value: string) => {
+    onChange(cleanIdList([...selectedValues, value]));
+    setQuery('');
+    setOpen(false);
+  };
+
+  const removeValue = (value: string) => {
+    onChange(cleanIdList(selectedValues.filter((current) => current !== value)));
+  };
+
+  return (
+    <div className="block relative" ref={containerRef}>
+      <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">{label}</span>
+      <div
+        className={`min-h-[42px] w-full rounded-xl border border-gray-200 bg-white px-2.5 py-2 text-sm shadow-sm transition-colors focus-within:border-[#2a4038] focus-within:ring-2 focus-within:ring-[#2a4038]/10 ${disabled ? 'opacity-60' : ''}`}
+        onMouseDown={() => {
+          if (!disabled) setOpen(true);
+        }}
+      >
+        <div className="flex flex-wrap items-center gap-1.5">
+          {selectedOptions.map((option, index) => (
+            <span key={option.value} className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-[#2a4038]/15 bg-[#eef4f1] px-2 py-1 text-xs font-semibold text-[#2a4038]">
+              <span className="truncate">{option.label}</span>
+              {index === 0 && <span className="rounded bg-white/80 px-1 text-[9px] uppercase tracking-wide text-[#2a4038]/70">Principal</span>}
+              {!disabled && (
+                <button
+                  type="button"
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    removeValue(option.value);
+                  }}
+                  className="rounded p-0.5 text-[#2a4038]/55 hover:bg-white hover:text-[#2a4038]"
+                  aria-label={`Quitar ${option.label}`}
+                >
+                  <X size={11} />
+                </button>
+              )}
+            </span>
+          ))}
+          {!disabled && (
+            <input
+              type="text"
+              value={query}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setOpen(true);
+              }}
+              onFocus={() => setOpen(true)}
+              placeholder={selectedOptions.length ? 'Agregar otro jefe' : emptyLabel}
+              className="min-w-[160px] flex-1 border-0 bg-transparent px-1 py-1 text-sm text-gray-700 placeholder:text-gray-300 focus:outline-none"
+            />
+          )}
+        </div>
+      </div>
+      {open && !disabled && (
+        <ul className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-gray-100 bg-white shadow-lg">
+          {filteredOptions.length === 0 ? (
+            <li className="px-3 py-2 text-sm text-gray-300">Sin resultados</li>
+          ) : filteredOptions.map((option) => (
+            <li
+              key={option.value}
+              onMouseDown={() => addValue(option.value)}
+              className="cursor-pointer px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
             >
               {option.label}
             </li>
@@ -2909,15 +3024,17 @@ export function AdminHR() {
     }
     setSavingManagerAssignments(true);
     try {
+      const managerIds = cleanIdList(managerAssignmentManagerIds);
       const response = await assignEmployeeManagers({
         branch: managerAssignmentBranch === 'all' ? null : managerAssignmentBranch,
         employee_ids: employeeIds,
-        manager_ids: managerAssignmentManagerIds,
+        manager_ids: managerIds,
       });
       setEmployees((current) => {
         const updatedById = new Map(response.employees.map((employee) => [employee.id, employee]));
         return current.map((employee) => updatedById.get(employee.id) ?? employee);
       });
+      await loadData();
       toast.success(`${response.updated} empleado(s) actualizado(s)`);
       setShowManagerAssignmentModal(false);
     } catch (error) {
@@ -3076,7 +3193,18 @@ export function AdminHR() {
           { value: 'TERMINATED', label: 'Retirado' },
         ]} emptyLabel="Estado" />
         <SelectInput label="Sede o sucursal" value={employeeForm.branch} onChange={(value) => setFormField('branch', value)} options={branches.map((branch) => ({ value: branch.id, label: `${branch.name} · ${branch.city || 'Sin ciudad'}` }))} />
-        <SearchableSelectInput label="Jefe inmediato principal" value={employeeForm.manager} onChange={(value) => setEmployeeForm((current) => ({ ...current, manager: value, immediate_managers: value ? [value] : [] }))} options={activeEmployees.filter((employee) => employee.id !== editingEmployee?.id).map((employee) => ({ value: employee.id, label: getEmployeeName(employee) }))} emptyLabel="Sin jefe asignado" />
+        <div className="lg:col-span-2">
+          <MultiSearchableSelectInput
+            label="Jefes inmediatos"
+            values={employeeForm.immediate_managers}
+            onChange={(values) => {
+              const managerIds = cleanIdList(values);
+              setEmployeeForm((current) => ({ ...current, manager: managerIds[0] ?? '', immediate_managers: managerIds }));
+            }}
+            options={employees.filter((employee) => employee.id !== editingEmployee?.id).map((employee) => ({ value: employee.id, label: getEmployeeName(employee) }))}
+            emptyLabel="Sin jefe asignado"
+          />
+        </div>
         <TextInput label="Centro de costos" value={employeeForm.cost_center} onChange={(value) => setFormField('cost_center', value)} />
         <SelectInput label="Modalidad de trabajo" value={employeeForm.work_modality} onChange={(value) => setFormField('work_modality', value)} options={[
           { value: 'ONSITE', label: 'Presencial' },

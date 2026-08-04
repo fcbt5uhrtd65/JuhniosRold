@@ -1,4 +1,5 @@
 import logging
+import json
 
 from apps.identity.interfaces.permissions import HasComponentAccess
 from django.db import transaction
@@ -215,20 +216,44 @@ class EmployeeViewSet(SoftDeleteModelViewSet):
         serializer.save(**extra_fields)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @staticmethod
-    def _clean_id_list(value):
+    @classmethod
+    def _clean_id_list(cls, value):
         if value in (None, ""):
             return []
         if isinstance(value, (list, tuple, set)):
             raw_values = value
+        elif isinstance(value, str) and value.strip().startswith("["):
+            try:
+                return cls._clean_id_list(json.loads(value))
+            except ValueError:
+                raw_values = [value]
+        elif isinstance(value, str) and "," in value:
+            raw_values = value.split(",")
         else:
             raw_values = [value]
-        return [str(item).strip() for item in raw_values if str(item).strip()]
+        seen = set()
+        cleaned = []
+        for item in raw_values:
+            item_id = str(item).strip()
+            if not item_id or item_id in seen:
+                continue
+            cleaned.append(item_id)
+            seen.add(item_id)
+        return cleaned
+
+    @classmethod
+    def _request_id_list(cls, request, field_name):
+        data = request.data
+        if hasattr(data, "getlist"):
+            values = data.getlist(field_name)
+            if values:
+                return cls._clean_id_list(values)
+        return cls._clean_id_list(data.get(field_name))
 
     @action(detail=False, methods=("post",), url_path="assign-managers")
     def assign_managers(self, request):
-        employee_ids = self._clean_id_list(request.data.get("employee_ids"))
-        manager_ids = self._clean_id_list(request.data.get("manager_ids"))
+        employee_ids = self._request_id_list(request, "employee_ids")
+        manager_ids = self._request_id_list(request, "manager_ids")
         branch_id = str(request.data.get("branch") or request.data.get("branch_id") or "").strip()
 
         if not employee_ids:
@@ -236,11 +261,15 @@ class EmployeeViewSet(SoftDeleteModelViewSet):
         if not manager_ids:
             raise ValidationError({"manager_ids": ["Selecciona al menos un jefe inmediato."]})
 
-        managers = list(Employee.objects.filter(id__in=manager_ids, status=Employee.Status.ACTIVE))
-        found_manager_ids = {str(manager.id) for manager in managers}
+        managers_by_id = {
+            str(manager.id): manager
+            for manager in Employee.objects.filter(id__in=manager_ids, status=Employee.Status.ACTIVE)
+        }
+        found_manager_ids = set(managers_by_id)
         missing_manager_ids = [manager_id for manager_id in manager_ids if manager_id not in found_manager_ids]
         if missing_manager_ids:
             raise ValidationError({"manager_ids": ["Hay jefes inmediatos inexistentes o inactivos."]})
+        managers = [managers_by_id[manager_id] for manager_id in manager_ids]
 
         employees_queryset = Employee.objects.filter(id__in=employee_ids)
         if branch_id:
