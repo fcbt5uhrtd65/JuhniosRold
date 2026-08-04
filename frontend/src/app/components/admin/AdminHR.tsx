@@ -64,6 +64,7 @@ import {
   SEVERANCE_FUND_OPTIONS,
 } from '../../utils/socialSecurityCatalog';
 import {
+  assignEmployeeManagers,
   deleteEmployee,
   createBranch,
   deleteBranch,
@@ -247,6 +248,7 @@ interface EmployeeFormState {
   department: string;
   position: string;
   manager: string;
+  immediate_managers: string[];
   employment_type: string;
   contract_type: string;
   hire_date: string;
@@ -383,6 +385,7 @@ const EMPTY_EMPLOYEE_FORM: EmployeeFormState = {
   department: '',
   position: '',
   manager: '',
+  immediate_managers: [],
   employment_type: 'EMPLOYEE',
   contract_type: 'INDEFINITE',
   hire_date: '',
@@ -611,6 +614,25 @@ function getEmployeeName(employee: Employee): string {
   return `${employee.first_name} ${employee.last_name}`.trim() || employee.employee_code || 'Empleado sin nombre';
 }
 
+function getEmployeeManagerIds(employee: Employee): string[] {
+  const ids = employee.immediate_managers?.length ? employee.immediate_managers : employee.manager ? [employee.manager] : [];
+  return [...new Set(ids.filter(Boolean))];
+}
+
+function cleanIdList(ids: string[]): string[] {
+  return [...new Set(ids.map((id) => id.trim()).filter(Boolean))];
+}
+
+function getEmployeeManagerNames(employee: Employee, employeeById: Map<string, Employee>): string {
+  const names = getEmployeeManagerIds(employee)
+    .map((managerId) => {
+      const manager = employeeById.get(managerId);
+      return manager ? getEmployeeName(manager) : '';
+    })
+    .filter(Boolean);
+  return names.length ? names.join(', ') : 'Sin jefe';
+}
+
 function normalizeSearchText(value: string): string {
   return value
     .normalize('NFD')
@@ -652,7 +674,7 @@ function matchesEmployeeDataQuality(employee: Employee, filter: EmployeeDataQual
     case 'missing_branch':
       return !hasText(employee.branch);
     case 'missing_manager':
-      return !hasText(employee.manager);
+      return getEmployeeManagerIds(employee).length === 0;
     case 'missing_social_security':
       return !hasText(employee.eps) || !hasText(employee.pension_fund) || !hasText(employee.severance_fund) || !hasText(employee.arl) || !hasText(employee.compensation_fund);
     case 'missing_banking':
@@ -1223,6 +1245,7 @@ function mapEmployeeToForm(employee: Employee): EmployeeFormState {
     department: employee.department ?? '',
     position: employee.position ?? '',
     manager: employee.manager ?? '',
+    immediate_managers: employee.immediate_managers?.length ? employee.immediate_managers : employee.manager ? [employee.manager] : [],
     employment_type: employee.employment_type,
     contract_type: employee.contract_type,
     hire_date: fieldValue(employee.hire_date),
@@ -1263,6 +1286,8 @@ function cleanNullable(value: string): string | null {
 }
 
 function buildEmployeePayload(form: EmployeeFormState): EmployeePayload {
+  const managerIds = cleanIdList(form.immediate_managers);
+  const fallbackManager = cleanNullable(form.manager);
   return {
     ...(form.user ? { user: form.user } : {}),
     ...(form.user_role ? { user_role: form.user_role } : {}),
@@ -1293,7 +1318,8 @@ function buildEmployeePayload(form: EmployeeFormState): EmployeePayload {
     marital_status: form.marital_status as EmployeePayload['marital_status'],
     department: cleanNullable(form.department),
     position: cleanNullable(form.position),
-    manager: cleanNullable(form.manager),
+    manager: managerIds[0] ?? fallbackManager,
+    immediate_managers: managerIds.length ? managerIds : fallbackManager ? [fallbackManager] : [],
     employment_type: form.employment_type as EmployeePayload['employment_type'],
     contract_type: form.contract_type as EmployeePayload['contract_type'],
     hire_date: cleanNullable(form.hire_date),
@@ -1506,6 +1532,115 @@ export function SearchableSelectInput({
   );
 }
 
+function MultiSearchableSelectInput({
+  label,
+  values,
+  onChange,
+  options,
+  emptyLabel = 'Buscar y agregar',
+  disabled = false,
+}: {
+  label: string;
+  values: string[];
+  onChange: (values: string[]) => void;
+  options: Array<{ value: string; label: string }>;
+  emptyLabel?: string;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+  const selectedValues = [...new Set(values.filter(Boolean))];
+  const selectedValueSet = new Set(selectedValues);
+  const selectedOptions = selectedValues.map((value) => options.find((option) => option.value === value) ?? { value, label: 'Jefe no encontrado' });
+  const filteredOptions = options
+    .filter((option) => !selectedValueSet.has(option.value))
+    .filter((option) => !query || option.label.toLowerCase().includes(query.toLowerCase()));
+
+  useEffect(() => {
+    function onMouseDown(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+        setQuery('');
+      }
+    }
+    document.addEventListener('mousedown', onMouseDown);
+    return () => document.removeEventListener('mousedown', onMouseDown);
+  }, []);
+
+  const addValue = (value: string) => {
+    onChange(cleanIdList([...selectedValues, value]));
+    setQuery('');
+    setOpen(false);
+  };
+
+  const removeValue = (value: string) => {
+    onChange(cleanIdList(selectedValues.filter((current) => current !== value)));
+  };
+
+  return (
+    <div className="block relative" ref={containerRef}>
+      <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">{label}</span>
+      <div
+        className={`min-h-[42px] w-full rounded-xl border border-gray-200 bg-white px-2.5 py-2 text-sm shadow-sm transition-colors focus-within:border-[#2a4038] focus-within:ring-2 focus-within:ring-[#2a4038]/10 ${disabled ? 'opacity-60' : ''}`}
+        onMouseDown={() => {
+          if (!disabled) setOpen(true);
+        }}
+      >
+        <div className="flex flex-wrap items-center gap-1.5">
+          {selectedOptions.map((option, index) => (
+            <span key={option.value} className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-[#2a4038]/15 bg-[#eef4f1] px-2 py-1 text-xs font-semibold text-[#2a4038]">
+              <span className="truncate">{option.label}</span>
+              {index === 0 && <span className="rounded bg-white/80 px-1 text-[9px] uppercase tracking-wide text-[#2a4038]/70">Principal</span>}
+              {!disabled && (
+                <button
+                  type="button"
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    removeValue(option.value);
+                  }}
+                  className="rounded p-0.5 text-[#2a4038]/55 hover:bg-white hover:text-[#2a4038]"
+                  aria-label={`Quitar ${option.label}`}
+                >
+                  <X size={11} />
+                </button>
+              )}
+            </span>
+          ))}
+          {!disabled && (
+            <input
+              type="text"
+              value={query}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setOpen(true);
+              }}
+              onFocus={() => setOpen(true)}
+              placeholder={selectedOptions.length ? 'Agregar otro jefe' : emptyLabel}
+              className="min-w-[160px] flex-1 border-0 bg-transparent px-1 py-1 text-sm text-gray-700 placeholder:text-gray-300 focus:outline-none"
+            />
+          )}
+        </div>
+      </div>
+      {open && !disabled && (
+        <ul className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-gray-100 bg-white shadow-lg">
+          {filteredOptions.length === 0 ? (
+            <li className="px-3 py-2 text-sm text-gray-300">Sin resultados</li>
+          ) : filteredOptions.map((option) => (
+            <li
+              key={option.value}
+              onMouseDown={() => addValue(option.value)}
+              className="cursor-pointer px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+            >
+              {option.label}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export function TextareaInput({
   label,
   value,
@@ -1705,6 +1840,12 @@ export function AdminHR() {
   const [branchSearching, setBranchSearching] = useState(false);
   const [branchSuggestionsOpen, setBranchSuggestionsOpen] = useState(false);
   const [branchReverseLoading, setBranchReverseLoading] = useState(false);
+  const [showManagerAssignmentModal, setShowManagerAssignmentModal] = useState(false);
+  const [managerAssignmentBranch, setManagerAssignmentBranch] = useState('all');
+  const [managerAssignmentEmployeeIds, setManagerAssignmentEmployeeIds] = useState<string[]>([]);
+  const [managerAssignmentManagerIds, setManagerAssignmentManagerIds] = useState<string[]>([]);
+  const [managerAssignmentSearch, setManagerAssignmentSearch] = useState('');
+  const [savingManagerAssignments, setSavingManagerAssignments] = useState(false);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -2840,7 +2981,101 @@ export function AdminHR() {
     setFilterDataQuality('all');
   };
 
+  const openManagerAssignmentModal = () => {
+    setManagerAssignmentBranch(filterBranch !== 'all' ? filterBranch : 'all');
+    setManagerAssignmentEmployeeIds([]);
+    setManagerAssignmentManagerIds([]);
+    setManagerAssignmentSearch('');
+    setShowManagerAssignmentModal(true);
+  };
+
+  const toggleManagerAssignmentEmployee = (employeeId: string) => {
+    setManagerAssignmentEmployeeIds((current) =>
+      current.includes(employeeId) ? current.filter((id) => id !== employeeId) : [...current, employeeId],
+    );
+  };
+
+  const toggleManagerAssignmentManager = (employeeId: string) => {
+    setManagerAssignmentManagerIds((current) =>
+      current.includes(employeeId) ? current.filter((id) => id !== employeeId) : [...current, employeeId],
+    );
+  };
+
+  const toggleAllManagerAssignmentEmployees = () => {
+    const visibleIds = managerAssignmentEmployees
+      .filter((employee) => !managerAssignmentManagerIdSet.has(employee.id))
+      .map((employee) => employee.id);
+    const allSelected = visibleIds.length > 0 && visibleIds.every((id) => managerAssignmentEmployeeIdSet.has(id));
+    setManagerAssignmentEmployeeIds((current) => {
+      if (allSelected) return current.filter((id) => !visibleIds.includes(id));
+      return [...new Set([...current, ...visibleIds])];
+    });
+  };
+
+  const handleSaveManagerAssignments = async () => {
+    const employeeIds = managerAssignmentEmployeeIds.filter((id) => !managerAssignmentManagerIdSet.has(id));
+    if (employeeIds.length === 0) {
+      toast.error('Selecciona al menos un empleado para asignar.');
+      return;
+    }
+    if (managerAssignmentManagerIds.length === 0) {
+      toast.error('Selecciona al menos un jefe inmediato.');
+      return;
+    }
+    setSavingManagerAssignments(true);
+    try {
+      const managerIds = cleanIdList(managerAssignmentManagerIds);
+      const response = await assignEmployeeManagers({
+        branch: managerAssignmentBranch === 'all' ? null : managerAssignmentBranch,
+        employee_ids: employeeIds,
+        manager_ids: managerIds,
+      });
+      setEmployees((current) => {
+        const updatedById = new Map(response.employees.map((employee) => [employee.id, employee]));
+        return current.map((employee) => updatedById.get(employee.id) ?? employee);
+      });
+      await loadData();
+      toast.success(`${response.updated} empleado(s) actualizado(s)`);
+      setShowManagerAssignmentModal(false);
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudieron asignar los jefes inmediatos');
+    } finally {
+      setSavingManagerAssignments(false);
+    }
+  };
+
   const activeEmployees = employees.filter((employee) => employee.status === 'ACTIVE');
+  const managerAssignmentEmployees = useMemo(() => {
+    const query = normalizeSearchText(managerAssignmentSearch);
+    return activeEmployees
+      .filter((employee) => managerAssignmentBranch === 'all' || employee.branch === managerAssignmentBranch)
+      .filter((employee) => {
+        if (!query) return true;
+        const branch = employee.branch ? branchById.get(employee.branch) : null;
+        const department = employee.department ? departmentById.get(employee.department) : null;
+        const position = employee.position ? positionById.get(employee.position) : null;
+        return (
+          normalizeSearchText(getEmployeeName(employee)).includes(query) ||
+          normalizeSearchText(employee.employee_code).includes(query) ||
+          normalizeSearchText(employee.document_number ?? '').includes(query) ||
+          normalizeSearchText(branch?.name ?? '').includes(query) ||
+          normalizeSearchText(department?.name ?? '').includes(query) ||
+          normalizeSearchText(position?.name ?? '').includes(query)
+        );
+      })
+      .sort((left, right) => getEmployeeName(left).localeCompare(getEmployeeName(right), 'es'));
+  }, [activeEmployees, branchById, departmentById, managerAssignmentBranch, managerAssignmentSearch, positionById]);
+  const managerAssignmentEmployeeIdSet = useMemo(() => new Set(managerAssignmentEmployeeIds), [managerAssignmentEmployeeIds]);
+  const managerAssignmentManagerIdSet = useMemo(() => new Set(managerAssignmentManagerIds), [managerAssignmentManagerIds]);
+  const managerAssignmentSelectedEmployees = useMemo(
+    () => employees.filter((employee) => managerAssignmentEmployeeIdSet.has(employee.id)),
+    [employees, managerAssignmentEmployeeIdSet],
+  );
+  const managerAssignmentSelectedManagers = useMemo(
+    () => employees.filter((employee) => managerAssignmentManagerIdSet.has(employee.id)),
+    [employees, managerAssignmentManagerIdSet],
+  );
   const statusOptions = activeTab === 'vacations'
     ? [
         { value: 'all', label: 'Todos los estados' },
@@ -2958,7 +3193,18 @@ export function AdminHR() {
           { value: 'TERMINATED', label: 'Retirado' },
         ]} emptyLabel="Estado" />
         <SelectInput label="Sede o sucursal" value={employeeForm.branch} onChange={(value) => setFormField('branch', value)} options={branches.map((branch) => ({ value: branch.id, label: `${branch.name} · ${branch.city || 'Sin ciudad'}` }))} />
-        <SearchableSelectInput label="Jefe inmediato" value={employeeForm.manager} onChange={(value) => setFormField('manager', value)} options={activeEmployees.filter((employee) => employee.id !== editingEmployee?.id).map((employee) => ({ value: employee.id, label: getEmployeeName(employee) }))} emptyLabel="Sin jefe asignado" />
+        <div className="lg:col-span-2">
+          <MultiSearchableSelectInput
+            label="Jefes inmediatos"
+            values={employeeForm.immediate_managers}
+            onChange={(values) => {
+              const managerIds = cleanIdList(values);
+              setEmployeeForm((current) => ({ ...current, manager: managerIds[0] ?? '', immediate_managers: managerIds }));
+            }}
+            options={employees.filter((employee) => employee.id !== editingEmployee?.id).map((employee) => ({ value: employee.id, label: getEmployeeName(employee) }))}
+            emptyLabel="Sin jefe asignado"
+          />
+        </div>
         <TextInput label="Centro de costos" value={employeeForm.cost_center} onChange={(value) => setFormField('cost_center', value)} />
         <SelectInput label="Modalidad de trabajo" value={employeeForm.work_modality} onChange={(value) => setFormField('work_modality', value)} options={[
           { value: 'ONSITE', label: 'Presencial' },
@@ -3413,7 +3659,7 @@ export function AdminHR() {
     const department = employee.department ? departmentById.get(employee.department)?.name : 'Sin área';
     const position = employee.position ? positionById.get(employee.position)?.name : 'Sin cargo';
     const branch = employee.branch ? branchById.get(employee.branch)?.name : 'Sin sede';
-    const manager = employee.manager ? employeeById.get(employee.manager) : null;
+    const managerNames = getEmployeeManagerNames(employee, employeeById);
     const rows: Array<[string, string | number | null | undefined]> =
       employeeModalTab === 'personal'
         ? [
@@ -3444,7 +3690,7 @@ export function AdminHR() {
               ['Salario básico', formatCurrency(employee.base_salary)],
               ['Estado', statusLabel(employee.status)],
               ['Sede', branch],
-              ['Jefe inmediato', manager ? getEmployeeName(manager) : 'Sin jefe'],
+              ['Jefes inmediatos', managerNames],
               ['Centro de costos', employee.cost_center],
               ['Modalidad', employee.work_modality],
               ['Fecha de terminación', parseDate(employee.termination_date)],
@@ -3568,14 +3814,24 @@ export function AdminHR() {
         </div>
         <div className="flex flex-wrap gap-2">
           {activeTab === 'employees' && (
-            <button
-              onClick={() => void handleEmployeesPdfExport()}
-              disabled={exportingEmployeesPdf || isLoading || sortedEmployees.length === 0}
-              className="flex items-center gap-2 px-4 py-2.5 border border-[#2a4038] text-[#2a4038] text-xs font-semibold rounded-xl hover:bg-[#eef4f1] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {exportingEmployeesPdf ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
-              {exportingEmployeesPdf ? 'Generando PDF...' : 'Exportar filtro PDF'}
-            </button>
+            <>
+              <button
+                onClick={openManagerAssignmentModal}
+                disabled={isLoading || activeEmployees.length === 0}
+                className="flex items-center gap-2 px-4 py-2.5 border border-[#2a4038] text-[#2a4038] text-xs font-semibold rounded-xl hover:bg-[#eef4f1] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Network size={14} />
+                Asignar jefes
+              </button>
+              <button
+                onClick={() => void handleEmployeesPdfExport()}
+                disabled={exportingEmployeesPdf || isLoading || sortedEmployees.length === 0}
+                className="flex items-center gap-2 px-4 py-2.5 border border-[#2a4038] text-[#2a4038] text-xs font-semibold rounded-xl hover:bg-[#eef4f1] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {exportingEmployeesPdf ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
+                {exportingEmployeesPdf ? 'Generando PDF...' : 'Exportar filtro PDF'}
+              </button>
+            </>
           )}
           {activeTab === 'branches' && (
             <button
@@ -3864,6 +4120,7 @@ export function AdminHR() {
                           <Td>
                             <div>{position?.name ?? 'Sin cargo'}</div>
                             <div className="text-gray-400 text-[11px] mt-1">{department?.name ?? 'Sin área'} · {branch?.name ?? 'Sin sede'}</div>
+                            <div className="text-gray-400 text-[11px] mt-1">Jefes: {getEmployeeManagerNames(employee, employeeById)}</div>
                           </Td>
                           <Td>
                             <Badge label={statusLabel(employee.status)} color={statusBadge(employee.status)} />
@@ -5173,6 +5430,146 @@ export function AdminHR() {
             <button type="submit" disabled={savingBranch} className="flex-1 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold hover:bg-[#3d5c4e] disabled:opacity-50">{savingBranch ? 'Guardando...' : 'Guardar sede'}</button>
           </div>
         </form>
+      </Modal>
+
+      <Modal title="Asignar jefes inmediatos" open={showManagerAssignmentModal} onClose={() => setShowManagerAssignmentModal(false)} wide>
+        <div className="space-y-4">
+          <div className="grid gap-3 lg:grid-cols-[240px_minmax(0,1fr)]">
+            <label className="block">
+              <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Sede</span>
+              <select
+                value={managerAssignmentBranch}
+                onChange={(event) => {
+                  setManagerAssignmentBranch(event.target.value);
+                  setManagerAssignmentEmployeeIds([]);
+                }}
+                className={`${selectCls} w-full`}
+              >
+                <option value="all">Todas las sedes</option>
+                {branches.map((branch) => (
+                  <option key={branch.id} value={branch.id}>{branch.name} · {branch.city || 'Sin ciudad'}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Buscar empleados</span>
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
+                <input
+                  value={managerAssignmentSearch}
+                  onChange={(event) => setManagerAssignmentSearch(event.target.value)}
+                  placeholder="Nombre, documento, cargo, área o sede"
+                  className={`${inputCls} w-full pl-9`}
+                />
+              </div>
+            </label>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(280px,0.75fr)]">
+            <div className="rounded-xl border border-gray-100 bg-white overflow-hidden">
+              <div className="flex flex-col gap-2 border-b border-gray-100 bg-gray-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">Empleados a actualizar</p>
+                  <p className="text-xs text-gray-500">{managerAssignmentEmployeeIds.length} seleccionados · {managerAssignmentEmployees.length} visibles</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={toggleAllManagerAssignmentEmployees}
+                  disabled={managerAssignmentEmployees.length === 0}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50"
+                >
+                  <Check size={13} />
+                  Seleccionar visibles
+                </button>
+              </div>
+              <div className="max-h-[360px] overflow-y-auto divide-y divide-gray-100">
+                {managerAssignmentEmployees.length === 0 ? (
+                  <div className="px-4 py-8 text-center text-sm text-gray-400">No hay empleados activos con ese filtro.</div>
+                ) : managerAssignmentEmployees.map((employee) => {
+                  const branch = employee.branch ? branchById.get(employee.branch) : null;
+                  const position = employee.position ? positionById.get(employee.position) : null;
+                  const disabled = managerAssignmentManagerIdSet.has(employee.id);
+                  return (
+                    <label key={employee.id} className={`flex items-start gap-3 px-4 py-3 transition-colors ${disabled ? 'bg-gray-50 opacity-60' : 'hover:bg-gray-50 cursor-pointer'}`}>
+                      <input
+                        type="checkbox"
+                        checked={managerAssignmentEmployeeIdSet.has(employee.id)}
+                        onChange={() => toggleManagerAssignmentEmployee(employee.id)}
+                        disabled={disabled}
+                        className="mt-1 h-4 w-4 rounded border-gray-300 text-[#2a4038] focus:ring-[#2a4038]"
+                      />
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-gray-900">{getEmployeeName(employee)}</p>
+                        <p className="text-xs text-gray-500">{position?.name ?? 'Sin cargo'} · {branch?.name ?? 'Sin sede'}</p>
+                        <p className="text-[11px] text-gray-400">Actual: {getEmployeeManagerNames(employee, employeeById)}</p>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-gray-100 bg-white overflow-hidden">
+              <div className="border-b border-gray-100 bg-gray-50 px-4 py-3">
+                <p className="text-sm font-semibold text-gray-900">Jefes inmediatos</p>
+                <p className="text-xs text-gray-500">{managerAssignmentManagerIds.length} seleccionados. Cualquiera puede firmar.</p>
+              </div>
+              <div className="max-h-[360px] overflow-y-auto divide-y divide-gray-100">
+                {activeEmployees.length === 0 ? (
+                  <div className="px-4 py-8 text-center text-sm text-gray-400">No hay empleados activos para elegir como jefe.</div>
+                ) : [...activeEmployees]
+                  .sort((left, right) => getEmployeeName(left).localeCompare(getEmployeeName(right), 'es'))
+                  .map((employee) => {
+                    const disabled = managerAssignmentEmployeeIdSet.has(employee.id);
+                    const position = employee.position ? positionById.get(employee.position) : null;
+                    return (
+                      <label key={employee.id} className={`flex items-start gap-3 px-4 py-3 transition-colors ${disabled ? 'bg-gray-50 opacity-60' : 'hover:bg-gray-50 cursor-pointer'}`}>
+                        <input
+                          type="checkbox"
+                          checked={managerAssignmentManagerIdSet.has(employee.id)}
+                          onChange={() => toggleManagerAssignmentManager(employee.id)}
+                          disabled={disabled}
+                          className="mt-1 h-4 w-4 rounded border-gray-300 text-[#2a4038] focus:ring-[#2a4038]"
+                        />
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-gray-900">{getEmployeeName(employee)}</p>
+                          <p className="text-xs text-gray-500">{position?.name ?? 'Sin cargo'}</p>
+                        </div>
+                      </label>
+                    );
+                  })}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-[#2a4038]/15 bg-[#eef4f1] px-4 py-3">
+            <p className="text-xs font-semibold text-[#2a4038]">
+              Se reemplazarán los jefes de {managerAssignmentSelectedEmployees.length} empleado(s) por {managerAssignmentSelectedManagers.length} jefe(s).
+            </p>
+            <p className="mt-1 text-xs text-[#2a4038]/75">
+              Jefes: {managerAssignmentSelectedManagers.map(getEmployeeName).join(', ') || 'Sin seleccionar'}
+            </p>
+          </div>
+
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              onClick={() => setShowManagerAssignmentModal(false)}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 px-4 py-2.5 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleSaveManagerAssignments()}
+              disabled={savingManagerAssignments || managerAssignmentEmployeeIds.length === 0 || managerAssignmentManagerIds.length === 0}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#2a4038] px-4 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-[#3d5c4e] disabled:opacity-50"
+            >
+              {savingManagerAssignments ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+              Guardar asignación
+            </button>
+          </div>
+        </div>
       </Modal>
 
       {showEmployeeModal && (

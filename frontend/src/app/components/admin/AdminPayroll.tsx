@@ -114,6 +114,14 @@ function payrollGross(payroll: { gross_earnings: string; base_salary: string; bo
   return Number(payroll.base_salary || 0) + Number(payroll.bonuses || 0);
 }
 
+function formatHours(value: number): string {
+  return `${value.toFixed(2)} h`;
+}
+
+function formatPlainNumber(value: number): string {
+  return value.toLocaleString('es-CO');
+}
+
 function formatDate(value: string | null): string {
   if (!value) return 'Sin fecha';
   return new Date(`${value}T00:00:00`).toLocaleDateString('es-CO');
@@ -622,7 +630,12 @@ function employeeName(employee: Employee | undefined): string {
 
 function biometricCodeDisplayName(code: string, employeeByBiometricCode: Map<string, Employee>): string {
   const employee = employeeByBiometricCode.get(code);
-  return employee ? employeeName(employee) : `Codigo ${code}`;
+  return employee ? employeeName(employee) : code;
+}
+
+function biometricCodePageName(code: string, employeeByBiometricCode: Map<string, Employee>): string {
+  const employee = employeeByBiometricCode.get(code);
+  return employee ? employeeName(employee) : code;
 }
 
 function describeApiError(error: unknown, fallback: string): string {
@@ -787,6 +800,8 @@ function dayMinutesInSegment(start: number, end: number): number {
   return total;
 }
 
+const FIXED_LUNCH_MINUTES = 60;
+
 function calculatePreviewHours(row: Pick<BiometricPreviewRow, 'checkIn' | 'breakStart' | 'breakEnd' | 'checkOut'>) {
   const checkIn = timeToMinutes(row.checkIn);
   const checkOutRaw = timeToMinutes(row.checkOut);
@@ -800,12 +815,16 @@ function calculatePreviewHours(row: Pick<BiometricPreviewRow, 'checkIn' | 'break
 
   if (breakStartRaw !== null && breakEndRaw !== null) {
     const breakStart = breakStartRaw >= checkIn ? breakStartRaw : breakStartRaw + 1440;
-    const breakEnd = breakEndRaw >= breakStartRaw ? breakEndRaw : breakEndRaw + 1440;
-    if (checkIn < breakStart && breakStart < breakEnd && breakEnd < checkOut) {
-      segments.push([checkIn, breakStart], [breakEnd, checkOut]);
+    if (checkIn < breakStart && breakStart < checkOut) {
+      const fixedBreakEnd = Math.min(checkOut, breakStart + FIXED_LUNCH_MINUTES);
+      segments.push([checkIn, breakStart], [fixedBreakEnd, checkOut]);
     } else {
       segments.push([checkIn, checkOut]);
     }
+  } else if (checkOut - checkIn >= 6 * 60) {
+    const lunchStart = Math.min(checkIn + 5 * 60, Math.max(checkIn, checkOut - FIXED_LUNCH_MINUTES));
+    const lunchEnd = Math.min(checkOut, lunchStart + FIXED_LUNCH_MINUTES);
+    segments.push(...([[checkIn, lunchStart], [lunchEnd, checkOut]].filter(([start, end]) => end > start) as Array<[number, number]>));
   } else {
     segments.push([checkIn, checkOut]);
   }
@@ -1082,14 +1101,14 @@ function biometricPayrollBreakdown(row: BiometricPreviewRow | undefined, holiday
   const breakEndRaw = timeToMinutes(row.breakEnd);
   const hasFullBreak = breakStartRaw !== null && breakEndRaw !== null;
   const breakStart = breakStartRaw !== null && breakStartRaw < checkIn ? breakStartRaw + 1440 : breakStartRaw;
-  const breakEnd = breakEndRaw !== null && breakStartRaw !== null && breakEndRaw < breakStartRaw ? breakEndRaw + 1440 : breakEndRaw;
-  const fallbackLunchMinutes = !hasFullBreak && rawMinutes >= 6 * 60 && expectedOrdinaryMinutesForPreview(row.date, holiday) > 0 ? 60 : 0;
+  const fallbackLunchMinutes = !hasFullBreak && rawMinutes >= 6 * 60 && expectedOrdinaryMinutesForPreview(row.date, holiday) > 0 ? FIXED_LUNCH_MINUTES : 0;
   let lunchMinutes = fallbackLunchMinutes;
   let segments: Array<[number, number]> = [[checkIn, checkOut]];
 
-  if (breakStart !== null && breakEnd !== null && checkIn < breakStart && breakStart < breakEnd && breakEnd < checkOut) {
-    lunchMinutes = Math.max(0, breakEnd - breakStart);
-    segments = [[checkIn, breakStart], [breakEnd, checkOut]];
+  if (hasFullBreak && breakStart !== null && checkIn < breakStart && breakStart < checkOut) {
+    const fixedBreakEnd = Math.min(checkOut, breakStart + FIXED_LUNCH_MINUTES);
+    lunchMinutes = Math.max(0, fixedBreakEnd - breakStart);
+    segments = [[checkIn, breakStart], [fixedBreakEnd, checkOut]].filter(([start, end]) => end > start);
   } else if (fallbackLunchMinutes > 0) {
     const lunchStart = Math.min(checkIn + 5 * 60, Math.max(checkIn, checkOut - fallbackLunchMinutes));
     const lunchEnd = Math.min(checkOut, lunchStart + fallbackLunchMinutes);
@@ -1170,6 +1189,7 @@ function buildBiometricCodeDayRows(
   rows: BiometricPreviewRow[],
   holidaysByDate: Map<string, PublicHoliday>,
   dateRange: string[],
+  employeeLabel: string,
 ): XlsxCell[][] {
   const rowsByDate = new Map(rows.map((row) => [row.date, row]));
   return dateRange.map((date) => {
@@ -1179,7 +1199,7 @@ function buildBiometricCodeDayRows(
     const breakdown = biometricPayrollBreakdown(row, holiday);
     const rowStyle = row?.status === 'Revisar' || row?.status === 'Incompleto' ? XLSX_STYLE.warning : 3;
     return [
-      xlsxCell(row ? code : ''),
+      xlsxCell(row ? employeeLabel : ''),
       xlsxCell(formatDate(date)),
       xlsxCell(WEEKDAY_LABELS[mondayWeekdayIndex(date)]),
       xlsxCell(row?.checkIn === '-' ? '' : row?.checkIn ?? ''),
@@ -1345,7 +1365,7 @@ function buildBiometricPreviewXlsx(
     ]);
 
     const detailHeader = [
-      'COD',
+      'EMPLEADO/CODIGO',
       'FECHA',
       'DIA',
       'ENTRADA',
@@ -1372,7 +1392,8 @@ function buildBiometricPreviewXlsx(
       'TIMBRADAS',
       'TODAS LAS TIMBRADAS',
     ];
-    const dayRows = buildBiometricCodeDayRows(code, codeRows, holidaysByDate, exportRange);
+    const pageName = biometricCodePageName(code, employeeByBiometricCode);
+    const dayRows = buildBiometricCodeDayRows(code, codeRows, holidaysByDate, exportRange, pageName);
     const totalRow = [
       xlsxCell('TOTALES', XLSX_STYLE.total),
       xlsxCell(''),
@@ -1431,7 +1452,7 @@ function buildBiometricPreviewXlsx(
     ];
 
     return {
-      name: uniqueSheetName(`COD ${code}`, usedSheetNames),
+      name: uniqueSheetName(pageName, usedSheetNames),
       widths: [10, 14, 12, 13, 13, 13, 17, 12, 17, 16, 11, 18, 17, 16, 19, 21, 19, 21, 14, 14, 24, 14, 20, 42, 11, 42],
       rows: [
         [xlsxCell('NOMINA BIOMETRICA', XLSX_STYLE.title), xlsxCell(displayName, XLSX_STYLE.title), xlsxCell(`CODIGO ${code}`, XLSX_STYLE.title)],
@@ -1461,6 +1482,100 @@ function buildBiometricPreviewXlsx(
     ...codeSheets,
   ];
   return createXlsxBlob(sheets);
+}
+
+function buildBiometricCalendarXlsx(
+  rows: BiometricPreviewRow[],
+  holidaysByDate: Map<string, PublicHoliday>,
+  dateRange: string[],
+  fileName: string,
+  employeeByBiometricCode: Map<string, Employee>,
+): Blob {
+  const exportRange = biometricExportDateRange(rows, dateRange);
+  const months = groupDatesByMonth(exportRange);
+  const byCode = new Map<string, BiometricPreviewRow[]>();
+  rows.forEach((row) => {
+    const group = byCode.get(row.code) ?? [];
+    group.push(row);
+    byCode.set(row.code, group);
+  });
+  const codeGroups = [...byCode.entries()]
+    .map(([code, codeRows]) => [code, [...codeRows].sort((left, right) => left.date.localeCompare(right.date))] as const)
+    .sort(([left], [right]) => left.localeCompare(right, 'es', { numeric: true }));
+  const usedSheetNames = new Set<string>();
+  const summaryRows: XlsxCell[][] = [
+    [xlsxCell('CALENDARIO BIOMETRICO', XLSX_STYLE.title)],
+    [xlsxCell('Archivo', XLSX_STYLE.softHeader), xlsxCell(fileName || 'TXT biometrico')],
+    [xlsxCell('Periodo', XLSX_STYLE.softHeader), xlsxCell(exportRange.length ? `${formatDate(exportRange[0])} - ${formatDate(exportRange[exportRange.length - 1])}` : 'Sin rango')],
+    [],
+    ['Empleado/Codigo', 'Codigo reloj', 'Dias con marca', 'Faltas laborales', 'Festivos', 'Dias por revisar'].map((label) => xlsxCell(label, XLSX_STYLE.tableHeader)),
+  ];
+
+  const calendarSheets = codeGroups.map(([code, codeRows]) => {
+    const rowsByDate = new Map(codeRows.map((row) => [row.date, row]));
+    const summary = summarizeBiometricCodeRows(codeRows, holidaysByDate, exportRange);
+    const pageName = biometricCodePageName(code, employeeByBiometricCode);
+    summaryRows.push([
+      xlsxCell(pageName),
+      xlsxCell(code),
+      xlsxCell(summary.daysWithMarks),
+      xlsxCell(summary.missingWorkDays),
+      xlsxCell(summary.holidayDays),
+      xlsxCell(summary.reviewDays),
+    ].map((cell) => ({ ...cell, style: cell.style || (summary.reviewDays > 0 ? XLSX_STYLE.warning : 3) })));
+
+    const calendarRows: XlsxCell[][] = [
+      [xlsxCell('CALENDARIO BIOMETRICO', XLSX_STYLE.title), xlsxCell(pageName, XLSX_STYLE.title), xlsxCell(`CODIGO ${code}`, XLSX_STYLE.title)],
+      [xlsxCell('Archivo', XLSX_STYLE.softHeader), xlsxCell(fileName || 'TXT biometrico'), xlsxCell('Periodo', XLSX_STYLE.softHeader), xlsxCell(exportRange.length ? `${formatDate(exportRange[0])} - ${formatDate(exportRange[exportRange.length - 1])}` : 'Sin rango')],
+      [xlsxCell('Empleado/Codigo', XLSX_STYLE.softHeader), xlsxCell(pageName), xlsxCell('Dias por revisar', XLSX_STYLE.softHeader), xlsxCell(summary.reviewDays)],
+      [],
+    ];
+
+    months.forEach((month) => {
+      calendarRows.push([xlsxCell(month.title.toUpperCase(), XLSX_STYLE.darkHeader)]);
+      calendarRows.push(WEEKDAY_LABELS.map((label) => xlsxCell(label, XLSX_STYLE.tableHeader)));
+      const paddedCells = [...month.cells];
+      while (paddedCells.length % 7 !== 0) paddedCells.push(null);
+      for (let index = 0; index < paddedCells.length; index += 7) {
+        calendarRows.push(paddedCells.slice(index, index + 7).map((date) => {
+          if (!date) return xlsxCell('');
+          const row = rowsByDate.get(date);
+          const holiday = holidaysByDate.get(date);
+          const weekend = isWeekendDate(date);
+          const day = String(parseLocalDate(date).getDate());
+          if (!row) {
+            const label = holiday ? `${day} - ${holiday.name}` : weekend ? `${day} - Descanso` : `${day} - Sin marca`;
+            return xlsxCell(label, holiday || weekend ? 3 : XLSX_STYLE.warning);
+          }
+          const breakdown = biometricPayrollBreakdown(row, holiday);
+          const value = [
+            day,
+            `${row.checkIn} - ${row.checkOut}`,
+            `Almuerzo: ${breakdown.lunchHours || 0}h`,
+            `Trab: ${previewDurationLabel(row)}`,
+            biometricStatus(row, holiday, weekend),
+          ].join(' | ');
+          return xlsxCell(value, row.status === 'Completo' ? 3 : XLSX_STYLE.warning);
+        }));
+      }
+      calendarRows.push([]);
+    });
+
+    return {
+      name: uniqueSheetName(pageName, usedSheetNames),
+      widths: [24, 24, 24, 24, 24, 24, 24],
+      rows: calendarRows,
+    };
+  });
+
+  return createXlsxBlob([
+    {
+      name: uniqueSheetName('Resumen calendario', usedSheetNames),
+      widths: [32, 14, 16, 16, 12, 16],
+      rows: summaryRows,
+    },
+    ...calendarSheets,
+  ]);
 }
 
 export function AdminPayroll() {
@@ -2731,6 +2846,29 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
     toast.success(code ? `Exportado el Excel del codigo ${code}.` : 'Exportado el Excel por codigo.');
   };
 
+  const exportPreviewCalendarRows = (rows: BiometricPreviewRow[], code?: string) => {
+    if (rows.length === 0) {
+      toast.warning('No hay marcaciones para exportar.');
+      return;
+    }
+    const orderedRows = [...rows].sort((left, right) => left.code.localeCompare(right.code, 'es', { numeric: true }) || left.date.localeCompare(right.date));
+    const exportRange = biometricExportDateRange(orderedRows, previewDateRange);
+    const start = exportRange[0] ?? orderedRows[0]?.date ?? uploadDateFrom;
+    const end = exportRange[exportRange.length - 1] ?? orderedRows[orderedRows.length - 1]?.date ?? uploadDateTo;
+    const cleanCode = code ? code.replace(/[^a-zA-Z0-9_-]/g, '_') : 'todos';
+    downloadBlob(
+      `biometrico_calendario_${cleanCode}_${start || 'inicio'}_${end || 'fin'}.xlsx`,
+      buildBiometricCalendarXlsx(
+        orderedRows,
+        previewHolidaysByDate,
+        previewDateRange,
+        previewFileName,
+        employeeByBiometricCode,
+      ),
+    );
+    toast.success(code ? `Exportado el calendario del codigo ${code}.` : 'Exportado el calendario completo.');
+  };
+
   const updateSavedAnalyses = (items: SavedBiometricAnalysis[]) => {
     setSavedAnalyses(items);
     persistSavedBiometricAnalyses(items);
@@ -2814,76 +2952,101 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
     toast.success('Analisis eliminado.');
   };
 
+  const previewTotalWorkedHours = previewRows.reduce((sum, row) => sum + row.workedHours, 0);
+  const previewTotalDayHours = previewRows.reduce((sum, row) => sum + row.dayHours, 0);
+  const previewTotalNightHours = previewRows.reduce((sum, row) => sum + row.nightHours, 0);
+  const previewReviewCount = previewRows.filter((row) => row.status !== 'Completo').length;
+  const previewRangeLabel = previewDateRange.length
+    ? `${formatDate(previewDateRange[0])} - ${formatDate(previewDateRange[previewDateRange.length - 1])}`
+    : 'Sin rango';
+
   if (loading) return <LoadingState label="Cargando información biométrica..." />;
 
   return (
-    <div className="space-y-4">
-      <Card className="p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-sm font-semibold text-gray-900">Inteligencia de marcaciones</p>
-            <p className="text-[11px] text-gray-500 mt-0.5">
-              El TXT se analiza por codigo y dia. Todas las timbradas se conservan; si el conteo no es normal, el dia queda marcado para revisar.
-            </p>
+    <div className="space-y-5">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.75fr)]">
+        <Card className="p-5">
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-base font-semibold text-gray-900">Importar marcaciones</p>
+              <p className="mt-1 text-xs text-gray-500">Carga un TXT, filtra el rango y revisa el resultado antes de guardar o exportar.</p>
+            </div>
+            <SecondaryButton onClick={() => setShowDeviceModal(true)} icon={<Plus size={13} />}>Nuevo dispositivo</SecondaryButton>
           </div>
-          <SecondaryButton onClick={() => setShowIntelligenceModal(true)}>Ajustar</SecondaryButton>
-        </div>
-      </Card>
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(220px,1fr)_160px_160px_auto] lg:items-end">
+            <label className="block">
+              <span className="block text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1.5">Dispositivo</span>
+              <select value={uploadingDevice} onChange={(e) => setUploadingDevice(e.target.value)} className={selectCls}>
+                <option value="">Sin especificar</option>
+                {devices.map((device) => (
+                  <option key={device.id} value={device.id}>{device.name}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="block text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1.5">Desde</span>
+              <input type="date" value={uploadDateFrom} onChange={(e) => setUploadDateFrom(e.target.value)} className={inputCls} />
+            </label>
+            <label className="block">
+              <span className="block text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1.5">Hasta</span>
+              <input type="date" value={uploadDateTo} onChange={(e) => setUploadDateTo(e.target.value)} className={inputCls} />
+            </label>
+            <label className="flex h-[42px] items-center justify-center gap-2 rounded-lg bg-[#2a4038] px-4 text-xs font-semibold text-white transition-colors hover:bg-[#3d5c4e] cursor-pointer">
+              <UploadCloud size={14} />
+              {uploading ? 'Subiendo...' : 'Subir TXT'}
+              <input
+                type="file"
+                accept=".txt,text/plain"
+                className="hidden"
+                disabled={uploading}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) void handleUpload(file);
+                  e.target.value = '';
+                }}
+              />
+            </label>
+          </div>
+        </Card>
 
-      <Card className="p-5">
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-sm font-semibold text-gray-900">Importar TXT del reloj biometrico</p>
-          <SecondaryButton onClick={() => setShowDeviceModal(true)} icon={<Plus size={13} />}>Nuevo dispositivo</SecondaryButton>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-[minmax(180px,1fr)_minmax(150px,180px)_minmax(150px,180px)_auto] items-end gap-3">
-          <label className="block flex-1">
-            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Dispositivo (opcional)</span>
-            <select value={uploadingDevice} onChange={(e) => setUploadingDevice(e.target.value)} className={selectCls}>
-              <option value="">Sin especificar</option>
-              {devices.map((device) => (
-                <option key={device.id} value={device.id}>{device.name}</option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
-            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Tomar desde</span>
-            <input type="date" value={uploadDateFrom} onChange={(e) => setUploadDateFrom(e.target.value)} className={inputCls} />
-          </label>
-          <label className="block">
-            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Tomar hasta</span>
-            <input type="date" value={uploadDateTo} onChange={(e) => setUploadDateTo(e.target.value)} className={inputCls} />
-          </label>
-          <label className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white text-xs font-semibold rounded-xl hover:bg-[#3d5c4e] transition-colors cursor-pointer disabled:opacity-50">
-            <UploadCloud size={14} />
-            {uploading ? 'Subiendo...' : 'Subir archivo'}
-            <input
-              type="file"
-              accept=".txt,text/plain"
-              className="hidden"
-              disabled={uploading}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) void handleUpload(file);
-                e.target.value = '';
-              }}
-            />
-          </label>
-        </div>
-      </Card>
+        <Card className="p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-base font-semibold text-gray-900">Control biométrico</p>
+              <p className="mt-1 text-xs text-gray-500">Reglas de lectura, mapeos y correcciones pendientes.</p>
+            </div>
+            <SecondaryButton onClick={() => setShowIntelligenceModal(true)}>Ajustar</SecondaryButton>
+          </div>
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Ventana</p>
+              <p className="mt-1 text-sm font-semibold text-gray-900">{intelligenceSettings?.duplicate_punch_window_minutes ?? 15} min</p>
+            </div>
+            <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Mapeos</p>
+              <p className="mt-1 text-sm font-semibold text-gray-900">{formatPlainNumber(mappings.length)}</p>
+            </div>
+            <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Pendientes</p>
+              <p className={`mt-1 text-sm font-semibold ${pending.length ? 'text-amber-700' : 'text-emerald-700'}`}>{formatPlainNumber(pending.length)}</p>
+            </div>
+          </div>
+        </Card>
+      </div>
 
-      <Card className="p-5">
+      <Card className="p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <label className="block flex-1">
-            <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Analisis guardados</span>
+            <span className="block text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1.5">Análisis guardados</span>
             <select
               value={selectedSavedAnalysisId}
               onChange={(event) => setSelectedSavedAnalysisId(event.target.value)}
               className={selectCls}
             >
-              <option value="">Sin analisis guardados</option>
+              <option value="">Sin análisis guardados</option>
               {savedAnalyses.map((item) => (
                 <option key={item.id} value={item.id}>
-                  {item.name} - {item.rows.length} dia(s)
+                  {item.name} - {item.rows.length} día(s)
                 </option>
               ))}
             </select>
@@ -2897,42 +3060,62 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
       </Card>
 
       {(previewFileName || previewRows.length > 0) && (
-        <Card className="p-5">
-          <div className="flex flex-col gap-3 mb-3 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <p className="text-sm font-semibold text-gray-900">Tabla analizada del TXT</p>
-              <p className="text-[11px] text-gray-500">
-                {previewFileName || 'Archivo seleccionado'} - {previewProgress.parsed} timbradas - {previewByCode.length} codigos - {previewRows.length} dias analizados
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge label={`${previewRows.reduce((sum, row) => sum + row.workedHours, 0).toFixed(2)} hrs trabajadas`} color="gray" />
-              <Badge label={`${previewRows.reduce((sum, row) => sum + row.dayHours, 0).toFixed(2)} diurnas`} color="green" />
-              <Badge label={`${previewRows.reduce((sum, row) => sum + row.nightHours, 0).toFixed(2)} nocturnas`} color="blue" />
-              <Badge label={`${previewRows.filter((row) => row.status !== 'Completo').length} por revisar`} color={previewRows.some((row) => row.status !== 'Completo') ? 'yellow' : 'green'} />
-              <SecondaryButton onClick={() => setPreviewMode((mode) => (mode === 'table' ? 'calendar' : 'table'))} icon={<RotateCw size={13} />}>
-                {previewMode === 'table' ? 'Girar a calendario' : 'Girar a tabla'}
-              </SecondaryButton>
-              <SecondaryButton onClick={handleSaveAnalysis} icon={<Save size={13} />}>
-                Guardar
-              </SecondaryButton>
-              {previewMode === 'table' && (
-                <SecondaryButton
-                  onClick={() => setExpandedPreviewCodes((current) => (
-                    current.size === previewByCode.length ? new Set() : new Set(previewByCode.map((group) => group.code))
-                  ))}
-                >
-                  {expandedPreviewCodes.size === previewByCode.length ? 'Ocultar todos' : 'Ver todos'}
+        <Card className="overflow-hidden">
+          <div className="border-b border-gray-100 px-5 py-4">
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+              <div>
+                <p className="text-base font-semibold text-gray-900">Resultado del TXT</p>
+                <p className="mt-1 text-xs text-gray-500">
+                  {previewFileName || 'Archivo seleccionado'} · {previewRangeLabel} · {formatPlainNumber(previewProgress.parsed)} timbradas · {previewByCode.length} código(s)
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <SecondaryButton onClick={() => setPreviewMode((mode) => (mode === 'table' ? 'calendar' : 'table'))} icon={<RotateCw size={13} />}>
+                  {previewMode === 'table' ? 'Calendario' : 'Tabla'}
                 </SecondaryButton>
-              )}
-              <SecondaryButton onClick={() => exportPreviewRows(previewRows)} icon={<Download size={13} />}>
-                Exportar todo
-              </SecondaryButton>
-              {previewParsing && <Badge label={`Leyendo ${previewProgress.processed}/${previewProgress.total}`} color="yellow" />}
+                <SecondaryButton onClick={handleSaveAnalysis} icon={<Save size={13} />}>
+                  Guardar
+                </SecondaryButton>
+                {previewMode === 'table' && (
+                  <SecondaryButton
+                    onClick={() => setExpandedPreviewCodes((current) => (
+                      current.size === previewByCode.length ? new Set() : new Set(previewByCode.map((group) => group.code))
+                    ))}
+                  >
+                    {expandedPreviewCodes.size === previewByCode.length ? 'Ocultar todos' : 'Ver todos'}
+                  </SecondaryButton>
+                )}
+                <SecondaryButton onClick={() => (previewMode === 'calendar' ? exportPreviewCalendarRows(previewRows) : exportPreviewRows(previewRows))} icon={<Download size={13} />}>
+                  {previewMode === 'calendar' ? 'Exportar calendario' : 'Exportar todo'}
+                </SecondaryButton>
+              </div>
             </div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Trabajadas</p>
+                <p className="mt-1 text-sm font-semibold text-gray-900">{formatHours(previewTotalWorkedHours)}</p>
+              </div>
+              <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-600">Diurnas</p>
+                <p className="mt-1 text-sm font-semibold text-emerald-800">{formatHours(previewTotalDayHours)}</p>
+              </div>
+              <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-blue-600">Nocturnas</p>
+                <p className="mt-1 text-sm font-semibold text-blue-800">{formatHours(previewTotalNightHours)}</p>
+              </div>
+              <div className={`rounded-lg border px-3 py-2 ${previewReviewCount ? 'border-amber-100 bg-amber-50' : 'border-emerald-100 bg-emerald-50'}`}>
+                <p className={`text-[10px] font-bold uppercase tracking-widest ${previewReviewCount ? 'text-amber-600' : 'text-emerald-600'}`}>Por revisar</p>
+                <p className={`mt-1 text-sm font-semibold ${previewReviewCount ? 'text-amber-800' : 'text-emerald-800'}`}>{formatPlainNumber(previewReviewCount)} día(s)</p>
+              </div>
+            </div>
+            {previewParsing && (
+              <div className="mt-3">
+                <Badge label={`Leyendo ${previewProgress.processed}/${previewProgress.total}`} color="yellow" />
+              </div>
+            )}
           </div>
           {previewProgress.total > 0 && (
-            <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-3">
+            <div className="h-1 bg-gray-100">
               <div
                 className="h-full bg-[#2a4038] transition-all"
                 style={{ width: `${Math.min(100, Math.round((previewProgress.processed / previewProgress.total) * 100))}%` }}
@@ -2942,14 +3125,14 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
           {previewRows.length === 0 ? (
             <EmptyState title={previewParsing ? 'Analizando TXT...' : 'Sin marcaciones para mostrar'} />
           ) : (
-            <>
+            <div className="p-4">
               {previewMode === 'calendar' ? (
-            <div className="max-h-[640px] overflow-auto space-y-3 pr-1">
+            <div className="max-h-[640px] space-y-3 overflow-auto pr-1">
               {previewByCode.map((group) => {
                 const rowsByDate = new Map(group.rows.map((row) => [row.date, row]));
                 const mappedEmployee = employeeByBiometricCode.get(group.code);
                 return (
-                  <div key={group.code} className="rounded-lg border border-gray-100 bg-white">
+                  <div key={group.code} className="overflow-hidden rounded-lg border border-gray-100 bg-white">
                     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-3 py-2">
                       <div>
                         <p className="text-sm font-semibold text-gray-900">{biometricCodeDisplayName(group.code, employeeByBiometricCode)}</p>
@@ -2959,10 +3142,10 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
                       </div>
                       <button
                         type="button"
-                        onClick={() => exportPreviewRows(group.rows, group.code)}
+                        onClick={() => exportPreviewCalendarRows(group.rows, group.code)}
                         className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-[11px] font-semibold text-[#2a4038] hover:bg-gray-50"
                       >
-                        <Download size={12} /> Exportar codigo
+                        <Download size={12} /> Exportar calendario
                       </button>
                     </div>
                     <div className="space-y-3 p-3">
@@ -2978,7 +3161,7 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
                           </div>
                           <div className="grid min-w-[1120px] grid-cols-7">
                             {month.cells.map((date, index) => {
-                              if (!date) return <div key={`empty-${group.code}-${month.key}-${index}`} className="min-h-[174px] border-b border-r border-gray-50 bg-gray-50/50" />;
+                              if (!date) return <div key={`empty-${group.code}-${month.key}-${index}`} className="min-h-[154px] border-b border-r border-gray-50 bg-gray-50/50" />;
                               const row = rowsByDate.get(date);
                               const holiday = previewHolidaysByDate.get(date);
                               const parameter = previewParametersByYear.get(Number(date.slice(0, 4)));
@@ -2998,7 +3181,7 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
                               return (
                                 <div
                                   key={`${group.code}-${date}`}
-                                  className={`min-h-[174px] border-b border-r border-gray-50 p-2 ${missing && !holiday && !weekend ? 'bg-red-50/50' : holiday ? 'bg-blue-50/40' : 'bg-white'}`}
+                                  className={`min-h-[154px] border-b border-r border-gray-50 p-2 ${missing && !holiday && !weekend ? 'bg-red-50/50' : holiday ? 'bg-blue-50/40' : 'bg-white'}`}
                                 >
                                   <div className="flex items-start justify-between gap-1">
                                     <span className="text-[11px] font-semibold text-gray-900">{parseLocalDate(date).getDate()}</span>
@@ -3048,53 +3231,53 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
               })}
             </div>
               ) : (
-            <div className="overflow-auto max-h-[520px] border border-gray-100 rounded-lg">
+            <div className="max-h-[560px] overflow-auto rounded-lg border border-gray-100 bg-white">
               <table className="w-full text-xs">
-                <thead className="sticky top-0 bg-white z-10">
-                  <tr className="text-left text-[10px] uppercase text-gray-400 border-b border-gray-100">
-                    <th className="py-2 px-3">Empleado / codigo</th>
-                    <th className="py-2 px-3">Dias</th>
-                    <th className="py-2 px-3">Timbradas</th>
-                    <th className="py-2 px-3">Hrs</th>
-                    <th className="py-2 px-3">Diurnas</th>
-                    <th className="py-2 px-3">Nocturnas</th>
-                    <th className="py-2 px-3">Faltas</th>
-                    <th className="py-2 px-3">Festivos</th>
-                    <th className="py-2 px-3">Revision</th>
-                    <th className="py-2 px-3 text-right">Accion</th>
+                <thead className="sticky top-0 z-10 bg-gray-50">
+                  <tr className="border-b border-gray-100 text-left text-[10px] uppercase tracking-wider text-gray-400">
+                    <th className="px-4 py-3">Empleado / código</th>
+                    <th className="px-3 py-3 text-right">Días</th>
+                    <th className="px-3 py-3 text-right">Timbradas</th>
+                    <th className="px-3 py-3 text-right">Hrs</th>
+                    <th className="px-3 py-3 text-right">Diurnas</th>
+                    <th className="px-3 py-3 text-right">Nocturnas</th>
+                    <th className="px-3 py-3 text-center">Faltas</th>
+                    <th className="px-3 py-3 text-center">Festivos</th>
+                    <th className="px-3 py-3 text-center">Revisión</th>
+                    <th className="px-4 py-3 text-right">Acción</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-gray-50">
                   {previewByCode.map((group) => {
                     const expanded = expandedPreviewCodes.has(group.code);
                     const mappedEmployee = employeeByBiometricCode.get(group.code);
                     return (
                       <Fragment key={group.code}>
-                        <tr key={group.code} className="border-b border-gray-50 bg-white">
-                          <td className="py-3 px-3">
+                        <tr key={group.code} className="bg-white transition-colors hover:bg-gray-50/70">
+                          <td className="px-4 py-3">
                             <div className="text-sm font-semibold text-gray-900">{biometricCodeDisplayName(group.code, employeeByBiometricCode)}</div>
                             <div className="mt-1 font-mono text-[11px] text-gray-400">
-                              Codigo {group.code}{mappedEmployee?.employee_code ? ` - ${mappedEmployee.employee_code}` : ''}
+                              Código {group.code}{mappedEmployee?.employee_code ? ` - ${mappedEmployee.employee_code}` : ''}
                             </div>
                           </td>
-                          <td className="py-3 px-3">{group.rows.length}</td>
-                          <td className="py-3 px-3">{group.rawMarkCount}</td>
-                          <td className="py-3 px-3 font-semibold">{group.totalHours.toFixed(2)}</td>
-                          <td className="py-3 px-3 text-emerald-700">{group.dayHours.toFixed(2)}</td>
-                          <td className="py-3 px-3 text-indigo-700">{group.nightHours.toFixed(2)}</td>
-                          <td className="py-3 px-3">
+                          <td className="px-3 py-3 text-right">{group.rows.length}</td>
+                          <td className="px-3 py-3 text-right">{group.rawMarkCount}</td>
+                          <td className="px-3 py-3 text-right font-semibold">{group.totalHours.toFixed(2)}</td>
+                          <td className="px-3 py-3 text-right text-emerald-700">{group.dayHours.toFixed(2)}</td>
+                          <td className="px-3 py-3 text-right text-indigo-700">{group.nightHours.toFixed(2)}</td>
+                          <td className="px-3 py-3 text-center">
                             <Badge label={group.missingWorkDays} color={group.missingWorkDays > 0 ? 'red' : 'green'} />
                           </td>
-                          <td className="py-3 px-3">
+                          <td className="px-3 py-3 text-center">
                             <Badge label={group.holidayDays} color={group.holidayDays > 0 ? 'blue' : 'gray'} />
                           </td>
-                          <td className="py-3 px-3">
+                          <td className="px-3 py-3 text-center">
                             <Badge
-                              label={group.reviewDays > 0 ? `${group.reviewDays} dia(s)` : 'OK'}
+                              label={group.reviewDays > 0 ? `${group.reviewDays} día(s)` : 'OK'}
                               color={group.reviewDays > 0 ? 'yellow' : 'green'}
                             />
                           </td>
-                          <td className="py-3 px-3">
+                          <td className="px-4 py-3">
                             <div className="flex justify-end gap-2">
                               <button
                                 type="button"
@@ -3103,13 +3286,13 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
                               >
                                 <Download size={12} /> Excel
                               </button>
-                            <button
-                              type="button"
-                              onClick={() => togglePreviewCode(group.code)}
-                              className="rounded-lg border border-gray-200 px-3 py-1.5 text-[11px] font-semibold text-[#2a4038] hover:bg-gray-50"
-                            >
-                              {expanded ? 'Ocultar' : 'Ver mas'}
-                            </button>
+                              <button
+                                type="button"
+                                onClick={() => togglePreviewCode(group.code)}
+                                className="rounded-lg border border-gray-200 px-3 py-1.5 text-[11px] font-semibold text-[#2a4038] hover:bg-gray-50"
+                              >
+                                {expanded ? 'Ocultar' : 'Ver más'}
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -3176,80 +3359,88 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
               </table>
             </div>
               )}
-            </>
+            </div>
           )}
         </Card>
       )}
 
-      <Card className="p-5">
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-sm font-semibold text-gray-900">Mapeo de códigos del reloj a empleados</p>
-          <SecondaryButton onClick={() => { setMappingInitialCode(undefined); setShowMappingModal(true); }} icon={<Plus size={13} />}>Nuevo mapeo</SecondaryButton>
-        </div>
-        {mappings.length === 0 ? (
-          <EmptyState title="Sin mapeos registrados" description="Sin mapeo, las marcaciones del reloj no se pueden asociar a un empleado." />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="text-left text-[10px] uppercase text-gray-400 border-b border-gray-100">
-                  <th className="py-2 pr-3">Código del reloj</th>
-                  <th className="py-2 pr-3">Empleado</th>
-                  <th className="py-2 pr-3">Estado</th>
-                  <th className="py-2 pr-3" />
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedMappings.map((mapping) => (
-                  <tr key={mapping.id} className="border-b border-gray-50">
-                    <td className="py-2 pr-3 font-mono">{mapping.biometric_code}</td>
-                    <td className="py-2 pr-3">{employeeName(employeeById.get(mapping.employee))}</td>
-                    <td className="py-2 pr-3">
-                      <Badge label={mapping.is_active ? 'Activo' : 'Inactivo'} color={mapping.is_active ? 'green' : 'gray'} />
-                    </td>
-                    <td className="py-2 pr-3 text-right">
-                      <button onClick={() => void handleDeleteMapping(mapping.id)} className="text-red-500 hover:underline">Eliminar</button>
-                    </td>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(340px,0.85fr)]">
+        <Card className="p-5">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Mapeo de códigos</p>
+              <p className="mt-0.5 text-[11px] text-gray-500">Relaciona cada código del reloj con un empleado.</p>
+            </div>
+            <SecondaryButton onClick={() => { setMappingInitialCode(undefined); setShowMappingModal(true); }} icon={<Plus size={13} />}>Nuevo</SecondaryButton>
+          </div>
+          {mappings.length === 0 ? (
+            <EmptyState title="Sin mapeos registrados" description="Sin mapeo, las marcaciones del reloj no se pueden asociar a un empleado." />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-gray-100 text-left text-[10px] uppercase tracking-wider text-gray-400">
+                    <th className="py-2 pr-3">Código</th>
+                    <th className="py-2 pr-3">Empleado</th>
+                    <th className="py-2 pr-3">Estado</th>
+                    <th className="py-2 pr-3" />
                   </tr>
-                ))}
-              </tbody>
-            </table>
-            {mappings.length > BIOMETRIC_MAPPING_PAGE_SIZE && (
-              <div className="mt-3">
-                <Pagination
-                  currentPage={Math.min(mappingPage, mappingTotalPages)}
-                  totalPages={mappingTotalPages}
-                  totalItems={mappings.length}
-                  itemsPerPage={BIOMETRIC_MAPPING_PAGE_SIZE}
-                  itemsPerPageOptions={[6]}
-                  onPageChange={setMappingPage}
-                />
-              </div>
-            )}
-          </div>
-        )}
-      </Card>
-
-      <Card className="p-5">
-        <p className="text-sm font-semibold text-gray-900 mb-3">Marcaciones pendientes de corrección</p>
-        {pending.length === 0 ? (
-          <EmptyState title="Sin marcaciones pendientes" description="Todas las asistencias tienen entrada y salida completas." />
-        ) : (
-          <div className="space-y-2">
-            {pending.map((attendance) => (
-              <div key={attendance.id} className="flex items-center justify-between gap-3 border border-gray-100 rounded-lg p-3">
-                <div>
-                  <p className="text-xs font-semibold text-gray-900">{employeeName(employeeById.get(attendance.employee))}</p>
-                  <p className="text-[11px] text-gray-400">
-                    {formatDate(attendance.date)} · Entrada: {attendance.check_in ? formatDateTime(attendance.check_in) : 'Sin registrar'} · Salida: {attendance.check_out ? formatDateTime(attendance.check_out) : 'Sin registrar'}
-                  </p>
+                </thead>
+                <tbody>
+                  {paginatedMappings.map((mapping) => (
+                    <tr key={mapping.id} className="border-b border-gray-50 last:border-0">
+                      <td className="py-2 pr-3 font-mono text-gray-800">{mapping.biometric_code}</td>
+                      <td className="py-2 pr-3">{employeeName(employeeById.get(mapping.employee))}</td>
+                      <td className="py-2 pr-3">
+                        <Badge label={mapping.is_active ? 'Activo' : 'Inactivo'} color={mapping.is_active ? 'green' : 'gray'} />
+                      </td>
+                      <td className="py-2 pr-3 text-right">
+                        <button onClick={() => void handleDeleteMapping(mapping.id)} className="text-[11px] font-semibold text-red-500 hover:underline">Eliminar</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {mappings.length > BIOMETRIC_MAPPING_PAGE_SIZE && (
+                <div className="mt-3">
+                  <Pagination
+                    currentPage={Math.min(mappingPage, mappingTotalPages)}
+                    totalPages={mappingTotalPages}
+                    totalItems={mappings.length}
+                    itemsPerPage={BIOMETRIC_MAPPING_PAGE_SIZE}
+                    itemsPerPageOptions={[6]}
+                    onPageChange={setMappingPage}
+                  />
                 </div>
-                <SecondaryButton onClick={() => setShowCorrectionModal(attendance)}>Corregir</SecondaryButton>
-              </div>
-            ))}
+              )}
+            </div>
+          )}
+        </Card>
+
+        <Card className="p-5">
+          <div className="mb-3">
+            <p className="text-sm font-semibold text-gray-900">Pendientes de corrección</p>
+            <p className="mt-0.5 text-[11px] text-gray-500">Días con entrada o salida incompleta.</p>
           </div>
-        )}
-      </Card>
+          {pending.length === 0 ? (
+            <EmptyState title="Sin marcaciones pendientes" description="Todas las asistencias tienen entrada y salida completas." />
+          ) : (
+            <div className="max-h-[360px] space-y-2 overflow-y-auto pr-1">
+              {pending.map((attendance) => (
+                <div key={attendance.id} className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 p-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-semibold text-gray-900">{employeeName(employeeById.get(attendance.employee))}</p>
+                    <p className="mt-1 text-[11px] text-gray-400">
+                      {formatDate(attendance.date)} · Entrada: {attendance.check_in ? formatDateTime(attendance.check_in) : 'Sin registrar'} · Salida: {attendance.check_out ? formatDateTime(attendance.check_out) : 'Sin registrar'}
+                    </p>
+                  </div>
+                  <SecondaryButton onClick={() => setShowCorrectionModal(attendance)}>Corregir</SecondaryButton>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
 
       <NewBiometricMappingModal
         open={showMappingModal}
