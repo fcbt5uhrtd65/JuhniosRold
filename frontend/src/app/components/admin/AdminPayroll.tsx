@@ -1105,7 +1105,7 @@ function biometricPayrollBreakdown(row: BiometricPreviewRow | undefined, holiday
   let lunchMinutes = fallbackLunchMinutes;
   let segments: Array<[number, number]> = [[checkIn, checkOut]];
 
-  if (breakStart !== null && breakEnd !== null && checkIn < breakStart && breakStart < checkOut) {
+  if (hasFullBreak && breakStart !== null && checkIn < breakStart && breakStart < checkOut) {
     const fixedBreakEnd = Math.min(checkOut, breakStart + FIXED_LUNCH_MINUTES);
     lunchMinutes = Math.max(0, fixedBreakEnd - breakStart);
     segments = [[checkIn, breakStart], [fixedBreakEnd, checkOut]].filter(([start, end]) => end > start);
