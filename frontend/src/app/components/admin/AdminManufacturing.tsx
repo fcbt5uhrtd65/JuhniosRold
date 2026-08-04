@@ -53,17 +53,27 @@ import {
   type ManufacturingSection,
 } from './manufacturing-shared';
 import { GeneralTab } from './manufacturing-tab-general';
+import { DocumentsTab } from './manufacturing-tab-release';
+import { ProductionControlTab } from './manufacturing-tab-production-control';
+import { LineIdentificationTab } from './manufacturing-tab-line-identification';
+import { CleaningLateTab } from './manufacturing-tab-cleaning-late';
+import { ClearanceEarlyTab } from './manufacturing-tab-clearance-early';
+import { AnalysisCertificateTab } from './manufacturing-tab-analysis-certificate';
+import { PackagingControlTab } from './manufacturing-tab-packaging';
+import { CleaningEarlyTab } from './manufacturing-tab-cleaning-early';
 import { DispensingTab } from './manufacturing-tab-dispensing';
 import { ManufacturingTab } from './manufacturing-tab-manufacturing';
-import { BulkQualityTab } from './manufacturing-tab-quality';
 import { FillingTab } from './manufacturing-tab-filling';
-import { PackagingTab } from './manufacturing-tab-packaging';
-import { FinalQualityTab, DocumentsTab, ReleaseTab, HistoryTab } from './manufacturing-tab-release';
+import { WeightVolumeTab } from './manufacturing-tab-weight-volume';
+import { ClearanceLateTab } from './manufacturing-tab-clearance-late';
+import { SealIntegrityTab } from './manufacturing-tab-seal-integrity';
+import { RawMaterialIdentificationTab } from './manufacturing-tab-raw-material-identification';
+import { FinalQualityTab, ReleaseTab, HistoryTab } from './manufacturing-tab-release';
 
 /* ═══════════════════════════════════════════════════════
    MÓDULO DE PRODUCCIÓN — orquestación de secciones (Planificación /
-   Expedientes de lote) y el detalle de lote (10 pestañas por fase,
-   repartidas en los archivos manufacturing-tab-*.tsx).
+   Expedientes de lote) y el detalle de lote (19 pestañas, calcadas del
+   SOP físico real de la empresa, repartidas en manufacturing-tab-*.tsx).
 ═══════════════════════════════════════════════════════ */
 
 export function AdminManufacturing() {
@@ -543,16 +553,25 @@ function BatchDetail({
 
       <BatchProgressBar status={batch.status} />
 
-      <TabBar tabs={BATCH_TABS} value={activeTab} onChange={setActiveTab} currentId={currentPhaseTab} />
+      <TabBar tabs={BATCH_TABS} value={activeTab} onChange={setActiveTab} currentId={currentPhaseTab} compact />
 
       {activeTab === 'general' && <GeneralTab batch={batch} employeeById={employeeById} onRefresh={onRefresh} />}
+      {activeTab === 'documents' && <DocumentsTab batch={batch} onNavigateToTab={setActiveTab} />}
+      {activeTab === 'production_control' && <ProductionControlTab batch={batch} employeeById={employeeById} employees={Array.from(employeeById.values())} />}
+      {activeTab === 'line_identification' && <LineIdentificationTab batch={batch} />}
+      {activeTab === 'cleaning_late' && <CleaningLateTab batch={batch} />}
+      {activeTab === 'clearance_early' && <ClearanceEarlyTab batch={batch} />}
+      {activeTab === 'analysis_certificate' && <AnalysisCertificateTab batch={batch} />}
+      {activeTab === 'packaging_control' && <PackagingControlTab batch={batch} employeeById={employeeById} employees={Array.from(employeeById.values())} />}
+      {activeTab === 'cleaning_early' && <CleaningEarlyTab batch={batch} />}
       {activeTab === 'dispensing' && <DispensingTab batch={batch} employeeById={employeeById} />}
       {activeTab === 'manufacturing' && <ManufacturingTab batch={batch} employeeById={employeeById} />}
-      {activeTab === 'bulk_quality' && <BulkQualityTab batch={batch} />}
       {activeTab === 'filling' && <FillingTab batch={batch} employeeById={employeeById} />}
-      {activeTab === 'packaging' && <PackagingTab batch={batch} employeeById={employeeById} employees={Array.from(employeeById.values())} />}
+      {activeTab === 'weight_volume' && <WeightVolumeTab batch={batch} />}
+      {activeTab === 'clearance_late' && <ClearanceLateTab batch={batch} />}
+      {activeTab === 'seal_integrity' && <SealIntegrityTab batch={batch} />}
+      {activeTab === 'raw_material_identification' && <RawMaterialIdentificationTab batch={batch} />}
       {activeTab === 'final_quality' && <FinalQualityTab batch={batch} />}
-      {activeTab === 'documents' && <DocumentsTab batch={batch} onNavigateToTab={setActiveTab} />}
       {activeTab === 'release' && <ReleaseTab batch={batch} employeeById={employeeById} onRefresh={onRefresh} />}
       {activeTab === 'history' && <HistoryTab batch={batch} />}
     </div>

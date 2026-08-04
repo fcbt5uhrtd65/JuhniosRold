@@ -5,7 +5,6 @@ import { Badge, Card, EmptyState, LoadingState, Modal, PrimaryButton, SecondaryB
 import { SignatureBlock } from './SignatureBlock';
 import {
   createAnalysisCertificate,
-  createMicrobiologyAnalysis,
   exportAnalysisCertificate,
   getAnalysisCertificate,
   loadCertificateTestsFromSpecification,
@@ -15,10 +14,10 @@ import {
 import { formatDate } from './manufacturing-shared';
 
 /* ═══════════════════════════════════════════════════════
-   Pestaña "Calidad del granel" del expediente de lote.
+   Pestaña "Certificado de análisis" del expediente de lote.
 ═══════════════════════════════════════════════════════ */
 
-export function BulkQualityTab({ batch }: { batch: BatchRecord }) {
+export function AnalysisCertificateTab({ batch }: { batch: BatchRecord }) {
   const toast = useToast();
   const [certificate, setCertificate] = useState<AnalysisCertificateRecord | null>(null);
   const [loading, setLoading] = useState(true);
@@ -63,7 +62,7 @@ export function BulkQualityTab({ batch }: { batch: BatchRecord }) {
     }
   };
 
-  if (loading) return <LoadingState label="Cargando calidad del granel..." />;
+  if (loading) return <LoadingState label="Cargando certificado de análisis..." />;
 
   return (
     <div className="space-y-4">
@@ -203,67 +202,3 @@ function NewAnalysisCertificateModal({
     </Modal>
   );
 }
-
-export function NewMicrobiologyAnalysisModal({
-  open,
-  batchId,
-  onClose,
-  onCreated,
-}: {
-  open: boolean;
-  batchId: string;
-  onClose: () => void;
-  onCreated: () => Promise<void>;
-}) {
-  const toast = useToast();
-  const [sampleCode, setSampleCode] = useState('');
-  const [laboratory, setLaboratory] = useState('');
-  const [reportNumber, setReportNumber] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  const handleSubmit = async () => {
-    setSaving(true);
-    try {
-      await createMicrobiologyAnalysis({
-        batch: batchId,
-        sample_code: sampleCode,
-        laboratory,
-        report_number: reportNumber,
-        overall_result: 'PENDING',
-      });
-      toast.success('Análisis microbiológico creado');
-      await onCreated();
-    } catch (error) {
-      console.error(error);
-      toast.error(error instanceof Error ? error.message : 'No se pudo crear el análisis');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Modal title="Nuevo análisis microbiológico" open={open} onClose={onClose}>
-      <div className="space-y-4">
-        <label className="block">
-          <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Código de muestra</span>
-          <input value={sampleCode} onChange={(e) => setSampleCode(e.target.value)} className={inputCls} />
-        </label>
-        <label className="block">
-          <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Laboratorio</span>
-          <input value={laboratory} onChange={(e) => setLaboratory(e.target.value)} className={inputCls} />
-        </label>
-        <label className="block">
-          <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">N.º informe</span>
-          <input value={reportNumber} onChange={(e) => setReportNumber(e.target.value)} className={inputCls} />
-        </label>
-        <div className="flex justify-end gap-2">
-          <SecondaryButton onClick={onClose}>Cancelar</SecondaryButton>
-          <PrimaryButton onClick={() => void handleSubmit()} disabled={saving}>
-            {saving ? 'Guardando...' : 'Crear análisis'}
-          </PrimaryButton>
-        </div>
-      </div>
-    </Modal>
-  );
-}
-

@@ -5,6 +5,7 @@ import { Badge, Card, EmptyState, KpiCard, LoadingState, Modal, PrimaryButton, S
 import { SignaturePad } from './SignaturePad';
 import { SignatureBlock } from './SignatureBlock';
 import {
+  createMicrobiologyAnalysis,
   deleteBatchAttachment,
   exportBatchRelease,
   exportDocumentChecklist,
@@ -37,7 +38,6 @@ import {
 } from '../../services/manufacturing.service';
 import type { Employee } from '../../services/employees.service';
 import { BATCH_TABS, STATUS_LABELS, SectionField, formatDate, formatDateTime, getEmployeeName, getMediaUrl, type BatchTab } from './manufacturing-shared';
-import { NewMicrobiologyAnalysisModal } from './manufacturing-tab-quality';
 
 /* ═══════════════════════════════════════════════════════
    Pestañas "Calidad final", "Documentos", "Liberación" e
@@ -49,8 +49,9 @@ export function FinalQualityTab({ batch }: { batch: BatchRecord }) {
     <Card className="p-5">
       <p className="text-sm font-semibold text-gray-900 mb-2">Calidad final</p>
       <p className="text-xs text-gray-500">
-        Los resultados de calidad final (certificado de producto terminado, microbiología y controles físicos) se consolidan
-        en las pestañas de "Calidad del granel" y "Acondicionamiento" — comparten los mismos registros del expediente del lote {batch.batch_code || batch.production_order_number}.
+        Los resultados de calidad final (certificado de análisis, microbiología y controles físicos) se consolidan
+        en las pestañas "Certificado de análisis", "Control de peso o volumen", "Control de hermeticidad" y "Liberación" —
+        comparten los mismos registros del expediente del lote {batch.batch_code || batch.production_order_number}.
       </p>
     </Card>
   );
@@ -62,18 +63,18 @@ const TAB_LABEL_BY_ID = new Map(BATCH_TABS.map((t) => [t.id, t.label]));
 // mandar al usuario directo a donde se resuelve, en vez de que tenga que
 // adivinar cuál pestaña corresponde al nombre del documento.
 const TABS_BY_DOCUMENT_CODE: Partial<Record<string, BatchTab[]>> = {
-  LINE_CLEARANCE: ['dispensing', 'manufacturing', 'filling'],
-  CLEAN_AREA_EQUIPMENT: ['dispensing', 'manufacturing', 'filling'],
-  RAW_MATERIAL_IDENTIFICATION: ['dispensing'],
+  LINE_CLEARANCE: ['clearance_early', 'clearance_late'],
+  CLEAN_AREA_EQUIPMENT: ['cleaning_early', 'cleaning_late'],
+  RAW_MATERIAL_IDENTIFICATION: ['raw_material_identification'],
   DISPENSING_ORDER: ['dispensing'],
-  ANALYSIS_CERTIFICATE: ['bulk_quality'],
-  MICROBIOLOGY: ['bulk_quality'],
-  LINE_IDENTIFICATION: ['general'],
+  ANALYSIS_CERTIFICATE: ['analysis_certificate'],
+  MICROBIOLOGY: ['final_quality'],
+  LINE_IDENTIFICATION: ['line_identification'],
   FILLING_CONTROL: ['filling'],
-  SEAL_INTEGRITY: ['filling'],
-  WEIGHT_VOLUME: ['filling'],
-  PACKAGING_CONTROL: ['packaging'],
-  PRODUCTION_CONTROL: ['packaging'],
+  SEAL_INTEGRITY: ['seal_integrity'],
+  WEIGHT_VOLUME: ['weight_volume'],
+  PACKAGING_CONTROL: ['packaging_control'],
+  PRODUCTION_CONTROL: ['production_control'],
   RELEASE: ['release'],
 };
 
@@ -598,6 +599,69 @@ function ReleaseMicrobiologySection({ batch }: { batch: BatchRecord }) {
         }}
       />
     </Card>
+  );
+}
+
+function NewMicrobiologyAnalysisModal({
+  open,
+  batchId,
+  onClose,
+  onCreated,
+}: {
+  open: boolean;
+  batchId: string;
+  onClose: () => void;
+  onCreated: () => Promise<void>;
+}) {
+  const toast = useToast();
+  const [sampleCode, setSampleCode] = useState('');
+  const [laboratory, setLaboratory] = useState('');
+  const [reportNumber, setReportNumber] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async () => {
+    setSaving(true);
+    try {
+      await createMicrobiologyAnalysis({
+        batch: batchId,
+        sample_code: sampleCode,
+        laboratory,
+        report_number: reportNumber,
+        overall_result: 'PENDING',
+      });
+      toast.success('Análisis microbiológico creado');
+      await onCreated();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo crear el análisis');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title="Nuevo análisis microbiológico" open={open} onClose={onClose}>
+      <div className="space-y-4">
+        <label className="block">
+          <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Código de muestra</span>
+          <input value={sampleCode} onChange={(e) => setSampleCode(e.target.value)} className={inputCls} />
+        </label>
+        <label className="block">
+          <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Laboratorio</span>
+          <input value={laboratory} onChange={(e) => setLaboratory(e.target.value)} className={inputCls} />
+        </label>
+        <label className="block">
+          <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">N.º informe</span>
+          <input value={reportNumber} onChange={(e) => setReportNumber(e.target.value)} className={inputCls} />
+        </label>
+        <div className="flex justify-end gap-2">
+          <SecondaryButton onClick={onClose}>Cancelar</SecondaryButton>
+          <PrimaryButton onClick={() => void handleSubmit()} disabled={saving}>
+            {saving ? 'Guardando...' : 'Crear análisis'}
+          </PrimaryButton>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

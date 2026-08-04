@@ -20,25 +20,40 @@ import { formatDateTime, useAreasAndLines } from './manufacturing-shared';
 
 /* ═══════════════════════════════════════════════════════
    Despeje de línea y registros de limpieza — compartido
-   entre las pestañas de Dispensación, Fabricación y Llenado.
+   entre las pestañas de Dispensación, Fabricación, Llenado
+   y Acondicionamiento.
 ═══════════════════════════════════════════════════════ */
+
+export type ClearancePhase = 'DISPENSING' | 'MANUFACTURING' | 'FILLING' | 'PACKAGING';
+
+const PHASE_LABELS_FULL: Record<ClearancePhase, string> = {
+  DISPENSING: 'Dispensación',
+  MANUFACTURING: 'Fabricación',
+  FILLING: 'Llenado',
+  PACKAGING: 'Acondicionamiento',
+};
+
+const ALL_PHASES: ClearancePhase[] = ['DISPENSING', 'MANUFACTURING', 'FILLING', 'PACKAGING'];
 
 export function NewLineClearanceModal({
   open,
   batchId,
   defaultPhase,
+  phaseOptions,
   onClose,
   onCreated,
 }: {
   open: boolean;
   batchId: string;
-  defaultPhase?: 'DISPENSING' | 'MANUFACTURING' | 'FILLING' | 'PACKAGING';
+  defaultPhase?: ClearancePhase;
+  phaseOptions?: ClearancePhase[];
   onClose: () => void;
   onCreated: () => Promise<void>;
 }) {
   const toast = useToast();
   const { areas, productionLines } = useAreasAndLines();
-  const [phase, setPhase] = useState<'DISPENSING' | 'MANUFACTURING' | 'FILLING' | 'PACKAGING'>(defaultPhase ?? 'MANUFACTURING');
+  const options = phaseOptions ?? ALL_PHASES;
+  const [phase, setPhase] = useState<ClearancePhase>(defaultPhase ?? options[0]);
   const [area, setArea] = useState('');
   const [productionLine, setProductionLine] = useState('');
   const [previousProduct, setPreviousProduct] = useState('');
@@ -75,11 +90,10 @@ export function NewLineClearanceModal({
       <div className="space-y-4">
         <label className="block">
           <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Fase</span>
-          <select value={phase} onChange={(e) => setPhase(e.target.value as typeof phase)} className={selectCls}>
-            <option value="DISPENSING">Dispensación</option>
-            <option value="MANUFACTURING">Fabricación</option>
-            <option value="FILLING">Llenado</option>
-            <option value="PACKAGING">Acondicionamiento</option>
+          <select value={phase} onChange={(e) => setPhase(e.target.value as ClearancePhase)} className={selectCls}>
+            {options.map((p) => (
+              <option key={p} value={p}>{PHASE_LABELS_FULL[p]}</option>
+            ))}
           </select>
         </label>
         <div className="grid grid-cols-2 gap-3">
@@ -130,18 +144,21 @@ export function NewCleaningRecordModal({
   open,
   batchId,
   defaultPhase,
+  phaseOptions,
   onClose,
   onCreated,
 }: {
   open: boolean;
   batchId: string;
-  defaultPhase?: 'DISPENSING' | 'MANUFACTURING' | 'FILLING' | 'PACKAGING';
+  defaultPhase?: ClearancePhase;
+  phaseOptions?: ClearancePhase[];
   onClose: () => void;
   onCreated: () => Promise<void>;
 }) {
   const toast = useToast();
   const [recordType, setRecordType] = useState<'AREA' | 'EQUIPMENT'>('AREA');
-  const [phase, setPhase] = useState<'DISPENSING' | 'MANUFACTURING' | 'FILLING' | 'PACKAGING'>(defaultPhase ?? 'MANUFACTURING');
+  const options = phaseOptions ?? ALL_PHASES;
+  const [phase, setPhase] = useState<ClearancePhase>(defaultPhase ?? options[0]);
   const [area, setArea] = useState('');
   const [equipment, setEquipment] = useState('');
   const [equipmentCode, setEquipmentCode] = useState('');
@@ -193,11 +210,10 @@ export function NewCleaningRecordModal({
         </label>
         <label className="block">
           <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Fase del proceso</span>
-          <select value={phase} onChange={(e) => setPhase(e.target.value as typeof phase)} className={selectCls}>
-            <option value="DISPENSING">Dispensación</option>
-            <option value="MANUFACTURING">Fabricación</option>
-            <option value="FILLING">Llenado</option>
-            <option value="PACKAGING">Acondicionamiento</option>
+          <select value={phase} onChange={(e) => setPhase(e.target.value as ClearancePhase)} className={selectCls}>
+            {options.map((p) => (
+              <option key={p} value={p}>{PHASE_LABELS_FULL[p]}</option>
+            ))}
           </select>
         </label>
         {recordType === 'AREA' ? (
@@ -256,42 +272,36 @@ export function NewCleaningRecordModal({
   );
 }
 
-export function PhaseClearanceAndCleaningSection({
+function PhaseTag({ phase }: { phase: ClearancePhase }) {
+  return <span className="text-[10px] font-semibold text-gray-400 bg-gray-50 border border-gray-100 rounded px-1.5 py-0.5">{PHASE_LABELS_FULL[phase]}</span>;
+}
+
+export function ClearanceSection({
   batch,
-  phase,
-  phaseLabel,
+  phases,
+  groupLabel,
 }: {
   batch: BatchRecord;
-  phase: 'DISPENSING' | 'MANUFACTURING' | 'FILLING' | 'PACKAGING';
-  phaseLabel: string;
+  phases: ClearancePhase[];
+  groupLabel: string;
 }) {
   const toast = useToast();
   const [clearances, setClearances] = useState<LineClearanceRecord[]>([]);
-  const [cleanings, setCleanings] = useState<CleaningRecordRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [showClearanceModal, setShowClearanceModal] = useState(false);
-  const [showCleaningModal, setShowCleaningModal] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [clearancesRes, cleaningsRes] = await Promise.allSettled([
-        getLineClearances(batch.id),
-        getCleaningRecords(batch.id),
-      ]);
-      if (clearancesRes.status === 'fulfilled') {
-        setClearances(clearancesRes.value.filter((c) => c.phase === phase));
-      }
-      if (cleaningsRes.status === 'fulfilled') {
-        setCleanings(cleaningsRes.value.filter((c) => c.phase === phase));
-      }
+      const all = await getLineClearances(batch.id);
+      setClearances(all.filter((c) => phases.includes(c.phase as ClearancePhase)));
     } catch (error) {
       console.error(error);
-      toast.error(`No se pudo cargar despeje/limpieza de ${phaseLabel.toLowerCase()}`);
+      toast.error(`No se pudo cargar el despeje de ${groupLabel.toLowerCase()}`);
     } finally {
       setLoading(false);
     }
-  }, [batch.id, phase, phaseLabel, toast]);
+  }, [batch.id, phases, groupLabel, toast]);
 
   useEffect(() => {
     void load();
@@ -328,33 +338,27 @@ export function PhaseClearanceAndCleaningSection({
     }
   };
 
-  const handleExportCleaning = async (record: CleaningRecordRecord) => {
-    try {
-      await exportCleaningRecord(record.id, batch.batch_code || batch.production_order_number);
-    } catch (error) {
-      console.error(error);
-      toast.error('No se pudo exportar la limpieza');
-    }
-  };
-
-  if (loading) return null;
+  if (loading) return <p className="text-xs text-gray-400">Cargando...</p>;
 
   return (
     <>
       <Card className="p-5">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-sm font-semibold text-gray-900">Despeje de línea ({phaseLabel.toLowerCase()})</p>
+          <p className="text-sm font-semibold text-gray-900">Despeje de línea de áreas y equipos ({groupLabel})</p>
           <SecondaryButton onClick={() => setShowClearanceModal(true)} icon={<Plus size={13} />}>Nuevo despeje</SecondaryButton>
         </div>
         {clearances.length === 0 ? (
-          <EmptyState title="Sin despejes registrados" />
+          <EmptyState title="Sin despejes registrados" description={`Aún no se ha registrado ningún despeje de línea para ${groupLabel.toLowerCase()}.`} />
         ) : (
           <div className="space-y-2">
             {clearances.map((clearance) => (
               <div key={clearance.id} className="flex items-center justify-between gap-3 border border-gray-100 rounded-lg p-3">
                 <div>
-                  <p className="text-xs font-semibold text-gray-900">Área: {clearance.area_name || '-'}</p>
-                  <p className="text-[11px] text-gray-400">{formatDateTime(clearance.cleared_at)}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-semibold text-gray-900">Área: {clearance.area_name || '-'}</p>
+                    <PhaseTag phase={clearance.phase as ClearancePhase} />
+                  </div>
+                  <p className="text-[11px] text-gray-400 mt-0.5">{formatDateTime(clearance.cleared_at)}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge label={clearance.status} color={clearance.status === 'APPROVED' ? 'green' : clearance.status === 'REJECTED' ? 'red' : 'yellow'} />
@@ -374,21 +378,82 @@ export function PhaseClearanceAndCleaningSection({
         )}
       </Card>
 
+      <NewLineClearanceModal
+        open={showClearanceModal}
+        batchId={batch.id}
+        phaseOptions={phases}
+        onClose={() => setShowClearanceModal(false)}
+        onCreated={async () => {
+          setShowClearanceModal(false);
+          await load();
+        }}
+      />
+    </>
+  );
+}
+
+export function CleaningSection({
+  batch,
+  phases,
+  groupLabel,
+}: {
+  batch: BatchRecord;
+  phases: ClearancePhase[];
+  groupLabel: string;
+}) {
+  const toast = useToast();
+  const [cleanings, setCleanings] = useState<CleaningRecordRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showCleaningModal, setShowCleaningModal] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const all = await getCleaningRecords(batch.id);
+      setCleanings(all.filter((c) => phases.includes(c.phase as ClearancePhase)));
+    } catch (error) {
+      console.error(error);
+      toast.error(`No se pudo cargar la limpieza de ${groupLabel.toLowerCase()}`);
+    } finally {
+      setLoading(false);
+    }
+  }, [batch.id, phases, groupLabel, toast]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const handleExportCleaning = async (record: CleaningRecordRecord) => {
+    try {
+      await exportCleaningRecord(record.id, batch.batch_code || batch.production_order_number);
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo exportar la limpieza');
+    }
+  };
+
+  if (loading) return <p className="text-xs text-gray-400">Cargando...</p>;
+
+  return (
+    <>
       <Card className="p-5">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-sm font-semibold text-gray-900">Limpieza de áreas y equipos ({phaseLabel.toLowerCase()})</p>
+          <p className="text-sm font-semibold text-gray-900">Limpieza de áreas y equipos ({groupLabel})</p>
           <SecondaryButton onClick={() => setShowCleaningModal(true)} icon={<Plus size={13} />}>Nueva limpieza</SecondaryButton>
         </div>
         {cleanings.length === 0 ? (
-          <EmptyState title="Sin registros de limpieza" />
+          <EmptyState title="Sin registros de limpieza" description={`Aún no se ha registrado ninguna limpieza para ${groupLabel.toLowerCase()}.`} />
         ) : (
           <div className="space-y-2">
             {cleanings.map((record) => (
               <div key={record.id} className="border border-gray-100 rounded-lg p-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-xs font-semibold text-gray-900">{record.record_type === 'AREA' ? record.area : record.equipment}</p>
-                    <p className="text-[11px] text-gray-400">Sanitizante: {record.sanitizer || '-'} · {formatDateTime(record.cleaned_at)}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs font-semibold text-gray-900">{record.record_type === 'AREA' ? record.area : record.equipment}</p>
+                      <PhaseTag phase={record.phase as ClearancePhase} />
+                    </div>
+                    <p className="text-[11px] text-gray-400 mt-0.5">Sanitizante: {record.sanitizer || '-'} · {formatDateTime(record.cleaned_at)}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     {record.is_expired && <Badge label="Vencida" color="red" />}
@@ -408,20 +473,10 @@ export function PhaseClearanceAndCleaningSection({
         )}
       </Card>
 
-      <NewLineClearanceModal
-        open={showClearanceModal}
-        batchId={batch.id}
-        defaultPhase={phase}
-        onClose={() => setShowClearanceModal(false)}
-        onCreated={async () => {
-          setShowClearanceModal(false);
-          await load();
-        }}
-      />
       <NewCleaningRecordModal
         open={showCleaningModal}
         batchId={batch.id}
-        defaultPhase={phase}
+        phaseOptions={phases}
         onClose={() => setShowCleaningModal(false)}
         onCreated={async () => {
           setShowCleaningModal(false);

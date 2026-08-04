@@ -367,9 +367,9 @@ export function ErrorState({ title, description, action }: { title?: string; des
   );
 }
 
-export function TabBar<T extends string>({ tabs, value, onChange, currentId }: { tabs: { id: T; label: string; icon?: React.ComponentType<{ size?: number }> }[]; value: T; onChange: (id: T) => void; currentId?: T }) {
+export function TabBar<T extends string>({ tabs, value, onChange, currentId, compact }: { tabs: { id: T; label: string; icon?: React.ComponentType<{ size?: number }> }[]; value: T; onChange: (id: T) => void; currentId?: T; compact?: boolean }) {
   return (
-    <div className="flex gap-1 mb-6 bg-gray-100 rounded-xl p-1 flex-wrap">
+    <div className={`flex flex-wrap bg-gray-100 rounded-xl ${compact ? 'gap-0.5 p-0.5 mb-4' : 'gap-1 p-1 mb-6'}`}>
       {tabs.map(t => {
         const Icon = t.icon;
         const active = value === t.id;
@@ -378,9 +378,9 @@ export function TabBar<T extends string>({ tabs, value, onChange, currentId }: {
             key={t.id}
             onClick={() => onChange(t.id)}
             title={t.id === currentId ? 'Fase actual del lote' : undefined}
-            className={`relative flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${active ? 'bg-white text-[#2a4038] shadow-sm font-semibold' : 'text-gray-500 hover:text-gray-700'}`}
+            className={`relative flex items-center gap-1 rounded-lg font-medium transition-all whitespace-nowrap ${compact ? 'px-2 py-1 text-[11px]' : 'px-3 py-2 text-xs'} ${active ? 'bg-white text-[#2a4038] shadow-sm font-semibold' : 'text-gray-500 hover:text-gray-700'}`}
           >
-            {Icon && <Icon size={12} />} {t.label}
+            {Icon && <Icon size={compact ? 11 : 12} />} {t.label}
             {t.id === currentId && <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />}
           </button>
         );

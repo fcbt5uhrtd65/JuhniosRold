@@ -3,6 +3,7 @@ import {
   Beaker,
   Boxes,
   ClipboardCheck,
+  DoorOpen,
   Droplets,
   Factory,
   FileText,
@@ -10,8 +11,12 @@ import {
   History,
   Package,
   Scale,
+  Shield,
   ShieldCheck,
+  SprayCan,
+  Tag,
   Truck,
+  Weight,
 } from 'lucide-react';
 import { Card, type BadgeColor } from './AdminUI';
 import {
@@ -28,15 +33,26 @@ import type { Employee } from '../../services/employees.service';
    del expediente de lote (módulo de manufactura).
 ═══════════════════════════════════════════════════════ */
 
+// Orden y agrupación calcados del SOP físico real de la empresa (no de las
+// fases genéricas del software) — ver referencia en Documentos/Produccion/*.jpeg.
 export type BatchTab =
   | 'general'
+  | 'documents'
+  | 'production_control'
+  | 'line_identification'
+  | 'cleaning_late'
+  | 'clearance_early'
+  | 'analysis_certificate'
+  | 'packaging_control'
+  | 'cleaning_early'
   | 'dispensing'
   | 'manufacturing'
-  | 'bulk_quality'
   | 'filling'
-  | 'packaging'
+  | 'weight_volume'
+  | 'clearance_late'
+  | 'seal_integrity'
+  | 'raw_material_identification'
   | 'final_quality'
-  | 'documents'
   | 'release'
   | 'history';
 
@@ -48,14 +64,23 @@ export const MANUFACTURING_SECTIONS: Array<{ id: ManufacturingSection; label: st
 ];
 
 export const BATCH_TABS: Array<{ id: BatchTab; label: string; icon: typeof FileText }> = [
-  { id: 'general', label: 'Información general', icon: FileText },
+  { id: 'general', label: 'General', icon: FileText },
+  { id: 'documents', label: 'Documentos', icon: ClipboardCheck },
+  { id: 'production_control', label: 'Producción', icon: Factory },
+  { id: 'line_identification', label: 'Identif. línea', icon: Tag },
+  { id: 'cleaning_late', label: 'Limpieza llenado', icon: SprayCan },
+  { id: 'clearance_early', label: 'Despeje dispensación', icon: DoorOpen },
+  { id: 'analysis_certificate', label: 'Certificado análisis', icon: Beaker },
+  { id: 'packaging_control', label: 'Acondicionamiento', icon: Boxes },
+  { id: 'cleaning_early', label: 'Limpieza dispensación', icon: SprayCan },
   { id: 'dispensing', label: 'Dispensación', icon: Scale },
   { id: 'manufacturing', label: 'Fabricación', icon: FlaskConical },
-  { id: 'bulk_quality', label: 'Calidad del granel', icon: Beaker },
   { id: 'filling', label: 'Llenado', icon: Droplets },
-  { id: 'packaging', label: 'Acondicionamiento', icon: Boxes },
+  { id: 'weight_volume', label: 'Peso o volumen', icon: Weight },
+  { id: 'clearance_late', label: 'Despeje llenado', icon: DoorOpen },
+  { id: 'seal_integrity', label: 'Hermeticidad', icon: Shield },
+  { id: 'raw_material_identification', label: 'Materia prima', icon: Package },
   { id: 'final_quality', label: 'Calidad final', icon: ShieldCheck },
-  { id: 'documents', label: 'Documentos', icon: ClipboardCheck },
   { id: 'release', label: 'Liberación', icon: Truck },
   { id: 'history', label: 'Historial', icon: History },
 ];
@@ -101,11 +126,11 @@ export const STATUS_TO_CURRENT_TAB: Record<BatchStatus, BatchTab> = {
   DISPENSING: 'dispensing',
   DISPENSING_DONE: 'manufacturing',
   MANUFACTURING: 'manufacturing',
-  BULK_PENDING_ANALYSIS: 'bulk_quality',
+  BULK_PENDING_ANALYSIS: 'analysis_certificate',
   BULK_APPROVED: 'filling',
   FILLING: 'filling',
-  PACKAGING: 'packaging',
-  FINISHED_QUARANTINE: 'packaging',
+  PACKAGING: 'packaging_control',
+  FINISHED_QUARANTINE: 'packaging_control',
   PENDING_DOCUMENTS: 'documents',
   PENDING_MICROBIOLOGY: 'final_quality',
   RELEASED: 'release',
