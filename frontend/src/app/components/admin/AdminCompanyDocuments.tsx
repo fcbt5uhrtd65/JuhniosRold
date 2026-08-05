@@ -79,6 +79,8 @@ export function AdminCompanyDocuments() {
   const [newDocumentName, setNewDocumentName] = useState('');
   const [newDocumentDescription, setNewDocumentDescription] = useState('');
   const [newDocumentFile, setNewDocumentFile] = useState<File | null>(null);
+  const [newDocumentVisibleFrom, setNewDocumentVisibleFrom] = useState('');
+  const [newDocumentVisibleUntil, setNewDocumentVisibleUntil] = useState('');
   const [savingNewDocument, setSavingNewDocument] = useState(false);
 
   const [showVersionModal, setShowVersionModal] = useState(false);
@@ -145,6 +147,8 @@ export function AdminCompanyDocuments() {
     setNewDocumentName('');
     setNewDocumentDescription('');
     setNewDocumentFile(null);
+    setNewDocumentVisibleFrom('');
+    setNewDocumentVisibleUntil('');
   };
 
   const handleCreateDocument = async () => {
@@ -156,6 +160,10 @@ export function AdminCompanyDocuments() {
       toast.error('Selecciona el archivo de la primera versión');
       return;
     }
+    if (newDocumentVisibleFrom && newDocumentVisibleUntil && newDocumentVisibleUntil < newDocumentVisibleFrom) {
+      toast.error('La fecha final debe ser posterior o igual a la fecha inicial');
+      return;
+    }
     setSavingNewDocument(true);
     try {
       const document = await createCompanyDocument({
@@ -163,7 +171,11 @@ export function AdminCompanyDocuments() {
         name: newDocumentName.trim(),
         description: newDocumentDescription.trim(),
       });
-      await createCompanyDocumentVersion(document.id, { file: newDocumentFile });
+      await createCompanyDocumentVersion(document.id, {
+        file: newDocumentFile,
+        visible_from: newDocumentVisibleFrom || null,
+        visible_until: newDocumentVisibleUntil || null,
+      });
       toast.success('Documento publicado');
       closeNewDocumentModal();
       setSelectedDocumentId(document.id);
@@ -513,6 +525,27 @@ export function AdminCompanyDocuments() {
               className={inputCls}
             />
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Visible desde (opcional)</label>
+              <input
+                type="date"
+                value={newDocumentVisibleFrom}
+                onChange={(event) => setNewDocumentVisibleFrom(event.target.value)}
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Visible hasta (opcional)</label>
+              <input
+                type="date"
+                value={newDocumentVisibleUntil}
+                onChange={(event) => setNewDocumentVisibleUntil(event.target.value)}
+                className={inputCls}
+              />
+            </div>
+          </div>
+          <p className="text-[11px] text-gray-400 -mt-2">Si dejas estos campos vacíos, el documento se mostrará siempre que sea la versión vigente.</p>
           <div className="flex gap-3 pt-4">
             <button
               type="button"
