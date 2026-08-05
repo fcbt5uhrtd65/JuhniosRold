@@ -1124,6 +1124,18 @@ class CompanyDocumentViewSet(SoftDeleteModelViewSet):
         self.required_component_action = "edit"
         return super().get_permissions()
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        user = self.request.user
+        if self.action in {"list", "retrieve"} and not user.has_component_access(self.required_component, "edit"):
+            today = timezone.localdate()
+            queryset = queryset.filter(
+                Q(visible_from__isnull=True) | Q(visible_from__lte=today),
+            ).filter(
+                Q(visible_until__isnull=True) | Q(visible_until__gte=today),
+            )
+        return queryset
+
     def perform_create(self, serializer):
         serializer.save(uploaded_by=self.request.user)
 

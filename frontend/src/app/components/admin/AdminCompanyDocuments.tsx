@@ -7,7 +7,7 @@ import {
   getCompanyDocuments,
   type CompanyDocument,
 } from '../../services/human-resources.service';
-import { Table, Th, Td, Modal, EmptyState, LoadingState, inputCls, actionsCellCls, ActionsMenu } from './AdminUI';
+import { Badge, type BadgeColor, Table, Th, Td, Modal, EmptyState, LoadingState, inputCls, actionsCellCls, ActionsMenu } from './AdminUI';
 
 function getMediaUrl(url: string): string {
   try {
@@ -22,6 +22,27 @@ function formatDateTime(value: string): string {
   return new Date(value).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' });
 }
 
+function formatDate(value: string): string {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString('es-CO');
+}
+
+function getVisibilityInfo(document: CompanyDocument): { label: string; color: BadgeColor } {
+  const today = new Date().toISOString().slice(0, 10);
+  if (document.visible_from && today < document.visible_from) {
+    return { label: `Se muestra desde ${formatDate(document.visible_from)}`, color: 'yellow' };
+  }
+  if (document.visible_until && today > document.visible_until) {
+    return { label: `Oculto desde ${formatDate(document.visible_until)}`, color: 'gray' };
+  }
+  if (document.visible_from || document.visible_until) {
+    const from = document.visible_from ? formatDate(document.visible_from) : 'siempre';
+    const until = document.visible_until ? formatDate(document.visible_until) : 'siempre';
+    return { label: `Visible ${from} - ${until}`, color: 'green' };
+  }
+  return { label: 'Siempre visible', color: 'green' };
+}
+
 export function AdminCompanyDocuments() {
   const toast = useToast();
   const [documents, setDocuments] = useState<CompanyDocument[]>([]);
@@ -31,6 +52,8 @@ export function AdminCompanyDocuments() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [file, setFile] = useState<File | null>(null);
+  const [visibleFrom, setVisibleFrom] = useState('');
+  const [visibleUntil, setVisibleUntil] = useState('');
 
   const loadDocuments = useCallback(async () => {
     setIsLoading(true);
@@ -53,6 +76,8 @@ export function AdminCompanyDocuments() {
     setShowUploadModal(false);
     setName('');
     setFile(null);
+    setVisibleFrom('');
+    setVisibleUntil('');
   };
 
   const handleUpload = async () => {
@@ -64,9 +89,18 @@ export function AdminCompanyDocuments() {
       toast.error('Selecciona un archivo para subir');
       return;
     }
+    if (visibleFrom && visibleUntil && visibleUntil < visibleFrom) {
+      toast.error('La fecha final debe ser posterior o igual a la fecha inicial');
+      return;
+    }
     setSaving(true);
     try {
-      await createCompanyDocument({ name: name.trim(), file });
+      await createCompanyDocument({
+        name: name.trim(),
+        file,
+        visible_from: visibleFrom || null,
+        visible_until: visibleUntil || null,
+      });
       toast.success('Documento publicado en el reglamento interno');
       closeUploadModal();
       await loadDocuments();
@@ -122,11 +156,14 @@ export function AdminCompanyDocuments() {
             <tr>
               <Th>Documento</Th>
               <Th>Publicado</Th>
+              <Th>Vigencia</Th>
               <Th>Acciones</Th>
             </tr>
           </thead>
           <tbody>
-            {documents.map((document) => (
+            {documents.map((document) => {
+              const visibility = getVisibilityInfo(document);
+              return (
               <tr key={document.id} className="hover:bg-gray-50/50">
                 <Td>
                   <div className="flex items-center gap-2">
@@ -135,6 +172,7 @@ export function AdminCompanyDocuments() {
                   </div>
                 </Td>
                 <Td>{formatDateTime(document.uploaded_at)}</Td>
+                <Td><Badge label={visibility.label} color={visibility.color} /></Td>
                 <Td className={actionsCellCls}>
                   <ActionsMenu
                     items={[
@@ -156,7 +194,8 @@ export function AdminCompanyDocuments() {
                   />
                 </Td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </Table>
       )}
@@ -183,6 +222,28 @@ export function AdminCompanyDocuments() {
               className={inputCls}
             />
           </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Visible desde (opcional)</label>
+              <input
+                type="date"
+                value={visibleFrom}
+                onChange={(event) => setVisibleFrom(event.target.value)}
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Visible hasta (opcional)</label>
+              <input
+                type="date"
+                value={visibleUntil}
+                onChange={(event) => setVisibleUntil(event.target.value)}
+                className={inputCls}
+              />
+            </div>
+          </div>
+          <p className="text-[11px] text-gray-400 -mt-2">Si dejas estos campos vacíos, el documento se mostrará siempre.</p>
 
           <div className="flex gap-3 pt-4">
             <button

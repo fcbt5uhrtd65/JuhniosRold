@@ -515,13 +515,20 @@ class EmployeeDocument(BaseModel):
 
 class CompanyDocument(BaseModel):
     """Documentos institucionales publicados por RRHH (reglamento interno,
-    políticas, manuales) visibles en modo lectura para todos los empleados."""
+    políticas, manuales) visibles en modo lectura para todos los empleados.
+
+    ``visible_from``/``visible_until`` son opcionales: si se dejan vacíos el
+    documento se ve siempre. Si se definen, solo aparece en el listado de
+    empleados (CompanyDocumentViewSet.get_queryset) mientras la fecha actual
+    esté dentro del rango — RRHH sigue viéndolo siempre en su propio panel."""
 
     name = models.CharField(max_length=180)
     file = models.FileField(
         upload_to="human_resources/company_documents/",
         validators=[FileExtensionValidator(allowed_extensions=("pdf", "png", "jpg", "jpeg", "doc", "docx"))],
     )
+    visible_from = models.DateField(null=True, blank=True)
+    visible_until = models.DateField(null=True, blank=True)
     uploaded_at = models.DateTimeField(auto_now_add=True)
     uploaded_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -533,6 +540,14 @@ class CompanyDocument(BaseModel):
 
     class Meta(BaseModel.Meta):
         ordering = ("-uploaded_at",)
+
+    def is_currently_visible(self):
+        today = timezone.localdate()
+        if self.visible_from and today < self.visible_from:
+            return False
+        if self.visible_until and today > self.visible_until:
+            return False
+        return True
 
     def __str__(self):
         return self.name

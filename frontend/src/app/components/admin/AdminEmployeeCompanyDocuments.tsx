@@ -17,6 +17,11 @@ function formatDateTime(value: string): string {
   return new Date(value).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' });
 }
 
+function formatDate(value: string): string {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString('es-CO');
+}
+
 export function AdminEmployeeCompanyDocuments() {
   const toast = useToast();
   const [documents, setDocuments] = useState<CompanyDocument[]>([]);
@@ -63,6 +68,9 @@ export function AdminEmployeeCompanyDocuments() {
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-gray-900 truncate">{document.name}</p>
                 <p className="text-xs text-gray-400 truncate">Publicado el {formatDateTime(document.uploaded_at)}</p>
+                {document.visible_until && (
+                  <p className="text-xs text-amber-600 truncate mt-0.5">Disponible hasta el {formatDate(document.visible_until)}</p>
+                )}
               </div>
               {document.file && (
                 <a

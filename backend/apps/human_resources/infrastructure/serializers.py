@@ -344,6 +344,15 @@ class CompanyDocumentSerializer(serializers.ModelSerializer):
         fields = "__all__"
         read_only_fields = ("uploaded_at", "uploaded_by")
 
+    def validate(self, attrs):
+        visible_from = attrs.get("visible_from", getattr(self.instance, "visible_from", None))
+        visible_until = attrs.get("visible_until", getattr(self.instance, "visible_until", None))
+        if visible_from and visible_until and visible_until < visible_from:
+            raise serializers.ValidationError(
+                {"visible_until": "La fecha final debe ser posterior o igual a la fecha inicial."}
+            )
+        return attrs
+
     def validate_file(self, file):
         if not file:
             raise serializers.ValidationError("Debes adjuntar un archivo.")

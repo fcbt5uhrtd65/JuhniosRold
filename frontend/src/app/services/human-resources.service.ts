@@ -558,6 +558,8 @@ export interface CompanyDocument {
   id: string;
   name: string;
   file: string | null;
+  visible_from: string | null;
+  visible_until: string | null;
   uploaded_at: string;
   uploaded_by: string | null;
   created_at: string;
@@ -650,6 +652,8 @@ export interface EmployeeDocumentPayload {
 export interface CompanyDocumentPayload {
   name: string;
   file?: File | null;
+  visible_from?: string | null;
+  visible_until?: string | null;
 }
 
 export interface ListAttendanceParams {
