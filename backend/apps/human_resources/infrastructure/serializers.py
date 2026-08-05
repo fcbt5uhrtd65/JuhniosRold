@@ -14,6 +14,7 @@ from .models import (
     BiometricDevice,
     BiometricImportBatch,
     CompanyDocument,
+    CompanyDocumentVersion,
     EmployeeBiometricId,
     EmployeeDocument,
     EmployeeWorkSchedule,
@@ -338,11 +339,13 @@ class EmployeeDocumentSerializer(serializers.ModelSerializer):
         return file
 
 
-class CompanyDocumentSerializer(serializers.ModelSerializer):
+class CompanyDocumentVersionSerializer(serializers.ModelSerializer):
+    version_label = serializers.ReadOnlyField()
+
     class Meta:
-        model = CompanyDocument
+        model = CompanyDocumentVersion
         fields = "__all__"
-        read_only_fields = ("uploaded_at", "uploaded_by")
+        read_only_fields = ("document", "version_number", "published_at", "uploaded_by")
 
     def validate(self, attrs):
         visible_from = attrs.get("visible_from", getattr(self.instance, "visible_from", None))
@@ -374,6 +377,34 @@ class CompanyDocumentSerializer(serializers.ModelSerializer):
             )
 
         return file
+
+
+class CompanyDocumentSerializer(serializers.ModelSerializer):
+    """``current_version`` es la última versión publicada (para RRHH, que
+    gestiona el documento completo) salvo que el contexto marque
+    ``visible_only=True`` (vista de empleado), en cuyo caso es la última
+    versión publicada que además esté dentro de su ventana de vigencia —
+    puede no coincidir con la más reciente si esta aún no entra en vigor o ya
+    venció."""
+
+    current_version = serializers.SerializerMethodField()
+    versions_count = serializers.IntegerField(source="versions.count", read_only=True)
+
+    class Meta:
+        model = CompanyDocument
+        fields = "__all__"
+
+    def get_current_version(self, obj):
+        if self.context.get("visible_only"):
+            version = next((v for v in obj.versions.all() if v.is_currently_visible()), None)
+        else:
+            version = obj.current_version
+        return CompanyDocumentVersionSerializer(version).data if version else None
+
+    def validate_name(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("Debes indicar el nombre del documento.")
+        return value.strip()
 
 
 class EmployeeSelfServiceDocumentSerializer(serializers.ModelSerializer):

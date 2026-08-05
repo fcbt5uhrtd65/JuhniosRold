@@ -514,32 +514,75 @@ class EmployeeDocument(BaseModel):
 
 
 class CompanyDocument(BaseModel):
-    """Documentos institucionales publicados por RRHH (reglamento interno,
-    políticas, manuales) visibles en modo lectura para todos los empleados.
+    """Documento institucional publicado por RRHH (reglamento interno,
+    política, comunicado, formato) visible en modo lectura para todos los
+    empleados. Es el "documento lógico": el contenido real (el PDF y su
+    vigencia) vive en las ``CompanyDocumentVersion`` relacionadas — este
+    modelo agrupa el historial de versiones bajo un mismo nombre/categoría."""
 
-    ``visible_from``/``visible_until`` son opcionales: si se dejan vacíos el
-    documento se ve siempre. Si se definen, solo aparece en el listado de
-    empleados (CompanyDocumentViewSet.get_queryset) mientras la fecha actual
-    esté dentro del rango — RRHH sigue viéndolo siempre en su propio panel."""
+    class Category(models.TextChoices):
+        REGULATION = "REGULATION", "Reglamento"
+        POLICY = "POLICY", "Políticas"
+        ANNOUNCEMENT = "ANNOUNCEMENT", "Comunicados"
+        FORM = "FORM", "Formatos"
 
+    category = models.CharField(max_length=20, choices=Category.choices, default=Category.REGULATION)
     name = models.CharField(max_length=180)
+    description = models.TextField(blank=True)
+
+    class Meta(BaseModel.Meta):
+        ordering = ("category", "name")
+
+    @property
+    def current_version(self):
+        return self.versions.order_by("-version_number").first()
+
+    def __str__(self):
+        return self.name
+
+
+class CompanyDocumentVersion(BaseModel):
+    """Una versión publicada de un ``CompanyDocument``. ``version_number`` se
+    autoincrementa por documento (1, 2, 3...) y se muestra como "N.0". La
+    versión vigente de un documento es siempre la de mayor ``version_number``
+    — publicar una nueva versión no borra ni oculta las anteriores, quedan
+    disponibles como historial.
+
+    ``visible_from``/``visible_until`` son opcionales: si se dejan vacíos la
+    versión se ve siempre que sea la vigente. Si se definen, solo aparece en
+    el listado de empleados (CompanyDocumentViewSet.get_queryset) mientras la
+    fecha actual esté dentro del rango — RRHH sigue viéndola siempre."""
+
+    document = models.ForeignKey(CompanyDocument, on_delete=models.CASCADE, related_name="versions")
+    version_number = models.PositiveIntegerField()
     file = models.FileField(
         upload_to="human_resources/company_documents/",
         validators=[FileExtensionValidator(allowed_extensions=("pdf", "png", "jpg", "jpeg", "doc", "docx"))],
     )
     visible_from = models.DateField(null=True, blank=True)
     visible_until = models.DateField(null=True, blank=True)
-    uploaded_at = models.DateTimeField(auto_now_add=True)
+    published_at = models.DateTimeField(auto_now_add=True)
     uploaded_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="uploaded_company_documents",
+        related_name="uploaded_company_document_versions",
     )
 
     class Meta(BaseModel.Meta):
-        ordering = ("-uploaded_at",)
+        ordering = ("-version_number",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=("document", "version_number"),
+                condition=models.Q(deleted_at__isnull=True),
+                name="unique_active_version_per_document",
+            ),
+        ]
+
+    @property
+    def version_label(self):
+        return f"{self.version_number}.0"
 
     def is_currently_visible(self):
         today = timezone.localdate()
@@ -550,7 +593,7 @@ class CompanyDocument(BaseModel):
         return True
 
     def __str__(self):
-        return self.name
+        return f"{self.document.name} v{self.version_label}"
 
 
 class PublicHoliday(BaseModel):

@@ -49,6 +49,7 @@ from ..infrastructure.models import (
     BiometricDevice,
     BiometricImportBatch,
     CompanyDocument,
+    CompanyDocumentVersion,
     EmployeeBiometricId,
     EmployeeDocument,
     EmployeeWorkSchedule,
@@ -75,6 +76,7 @@ from ..infrastructure.serializers import (
     BiometricDeviceSerializer,
     BiometricImportBatchSerializer,
     CompanyDocumentSerializer,
+    CompanyDocumentVersionSerializer,
     EmployeeBiometricIdSerializer,
     EmployeeDocumentSerializer,
     EmployeeSelfServiceDocumentSerializer,
@@ -1109,35 +1111,78 @@ class EmployeeDocumentViewSet(SoftDeleteModelViewSet):
 
 
 class CompanyDocumentViewSet(SoftDeleteModelViewSet):
-    """Documentos institucionales (reglamento interno, políticas) que RRHH
-    publica y que cualquier empleado autenticado puede consultar y descargar,
-    pero solo RRHH/Admin puede subir, editar o eliminar."""
+    """Documentos institucionales (reglamento, políticas, comunicados,
+    formatos) que RRHH publica y que cualquier empleado autenticado puede
+    consultar y descargar, pero solo RRHH/Admin puede crear, editar o
+    eliminar — incluyendo publicar nuevas versiones."""
 
-    queryset = CompanyDocument.objects.select_related("uploaded_by")
+    queryset = CompanyDocument.objects.prefetch_related("versions", "versions__uploaded_by")
     serializer_class = CompanyDocumentSerializer
     permission_classes = (HasComponentAccess,)
     required_component = "human_resources.company_documents"
+    filterset_fields = ("category",)
+
+    def _is_manager(self):
+        return self.request.user.has_component_access(self.required_component, "edit")
 
     def get_permissions(self):
         if self.action in {"list", "retrieve"}:
             return (IsAuthenticated(),)
+        if self.action == "history":
+            if self.request.method == "GET":
+                return (IsAuthenticated(),)
+            self.required_component_action = "edit"
+            return super().get_permissions()
         self.required_component_action = "edit"
         return super().get_permissions()
 
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        if self.action in {"list", "retrieve"} and not self._is_manager():
+            context["visible_only"] = True
+        return context
+
     def get_queryset(self):
         queryset = super().get_queryset()
-        user = self.request.user
-        if self.action in {"list", "retrieve"} and not user.has_component_access(self.required_component, "edit"):
+        if self.action in {"list", "retrieve"} and not self._is_manager():
             today = timezone.localdate()
             queryset = queryset.filter(
-                Q(visible_from__isnull=True) | Q(visible_from__lte=today),
+                versions__deleted_at__isnull=True,
             ).filter(
-                Q(visible_until__isnull=True) | Q(visible_until__gte=today),
-            )
+                Q(versions__visible_from__isnull=True) | Q(versions__visible_from__lte=today),
+            ).filter(
+                Q(versions__visible_until__isnull=True) | Q(versions__visible_until__gte=today),
+            ).distinct()
         return queryset
 
-    def perform_create(self, serializer):
-        serializer.save(uploaded_by=self.request.user)
+    @action(detail=True, methods=("get", "post"), url_path="versions")
+    def history(self, request, pk=None):
+        document = self.get_object()
+
+        if request.method == "GET":
+            versions = document.versions.select_related("uploaded_by")
+            serializer = CompanyDocumentVersionSerializer(versions, many=True, context={"request": request})
+            return Response(serializer.data)
+
+        serializer = CompanyDocumentVersionSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        next_version_number = (document.versions.aggregate(Max("version_number"))["version_number__max"] or 0) + 1
+        version = serializer.save(document=document, version_number=next_version_number, uploaded_by=request.user)
+        return Response(CompanyDocumentVersionSerializer(version).data, status=status.HTTP_201_CREATED)
+
+
+class CompanyDocumentVersionViewSet(SoftDeleteModelViewSet):
+    """Acceso directo a versiones puntuales (eliminar una versión del
+    historial). La creación de versiones nuevas se hace vía
+    ``CompanyDocumentViewSet.history`` (POST .../company-documents/{id}/versions/)
+    para que el número de versión se autoincremente por documento."""
+
+    queryset = CompanyDocumentVersion.objects.select_related("document", "uploaded_by")
+    serializer_class = CompanyDocumentVersionSerializer
+    permission_classes = (HasComponentAccess,)
+    required_component = "human_resources.company_documents"
+    required_component_action = "edit"
+    http_method_names = ("get", "delete", "head", "options")
 
 
 class HRNotificationViewSet(SoftDeleteModelViewSet):

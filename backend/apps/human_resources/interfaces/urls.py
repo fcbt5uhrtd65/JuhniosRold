@@ -6,6 +6,7 @@ from .views import (
     AttendanceViewSet,
     BiometricDeviceViewSet,
     BiometricImportBatchViewSet,
+    CompanyDocumentVersionViewSet,
     CompanyDocumentViewSet,
     EmployeeBiometricIdViewSet,
     EmployeeDocumentViewSet,
@@ -31,6 +32,7 @@ router.register("payroll", PayrollViewSet)
 router.register("performance-reviews", PerformanceReviewViewSet)
 router.register("documents", EmployeeDocumentViewSet)
 router.register("company-documents", CompanyDocumentViewSet)
+router.register("company-document-versions", CompanyDocumentVersionViewSet)
 router.register("notifications", HRNotificationViewSet)
 router.register("holidays", PublicHolidayViewSet)
 router.register("payroll-legal-parameters", PayrollLegalParameterViewSet)

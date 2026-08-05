@@ -23,6 +23,7 @@ const ATTENDANCE_INTELLIGENCE_SETTINGS_PATH = `${HR_PATH}/attendance-intelligenc
 const PERFORMANCE_REVIEWS_PATH = `${HR_PATH}/performance-reviews/`;
 const DOCUMENTS_PATH = `${HR_PATH}/documents/`;
 const COMPANY_DOCUMENTS_PATH = `${HR_PATH}/company-documents/`;
+const COMPANY_DOCUMENT_VERSIONS_PATH = `${HR_PATH}/company-document-versions/`;
 const NOTIFICATIONS_PATH = `${HR_PATH}/notifications/`;
 
 interface PaginatedResponse<T> {
@@ -89,7 +90,7 @@ function buildEmployeeDocumentBody(payload: Partial<EmployeeDocumentPayload>): F
   return formData;
 }
 
-function buildCompanyDocumentBody(payload: Partial<CompanyDocumentPayload>): FormData {
+function buildCompanyDocumentVersionBody(payload: Partial<CompanyDocumentVersionPayload>): FormData {
   const formData = new FormData();
   Object.entries(payload).forEach(([key, value]) => {
     if (value === null || value === undefined || value === '') return;
@@ -554,14 +555,30 @@ export interface EmployeeDocument {
   deleted_at: string | null;
 }
 
-export interface CompanyDocument {
+export type CompanyDocumentCategory = 'REGULATION' | 'POLICY' | 'ANNOUNCEMENT' | 'FORM';
+
+export interface CompanyDocumentVersion {
   id: string;
-  name: string;
+  document: string;
+  version_number: number;
+  version_label: string;
   file: string | null;
   visible_from: string | null;
   visible_until: string | null;
-  uploaded_at: string;
+  published_at: string;
   uploaded_by: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface CompanyDocument {
+  id: string;
+  category: CompanyDocumentCategory;
+  name: string;
+  description: string;
+  current_version: CompanyDocumentVersion | null;
+  versions_count: number;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -650,8 +667,13 @@ export interface EmployeeDocumentPayload {
 }
 
 export interface CompanyDocumentPayload {
+  category: CompanyDocumentCategory;
   name: string;
-  file?: File | null;
+  description?: string;
+}
+
+export interface CompanyDocumentVersionPayload {
+  file: File;
   visible_from?: string | null;
   visible_until?: string | null;
 }
@@ -1488,19 +1510,47 @@ export async function createMyEmployeeDocument(payload: Omit<EmployeeDocumentPay
 }
 
 // ---- Company documents (reglamento interno) ----
-export async function getCompanyDocuments(): Promise<CompanyDocument[]> {
-  const res = await api.get<CompanyDocument[] | PaginatedResponse<CompanyDocument>>(COMPANY_DOCUMENTS_PATH);
+export async function getCompanyDocuments(category?: CompanyDocumentCategory): Promise<CompanyDocument[]> {
+  const query = buildQuery({ category });
+  const res = await api.get<CompanyDocument[] | PaginatedResponse<CompanyDocument>>(`${COMPANY_DOCUMENTS_PATH}${query}`);
   return normalizeListResponse(res.data).data;
 }
 
 export async function createCompanyDocument(payload: CompanyDocumentPayload): Promise<CompanyDocument> {
-  const res = await api.post<CompanyDocument>(COMPANY_DOCUMENTS_PATH, buildCompanyDocumentBody(payload));
+  const res = await api.post<CompanyDocument>(COMPANY_DOCUMENTS_PATH, payload);
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
+export async function updateCompanyDocument(id: string, payload: Partial<CompanyDocumentPayload>): Promise<CompanyDocument> {
+  const res = await api.patch<CompanyDocument>(`${COMPANY_DOCUMENTS_PATH}${id}/`, payload);
   if (res.data) return res.data;
   throw new Error(res.message);
 }
 
 export async function deleteCompanyDocument(id: string): Promise<void> {
   await api.delete(`${COMPANY_DOCUMENTS_PATH}${id}/`);
+}
+
+export async function getCompanyDocumentVersions(documentId: string): Promise<CompanyDocumentVersion[]> {
+  const res = await api.get<CompanyDocumentVersion[]>(`${COMPANY_DOCUMENTS_PATH}${documentId}/versions/`);
+  return res.data ?? [];
+}
+
+export async function createCompanyDocumentVersion(
+  documentId: string,
+  payload: CompanyDocumentVersionPayload,
+): Promise<CompanyDocumentVersion> {
+  const res = await api.post<CompanyDocumentVersion>(
+    `${COMPANY_DOCUMENTS_PATH}${documentId}/versions/`,
+    buildCompanyDocumentVersionBody(payload),
+  );
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
+export async function deleteCompanyDocumentVersion(id: string): Promise<void> {
+  await api.delete(`${COMPANY_DOCUMENT_VERSIONS_PATH}${id}/`);
 }
 
 // ---- Notifications ----
