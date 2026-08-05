@@ -215,6 +215,11 @@ COMPONENT_DEFINITIONS = (
         "description": "Carga de archivos del reloj biométrico, mapeo de empleados y corrección de asistencia.",
     },
     {
+        "code": "human_resources.company_documents",
+        "name": "Documentos y reglamento de la empresa",
+        "description": "Publicación de documentos institucionales (reglamento interno, políticas) visibles para todos los empleados.",
+    },
+    {
         "code": "finance.management",
         "name": "Finanzas",
         "description": "Transacciones financieras y facturación.",
@@ -287,6 +292,7 @@ def build_default_role_permissions():
         "human_resources.management": {"can_view": True, "can_edit": True},
         "human_resources.payroll": {"can_view": True, "can_edit": True},
         "human_resources.biometric_import": {"can_view": True, "can_edit": True},
+        "human_resources.company_documents": {"can_view": True, "can_edit": True},
     }
     permissions["EMPLEADO"] = {
         "identity.users": {"can_view": True, "can_edit": False},

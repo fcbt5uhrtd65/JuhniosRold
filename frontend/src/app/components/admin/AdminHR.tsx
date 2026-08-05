@@ -127,6 +127,7 @@ import {
   type VacationRequestType,
 } from '../../services/human-resources.service';
 import { AdminStructure } from './AdminStructure';
+import { AdminCompanyDocuments } from './AdminCompanyDocuments';
 import { LocationPicker } from '../ui/LocationPicker';
 import { InteractiveLocationMap } from '../ui/InteractiveLocationMap';
 import { geographyService } from '../../services/geography.service';
@@ -141,7 +142,7 @@ function toBranchDecimalString(value: number | string): string {
   return Number(value).toFixed(6);
 }
 
-type HRTab = 'employees' | 'branches' | 'catalog' | 'vacations' | 'calendar' | 'orgchart';
+type HRTab = 'employees' | 'branches' | 'catalog' | 'vacations' | 'calendar' | 'orgchart' | 'documents';
 type HRCalendarView = 'requests' | 'birthdays';
 type EmployeeDataQualityFilter =
   | 'all'
@@ -3885,6 +3886,7 @@ export function AdminHR() {
                 { id: 'vacations', label: 'Solicitudes', icon: CalendarClock, desc: 'Vacaciones y permisos' },
                 { id: 'calendar', label: 'Calendario', icon: CalendarDays, desc: 'Novedades y cumpleaños' },
                 { id: 'orgchart', label: 'Organigrama', icon: Network, desc: 'Jerarquía de la empresa' },
+                { id: 'documents', label: 'Documentos', icon: FileText, desc: 'Reglamento y políticas' },
               ] as const).map((item) => {
                 const Icon = item.icon;
                 const active = activeTab === item.id;
@@ -3910,9 +3912,10 @@ export function AdminHR() {
         </div>
 
         <div className="flex-1 min-w-0 space-y-4 px-4 sm:px-6 md:px-8 lg:px-0 pt-4 lg:pt-0">
-          {activeTab !== 'calendar' && activeTab !== 'vacations' && activeTab !== 'orgchart' && (
+          {activeTab !== 'calendar' && activeTab !== 'vacations' && activeTab !== 'orgchart' && activeTab !== 'documents' && (
             <SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Buscar por nombre, apellido, cédula, cargo, área, sede o correo..." className="w-full" />
           )}
+          {activeTab === 'documents' && <AdminCompanyDocuments />}
           {activeTab === 'employees' ? (
             <div className="space-y-3 rounded-xl border border-gray-100 bg-white p-3 shadow-sm">
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5">

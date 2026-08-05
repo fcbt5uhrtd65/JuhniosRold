@@ -22,6 +22,7 @@ const BIOMETRIC_IMPORTS_PATH = `${HR_PATH}/biometric-imports/`;
 const ATTENDANCE_INTELLIGENCE_SETTINGS_PATH = `${HR_PATH}/attendance-intelligence-settings/`;
 const PERFORMANCE_REVIEWS_PATH = `${HR_PATH}/performance-reviews/`;
 const DOCUMENTS_PATH = `${HR_PATH}/documents/`;
+const COMPANY_DOCUMENTS_PATH = `${HR_PATH}/company-documents/`;
 const NOTIFICATIONS_PATH = `${HR_PATH}/notifications/`;
 
 interface PaginatedResponse<T> {
@@ -79,6 +80,16 @@ function buildVacationRequestBody(
 }
 
 function buildEmployeeDocumentBody(payload: Partial<EmployeeDocumentPayload>): FormData {
+  const formData = new FormData();
+  Object.entries(payload).forEach(([key, value]) => {
+    if (value === null || value === undefined || value === '') return;
+    if (value instanceof File) formData.append(key, value);
+    else formData.append(key, String(value));
+  });
+  return formData;
+}
+
+function buildCompanyDocumentBody(payload: Partial<CompanyDocumentPayload>): FormData {
   const formData = new FormData();
   Object.entries(payload).forEach(([key, value]) => {
     if (value === null || value === undefined || value === '') return;
@@ -543,6 +554,17 @@ export interface EmployeeDocument {
   deleted_at: string | null;
 }
 
+export interface CompanyDocument {
+  id: string;
+  name: string;
+  file: string | null;
+  uploaded_at: string;
+  uploaded_by: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
 export interface HRNotification {
   id: string;
   employee: string | null;
@@ -623,6 +645,11 @@ export interface EmployeeDocumentPayload {
   expires_at?: string | null;
   status?: EmployeeDocumentStatus;
   observations?: string;
+}
+
+export interface CompanyDocumentPayload {
+  name: string;
+  file?: File | null;
 }
 
 export interface ListAttendanceParams {
@@ -1454,6 +1481,22 @@ export async function createMyEmployeeDocument(payload: Omit<EmployeeDocumentPay
   const res = await api.post<EmployeeDocument>(`${DOCUMENTS_PATH}me/`, buildEmployeeDocumentBody(payload));
   if (res.data) return res.data;
   throw new Error(res.message);
+}
+
+// ---- Company documents (reglamento interno) ----
+export async function getCompanyDocuments(): Promise<CompanyDocument[]> {
+  const res = await api.get<CompanyDocument[] | PaginatedResponse<CompanyDocument>>(COMPANY_DOCUMENTS_PATH);
+  return normalizeListResponse(res.data).data;
+}
+
+export async function createCompanyDocument(payload: CompanyDocumentPayload): Promise<CompanyDocument> {
+  const res = await api.post<CompanyDocument>(COMPANY_DOCUMENTS_PATH, buildCompanyDocumentBody(payload));
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
+export async function deleteCompanyDocument(id: string): Promise<void> {
+  await api.delete(`${COMPANY_DOCUMENTS_PATH}${id}/`);
 }
 
 // ---- Notifications ----

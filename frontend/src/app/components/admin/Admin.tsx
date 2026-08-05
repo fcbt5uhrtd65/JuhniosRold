@@ -15,6 +15,7 @@ import { AdminPayroll } from './AdminPayroll';
 import { AdminHR } from './AdminHR';
 import { AdminLegal } from './AdminLegal';
 import { AdminEmployeePortal } from './AdminEmployeePortal';
+import { AdminEmployeeCompanyDocuments } from './AdminEmployeeCompanyDocuments';
 import { AdminEmployeeSettings } from './AdminEmployeeSettings';
 import { AdminLoans } from './AdminLoans';
 import { AdminRoles } from './AdminRoles';
@@ -104,6 +105,8 @@ export function Admin() {
         return <AdminLegal />;
       case 'employee-portal':
         return <AdminEmployeePortal />;
+      case 'company-documents':
+        return <AdminEmployeeCompanyDocuments />;
       case 'employee-settings':
         return <AdminEmployeeSettings />;
       case 'loans':

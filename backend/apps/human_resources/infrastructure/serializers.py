@@ -13,6 +13,7 @@ from .models import (
     AttendanceIntelligenceSettings,
     BiometricDevice,
     BiometricImportBatch,
+    CompanyDocument,
     EmployeeBiometricId,
     EmployeeDocument,
     EmployeeWorkSchedule,
@@ -317,6 +318,35 @@ class EmployeeDocumentSerializer(serializers.ModelSerializer):
     def validate_file(self, file):
         if not file:
             return file
+
+        extension = Path(file.name).suffix.lower().lstrip(".")
+        if extension not in {"pdf", "png", "jpg", "jpeg", "doc", "docx"}:
+            raise serializers.ValidationError(
+                "El documento solo puede ser PDF, Word o una imagen PNG/JPG."
+            )
+
+        content_type = getattr(file, "content_type", None)
+        if content_type and content_type.lower() not in {
+            *ALLOWED_SUPPORT_CONTENT_TYPES,
+            "application/msword",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        }:
+            raise serializers.ValidationError(
+                "El documento solo puede ser PDF, Word o una imagen PNG/JPG."
+            )
+
+        return file
+
+
+class CompanyDocumentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CompanyDocument
+        fields = "__all__"
+        read_only_fields = ("uploaded_at", "uploaded_by")
+
+    def validate_file(self, file):
+        if not file:
+            raise serializers.ValidationError("Debes adjuntar un archivo.")
 
         extension = Path(file.name).suffix.lower().lstrip(".")
         if extension not in {"pdf", "png", "jpg", "jpeg", "doc", "docx"}:

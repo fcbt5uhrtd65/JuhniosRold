@@ -48,6 +48,7 @@ from ..infrastructure.models import (
     AttendanceIntelligenceSettings,
     BiometricDevice,
     BiometricImportBatch,
+    CompanyDocument,
     EmployeeBiometricId,
     EmployeeDocument,
     EmployeeWorkSchedule,
@@ -73,6 +74,7 @@ from ..infrastructure.serializers import (
     AttendanceSerializer,
     BiometricDeviceSerializer,
     BiometricImportBatchSerializer,
+    CompanyDocumentSerializer,
     EmployeeBiometricIdSerializer,
     EmployeeDocumentSerializer,
     EmployeeSelfServiceDocumentSerializer,
@@ -1104,6 +1106,26 @@ class EmployeeDocumentViewSet(SoftDeleteModelViewSet):
     def perform_update(self, serializer):
         document = serializer.save()
         self._create_document_alert(document)
+
+
+class CompanyDocumentViewSet(SoftDeleteModelViewSet):
+    """Documentos institucionales (reglamento interno, políticas) que RRHH
+    publica y que cualquier empleado autenticado puede consultar y descargar,
+    pero solo RRHH/Admin puede subir, editar o eliminar."""
+
+    queryset = CompanyDocument.objects.select_related("uploaded_by")
+    serializer_class = CompanyDocumentSerializer
+    permission_classes = (HasComponentAccess,)
+    required_component = "human_resources.company_documents"
+
+    def get_permissions(self):
+        if self.action in {"list", "retrieve"}:
+            return (IsAuthenticated(),)
+        self.required_component_action = "edit"
+        return super().get_permissions()
+
+    def perform_create(self, serializer):
+        serializer.save(uploaded_by=self.request.user)
 
 
 class HRNotificationViewSet(SoftDeleteModelViewSet):

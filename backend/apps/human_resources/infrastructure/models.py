@@ -513,6 +513,31 @@ class EmployeeDocument(BaseModel):
         return f"{self.employee} - {self.get_document_type_display()}"
 
 
+class CompanyDocument(BaseModel):
+    """Documentos institucionales publicados por RRHH (reglamento interno,
+    políticas, manuales) visibles en modo lectura para todos los empleados."""
+
+    name = models.CharField(max_length=180)
+    file = models.FileField(
+        upload_to="human_resources/company_documents/",
+        validators=[FileExtensionValidator(allowed_extensions=("pdf", "png", "jpg", "jpeg", "doc", "docx"))],
+    )
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="uploaded_company_documents",
+    )
+
+    class Meta(BaseModel.Meta):
+        ordering = ("-uploaded_at",)
+
+    def __str__(self):
+        return self.name
+
+
 class PublicHoliday(BaseModel):
     """Catálogo editable de festivos colombianos, por año. Se guarda con la
     fecha ya resuelta (traslado al lunes de la Ley Emiliani ya aplicado si
