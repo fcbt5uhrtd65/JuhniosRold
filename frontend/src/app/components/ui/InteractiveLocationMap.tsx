@@ -12,13 +12,20 @@ interface InteractiveLocationMapProps {
   className?: string;
   /** Disables dragging and click-to-move, for views that only display a saved location. */
   readOnly?: boolean;
+  /**
+   * Where to center the map when no marker has been placed yet (lat/lng are null) — e.g. an
+   * approximate IP-based location, so the map opens near the user's real area instead of the
+   * whole-country default. Does NOT place a marker; the user still has to pick the exact point.
+   */
+  initialCenter?: { lat: number; lng: number } | null;
 }
 
 const DEFAULT_VIEW: [number, number] = [4.711, -74.0721]; // Colombia
 const DEFAULT_ZOOM = 5;
+const APPROXIMATE_ZOOM = 12;
 const FOCUSED_ZOOM = 16;
 
-export function InteractiveLocationMap({ lat, lng, onMarkerMove, className = '', readOnly = false }: InteractiveLocationMapProps) {
+export function InteractiveLocationMap({ lat, lng, onMarkerMove, className = '', readOnly = false, initialCenter = null }: InteractiveLocationMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mapInstanceRef = useRef<any>(null);
@@ -30,6 +37,8 @@ export function InteractiveLocationMap({ lat, lng, onMarkerMove, className = '',
   onMarkerMoveRef.current = onMarkerMove;
   const readOnlyRef = useRef(readOnly);
   readOnlyRef.current = readOnly;
+  const initialCenterRef = useRef(initialCenter);
+  initialCenterRef.current = initialCenter;
 
   // Init map once
   useEffect(() => {
@@ -76,6 +85,8 @@ export function InteractiveLocationMap({ lat, lng, onMarkerMove, className = '',
       if (lat !== null && lng !== null) {
         map.setView([lat, lng], FOCUSED_ZOOM);
         placeMarker(lat, lng);
+      } else if (initialCenterRef.current) {
+        map.setView([initialCenterRef.current.lat, initialCenterRef.current.lng], APPROXIMATE_ZOOM);
       } else {
         map.setView(DEFAULT_VIEW, DEFAULT_ZOOM);
       }
@@ -137,6 +148,16 @@ export function InteractiveLocationMap({ lat, lng, onMarkerMove, className = '',
     }
     map.setView([lat, lng], FOCUSED_ZOOM);
   }, [lat, lng, readOnly]);
+
+  // The IP-based approximate location usually resolves asynchronously, after the map has
+  // already mounted with the whole-country default view — recenter (without a marker) once it
+  // arrives, but only if the user hasn't placed a pin yet.
+  useEffect(() => {
+    if (lat !== null || lng !== null || !initialCenter) return;
+    const map = mapInstanceRef.current;
+    if (!map) return;
+    map.setView([initialCenter.lat, initialCenter.lng], APPROXIMATE_ZOOM);
+  }, [initialCenter, lat, lng]);
 
   return (
     <div className={`relative ${className}`}>

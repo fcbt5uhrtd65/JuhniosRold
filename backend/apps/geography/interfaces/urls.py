@@ -6,6 +6,7 @@ from .views import (
     CountryViewSet,
     GeocodingReverseView,
     GeocodingSearchView,
+    IpLocationView,
     StateViewSet,
 )
 
@@ -18,4 +19,5 @@ urlpatterns = [
     *router.urls,
     path("geocoding/search/", GeocodingSearchView.as_view(), name="geocoding-search"),
     path("geocoding/reverse/", GeocodingReverseView.as_view(), name="geocoding-reverse"),
+    path("geocoding/ip-location/", IpLocationView.as_view(), name="geocoding-ip-location"),
 ]

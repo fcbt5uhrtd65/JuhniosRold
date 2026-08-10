@@ -264,7 +264,7 @@ REST_FRAMEWORK = {
         "anon": "60/min",
         "user": "300/min",
         "auth_sensitive": "20/min",
-        "geocoding": "30/min",
+        "geocoding": "90/min",
     },
 }
 
