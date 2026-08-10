@@ -53,7 +53,12 @@ NOMINATIM_HEADERS = {
     "User-Agent": f"JuhniosRoldApp/1.0 ({NOMINATIM_CONTACT})",
 }
 GEOCODING_CACHE_TTL_SECONDS = 60 * 60
-GEOCODING_REQUEST_TIMEOUT_SECONDS = 4
+# 4s (bajado de los 8s originales) combinado con el debounce de 250ms del buscador hacía que
+# respuestas normales-pero-lentas de Nominatim/LocationIQ se reportaran como error con más
+# frecuencia de la deseada. 6s da más margen sin sentirse colgado; con 1 reintento en el
+# Retry de _session, el peor caso pasa de 8s a 12s, que sigue siendo razonable para un fallo
+# poco frecuente.
+GEOCODING_REQUEST_TIMEOUT_SECONDS = 6
 
 # Caja delimitadora de Colombia continental + insular (lon_min, lat_max, lon_max, lat_min —
 # formato viewbox de Nominatim/LocationIQ). Con bounded=1 esto recorta duro los resultados a
