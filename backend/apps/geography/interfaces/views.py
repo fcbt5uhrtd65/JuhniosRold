@@ -185,8 +185,13 @@ IP_API_URL = "http://ip-api.com/json/{ip}"
 
 
 def _client_ip(request) -> str:
-    forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
-    return forwarded.split(",")[0].strip() if forwarded else request.META.get("REMOTE_ADDR", "")
+    """X-Forwarded-For NO sirve aqui: nginx lo arma con $proxy_add_x_forwarded_for, que
+    antepone el valor que mande el cliente en vez de reemplazarlo, asi que cualquiera puede
+    enviar X-Forwarded-For: <ip falsa> y quedar como el primer salto. X-Real-IP en cambio lo
+    fija nginx siempre con $remote_addr (la IP real del socket TCP), sobrescribiendo lo que
+    el cliente haya mandado — es la unica que no se puede falsificar desde el navegador."""
+    real_ip = request.META.get("HTTP_X_REAL_IP", "").strip()
+    return real_ip or request.META.get("REMOTE_ADDR", "")
 
 
 def _is_public_ip(ip: str) -> bool:
