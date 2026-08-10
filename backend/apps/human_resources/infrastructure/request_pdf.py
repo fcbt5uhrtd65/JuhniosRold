@@ -21,15 +21,14 @@ from shared.infrastructure.pdf_letterhead import (
 
 COMPANY_NAME = "PRODUCTOS JUHNIOS ROLD SAS"
 
-
-def _company_name_for(employee):
-    """Razón social a mostrar en el documento: la de la sede del empleado
-    (``Branch.legal_name``) cuando está configurada — distintas sedes pueden
-    pertenecer a razones sociales/NITs distintos —, o ``COMPANY_NAME`` como
-    respaldo genérico si la sede no tiene ese dato o el empleado no tiene sede."""
-    branch = getattr(employee, "branch", None)
-    legal_name = getattr(branch, "legal_name", "") if branch else ""
-    return legal_name.strip() or COMPANY_NAME
+# Razón social por defecto de cada variante de membrete — el documento de una sede de una
+# marca nunca debe mencionar el nombre de la otra. Este valor se usa automáticamente en
+# cuanto se detecta la variante (ver resolve_letterhead_variant); Branch.legal_name, si se
+# configura, solo permite afinar el texto exacto sin cambiar de marca.
+VARIANT_COMPANY_NAMES = {
+    "default": COMPANY_NAME,
+    "surti": "SURTITIENDAS GALVAN S.A.S",
+}
 
 
 def resolve_letterhead_variant(employee):
@@ -44,6 +43,18 @@ def resolve_letterhead_variant(employee):
     if "SURTI" in haystack:
         return "surti"
     return "default"
+
+
+def _company_name_for(employee):
+    """Razón social a mostrar en el documento: la de ``Branch.legal_name`` cuando está
+    configurada explícitamente, o si no la razón social por defecto de la variante de
+    membrete detectada (Juhnios Rold o Surti según la sede) — nunca el nombre de una
+    marca distinta a la del membrete que se está dibujando."""
+    branch = getattr(employee, "branch", None)
+    legal_name = getattr(branch, "legal_name", "") if branch else ""
+    if legal_name.strip():
+        return legal_name.strip()
+    return VARIANT_COMPANY_NAMES[resolve_letterhead_variant(employee)]
 
 
 TEXT = HexColor("#1a1a1a")
