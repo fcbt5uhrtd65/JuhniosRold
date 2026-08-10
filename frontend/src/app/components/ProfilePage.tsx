@@ -441,7 +441,6 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
   const [profileLoc, setProfileLoc] = useState<LocationValue>(EMPTY_LOCATION);
   const [deliveryLoc, setDeliveryLoc] = useState<DeliveryLocationValue>(EMPTY_DELIVERY_LOCATION);
   const [cities, setCities] = useState<City[]>([]);
-  const cityNames = useMemo(() => cities.map(c => c.name), [cities]);
   const [loadingLoc, setLoadingLoc] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveOk, setSaveOk] = useState(false);
@@ -1061,10 +1060,7 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
                           <LocationPicker value={profileLoc} onChange={setProfileLoc} />
                           <DeliveryLocationSection
                             value={deliveryLoc} onChange={setDeliveryLoc}
-                            searchScope={{ state: profileLoc.stateName, country: profileLoc.countryName }}
-                            cityOptions={cityNames}
-                            onCityResolved={cn => setProfileLoc(p => ({ ...p, cityId: null, cityName: cn }))}
-                            onLocationResolved={setProfileLoc}
+                            searchScope={{ state: profileLoc.stateName, country: profileLoc.countryName, city: profileLoc.cityName }}
                           />
                         </div>
                       </div>

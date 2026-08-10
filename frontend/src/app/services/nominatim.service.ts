@@ -25,13 +25,35 @@ function normalizeForCompare(value: string): string {
     .trim();
 }
 
+/** Candidatos de campo de dirección donde Nominatim puede reportar la ciudad de un resultado
+ * — igual lista que resolveValidCity más abajo, reusada aquí para comparar contra la ciudad
+ * ya elegida arriba en el flujo. */
+function resultCityCandidates(result: NominatimResult): string[] {
+  const address = result.address;
+  return [
+    address?.city,
+    address?.town,
+    address?.municipality,
+    address?.county,
+    address?.city_district,
+    address?.district,
+    address?.borough,
+    address?.suburb,
+    address?.village,
+    address?.hamlet,
+    address?.locality,
+  ].filter((value): value is string => Boolean(value));
+}
+
 export async function searchAddress(
   query: string,
   opts?: {
     countryCodes?: string;
     state?: string;
     country?: string;
-    /** When true, drops results whose address.state/country don't match opts.state/opts.country — Nominatim's own `state`/`country` params only bias ranking, they don't hard-filter. */
+    /** Ciudad ya elegida arriba en el flujo (LocationPicker) — cuando se pasa, la búsqueda se hace en modo estructurado (calle+ciudad como campos separados, no un solo texto libre) para que Nominatim filtre duro por esa ciudad en vez de solo usarla como sesgo de ranking. */
+    city?: string;
+    /** When true, drops results whose address.state/country/city don't match opts — Nominatim's own `state`/`country`/`city` params only bias ranking in "q" mode, they don't hard-filter (structured mode with `city` does filter server-side, but this stays as a second line of defense). */
     strictScope?: boolean;
   },
 ): Promise<NominatimResult[]> {
@@ -43,21 +65,27 @@ export async function searchAddress(
     });
     if (opts?.state) params.set('state', opts.state);
     if (opts?.country) params.set('country', opts.country);
+    if (opts?.city) params.set('city', opts.city);
     if (opts?.countryCodes) params.set('countrycodes', opts.countryCodes);
 
     const res = await publicApi.get<NominatimResult[]>(
       `/geography/geocoding/search/?${params.toString()}`,
     );
     const results = res.data ?? [];
-    if (!opts?.strictScope || (!opts.state && !opts.country)) return results;
+    if (!opts?.strictScope || (!opts.state && !opts.country && !opts.city)) return results;
 
     const wantState = opts.state ? normalizeForCompare(opts.state) : null;
     const wantCountry = opts.country ? normalizeForCompare(opts.country) : null;
+    const wantCity = opts.city ? normalizeForCompare(opts.city) : null;
     return results.filter((result) => {
       const resultState = result.address?.state ? normalizeForCompare(result.address.state) : '';
       const resultCountry = result.address?.country ? normalizeForCompare(result.address.country) : '';
       if (wantCountry && resultCountry && resultCountry !== wantCountry) return false;
       if (wantState && resultState && resultState !== wantState) return false;
+      if (wantCity) {
+        const candidates = resultCityCandidates(result).map(normalizeForCompare);
+        if (candidates.length > 0 && !candidates.includes(wantCity)) return false;
+      }
       return true;
     });
   } catch {

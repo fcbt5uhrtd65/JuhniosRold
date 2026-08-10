@@ -131,21 +131,50 @@ class GeocodingSearchView(APIView):
         if not query:
             return Response([], status=status.HTTP_200_OK)
 
-        contextual_query = ", ".join(
-            part
-            for part in (
-                query,
-                request.query_params.get("state", ""),
-                request.query_params.get("country", ""),
+        limit = str(_bounded_limit(request.query_params.get("limit", 5)))
+        city = str(request.query_params.get("city", "")).strip()
+
+        # Búsqueda estructurada de Nominatim/LocationIQ: cada parte de la dirección va en su
+        # propio campo (street/city/county/country) en vez de concatenar todo en un único "q"
+        # de texto libre. El modo "q" es un parser heurístico que puede devolver resultados de
+        # OTRA ciudad/departamento cuando la calle no está bien indexada tal cual se escribió —
+        # exactamente el bug reportado (se elige Bogotá/Cundinamarca arriba y igual aparecen
+        # direcciones de otra parte del país). El modo estructurado, en cambio, filtra duro: si
+        # no hay una calle que además caiga dentro de la ciudad indicada, Nominatim no la
+        # devuelve, en vez de "adivinar" una coincidencia parcial en otro lugar. Solo se activa
+        # cuando ya se conoce la ciudad (mismo requisito que Google Places con biasing por
+        # ciudad); sin ciudad se mantiene el modo "q" de texto libre.
+        if city:
+            params = {
+                "format": "json",
+                "addressdetails": "1",
+                "limit": limit,
+                "street": query,
+                "city": city,
+            }
+            state = str(request.query_params.get("state", "")).strip()
+            if state:
+                params["state"] = state
+            country = str(request.query_params.get("country", "")).strip()
+            if country:
+                params["country"] = country
+        else:
+            contextual_query = ", ".join(
+                part
+                for part in (
+                    query,
+                    request.query_params.get("state", ""),
+                    request.query_params.get("country", ""),
+                )
+                if str(part).strip()
             )
-            if str(part).strip()
-        )
-        params = {
-            "format": "json",
-            "addressdetails": "1",
-            "limit": str(_bounded_limit(request.query_params.get("limit", 5))),
-            "q": contextual_query,
-        }
+            params = {
+                "format": "json",
+                "addressdetails": "1",
+                "limit": limit,
+                "q": contextual_query,
+            }
+
         country_codes = str(request.query_params.get("countrycodes", "")).strip()
         if country_codes:
             params["countrycodes"] = country_codes

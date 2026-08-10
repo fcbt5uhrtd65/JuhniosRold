@@ -87,7 +87,6 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
   const [shippingLocation, setShippingLocation] = useState<LocationValue>(EMPTY_LOCATION);
   const [deliveryLocation, setDeliveryLocation] = useState<DeliveryLocationValue>(EMPTY_DELIVERY_LOCATION);
   const [shippingCities, setShippingCities] = useState<City[]>([]);
-  const shippingCityNames = shippingCities.map((city) => city.name);
   const [formErrors, setFormErrors] = useState<Partial<Record<CheckoutFormField, string>>>({});
   const [showAddressForm, setShowAddressForm] = useState(!currentUser?.direccion);
 
@@ -269,7 +268,7 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
       country: registeredAddress.country,
       lat: registeredAddress.lat,
       lng: registeredAddress.lng,
-      confirmed: Boolean(registeredAddress.lat && registeredAddress.lng),
+      confirmed: Boolean(registeredAddress.address?.trim()),
     });
     if (registeredAddress.country) {
       geographyService
@@ -292,7 +291,7 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
     if (!formData.email.trim()) errors.email = 'Ingresa tu correo electrónico.';
     if (!formData.phone.trim()) errors.phone = 'Ingresa tu número de teléfono.';
     if (!deliveryLocation.address.trim() || !deliveryLocation.confirmed) {
-      errors.address = 'Confirma tu dirección de envío en el mapa.';
+      errors.address = 'Confirma tu dirección de envío.';
     }
     const country = shippingLocation.countryName || deliveryLocation.country;
     const state = shippingLocation.stateName || deliveryLocation.state;
@@ -678,15 +677,7 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
                                 setDeliveryLocation(value);
                                 setFormErrors((current) => ({ ...current, address: undefined }));
                               }}
-                              searchScope={{ state: shippingLocation.stateName, country: shippingLocation.countryName }}
-                              cityOptions={shippingCityNames}
-                              onCityResolved={(cityName) =>
-                                setShippingLocation((prev) => ({ ...prev, cityId: null, cityName }))
-                              }
-                              onLocationResolved={(loc) => {
-                                setShippingLocation(loc);
-                                setFormErrors((current) => ({ ...current, country: undefined, state: undefined, city: undefined }));
-                              }}
+                              searchScope={{ state: shippingLocation.stateName, country: shippingLocation.countryName, city: shippingLocation.cityName }}
                             />
                             {formErrors.address && <p className="text-xs text-red-600">{formErrors.address}</p>}
                           </div>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Check, ChevronRight, CreditCard, Eye, EyeOff, Lock, Mail,
@@ -111,7 +111,6 @@ export function LoginModal({ isOpen, onClose, onAdminAccess, onGoogleNewUser }: 
   const [regLoc, setRegLoc] = useState<LocationValue>(EMPTY_LOCATION);
   const [delLoc, setDelLoc] = useState<DeliveryLocationValue>(EMPTY_DELIVERY_LOCATION);
   const [cities, setCities] = useState<City[]>([]);
-  const cityNames = useMemo(() => cities.map(c => c.name), [cities]);
 
   /* flujo */
   const [verificationId,    setVerificationId]    = useState('');
@@ -289,8 +288,8 @@ export function LoginModal({ isOpen, onClose, onAdminAccess, onGoogleNewUser }: 
       }
       /* registro paso 2 (dirección) */
       if (screen === 'reg2') {
-        if (!delLoc.confirmed || delLoc.lat === null || delLoc.lng === null) {
-          setError('Confirma tu ubicación de entrega.'); return;
+        if (!delLoc.confirmed || !delLoc.address.trim()) {
+          setError('Confirma tu dirección de entrega.'); return;
         }
         const r = await customerRegister(nombre, apellidos, email, password, {
           phone: telefono || undefined, address: delLoc.address || undefined,
@@ -692,9 +691,7 @@ export function LoginModal({ isOpen, onClose, onAdminAccess, onGoogleNewUser }: 
                       <LocationPicker value={regLoc} onChange={setRegLoc} />
                       <DeliveryLocationSection
                         value={delLoc} onChange={setDelLoc}
-                        searchScope={{ state: regLoc.stateName, country: regLoc.countryName }}
-                        cityOptions={cityNames}
-                        onCityResolved={cn => setRegLoc(p => ({ ...p, cityId: null, cityName: cn }))}
+                        searchScope={{ state: regLoc.stateName, country: regLoc.countryName, city: regLoc.cityName }}
                       />
                     </div>
                     <div className="flex gap-2">

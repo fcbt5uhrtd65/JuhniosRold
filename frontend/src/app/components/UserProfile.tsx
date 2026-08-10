@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import {
@@ -49,7 +49,6 @@ export function UserProfile({ isOpen, onClose }: UserProfileProps) {
   const [profileLocation, setProfileLocation] = useState<LocationValue>(EMPTY_LOCATION);
   const [deliveryLocation, setDeliveryLocation] = useState<DeliveryLocationValue>(EMPTY_DELIVERY_LOCATION);
   const [profileCities, setProfileCities] = useState<City[]>([]);
-  const profileCityNames = useMemo(() => profileCities.map((city) => city.name), [profileCities]);
 
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -396,12 +395,7 @@ export function UserProfile({ isOpen, onClose }: UserProfileProps) {
                       <DeliveryLocationSection
                         value={deliveryLocation}
                         onChange={setDeliveryLocation}
-                        searchScope={{ state: profileLocation.stateName, country: profileLocation.countryName }}
-                        cityOptions={profileCityNames}
-                        onCityResolved={(cityName) =>
-                          setProfileLocation((prev) => ({ ...prev, cityId: null, cityName }))
-                        }
-                        onLocationResolved={setProfileLocation}
+                        searchScope={{ state: profileLocation.stateName, country: profileLocation.countryName, city: profileLocation.cityName }}
                       />
                     </div>
                   </div>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Building2, Check, ChevronRight, CreditCard, MapPin, Phone, User as UserIcon, X } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
@@ -78,7 +78,6 @@ export function GoogleOnboardingModal({ isOpen, initialFirstName = '', initialLa
   const [regLoc, setRegLoc] = useState<LocationValue>(EMPTY_LOCATION);
   const [delLoc, setDelLoc] = useState<DeliveryLocationValue>(EMPTY_DELIVERY_LOCATION);
   const [cities, setCities] = useState<City[]>([]);
-  const cityNames = useMemo(() => cities.map(c => c.name), [cities]);
 
   // Paso 3 — mayorista
   const [wantsWholesale, setWantsWholesale] = useState<boolean | null>(null);
@@ -163,8 +162,8 @@ export function GoogleOnboardingModal({ isOpen, initialFirstName = '', initialLa
   const handleLocationNext = async (skipLocation = false) => {
     setError('');
     if (!skipLocation) {
-      if (!delLoc.confirmed || delLoc.lat === null || delLoc.lng === null) {
-        setError('Confirma tu ubicación de entrega o selecciona "Completar más tarde".');
+      if (!delLoc.confirmed || !delLoc.address.trim()) {
+        setError('Confirma tu dirección de entrega o selecciona "Completar más tarde".');
         return;
       }
       setSubmitting(true);
@@ -315,10 +314,7 @@ export function GoogleOnboardingModal({ isOpen, initialFirstName = '', initialLa
                     <LocationPicker value={regLoc} onChange={setRegLoc} />
                     <DeliveryLocationSection
                       value={delLoc} onChange={setDelLoc}
-                      searchScope={{ state: regLoc.stateName, country: regLoc.countryName }}
-                      cityOptions={cityNames}
-                      onCityResolved={cn => setRegLoc(p => ({ ...p, cityId: null, cityName: cn }))}
-                      onLocationResolved={setRegLoc}
+                      searchScope={{ state: regLoc.stateName, country: regLoc.countryName, city: regLoc.cityName }}
                     />
                   </div>
                   <div className="flex gap-2">
