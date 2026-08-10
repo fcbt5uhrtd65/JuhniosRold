@@ -247,6 +247,12 @@ interface PasswordResetVerifyActionResult extends AuthActionResult {
 
 function authErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof ApiError) {
+    if (error.errors?.length === 1) {
+      // Un único error de campo (típico de login: solo email o password) no necesita el
+      // prefijo "campo: " — el texto del backend ("El usuario no existe...", "La contrasena
+      // es incorrecta.") ya es autoexplicativo sin él.
+      return error.errors[0].replace(/^[a-z_]+:\s*/i, '');
+    }
     return error.errors?.join(' ') || error.message;
   }
   return error instanceof Error ? error.message : fallback;
@@ -463,7 +469,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         ok: false,
         message: serverResponded
           ? authErrorMessage(error, 'Email o contraseña incorrectos.')
-          : 'No hay conexión con el servidor. Intenta nuevamente.',
+          : 'No pudimos conectar con el servidor. Verifica que el backend esté corriendo e inténtalo de nuevo.',
       };
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps

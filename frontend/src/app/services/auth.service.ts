@@ -180,7 +180,19 @@ export async function loginUser(payload: LoginPayload): Promise<AuthUser> {
   }
 
   setTokens(res.data.access, res.data.refresh);
-  return getCurrentUser();
+  try {
+    return await getCurrentUser();
+  } catch {
+    // El login (POST /auth/login/) ya fue aceptado por el backend en este punto — este
+    // fallo es de la llamada de seguimiento que trae el perfil, no de las credenciales.
+    // Sin este catch, un 401 transitorio aquí (p. ej. backend reiniciándose) se reporta
+    // como "sesión expirada", que confunde porque nunca hubo una sesión previa.
+    clearTokens();
+    throw new ApiError(
+      'Iniciaste sesión, pero no pudimos cargar tu cuenta. Intenta de nuevo en un momento.',
+      502,
+    );
+  }
 }
 
 // ---- Get current user (validates token) ----

@@ -354,7 +354,12 @@ export async function apiRequest<T>(
   const payload = await res.json().catch(() => null) as T | ApiResponse<T> | null;
 
   if (!res.ok) {
-    if (res.status === 401) {
+    // Un 401 de un endpoint de autenticación (login, google, register, password-reset,
+    // refresh) es un intento rechazado, no una sesión que expiró — no había sesión previa
+    // que invalidar. Tratarlo como AuthSessionError descarta el motivo real que devuelve
+    // el backend (p. ej. "El token de Google es inválido o ha expirado.") y lo reemplaza
+    // por el mensaje genérico de sesión expirada, que confunde al usuario.
+    if (res.status === 401 && !isAuthenticationRequest) {
       clearTokens();
       notifyAuthSessionInvalidated('unauthorized');
       throw new AuthSessionError();

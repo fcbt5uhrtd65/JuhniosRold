@@ -1,3 +1,5 @@
+import logging
+
 from django.conf import settings
 from rest_framework import generics, permissions, status, viewsets
 from rest_framework.decorators import action
@@ -323,10 +325,15 @@ class GoogleAuthView(generics.GenericAPIView):
             )
 
         try:
+            # clock_skew_in_seconds absorbe el desfase de reloj entre el host y el
+            # contenedor Docker (frecuente en Docker Desktop/WSL2 tras suspender el host),
+            # que sin esto rechaza como "Token used too early" tokens recien emitidos por
+            # Google apenas unos segundos antes de que el backend los verifique.
             id_info = id_token.verify_oauth2_token(
-                credential, google_requests.Request(), client_id
+                credential, google_requests.Request(), client_id, clock_skew_in_seconds=10
             )
-        except ValueError:
+        except ValueError as exc:
+            logging.getLogger(__name__).warning("Verificacion de token de Google fallo: %s", exc)
             return Response(
                 {"detail": "El token de Google es inválido o ha expirado."},
                 status=status.HTTP_401_UNAUTHORIZED,
