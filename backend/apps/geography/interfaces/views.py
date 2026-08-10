@@ -53,7 +53,12 @@ NOMINATIM_HEADERS = {
     "User-Agent": f"JuhniosRoldApp/1.0 ({NOMINATIM_CONTACT})",
 }
 GEOCODING_CACHE_TTL_SECONDS = 60 * 60
-GEOCODING_REQUEST_TIMEOUT_SECONDS = 4
+# 4s (bajado de los 8s originales) combinado con el debounce de 250ms del buscador hacía que
+# respuestas normales-pero-lentas de Nominatim/LocationIQ se reportaran como error con más
+# frecuencia de la deseada. 6s da más margen sin sentirse colgado; con 1 reintento en el
+# Retry de _session, el peor caso pasa de 8s a 12s, que sigue siendo razonable para un fallo
+# poco frecuente.
+GEOCODING_REQUEST_TIMEOUT_SECONDS = 6
 
 # Caja delimitadora de Colombia continental + insular (lon_min, lat_max, lon_max, lat_min —
 # formato viewbox de Nominatim/LocationIQ). Con bounded=1 esto recorta duro los resultados a
@@ -185,8 +190,13 @@ IP_API_URL = "http://ip-api.com/json/{ip}"
 
 
 def _client_ip(request) -> str:
-    forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
-    return forwarded.split(",")[0].strip() if forwarded else request.META.get("REMOTE_ADDR", "")
+    """X-Forwarded-For NO sirve aqui: nginx lo arma con $proxy_add_x_forwarded_for, que
+    antepone el valor que mande el cliente en vez de reemplazarlo, asi que cualquiera puede
+    enviar X-Forwarded-For: <ip falsa> y quedar como el primer salto. X-Real-IP en cambio lo
+    fija nginx siempre con $remote_addr (la IP real del socket TCP), sobrescribiendo lo que
+    el cliente haya mandado — es la unica que no se puede falsificar desde el navegador."""
+    real_ip = request.META.get("HTTP_X_REAL_IP", "").strip()
+    return real_ip or request.META.get("REMOTE_ADDR", "")
 
 
 def _is_public_ip(ip: str) -> bool:
