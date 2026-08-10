@@ -27,9 +27,13 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.RunSQL(
-            sql="DROP TABLE IF EXISTS human_resources_companydocument CASCADE;",
+            sql=(
+                "DROP TABLE IF EXISTS human_resources_companydocumentversion CASCADE;"
+                "DROP TABLE IF EXISTS human_resources_companydocument CASCADE;"
+            ),
             reverse_sql=migrations.RunSQL.noop,
             state_operations=[
+                migrations.DeleteModel(name="CompanyDocumentVersion"),
                 migrations.DeleteModel(name="CompanyDocument"),
             ],
         ),
