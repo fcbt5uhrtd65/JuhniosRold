@@ -892,17 +892,61 @@ export async function getTeamVacationRequests(params?: { page?: number; limit?: 
   return normalizeListResponse(res.data);
 }
 
+export interface ListLoanParams {
+  page?: number;
+  limit?: number;
+  employee__branch?: string;
+  start_date_from?: string;
+  start_date_to?: string;
+}
+
 /** Listado dedicado y exclusivo de solicitudes de préstamo, para Recursos Humanos,
  * Administrador, el rol Contabilidad, o un usuario con acceso puntual habilitado. */
-export async function getLoanRequests(params?: { page?: number; limit?: number }): Promise<{
+export async function getLoanRequests(params?: ListLoanParams): Promise<{
   data: VacationRequest[];
   total: number;
   next: string | null;
   previous: string | null;
 }> {
-  const query = buildQuery({ page: params?.page, page_size: params?.limit });
+  const query = buildQuery({
+    page: params?.page,
+    page_size: params?.limit,
+    employee__branch: params?.employee__branch,
+    start_date_from: params?.start_date_from,
+    start_date_to: params?.start_date_to,
+  });
   const res = await api.get<VacationRequest[] | PaginatedResponse<VacationRequest>>(`${VACATIONS_PATH}loans/${query}`);
   return normalizeListResponse(res.data);
+}
+
+export interface ExportLoansXlsxParams {
+  employee__branch?: string;
+  start_date_from?: string;
+  start_date_to?: string;
+}
+
+/** Descarga el Excel de solicitudes de préstamo con los mismos filtros aplicados en el listado. */
+export async function exportLoansXlsx(params?: ExportLoansXlsxParams): Promise<void> {
+  const token = getAccessToken();
+  if (!token) {
+    throw new Error('Tu sesión expiró. Inicia sesión de nuevo.');
+  }
+  const query = buildQuery({ ...params });
+  const response = await fetch(`${API_BASE_URL}${VACATIONS_PATH}loans-export-xlsx/${query}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error('No se pudo generar el Excel de préstamos.');
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `prestamos-${new Date().toISOString().slice(0, 10)}.xlsx`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 function buildDecisionBody(

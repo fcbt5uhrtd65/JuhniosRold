@@ -515,29 +515,68 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
 
+    def _loans_queryset(self, request):
+        """Base compartida por ``loans`` y ``loans_export_xlsx``: solicitudes de tipo
+        PRÉSTAMO filtradas por sede (``employee__branch``, vía ``filter_queryset`` para
+        heredar el backend de filtros estándar de DRF) y por rango de fecha de la
+        solicitud (``start_date_from``/``start_date_to``), igual que el listado general."""
+        queryset = (
+            self._self_service_queryset()
+            .filter(request_type=VacationRequest.RequestType.LOAN)
+        )
+        queryset = self.filter_queryset(queryset)
+
+        start_from = request.query_params.get("start_date_from")
+        start_to = request.query_params.get("start_date_to")
+        if start_from:
+            queryset = queryset.filter(start_date__gte=start_from)
+        if start_to:
+            queryset = queryset.filter(end_date__lte=start_to)
+
+        return queryset.order_by("-created_at")
+
     @action(detail=False, methods=("get",), permission_classes=(IsAuthenticated,), url_path="loans")
     def loans(self, request):
         """Listado dedicado y exclusivo de solicitudes de tipo PRÉSTAMO, para
         Recursos Humanos, Administrador, el rol Contabilidad, o cualquier
         usuario con acceso puntual (``can_view_loan_requests``). No expone
-        ningún otro tipo de solicitud ni otros datos del módulo de RRHH."""
+        ningún otro tipo de solicitud ni otros datos del módulo de RRHH.
+
+        Acepta los filtros estándar del ViewSet (``employee__branch``, etc. — ver
+        ``filterset_fields``) más ``start_date_from``/``start_date_to``."""
         if not getattr(request.user, "can_view_loans", False):
             return Response(
                 {"detail": "No tienes permiso para ver solicitudes de préstamo."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        queryset = (
-            self._self_service_queryset()
-            .filter(request_type=VacationRequest.RequestType.LOAN)
-            .order_by("-created_at")
-        )
+        queryset = self._loans_queryset(request)
         page = self.paginate_queryset(queryset)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
             return self.get_paginated_response(serializer.data)
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
+
+    @action(detail=False, methods=("get",), permission_classes=(IsAuthenticated,), url_path="loans-export-xlsx")
+    def loans_export_xlsx(self, request):
+        """Excel descargable de solicitudes de préstamo, con los mismos filtros y
+        permiso que el listado (``loans``): sede, rango de fechas, y solo visible
+        para quien puede ver préstamos."""
+        if not getattr(request.user, "can_view_loans", False):
+            return Response(
+                {"detail": "No tienes permiso para ver solicitudes de préstamo."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        queryset = self._loans_queryset(request).prefetch_related("overtime_shifts")
+        xlsx_buffer = render_requests_xlsx(queryset)
+        return FileResponse(
+            xlsx_buffer,
+            as_attachment=True,
+            filename=f"prestamos-{timezone.localdate():%Y%m%d}.xlsx",
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
 
     @staticmethod
     def _resolver_role(user, vacation=None):

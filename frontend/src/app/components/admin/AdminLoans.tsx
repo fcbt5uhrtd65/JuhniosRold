@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BarChart3, Check, ChevronDown, ChevronUp, FileDown, HandCoins, XCircle } from 'lucide-react';
+import { BarChart3, Check, ChevronDown, ChevronUp, FileDown, HandCoins, Loader2, X, XCircle } from 'lucide-react';
 import { useAdmin } from '../../contexts/AdminContext';
 import { useToast } from '../../contexts/ToastContext';
-import { getEmployees, type Employee } from '../../services/employees.service';
+import { getBranches, getEmployees, type Branch, type Employee } from '../../services/employees.service';
 import {
   approveVacationRequest,
+  exportLoansXlsx,
   getLoanRequests,
   openVacationRequestPdf,
   rejectVacationRequest,
   type VacationRequest,
   type VacationRequestStatus,
 } from '../../services/human-resources.service';
-import { ActionsMenu, actionsCellCls, Badge, type BadgeColor, Card, Modal, Table, Th, Td, LoadingState, EmptyState } from './AdminUI';
+import { ActionsMenu, actionsCellCls, Badge, type BadgeColor, Card, Modal, Table, Th, Td, LoadingState, EmptyState, inputCls, selectCls } from './AdminUI';
 import { SearchBar } from './SearchBar';
 import { Pagination } from './Pagination';
 import { SignaturePad } from './SignaturePad';
@@ -155,10 +156,15 @@ export function AdminLoans() {
   const [isLoading, setIsLoading] = useState(true);
   const [loans, setLoans] = useState<VacationRequest[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [query, setQuery] = useState('');
+  const [branchFilter, setBranchFilter] = useState('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [showBreakdown, setShowBreakdown] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [decisionRequest, setDecisionRequest] = useState<{ loan: VacationRequest; decision: 'approve' | 'reject' } | null>(null);
   const [decisionComment, setDecisionComment] = useState('');
   const [decisionSignature, setDecisionSignature] = useState<File | null>(null);
@@ -167,20 +173,55 @@ export function AdminLoans() {
 
   const loadLoans = async (options?: { silent?: boolean }) => {
     if (!options?.silent) setIsLoading(true);
-    const [loansRes, employeesRes] = await Promise.allSettled([getLoanRequests({ limit: 200 }), getEmployees({ limit: 500 })]);
+    const [loansRes, employeesRes, branchesRes] = await Promise.allSettled([
+      getLoanRequests({
+        limit: 200,
+        employee__branch: branchFilter !== 'all' ? branchFilter : undefined,
+        start_date_from: dateFrom || undefined,
+        start_date_to: dateTo || undefined,
+      }),
+      getEmployees({ limit: 500 }),
+      getBranches({ limit: 200 }),
+    ]);
     if (loansRes.status === 'fulfilled') {
       setLoans(loansRes.value.data);
     } else {
       toast.error('No se pudieron cargar las solicitudes de préstamo');
     }
     if (employeesRes.status === 'fulfilled') setEmployees(employeesRes.value.data);
+    if (branchesRes.status === 'fulfilled') setBranches(branchesRes.value.data);
     if (!options?.silent) setIsLoading(false);
   };
 
   useEffect(() => {
     void loadLoans();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [branchFilter, dateFrom, dateTo]);
+
+  const hasActiveFilters = Boolean(query || branchFilter !== 'all' || dateFrom || dateTo);
+
+  const clearFilters = () => {
+    setQuery('');
+    setBranchFilter('all');
+    setDateFrom('');
+    setDateTo('');
+  };
+
+  const handleExportXlsx = async () => {
+    setExporting(true);
+    try {
+      await exportLoansXlsx({
+        employee__branch: branchFilter !== 'all' ? branchFilter : undefined,
+        start_date_from: dateFrom || undefined,
+        start_date_to: dateTo || undefined,
+      });
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo generar el Excel de préstamos');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const openDecisionModal = (loan: VacationRequest, decision: 'approve' | 'reject') => {
     setDecisionComment('');
@@ -325,7 +366,48 @@ export function AdminLoans() {
             Solicitudes de préstamo de empleados, para registro y control contable.
           </p>
         </div>
+        <button
+          type="button"
+          onClick={() => void handleExportXlsx()}
+          disabled={exporting}
+          className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold text-white bg-[#2a4038] hover:bg-[#213029] transition-colors disabled:opacity-50"
+        >
+          {exporting ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
+          {exporting ? 'Generando...' : 'Exportar Excel'}
+        </button>
       </div>
+
+      <Card className="p-3 sm:p-4 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1 block">Sede</label>
+            <select value={branchFilter} onChange={(event) => setBranchFilter(event.target.value)} className={selectCls}>
+              <option value="all">Todas las sedes</option>
+              {branches.map((branch) => (
+                <option key={branch.id} value={branch.id}>{branch.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1 block">Desde</label>
+            <input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} className={inputCls} />
+          </div>
+          <div>
+            <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1 block">Hasta</label>
+            <input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} className={inputCls} />
+          </div>
+        </div>
+        {hasActiveFilters && (
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="mt-3 flex items-center gap-1 text-[11px] font-semibold text-gray-500 hover:text-gray-700 transition-colors"
+          >
+            <X size={12} />
+            Limpiar filtros
+          </button>
+        )}
+      </Card>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
         <Card className="p-3">
