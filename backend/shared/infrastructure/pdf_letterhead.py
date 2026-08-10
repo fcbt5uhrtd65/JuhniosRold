@@ -11,6 +11,18 @@ _ASSETS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "assets"))
 HEADER_IMAGE_PATH = os.path.join(_ASSETS_DIR, "letterhead_header.png")
 FOOTER_IMAGE_PATH = os.path.join(_ASSETS_DIR, "letterhead_footer.png")
 
+# Membretes alternativos por sede (ver resolve_letterhead_variant en request_pdf.py):
+# distintas sedes pueden pertenecer a razones sociales/marcas distintas y necesitan su
+# propio encabezado/pie en los documentos, sin afectar el membrete por defecto.
+HEADER_IMAGE_PATHS = {
+    "default": HEADER_IMAGE_PATH,
+    "surti": os.path.join(_ASSETS_DIR, "letterhead_header_surti.png"),
+}
+FOOTER_IMAGE_PATHS = {
+    "default": FOOTER_IMAGE_PATH,
+    "surti": os.path.join(_ASSETS_DIR, "letterhead_footer_surti.png"),
+}
+
 # Tamaño fijo y moderado de firma para todos los documentos: ni muy grande ni muy pequeña.
 SIGNATURE_WIDTH = 120
 SIGNATURE_HEIGHT = 40
@@ -51,13 +63,17 @@ def _cached_image(path):
     return _image_cache[path]
 
 
-def draw_letterhead_header(c, page_w, page_h, x0, x1):
+def draw_letterhead_header(c, page_w, page_h, x0, x1, variant="default"):
     """Dibuja la franja decorativa oficial completamente pegada al borde superior de
     la hoja (sin ningún espacio en blanco por encima), a todo el ancho de la página
     (fuera de los márgenes de contenido, igual que en el membrete original). Devuelve
     la coordenada y donde debe comenzar el resto del encabezado, ya con el respiro
-    (HEADER_CONTENT_GAP) aplicado para que el contenido no quede pegado a la franja."""
-    image = _cached_image(HEADER_IMAGE_PATH)
+    (HEADER_CONTENT_GAP) aplicado para que el contenido no quede pegado a la franja.
+
+    ``variant`` selecciona el membrete alternativo de una sede con marca propia (ver
+    HEADER_IMAGE_PATHS) — si no existe la variante pedida, cae al membrete por defecto."""
+    path = HEADER_IMAGE_PATHS.get(variant) or HEADER_IMAGE_PATH
+    image = _cached_image(path) or _cached_image(HEADER_IMAGE_PATH)
     if image is None:
         return page_h - HEADER_CONTENT_GAP
     iw, ih = image.getSize()
@@ -70,13 +86,17 @@ def draw_letterhead_header(c, page_w, page_h, x0, x1):
     return y - HEADER_CONTENT_GAP
 
 
-def draw_letterhead_footer(c, page_w, x0, x1):
+def draw_letterhead_footer(c, page_w, x0, x1, variant="default"):
     """Dibuja la franja de pie de página oficial (contacto), completamente pegada al
     borde inferior y a todo el ancho de la página, con los íconos y datos de contacto
     centrados/distribuidos tal como en el diseño original (no se recorta ni se
     reubica ningún elemento). Devuelve la altura ocupada, para que el contenido
-    reserve el margen inferior correspondiente y nunca invada la franja."""
-    image = _cached_image(FOOTER_IMAGE_PATH)
+    reserve el margen inferior correspondiente y nunca invada la franja.
+
+    ``variant`` selecciona el membrete alternativo de una sede con marca propia (ver
+    FOOTER_IMAGE_PATHS) — si no existe la variante pedida, cae al membrete por defecto."""
+    path = FOOTER_IMAGE_PATHS.get(variant) or FOOTER_IMAGE_PATH
+    image = _cached_image(path) or _cached_image(FOOTER_IMAGE_PATH)
     if image is None:
         return 0
     iw, ih = image.getSize()

@@ -21,6 +21,31 @@ from shared.infrastructure.pdf_letterhead import (
 
 COMPANY_NAME = "PRODUCTOS JUHNIOS ROLD SAS"
 
+
+def _company_name_for(employee):
+    """Razón social a mostrar en el documento: la de la sede del empleado
+    (``Branch.legal_name``) cuando está configurada — distintas sedes pueden
+    pertenecer a razones sociales/NITs distintos —, o ``COMPANY_NAME`` como
+    respaldo genérico si la sede no tiene ese dato o el empleado no tiene sede."""
+    branch = getattr(employee, "branch", None)
+    legal_name = getattr(branch, "legal_name", "") if branch else ""
+    return legal_name.strip() or COMPANY_NAME
+
+
+def resolve_letterhead_variant(employee):
+    """Variante de membrete (encabezado/pie) a usar según la sede del empleado — se
+    detecta por nombre o código de la sede en vez de un campo dedicado, ya que hoy
+    solo existen dos plantillas (la genérica de Juhnios Rold y la de Surti). Si en el
+    futuro hay más marcas, conviene reemplazar esto por un campo explícito en Branch."""
+    branch = getattr(employee, "branch", None)
+    if not branch:
+        return "default"
+    haystack = f"{getattr(branch, 'name', '') or ''} {getattr(branch, 'code', '') or ''}".upper()
+    if "SURTI" in haystack:
+        return "surti"
+    return "default"
+
+
 TEXT = HexColor("#1a1a1a")
 MUTED = HexColor("#5d6d7e")
 SUCCESS = HexColor("#1f8a4c")
@@ -270,11 +295,11 @@ def _draw_rich_paragraph(c, x, y, parts, max_width, size=10, leading=15, align="
 
 
 # ── Encabezado ─────────────────────────────────────────────────────────────────
-def _draw_letterhead(c, page_w, page_h, x0, x1):
+def _draw_letterhead(c, page_w, page_h, x0, x1, variant="default"):
     """Franja del membrete + una sola línea de metadatos del documento (área y número
     de solicitud a la izquierda, fecha de generación a la derecha), ya con aire
     respecto a la franja. Una sola línea, bien alineada, sin trazos divisorios."""
-    return draw_letterhead_header(c, page_w, page_h, x0, x1)
+    return draw_letterhead_header(c, page_w, page_h, x0, x1, variant=variant)
 
 
 def _draw_title(c, x0, x1, cx, y, vacation, request_number):
@@ -398,7 +423,7 @@ def _draw_loan_details(c, x0, x1, y, vacation, employee):
     authorization_parts = [
         ("Autorización de descuento:", True),
         (" recibí de la empresa", False),
-        (f" {COMPANY_NAME}, ", True),
+        (f" {_company_name_for(employee)}, ", True),
         ("identificada en el encabezado de este documento, la suma arriba mencionada en calidad de préstamo. Autorizo expresamente para que se descuente de mi(s) salario(s), de forma", False),
         (f" {frequency_label}, ", True),
         (f"en un total de", False),
@@ -585,10 +610,11 @@ def _draw_signatures_section(c, x0, x1, y, vacation):
 def _render_request_page(c, page_w, page_h, x0, x1, cx, vacation, employee, compact):
     """Dibuja el documento completo en el canvas dado y devuelve la coordenada y final
     (antes de las firmas), para poder medir si cupo en una sola página."""
-    footer_h = draw_letterhead_footer(c, page_w, x0, x1)
+    variant = resolve_letterhead_variant(employee)
+    footer_h = draw_letterhead_footer(c, page_w, x0, x1, variant=variant)
     bottom_limit = footer_h + 26
 
-    y = _draw_letterhead(c, page_w, page_h, x0, x1)
+    y = _draw_letterhead(c, page_w, page_h, x0, x1, variant=variant)
     y = _draw_title(c, x0, x1, cx, y, vacation, vacation.request_number or str(vacation.id))
     y = _draw_body(c, x0, x1, y, vacation, employee)
     y = _draw_approval_narrative(c, x0, x1, y, vacation, compact=compact)
@@ -598,10 +624,10 @@ def _render_request_page(c, page_w, page_h, x0, x1, cx, vacation, employee, comp
     return y, bottom_limit, fits_one_page
 
 
-def _draw_footer_note(c, page_w, bottom_limit):
+def _draw_footer_note(c, page_w, bottom_limit, employee):
     c.setFillColor(MUTED)
     c.setFont(FONT, 7.2)
-    c.drawCentredString(page_w / 2, bottom_limit - 12, f"Documento oficial · {COMPANY_NAME} · Válido con firmas digitales registradas.")
+    c.drawCentredString(page_w / 2, bottom_limit - 12, f"Documento oficial · {_company_name_for(employee)} · Válido con firmas digitales registradas.")
 
 
 def _read_support_document_bytes(support_document):
@@ -722,19 +748,20 @@ def render_request_pdf(vacation):
 
     if fits_one_page:
         _draw_signatures_section(c, x0, x1, y, vacation)
-        _draw_footer_note(c, page_w, bottom_limit)
+        _draw_footer_note(c, page_w, bottom_limit, employee)
     else:
         # Ni siquiera con espaciado compacto entra el bloque de firmas sin
         # invadir el pie de página (ej. préstamos con 3 firmas + trazabilidad
         # larga): se pasa a una segunda página en vez de dibujar encimado.
         c.showPage()
-        footer_h = draw_letterhead_footer(c, page_w, x0, x1)
+        variant = resolve_letterhead_variant(employee)
+        footer_h = draw_letterhead_footer(c, page_w, x0, x1, variant=variant)
         bottom_limit = footer_h + 26
-        y = _draw_letterhead(c, page_w, page_h, x0, x1)
+        y = _draw_letterhead(c, page_w, page_h, x0, x1, variant=variant)
         _text(c, x0, y, f"Gestión de Talento Humano  ·  {vacation.request_number or vacation.id}  ·  continuación", size=8.5, bold=True, color=MUTED)
         y -= 34
         _draw_signatures_section(c, x0, x1, y, vacation)
-        _draw_footer_note(c, page_w, bottom_limit)
+        _draw_footer_note(c, page_w, bottom_limit, employee)
 
     c.save()
     buffer.seek(0)

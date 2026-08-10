@@ -34,6 +34,14 @@ class Branch(BaseModel):
 
     code = models.CharField(max_length=30, unique=True)
     name = models.CharField(max_length=150)
+    legal_name = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Razón social (NIT propio) a la que pertenece esta sede — puede diferir de otras "
+        "sedes. Se usa en documentos oficiales (ej. PDF de solicitudes de préstamo) en vez de un "
+        "nombre de empresa fijo.",
+    )
+    nit = models.CharField(max_length=30, blank=True)
     address = models.TextField(blank=True)
     city = models.CharField(max_length=120, blank=True)
     department = models.CharField(max_length=120, blank=True)

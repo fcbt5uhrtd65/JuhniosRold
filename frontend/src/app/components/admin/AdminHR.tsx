@@ -8,6 +8,7 @@ import {
   CalendarClock,
   CalendarDays,
   Cake,
+  CalendarCog,
   Check,
   ChevronDown,
   ChevronUp,
@@ -15,9 +16,11 @@ import {
   Copy,
   Download,
   Edit2,
+  FileCheck2,
   FileDown,
   FileText,
   FileUp,
+  HandCoins,
   HeartPulse,
   History,
   KeyRound,
@@ -26,6 +29,7 @@ import {
   MapPin,
   Network,
   Paperclip,
+  Plane,
   Plus,
   Search,
   Save,
@@ -297,6 +301,8 @@ interface DocumentFormState {
 interface BranchFormState {
   code: string;
   name: string;
+  legal_name: string;
+  nit: string;
   address: string;
   city: string;
   department: string;
@@ -434,6 +440,8 @@ const EMPTY_DOCUMENT_FORM: DocumentFormState = {
 const EMPTY_BRANCH_FORM: BranchFormState = {
   code: '',
   name: '',
+  legal_name: '',
+  nit: '',
   address: '',
   city: '',
   department: '',
@@ -614,6 +622,56 @@ function formatCurrency(amount: number | string | null | undefined): string {
 function getEmployeeName(employee: Employee): string {
   return `${employee.first_name} ${employee.last_name}`.trim() || employee.employee_code || 'Empleado sin nombre';
 }
+
+const AVATAR_PALETTE = [
+  { bg: 'bg-[#2a4038]/10', text: 'text-[#2a4038]' },
+  { bg: 'bg-blue-100', text: 'text-blue-700' },
+  { bg: 'bg-violet-100', text: 'text-violet-700' },
+  { bg: 'bg-amber-100', text: 'text-amber-700' },
+  { bg: 'bg-rose-100', text: 'text-rose-700' },
+  { bg: 'bg-teal-100', text: 'text-teal-700' },
+];
+
+function getEmployeeInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  return (parts[0][0] + (parts[1]?.[0] ?? '')).toUpperCase();
+}
+
+function getAvatarPalette(seed: string): { bg: string; text: string } {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+  return AVATAR_PALETTE[hash % AVATAR_PALETTE.length];
+}
+
+function EmployeeAvatar({ employee, name }: { employee: Employee | undefined; name: string }) {
+  if (employee?.photo) {
+    return (
+      <img
+        src={getMediaUrl(employee.photo)}
+        alt={name}
+        className="w-8 h-8 rounded-full object-cover border border-gray-100 flex-shrink-0"
+      />
+    );
+  }
+  const palette = getAvatarPalette(employee?.id ?? name);
+  return (
+    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${palette.bg} ${palette.text}`}>
+      {getEmployeeInitials(name)}
+    </div>
+  );
+}
+
+const REQUEST_TYPE_ICONS: Record<VacationRequestType, React.ComponentType<{ size?: number; className?: string }>> = {
+  PERMISSION: FileCheck2,
+  VACATION: Plane,
+  OVERTIME: Clock3,
+  INCAPACITY: HeartPulse,
+  LEAVE: Briefcase,
+  LOAN: HandCoins,
+  SCHEDULE_CHANGE: CalendarCog,
+  OTHER: FileText,
+};
 
 function getEmployeeManagerIds(employee: Employee): string[] {
   const ids = employee.immediate_managers?.length ? employee.immediate_managers : employee.manager ? [employee.manager] : [];
@@ -2310,6 +2368,8 @@ export function AdminHR() {
     setBranchForm({
       code: branch.code,
       name: branch.name,
+      legal_name: branch.legal_name ?? '',
+      nit: branch.nit ?? '',
       address: branch.address,
       city: branch.city,
       department: branch.department,
@@ -2684,6 +2744,8 @@ export function AdminHR() {
       const payload = {
         code: editingBranch ? branchForm.code.trim() : generateBranchCode(branches),
         name: branchForm.name.trim(),
+        legal_name: branchForm.legal_name.trim(),
+        nit: branchForm.nit.trim(),
         address: branchForm.address.trim(),
         city: (branchLocation.cityName || branchForm.city).trim(),
         department: (branchLocation.stateName || branchForm.department).trim(),
@@ -3977,52 +4039,58 @@ export function AdminHR() {
               </div>
             </div>
           ) : activeTab === 'vacations' ? (
-            <div className="space-y-3 rounded-xl border border-gray-100 bg-white p-3 shadow-sm">
-              <div className="flex flex-col lg:flex-row gap-2.5">
-                <SearchBar value={vacationSearch} onChange={setVacationSearch} placeholder="Buscar por empleado, código, motivo o N° de solicitud..." className="w-full" />
-                <button
-                  type="button"
-                  onClick={() => void handleExportVacationXlsx()}
-                  disabled={exportingVacationXlsx}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#2a4038] px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#3d5c4e] disabled:opacity-50 whitespace-nowrap"
-                >
-                  {exportingVacationXlsx ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
-                  Exportar Excel
-                </button>
+            <div className="space-y-3 rounded-2xl border border-gray-100 bg-white p-3.5 shadow-sm">
+              <div className="flex flex-col lg:flex-row lg:items-center gap-2.5">
+                <SearchBar value={vacationSearch} onChange={setVacationSearch} placeholder="Buscar empleado, motivo o clave..." className="w-full lg:flex-1" />
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {(vacationSearch || vacationFilterEmployee !== 'all' || vacationFilterDepartment !== 'all' || vacationFilterBranch !== 'all' || vacationFilterStatus !== 'all' || vacationFilterType !== 'all' || vacationFilterStartFrom || vacationFilterStartTo) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setVacationSearch('');
+                        setVacationFilterEmployee('all');
+                        setVacationFilterDepartment('all');
+                        setVacationFilterBranch('all');
+                        setVacationFilterStatus('all');
+                        setVacationFilterType('all');
+                        setVacationFilterStartFrom('');
+                        setVacationFilterStartTo('');
+                      }}
+                      className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-800 whitespace-nowrap"
+                    >
+                      <X size={13} />
+                      Limpiar filtros
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => void handleExportVacationXlsx()}
+                    disabled={exportingVacationXlsx}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#2a4038] px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#3d5c4e] disabled:opacity-50 whitespace-nowrap"
+                  >
+                    {exportingVacationXlsx ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
+                    Exportar
+                  </button>
+                </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5">
-                <select value={vacationFilterType} onChange={(event) => setVacationFilterType(event.target.value)} className={`${selectCls} w-full`}>
-                  <option value="all">Todos los tipos</option>
-                  {REQUEST_TYPE_FILTER_OPTIONS.map((value) => (
-                    <option key={value} value={value}>{getRequestTypeLabel(value)}</option>
-                  ))}
-                </select>
-                <select value={vacationFilterEmployee} onChange={(event) => setVacationFilterEmployee(event.target.value)} className={`${selectCls} w-full`}>
-                  <option value="all">Todos los empleados</option>
-                  {employees.map((employee) => <option key={employee.id} value={employee.id}>{getEmployeeName(employee)}</option>)}
-                </select>
-                <select value={vacationFilterDepartment} onChange={(event) => setVacationFilterDepartment(event.target.value)} className={`${selectCls} w-full`}>
-                  <option value="all">Todas las áreas</option>
-                  {departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
-                </select>
-                <select value={vacationFilterBranch} onChange={(event) => setVacationFilterBranch(event.target.value)} className={`${selectCls} w-full`}>
-                  <option value="all">Todas las sedes</option>
-                  {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
-                </select>
-                <select value={vacationFilterStatus} onChange={(event) => setVacationFilterStatus(event.target.value)} className={`${selectCls} w-full`}>
-                  {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                </select>
-                <select value={vacationSort} onChange={(event) => setVacationSort(event.target.value as typeof vacationSort)} className={`${selectCls} w-full`}>
-                  <option value="created_at">Ordenar por fecha de solicitud</option>
-                  <option value="start_date">Ordenar por fecha del permiso</option>
-                  <option value="request_type">Ordenar por tipo</option>
-                </select>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <label className="block">
-                  <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1">
-                    Fecha del permiso desde
-                  </span>
+              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2.5">
+                <label className="block min-w-0">
+                  <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Estado</span>
+                  <select value={vacationFilterStatus} onChange={(event) => setVacationFilterStatus(event.target.value)} className={`${selectCls} w-full`}>
+                    {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                </label>
+                <label className="block min-w-0">
+                  <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Tipo</span>
+                  <select value={vacationFilterType} onChange={(event) => setVacationFilterType(event.target.value)} className={`${selectCls} w-full`}>
+                    <option value="all">Todos</option>
+                    {REQUEST_TYPE_FILTER_OPTIONS.map((value) => (
+                      <option key={value} value={value}>{getRequestTypeLabel(value)}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block min-w-0">
+                  <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Desde</span>
                   <input
                     type="date"
                     value={vacationFilterStartFrom}
@@ -4030,10 +4098,8 @@ export function AdminHR() {
                     className={`${inputCls} w-full`}
                   />
                 </label>
-                <label className="block">
-                  <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1">
-                    Fecha del permiso hasta
-                  </span>
+                <label className="block min-w-0">
+                  <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Hasta</span>
                   <input
                     type="date"
                     value={vacationFilterStartTo}
@@ -4041,28 +4107,36 @@ export function AdminHR() {
                     className={`${inputCls} w-full`}
                   />
                 </label>
+                <label className="block min-w-0">
+                  <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Empleado</span>
+                  <select value={vacationFilterEmployee} onChange={(event) => setVacationFilterEmployee(event.target.value)} className={`${selectCls} w-full`}>
+                    <option value="all">Todos</option>
+                    {employees.map((employee) => <option key={employee.id} value={employee.id}>{getEmployeeName(employee)}</option>)}
+                  </select>
+                </label>
+                <label className="block min-w-0">
+                  <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Área</span>
+                  <select value={vacationFilterDepartment} onChange={(event) => setVacationFilterDepartment(event.target.value)} className={`${selectCls} w-full`}>
+                    <option value="all">Todas</option>
+                    {departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
+                  </select>
+                </label>
+                <label className="block min-w-0">
+                  <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Sede</span>
+                  <select value={vacationFilterBranch} onChange={(event) => setVacationFilterBranch(event.target.value)} className={`${selectCls} w-full`}>
+                    <option value="all">Todas</option>
+                    {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+                  </select>
+                </label>
+                <label className="block min-w-0">
+                  <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Ordenar por</span>
+                  <select value={vacationSort} onChange={(event) => setVacationSort(event.target.value as typeof vacationSort)} className={`${selectCls} w-full`}>
+                    <option value="created_at">Fecha de solicitud</option>
+                    <option value="start_date">Fecha del permiso</option>
+                    <option value="request_type">Tipo</option>
+                  </select>
+                </label>
               </div>
-              {(vacationSearch || vacationFilterEmployee !== 'all' || vacationFilterDepartment !== 'all' || vacationFilterBranch !== 'all' || vacationFilterStatus !== 'all' || vacationFilterType !== 'all' || vacationFilterStartFrom || vacationFilterStartTo) && (
-                <div className="flex justify-end">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setVacationSearch('');
-                      setVacationFilterEmployee('all');
-                      setVacationFilterDepartment('all');
-                      setVacationFilterBranch('all');
-                      setVacationFilterStatus('all');
-                      setVacationFilterType('all');
-                      setVacationFilterStartFrom('');
-                      setVacationFilterStartTo('');
-                    }}
-                    className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-800"
-                  >
-                    <X size={12} />
-                    Limpiar filtros
-                  </button>
-                </div>
-              )}
             </div>
           ) : (
             <div className="flex flex-col sm:flex-row gap-3">
@@ -4434,28 +4508,41 @@ export function AdminHR() {
                       const canResolveThisRequest =
                         canManageThisRequest &&
                         ['PENDING', 'IN_REVIEW', 'PENDING_HR', 'PENDING_ADMIN'].includes(request.status);
+                      const employeeDisplayName = employee ? getEmployeeName(employee) : request.employee;
+                      const RequestTypeIcon = REQUEST_TYPE_ICONS[request.request_type];
                       return (
                         <tr key={request.id} className="hover:bg-gray-50/50">
                           <Td>
-                            <div className="font-medium text-gray-900">{employee ? getEmployeeName(employee) : request.employee}</div>
-                            <div className="text-gray-400 text-[11px] mt-1">{employee?.employee_code ?? 'Sin código'}</div>
+                            <div className="flex items-center gap-2.5">
+                              <EmployeeAvatar employee={employee} name={employeeDisplayName} />
+                              <div className="min-w-0">
+                                <div className="font-medium text-gray-900 truncate">{employeeDisplayName}</div>
+                                <div className="text-gray-400 text-[11px] mt-0.5">{employee?.employee_code ?? 'Sin código'}</div>
+                              </div>
+                            </div>
                           </Td>
                           <Td>
-                            <div>{getRequestTypeLabel(request.request_type, request.subtype)}</div>
-                            <div className="text-gray-400 text-[11px] mt-1">{getRequestSubtypeLabel(request.subtype)}</div>
+                            <div className="flex items-center gap-1.5">
+                              <RequestTypeIcon size={13} className="text-gray-400 flex-shrink-0" />
+                              <span>{getRequestTypeLabel(request.request_type, request.subtype)}</span>
+                            </div>
+                            <div className="text-gray-400 text-[11px] mt-1 pl-[19px]">{getRequestSubtypeLabel(request.subtype)}</div>
                           </Td>
                           <Td>
-                            {canManageAccessCredentials && request.request_type !== 'LOAN' && CORRECTABLE_STATUSES.includes(request.status) ? (
-                              <button
-                                onClick={() => openCorrectScheduleModal(request)}
-                                className="text-left hover:underline decoration-dotted underline-offset-2 hover:text-[#2a4038] transition-colors"
-                                title="Editar fecha/hora"
-                              >
-                                {getRequestScheduleLabel(request)}
-                              </button>
-                            ) : (
-                              getRequestScheduleLabel(request)
-                            )}
+                            <div className="flex items-center gap-1.5">
+                              <CalendarDays size={13} className="text-gray-400 flex-shrink-0" />
+                              {canManageAccessCredentials && request.request_type !== 'LOAN' && CORRECTABLE_STATUSES.includes(request.status) ? (
+                                <button
+                                  onClick={() => openCorrectScheduleModal(request)}
+                                  className="text-left hover:underline decoration-dotted underline-offset-2 hover:text-[#2a4038] transition-colors"
+                                  title="Editar fecha/hora"
+                                >
+                                  {getRequestScheduleLabel(request)}
+                                </button>
+                              ) : (
+                                <span>{getRequestScheduleLabel(request)}</span>
+                              )}
+                            </div>
                           </Td>
                           <Td className="max-w-xs">
                             {request.reason ? (
@@ -5366,6 +5453,18 @@ export function AdminHR() {
         <form onSubmit={handleBranchSubmit} className="space-y-4">
           <div className="grid sm:grid-cols-2 gap-4">
             <TextInput label="Nombre" required value={branchForm.name} onChange={(value) => setBranchForm((current) => ({ ...current, name: value }))} />
+            <TextInput label="NIT" value={branchForm.nit} onChange={(value) => setBranchForm((current) => ({ ...current, nit: value }))} />
+            <div className="sm:col-span-2">
+              <TextInput
+                label="Razón social"
+                value={branchForm.legal_name}
+                onChange={(value) => setBranchForm((current) => ({ ...current, legal_name: value }))}
+              />
+              <p className="text-[11px] text-gray-400 mt-1">
+                Empresa/NIT propietario de esta sede. Se usa en documentos oficiales (ej. PDF de préstamos) de los
+                empleados de esta sede. Si se deja vacío, se usa el nombre de la empresa por defecto.
+              </p>
+            </div>
             <div className="sm:col-span-2">
               <LocationPicker value={branchLocation} onChange={setBranchLocation} />
             </div>

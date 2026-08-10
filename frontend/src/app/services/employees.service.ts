@@ -123,6 +123,8 @@ export interface Branch {
   id: string;
   code: string;
   name: string;
+  legal_name: string;
+  nit: string;
   address: string;
   city: string;
   department: string;
@@ -276,6 +278,8 @@ export interface PositionPayload {
 export interface BranchPayload {
   code: string;
   name: string;
+  legal_name?: string;
+  nit?: string;
   address?: string;
   city?: string;
   department?: string;
