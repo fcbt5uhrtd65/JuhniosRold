@@ -1,6 +1,22 @@
 import { publicApi } from './api';
 import type { NominatimResult } from './nominatim.types';
 
+/** Approximate location from the visitor's IP — only meant to pre-center a map before the
+ * user interacts with it, never to set the actual delivery pin (IP geolocation is city-level
+ * at best). Returns null when it can't be resolved (local/private IPs, provider errors). */
+export async function getApproximateLocationByIp(): Promise<{ lat: number; lng: number; city?: string } | null> {
+  try {
+    const res = await publicApi.get<{ lat: number | null; lng: number | null; city?: string }>(
+      '/geography/geocoding/ip-location/',
+    );
+    const data = res.data;
+    if (!data || data.lat === null || data.lng === null) return null;
+    return { lat: data.lat, lng: data.lng, city: data.city };
+  } catch {
+    return null;
+  }
+}
+
 function normalizeForCompare(value: string): string {
   return value
     .normalize('NFD')

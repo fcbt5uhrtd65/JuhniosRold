@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, Loader2, LocateFixed, MapPin, Pencil, Search } from 'lucide-react';
+import { AlertTriangle, Check, Loader2, LocateFixed, MapPin, Pencil, Search, ShieldCheck } from 'lucide-react';
 import { useGeolocation } from '../../hooks/useGeolocation';
-import { mapNominatimAddressToFields, reverseGeocode, searchAddress } from '../../services/nominatim.service';
+import { getApproximateLocationByIp, mapNominatimAddressToFields, reverseGeocode, searchAddress } from '../../services/nominatim.service';
 import { geographyService } from '../../services/geography.service';
 import type { NominatimResult } from '../../services/nominatim.types';
 import type { LocationValue } from '../../services/geography.types';
@@ -9,7 +9,12 @@ import type { DeliveryLocationValue } from '../../services/delivery-location.typ
 import { InteractiveLocationMap } from './InteractiveLocationMap';
 
 const OLIVE = '#2D3A1F';
-const SEARCH_DEBOUNCE_MS = 400;
+// 250ms es el punto dulce entre "sentirse instantáneo" (Rappi/Google Places apuntan a ~200-300ms)
+// y no saturar el throttle de geocoding con una request por tecla en nombres largos.
+const SEARCH_DEBOUNCE_MS = 250;
+const MIN_SEARCH_QUERY_LENGTH = 3;
+/** ISO-2 country code(s) Nominatim/LocationIQ will hard-filter to, comma-separated (e.g. "co" or "co,ec"). */
+const DEFAULT_COUNTRY_CODES = 'co';
 
 interface DeliveryLocationSectionProps {
   value: DeliveryLocationValue;
@@ -18,6 +23,8 @@ interface DeliveryLocationSectionProps {
   searchScope?: { state?: string; country?: string };
   /** Valid municipality names for the selected department, used to ignore neighbourhoods/corregimientos returned by the geocoder. */
   cityOptions?: string[];
+  /** ISO-2 country code(s) to hard-filter address search results to. Defaults to Colombia ("co"). Pass '' to disable the hard filter. */
+  countryCodes?: string;
   /** Called when the resolved address points to a different city than the one picked manually, so the city selector can stay in sync. */
   onCityResolved?: (city: string) => void;
   /**
@@ -30,13 +37,22 @@ interface DeliveryLocationSectionProps {
   onLocationResolved?: (location: LocationValue) => void;
 }
 
-export function DeliveryLocationSection({ value, onChange, searchScope, cityOptions, onCityResolved, onLocationResolved }: DeliveryLocationSectionProps) {
+export function DeliveryLocationSection({
+  value,
+  onChange,
+  searchScope,
+  cityOptions,
+  countryCodes = DEFAULT_COUNTRY_CODES,
+  onCityResolved,
+  onLocationResolved,
+}: DeliveryLocationSectionProps) {
   const geolocation = useGeolocation();
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<NominatimResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [reverseLoading, setReverseLoading] = useState(false);
+  const [approximateCenter, setApproximateCenter] = useState<{ lat: number; lng: number } | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
@@ -50,6 +66,21 @@ export function DeliveryLocationSection({ value, onChange, searchScope, cityOpti
     }
     document.addEventListener('mousedown', onMouseDown);
     return () => document.removeEventListener('mousedown', onMouseDown);
+  }, []);
+
+  // Pre-center the map near the user's real area (via IP) before they interact with it, so it
+  // doesn't open on the whole-country default view. Only fetched when there's no pin yet — this
+  // never sets the actual delivery location, just the initial map viewport.
+  useEffect(() => {
+    if (value.lat !== null && value.lng !== null) return;
+    let cancelled = false;
+    getApproximateLocationByIp().then(location => {
+      if (!cancelled && location) setApproximateCenter(location);
+    });
+    return () => { cancelled = true; };
+    // Only worth checking once per mount — if the user later clears the pin, re-fetching
+    // wouldn't change anything since the IP hasn't moved.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // React to a successful browser geolocation lookup
@@ -90,13 +121,18 @@ export function DeliveryLocationSection({ value, onChange, searchScope, cityOpti
   // Debounced address search
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (!query.trim()) {
+    if (query.trim().length < MIN_SEARCH_QUERY_LENGTH) {
       setSuggestions([]);
       return;
     }
     debounceRef.current = setTimeout(async () => {
       setSearching(true);
-      const results = await searchAddress(query, { state: searchScope?.state, country: searchScope?.country });
+      const results = await searchAddress(query, {
+        state: searchScope?.state,
+        country: searchScope?.country,
+        countryCodes: countryCodes || undefined,
+        strictScope: true,
+      });
       setSearching(false);
       setSuggestions(results);
     }, SEARCH_DEBOUNCE_MS);
@@ -104,7 +140,7 @@ export function DeliveryLocationSection({ value, onChange, searchScope, cityOpti
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, searchScope?.state, searchScope?.country]);
+  }, [query, searchScope?.state, searchScope?.country, countryCodes]);
 
   async function handleSelectSuggestion(result: NominatimResult) {
     const fields = mapNominatimAddressToFields(result, { validCities: cityOptions });
@@ -184,19 +220,58 @@ export function DeliveryLocationSection({ value, onChange, searchScope, cityOpti
         Usar mi ubicación actual
       </button>
 
+      {/* Explicación previa al permiso nativo del navegador */}
+      {geolocation.status === 'prompt' && (
+        <div className="flex items-start gap-2.5 px-3.5 py-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800 leading-relaxed">
+          <ShieldCheck className="w-4 h-4 flex-shrink-0 mt-0.5" strokeWidth={1.5} />
+          <div className="flex-1 space-y-2">
+            <p>
+              Tu navegador va a pedirte permiso para compartir tu ubicación. La usamos solo para ubicar el pin en el mapa
+              y calcular tu envío con precisión — acepta el permiso cuando aparezca.
+            </p>
+            <div className="flex items-center gap-2 pt-0.5">
+              <button
+                type="button"
+                onClick={geolocation.confirmRequest}
+                className="px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Permitir ubicación
+              </button>
+              <button
+                type="button"
+                onClick={geolocation.cancelPrompt}
+                className="px-3 py-2 text-blue-700 hover:text-blue-900 transition-colors"
+              >
+                Ahora no
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Banner de error / fallback */}
       {(geolocation.status === 'error' || geolocation.status === 'unsupported') && (
-        <div className="flex items-start gap-2 px-3.5 py-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 leading-relaxed">
-          <span className="flex-1">
-            {geolocation.errorMessage}{' '}
+        <div className="flex items-start gap-2.5 px-3.5 py-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 leading-relaxed">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" strokeWidth={1.5} />
+          <div className="flex-1 space-y-1.5">
+            <p>{geolocation.errorMessage}</p>
+            {geolocation.permissionBlocked && (
+              <p className="text-amber-700">
+                En Chrome/Edge: toca el ícono de candado o "ⓘ" junto a la dirección del sitio → Permisos del sitio →
+                Ubicación → Permitir, y recarga la página.
+              </p>
+            )}
             <button
               type="button"
-              onClick={() => searchInputRef.current?.focus()}
+              onClick={() => {
+                searchInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                searchInputRef.current?.focus();
+              }}
               className="underline font-medium hover:text-amber-950 transition-colors"
             >
               Buscar manualmente
             </button>
-          </span>
+          </div>
         </div>
       )}
 
@@ -240,6 +315,7 @@ export function DeliveryLocationSection({ value, onChange, searchScope, cityOpti
         lat={value.lat}
         lng={value.lng}
         onMarkerMove={handleMarkerMove}
+        initialCenter={approximateCenter}
         className="h-56 sm:h-64 rounded-xl overflow-hidden border border-stone-200"
       />
 
