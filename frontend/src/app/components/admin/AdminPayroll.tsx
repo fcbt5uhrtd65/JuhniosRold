@@ -1578,11 +1578,47 @@ function buildBiometricCalendarXlsx(
   ]);
 }
 
-function orderDateTimeLabel(date: string, time: string): string {
-  if (time === '-' || !time) return '';
-  const [year, month, day] = date.split('-').map(Number);
-  const [hour, minute] = time.split(':');
-  return `${month}/${day}/${year} ${Number(hour)}:${minute}`;
+function buildBiometricOrderDayRows(
+  rows: BiometricPreviewRow[],
+  holidaysByDate: Map<string, PublicHoliday>,
+  dateRange: string[],
+  employeeLabel: string,
+): XlsxCell[][] {
+  const rowsByDate = new Map(rows.map((row) => [row.date, row]));
+  return dateRange.map((date) => {
+    const row = rowsByDate.get(date);
+    const holiday = holidaysByDate.get(date);
+    const weekend = isWeekendDate(date);
+    const rowStyle = row?.status === 'Revisar' || row?.status === 'Incompleto' ? XLSX_STYLE.warning : 3;
+    return [
+      xlsxCell(row ? employeeLabel : ''),
+      xlsxCell(formatDate(date)),
+      xlsxCell(WEEKDAY_LABELS[mondayWeekdayIndex(date)]),
+      xlsxCell(row?.checkIn === '-' ? '' : row?.checkIn ?? ''),
+      xlsxCell(row?.checkOut === '-' ? '' : row?.checkOut ?? ''),
+      xlsxCell(previewDurationLabel(row)),
+      xlsxCell(''),
+      xlsxCell(''),
+      xlsxCell(row?.breakStart === '-' ? '' : row?.breakStart ?? ''),
+      xlsxCell(row?.breakEnd === '-' ? '' : row?.breakEnd ?? ''),
+      xlsxCell(''),
+      xlsxCell(''),
+      xlsxCell(''),
+      xlsxCell(''),
+      xlsxCell(''),
+      xlsxCell(''),
+      xlsxCell(''),
+      xlsxCell(''),
+      xlsxCell(''),
+      xlsxCell(''),
+      xlsxCell(holiday?.name ?? ''),
+      xlsxCell(biometricStatus(row, holiday, weekend)),
+      xlsxCell(biometricObservation(row, holiday, weekend)),
+      xlsxCell(row?.analysis ?? ''),
+      xlsxCell(row?.rawMarkCount ?? ''),
+      xlsxCell(row?.marks ?? ''),
+    ].map((cell) => ({ ...cell, style: cell.style || rowStyle }));
+  });
 }
 
 function buildBiometricOrderXlsx(
@@ -1591,10 +1627,8 @@ function buildBiometricOrderXlsx(
   dateRange: string[],
   fileName: string,
   employeeByBiometricCode: Map<string, Employee>,
-  parametersByYear: Map<number, PayrollLegalParameter>,
 ): Blob {
   const exportRange = biometricExportDateRange(rows, dateRange);
-  const parameter = legalParameterForRange(parametersByYear, exportRange);
   const byCode = new Map<string, BiometricPreviewRow[]>();
   rows.forEach((row) => {
     const group = byCode.get(row.code) ?? [];
@@ -1606,119 +1640,55 @@ function buildBiometricOrderXlsx(
     .sort(([left], [right]) => left.localeCompare(right, 'es', { numeric: true }));
 
   const usedSheetNames = new Set<string>();
-  const orderHeader = [
-    'COD',
+  const periodLabel = exportRange.length
+    ? `${formatDate(exportRange[0])} - ${formatDate(exportRange[exportRange.length - 1])}`
+    : 'Sin rango';
+  const detailHeader = [
+    'EMPLEADO/CODIGO',
+    'FECHA',
+    'DIA',
     'ENTRADA',
     'SALIDA',
+    'DURACION',
     'HORAS TRABAJADAS',
     'HORAS ORD.',
     'INICIO ALMUERZO',
     'FIN ALMUERZO',
     'DESCANSO',
-    'HORAS EXTRAS DIURNAS',
-    'HORAS EXTRAS NOCT.',
+    'H. EXTRAS DIURNAS',
+    'H. EXTRAS NOCT.',
     'RECARGO NOCT.',
-    'HORA DOMINICAL DIURNA',
-    'HORAS EXTRAS DIURNA DOM',
-    'HORA DOMINICAL NOCT',
-    'HORAS EXTRAS NOCT DOM',
+    'DOMINICAL DIURNA',
+    'EXTRA DIURNA DOM.',
+    'DOMINICAL NOCT.',
+    'EXTRA NOCT. DOM.',
     'INCAPACIDADES',
     'HORA ORDINARIA',
+    'FESTIVO',
+    'ESTADO',
+    'OBSERVACION',
+    'ANALISIS',
+    'TIMBRADAS',
+    'TODAS LAS TIMBRADAS',
   ];
 
   const codeSheets = codeGroups.map(([code, codeRows]) => {
-    const rowsByDate = new Map(codeRows.map((row) => [row.date, row]));
-    const employee = employeeByBiometricCode.get(code);
-    const baseSalary = numberValue(employee?.base_salary) || numberValue(parameter?.minimum_wage);
-    const rates = biometricHourlyRates(baseSalary, parameter);
-
-    let total = emptyBiometricPayrollBreakdown();
-    const dayRows: XlsxCell[][] = [];
-
-    exportRange.forEach((date) => {
-      const row = rowsByDate.get(date);
-      const holiday = holidaysByDate.get(date);
-      const weekend = isWeekendDate(date);
-      const breakdown = biometricPayrollBreakdown(row, holiday);
-      total = addBiometricPayrollBreakdown(total, breakdown);
-
-      if (!row && weekend) {
-        const label = mondayWeekdayIndex(date) === 5 ? 'SABADO' : 'DOMINGO';
-        dayRows.push([xlsxCell(code, XLSX_STYLE.softHeader), xlsxCell(label, XLSX_STYLE.softHeader), ...Array(orderHeader.length - 2).fill(null).map(() => xlsxCell(''))]);
-        return;
-      }
-      if (!row && holiday) {
-        dayRows.push([xlsxCell(code, XLSX_STYLE.softHeader), xlsxCell(`FESTIVO - ${holiday.name}`, XLSX_STYLE.softHeader), ...Array(orderHeader.length - 2).fill(null).map(() => xlsxCell(''))]);
-        return;
-      }
-      if (!row) {
-        dayRows.push([xlsxCell(code, XLSX_STYLE.warning), xlsxCell('NO VINO', XLSX_STYLE.warning), ...Array(orderHeader.length - 2).fill(null).map(() => xlsxCell(''))]);
-        return;
-      }
-
-      dayRows.push([
-        xlsxCell(code),
-        xlsxCell(orderDateTimeLabel(date, row.checkIn)),
-        xlsxCell(orderDateTimeLabel(date, row.checkOut)),
-        xlsxCell(previewDurationLabel(row)),
-        xlsxCell(breakdown.ordinaryHours),
-        xlsxCell(orderDateTimeLabel(date, row.breakStart)),
-        xlsxCell(orderDateTimeLabel(date, row.breakEnd)),
-        xlsxCell(breakdown.lunchHours || ''),
-        xlsxCell(breakdown.extraDayHours || 0),
-        xlsxCell(breakdown.extraNightHours || 0),
-        xlsxCell(breakdown.nightSurchargeHours || 0),
-        xlsxCell(breakdown.sundayDayHours || 0),
-        xlsxCell(breakdown.sundayExtraDayHours || 0),
-        xlsxCell(breakdown.sundayNightHours || 0),
-        xlsxCell(breakdown.sundayExtraNightHours || 0),
-        xlsxCell(0),
-        xlsxCell(breakdown.ordinaryHours),
-      ]);
-    });
-
-    const bonification = roundedCurrency(total.extraDayHours * rates.dayExtra);
-    const totalRow: XlsxCell[] = [
-      xlsxCell('TOTALES', XLSX_STYLE.total),
-      xlsxCell(''),
-      xlsxCell(''),
-      xlsxCell(total.rawHours, XLSX_STYLE.total),
-      xlsxCell(total.ordinaryHours, XLSX_STYLE.total),
-      xlsxCell(''),
-      xlsxCell(''),
-      xlsxCell(total.lunchHours, XLSX_STYLE.total),
-      xlsxCell(total.extraDayHours, XLSX_STYLE.total),
-      xlsxCell(total.extraNightHours, XLSX_STYLE.total),
-      xlsxCell(total.nightSurchargeHours, XLSX_STYLE.total),
-      xlsxCell(total.sundayDayHours, XLSX_STYLE.total),
-      xlsxCell(total.sundayExtraDayHours, XLSX_STYLE.total),
-      xlsxCell(total.sundayNightHours, XLSX_STYLE.total),
-      xlsxCell(total.sundayExtraNightHours, XLSX_STYLE.total),
-      xlsxCell(0, XLSX_STYLE.total),
-      xlsxCell(total.ordinaryHours, XLSX_STYLE.total),
-    ];
-    const bonificationRow: XlsxCell[] = [
-      xlsxCell(''),
-      xlsxCell(''),
-      xlsxCell(''),
-      xlsxCell(''),
-      xlsxCell(''),
-      xlsxCell(''),
-      xlsxCell(''),
-      xlsxCell(''),
-      xlsxCell('Bonificacion', XLSX_STYLE.softHeader),
-      xlsxCell(bonification, XLSX_STYLE.total),
-    ];
-
+    const displayName = biometricCodeDisplayName(code, employeeByBiometricCode);
     const pageName = biometricCodePageName(code, employeeByBiometricCode);
+    const dayRows = buildBiometricOrderDayRows(codeRows, holidaysByDate, exportRange, pageName);
+    const reviewDays = codeRows.filter((row) => row.status !== 'Completo').length;
+
     return {
       name: uniqueSheetName(pageName, usedSheetNames),
-      widths: [8, 15, 15, 16, 11, 15, 13, 11, 16, 16, 14, 18, 20, 17, 19, 14, 14],
+      widths: [10, 14, 12, 13, 13, 13, 17, 12, 17, 16, 11, 18, 17, 16, 19, 21, 19, 21, 14, 14, 24, 14, 20, 42, 11, 42],
       rows: [
-        orderHeader.map((label) => xlsxCell(label, XLSX_STYLE.tableHeader)),
+        [xlsxCell('ORDEN DE MARCACIONES', XLSX_STYLE.title), xlsxCell(displayName, XLSX_STYLE.title), xlsxCell(`CODIGO ${code}`, XLSX_STYLE.title)],
+        [xlsxCell('Archivo', XLSX_STYLE.softHeader), xlsxCell(fileName || 'TXT biometrico'), xlsxCell('Periodo', XLSX_STYLE.softHeader), xlsxCell(periodLabel)],
+        [xlsxCell('Empleado', XLSX_STYLE.softHeader), xlsxCell(displayName), xlsxCell('Dias por revisar', XLSX_STYLE.softHeader), xlsxCell(reviewDays)],
+        [],
+        [xlsxCell('DETALLE DIARIO', XLSX_STYLE.darkHeader)],
+        detailHeader.map((label) => xlsxCell(label, XLSX_STYLE.tableHeader)),
         ...dayRows,
-        totalRow,
-        bonificationRow,
       ],
     };
   });
@@ -3035,7 +3005,6 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
         previewDateRange,
         previewFileName,
         employeeByBiometricCode,
-        previewParametersByYear,
       ),
     );
     toast.success(code ? `Exportado el orden del codigo ${code}.` : 'Exportado el orden completo.');
