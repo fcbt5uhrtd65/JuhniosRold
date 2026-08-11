@@ -895,11 +895,13 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
 
   const categoryTabs = useMemo(() => [
     { id: 'all', label: 'Todos', count: products.length },
-    ...categories.map(c => ({
-      id: c.id,
-      label: c.name,
-      count: products.filter(p => p.category_id === c.id).length,
-    })),
+    ...categories
+      .map(c => ({
+        id: c.id,
+        label: c.name,
+        count: products.filter(p => p.category_id === c.id).length,
+      }))
+      .filter(tab => tab.count > 0),
   ], [categories, products]);
 
   const currentProducts = useMemo(() => {

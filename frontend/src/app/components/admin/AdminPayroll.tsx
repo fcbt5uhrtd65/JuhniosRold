@@ -1578,6 +1578,92 @@ function buildBiometricCalendarXlsx(
   ]);
 }
 
+const WEEKDAY_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'];
+
+function buildBiometricOrderXlsx(
+  rows: BiometricPreviewRow[],
+  holidaysByDate: Map<string, PublicHoliday>,
+  dateRange: string[],
+  fileName: string,
+  employeeByBiometricCode: Map<string, Employee>,
+): Blob {
+  const exportRange = biometricExportDateRange(rows, dateRange);
+  const byCode = new Map<string, BiometricPreviewRow[]>();
+  rows.forEach((row) => {
+    const group = byCode.get(row.code) ?? [];
+    group.push(row);
+    byCode.set(row.code, group);
+  });
+  const codeGroups = [...byCode.entries()]
+    .map(([code, codeRows]) => [code, [...codeRows].sort((left, right) => left.date.localeCompare(right.date))] as const)
+    .sort(([left], [right]) => left.localeCompare(right, 'es', { numeric: true }));
+
+  const usedSheetNames = new Set<string>();
+  const periodLabel = exportRange.length
+    ? `${formatDate(exportRange[0])} - ${formatDate(exportRange[exportRange.length - 1])}`
+    : 'Sin rango';
+  const summaryRows: XlsxCell[][] = [
+    [xlsxCell('ORDEN DE MARCACIONES BIOMETRICAS', XLSX_STYLE.title)],
+    [xlsxCell('Archivo', XLSX_STYLE.softHeader), xlsxCell(fileName || 'TXT biometrico')],
+    [xlsxCell('Periodo', XLSX_STYLE.softHeader), xlsxCell(periodLabel)],
+    [],
+    ['Empleado', 'Codigo', 'Dias con marca', 'Dias del rango'].map((label) => xlsxCell(label, XLSX_STYLE.tableHeader)),
+  ];
+
+  const orderHeader = ['FECHA', 'DIA', 'MARCACIONES EN ORDEN', 'TIMBRADAS', 'ESTADO', 'NOVEDAD'];
+
+  const codeSheets = codeGroups.map(([code, codeRows]) => {
+    const rowsByDate = new Map(codeRows.map((row) => [row.date, row]));
+    const displayName = biometricCodeDisplayName(code, employeeByBiometricCode);
+    const pageName = biometricCodePageName(code, employeeByBiometricCode);
+    const daysWithMarks = codeRows.filter((row) => row.rawMarkCount > 0).length;
+
+    summaryRows.push([
+      xlsxCell(displayName),
+      xlsxCell(code),
+      xlsxCell(daysWithMarks),
+      xlsxCell(exportRange.length),
+    ]);
+
+    const dayRows: XlsxCell[][] = exportRange.map((date) => {
+      const row = rowsByDate.get(date);
+      const holiday = holidaysByDate.get(date);
+      const weekend = isWeekendDate(date);
+      const weekdayName = WEEKDAY_NAMES[parseLocalDate(date).getDay()];
+      const style = row ? (row.status === 'Completo' ? 3 : XLSX_STYLE.warning) : holiday || weekend ? 3 : XLSX_STYLE.warning;
+      return [
+        xlsxCell(formatDate(date), 3),
+        xlsxCell(weekdayName, 3),
+        xlsxCell(row?.marks || '-', style),
+        xlsxCell(row?.rawMarkCount ?? 0, style),
+        xlsxCell(biometricStatus(row, holiday, weekend), style),
+        xlsxCell(row?.analysis || biometricObservation(row, holiday, weekend), style),
+      ];
+    });
+
+    return {
+      name: uniqueSheetName(pageName, usedSheetNames),
+      widths: [13, 13, 40, 11, 14, 45],
+      rows: [
+        [xlsxCell('ORDEN DE MARCACIONES', XLSX_STYLE.title), xlsxCell(displayName, XLSX_STYLE.title), xlsxCell(`CODIGO ${code}`, XLSX_STYLE.title)],
+        [xlsxCell('Archivo', XLSX_STYLE.softHeader), xlsxCell(fileName || 'TXT biometrico'), xlsxCell('Periodo', XLSX_STYLE.softHeader), xlsxCell(periodLabel)],
+        [],
+        orderHeader.map((label) => xlsxCell(label, XLSX_STYLE.tableHeader)),
+        ...dayRows,
+      ],
+    };
+  });
+
+  return createXlsxBlob([
+    {
+      name: uniqueSheetName('Resumen orden', usedSheetNames),
+      widths: [30, 15, 16, 16],
+      rows: summaryRows,
+    },
+    ...codeSheets,
+  ]);
+}
+
 export function AdminPayroll() {
   const [activeSection, setActiveSection] = useState<PayrollSection>('periods');
   const { employees, employeeById, loading: loadingEmployees } = useEmployeeDirectory();
@@ -2869,6 +2955,29 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
     toast.success(code ? `Exportado el calendario del codigo ${code}.` : 'Exportado el calendario completo.');
   };
 
+  const exportPreviewOrderRows = (rows: BiometricPreviewRow[], code?: string) => {
+    if (rows.length === 0) {
+      toast.warning('No hay marcaciones para exportar.');
+      return;
+    }
+    const orderedRows = [...rows].sort((left, right) => left.code.localeCompare(right.code, 'es', { numeric: true }) || left.date.localeCompare(right.date));
+    const exportRange = biometricExportDateRange(orderedRows, previewDateRange);
+    const start = exportRange[0] ?? orderedRows[0]?.date ?? uploadDateFrom;
+    const end = exportRange[exportRange.length - 1] ?? orderedRows[orderedRows.length - 1]?.date ?? uploadDateTo;
+    const cleanCode = code ? code.replace(/[^a-zA-Z0-9_-]/g, '_') : 'todos';
+    downloadBlob(
+      `biometrico_orden_${cleanCode}_${start || 'inicio'}_${end || 'fin'}.xlsx`,
+      buildBiometricOrderXlsx(
+        orderedRows,
+        previewHolidaysByDate,
+        previewDateRange,
+        previewFileName,
+        employeeByBiometricCode,
+      ),
+    );
+    toast.success(code ? `Exportado el orden del codigo ${code}.` : 'Exportado el orden completo.');
+  };
+
   const updateSavedAnalyses = (items: SavedBiometricAnalysis[]) => {
     setSavedAnalyses(items);
     persistSavedBiometricAnalyses(items);
@@ -3088,6 +3197,9 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
                 <SecondaryButton onClick={() => (previewMode === 'calendar' ? exportPreviewCalendarRows(previewRows) : exportPreviewRows(previewRows))} icon={<Download size={13} />}>
                   {previewMode === 'calendar' ? 'Exportar calendario' : 'Exportar todo'}
                 </SecondaryButton>
+                <SecondaryButton onClick={() => exportPreviewOrderRows(previewRows)} icon={<Download size={13} />}>
+                  Exportar Excel (solo orden)
+                </SecondaryButton>
               </div>
             </div>
             <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -3140,13 +3252,22 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
                           Codigo {group.code}{mappedEmployee?.employee_code ? ` - ${mappedEmployee.employee_code}` : ''} - {group.rows.length} dias con marca - {group.missingWorkDays} faltas laborales - {group.holidayDays} festivos en rango
                         </p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => exportPreviewCalendarRows(group.rows, group.code)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-[11px] font-semibold text-[#2a4038] hover:bg-gray-50"
-                      >
-                        <Download size={12} /> Exportar calendario
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => exportPreviewCalendarRows(group.rows, group.code)}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-[11px] font-semibold text-[#2a4038] hover:bg-gray-50"
+                        >
+                          <Download size={12} /> Exportar calendario
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => exportPreviewOrderRows(group.rows, group.code)}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-[11px] font-semibold text-[#2a4038] hover:bg-gray-50"
+                        >
+                          <Download size={12} /> Solo orden
+                        </button>
+                      </div>
                     </div>
                     <div className="space-y-3 p-3">
                       {previewCalendarMonths.map((month) => (
@@ -3285,6 +3406,13 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
                                 className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-[11px] font-semibold text-[#2a4038] hover:bg-gray-50"
                               >
                                 <Download size={12} /> Excel
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => exportPreviewOrderRows(group.rows, group.code)}
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-[11px] font-semibold text-[#2a4038] hover:bg-gray-50"
+                              >
+                                <Download size={12} /> Solo orden
                               </button>
                               <button
                                 type="button"

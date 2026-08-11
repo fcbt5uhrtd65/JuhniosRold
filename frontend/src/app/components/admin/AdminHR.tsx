@@ -1763,6 +1763,10 @@ export function AdminHR() {
   const { currentUser } = useAdmin();
   const isAdmin = currentUser?.rol === 'ADMIN';
   const canManageAccessCredentials = currentUser?.rol === 'ADMIN' || currentUser?.rol === 'RRHH';
+  // RRHH tiene el mismo permiso que Administrador para eliminar cualquier solicitud
+  // (incluidas las de préstamo) — ver VacationRequestViewSet.destroy() en el backend.
+  // No amplía nada más de isAdmin (aprobar/rechazar/decidir remuneración siguen igual).
+  const canDeleteRequest = isAdmin || currentUser?.rol === 'RRHH';
   const canManageLoans = Boolean(currentUser?.canManageLoans);
   const [activeTab, setActiveTab] = useState<HRTab>('employees');
   const [employeeModalTab, setEmployeeModalTab] = useState<EmployeeModalTab>('personal');
@@ -4603,7 +4607,7 @@ export function AdminHR() {
                                   onClick: () => handleVacationAction(request, 'reject'),
                                   disabled: !canResolveThisRequest || vacationActionId === request.id,
                                 }] : []),
-                                ...(isAdmin ? [{
+                                ...(canDeleteRequest ? [{
                                   label: 'Eliminar solicitud',
                                   icon: Trash2,
                                   onClick: () => handleDeleteVacationRequest(request),

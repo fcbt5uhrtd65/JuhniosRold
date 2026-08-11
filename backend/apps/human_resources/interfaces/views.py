@@ -311,11 +311,14 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
         ).prefetch_related("employee__immediate_managers__user")
 
     def destroy(self, request, *args, **kwargs):
-        # El Administrador puede eliminar cualquier solicitud (borrado administrativo
-        # general). Además, el propio empleado dueño de la solicitud puede eliminarla
-        # (no editarla) mientras nadie la haya resuelto todavía — una vez que Jefe/
-        # RRHH/Admin ya actuaron sobre ella, se conserva por trazabilidad.
-        if getattr(request.user, "has_full_access", False):
+        # El Administrador y RRHH pueden eliminar cualquier solicitud (borrado
+        # administrativo general), incluidas las de préstamo — ese permiso de
+        # eliminación es independiente del circuito de aprobación de préstamos, que
+        # sigue siendo exclusivo de Tesorería/Admin (ver update() y _resolver_role()
+        # más abajo, que no cambian). Además, el propio empleado dueño de la solicitud
+        # puede eliminarla (no editarla) mientras nadie la haya resuelto todavía — una
+        # vez que Jefe/RRHH/Admin ya actuaron sobre ella, se conserva por trazabilidad.
+        if getattr(request.user, "has_full_access", False) or getattr(request.user, "role_code", None) == "RRHH":
             return super().destroy(request, *args, **kwargs)
 
         vacation = self.get_object()
