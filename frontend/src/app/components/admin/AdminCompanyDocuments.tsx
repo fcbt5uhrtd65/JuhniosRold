@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   BookOpen,
   ClipboardList,
+  Compass,
   Download,
   Eye,
   FileText,
@@ -48,8 +49,9 @@ function formatDate(value: string): string {
 const CATEGORIES: { id: CompanyDocumentCategory; label: string; icon: React.ComponentType<{ size?: number; className?: string }> }[] = [
   { id: 'REGULATION', label: 'Reglamento', icon: ScrollText },
   { id: 'POLICY', label: 'Políticas', icon: BookOpen },
-  { id: 'ANNOUNCEMENT', label: 'Comunicados', icon: Megaphone },
+  { id: 'ANNOUNCEMENT', label: 'Circulares', icon: Megaphone },
   { id: 'FORM', label: 'Formatos', icon: ClipboardList },
+  { id: 'MISSION_VISION', label: 'Misión y Visión', icon: Compass },
 ];
 
 function getVersionVisibility(version: CompanyDocumentVersion): { label: string; color: BadgeColor } {
@@ -262,8 +264,8 @@ export function AdminCompanyDocuments() {
     <div>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between mb-4">
         <div>
-          <h3 className="text-sm font-semibold text-gray-900">Documentos y reglamento de la empresa</h3>
-          <p className="text-xs text-gray-500 mt-0.5">Publica el reglamento, políticas, comunicados y formatos. Aparecen para todos los empleados en "Reglamento interno".</p>
+          <h3 className="text-sm font-semibold text-gray-900">Normativa de la empresa</h3>
+          <p className="text-xs text-gray-500 mt-0.5">Publica el reglamento, políticas, circulares, formatos y la misión y visión. Aparecen para todos los empleados en "Reglamento interno".</p>
         </div>
         <button
           type="button"

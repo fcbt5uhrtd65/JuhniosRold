@@ -127,6 +127,7 @@ import {
   type HRNotification,
   type RequestsDashboard,
   type VacationRequest,
+  type VacationRequestHistory,
   type VacationRequestStatus,
   type VacationRequestType,
 } from '../../services/human-resources.service';
@@ -1217,6 +1218,21 @@ function getRequestTypeLabel(type: string, subtype?: string): string {
 
 const REQUEST_TYPE_FILTER_OPTIONS: VacationRequestType[] = ['PERMISSION', 'OVERTIME', 'LEAVE', 'INCAPACITY', 'VACATION', 'LOAN', 'SCHEDULE_CHANGE', 'OTHER'];
 
+const HISTORY_ACTION_LABELS: Record<VacationRequestHistory['action'], string> = {
+  CREATED: 'Creación',
+  UPDATED: 'Cambio',
+  APPROVED: 'Aprobación',
+  REJECTED: 'Rechazo',
+  COMMENTED: 'Comentario',
+};
+
+/** El comentario del backend ya trae el detalle legible (ej. "Permiso editado
+ * por RRHH: ..."), así que el título de la tarjeta solo necesita distinguir
+ * el tipo de evento a simple vista; el detalle vive en el comentario mismo. */
+function getHistoryActionLabel(item: VacationRequestHistory): string {
+  return HISTORY_ACTION_LABELS[item.action] ?? item.action;
+}
+
 function getRequestSubtypeLabel(subtype: string): string {
   const labels: Record<string, string> = {
     PERSONAL: 'Personal',
@@ -1861,9 +1877,12 @@ export function AdminHR() {
     start_time: '',
     end_time: '',
   });
+  const [correctingShifts, setCorrectingShifts] = useState<{ date: string; start_time: string; end_time: string; notes: string }[]>([]);
+  const [correctingScheduleComment, setCorrectingScheduleComment] = useState('');
   const [savingScheduleCorrection, setSavingScheduleCorrection] = useState(false);
   const [editingRequest, setEditingRequest] = useState<VacationRequest | null>(null);
   const [editingRequestForm, setEditingRequestForm] = useState({ reason: '', description: '', observations: '' });
+  const [editingRequestComment, setEditingRequestComment] = useState('');
   const [savingRequestEdit, setSavingRequestEdit] = useState(false);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -2947,7 +2966,7 @@ export function AdminHR() {
     }
   };
 
-  const CORRECTABLE_STATUSES = ['PENDING', 'IN_REVIEW', 'PENDING_HR', 'PENDING_ADMIN'];
+  const CORRECTABLE_STATUSES = ['PENDING', 'IN_REVIEW', 'PENDING_HR', 'PENDING_ADMIN', 'APPROVED'];
 
   const openCorrectScheduleModal = (request: VacationRequest) => {
     const sameDay = request.start_date === request.end_date;
@@ -2961,14 +2980,57 @@ export function AdminHR() {
       start_time: request.start_time ?? '',
       end_time: request.end_time ?? '',
     });
+    setCorrectingShifts(
+      request.request_type === 'OVERTIME'
+        ? (request.overtime_shifts ?? []).map((shift) => ({
+            date: shift.date,
+            start_time: shift.start_time.slice(0, 5),
+            end_time: shift.end_time.slice(0, 5),
+            notes: shift.notes ?? '',
+          }))
+        : [],
+    );
+    setCorrectingScheduleComment('');
   };
 
   const closeCorrectScheduleModal = () => {
     setCorrectingRequest(null);
+    setCorrectingScheduleComment('');
   };
 
   const handleSaveScheduleCorrection = async () => {
     if (!correctingRequest) return;
+
+    if (correctingRequest.request_type === 'OVERTIME') {
+      if (correctingShifts.length === 0) {
+        toast.error('Agrega al menos un turno de horas extra');
+        return;
+      }
+      for (const shift of correctingShifts) {
+        if (!shift.date || !shift.start_time || !shift.end_time) {
+          toast.error('Completa fecha, hora inicio y hora fin de cada turno');
+          return;
+        }
+        if (shift.end_time <= shift.start_time) {
+          toast.error(`La hora final debe ser posterior a la inicial (${shift.date})`);
+          return;
+        }
+      }
+      setSavingScheduleCorrection(true);
+      try {
+        await correctVacationRequestSchedule(correctingRequest.id, { overtime_shifts: correctingShifts, comment: correctingScheduleComment.trim() });
+        toast.success('Turnos de horas extra corregidos');
+        closeCorrectScheduleModal();
+        await loadVacationRows();
+      } catch (error) {
+        console.error(error);
+        toast.error(error instanceof Error ? error.message : 'No se pudo corregir la solicitud');
+      } finally {
+        setSavingScheduleCorrection(false);
+      }
+      return;
+    }
+
     const start_date = correctingSchedule.period_mode === 'SINGLE_DAY' ? correctingSchedule.single_date : correctingSchedule.start_date;
     const end_date = correctingSchedule.period_mode === 'SINGLE_DAY' ? correctingSchedule.single_date : correctingSchedule.end_date;
     if (!start_date || !end_date) {
@@ -2987,6 +3049,7 @@ export function AdminHR() {
         is_full_day: correctingSchedule.is_full_day,
         start_time: correctingSchedule.is_full_day ? null : correctingSchedule.start_time,
         end_time: correctingSchedule.is_full_day ? null : (correctingSchedule.end_time || null),
+        comment: correctingScheduleComment.trim(),
       });
       toast.success('Fecha/hora corregida');
       closeCorrectScheduleModal();
@@ -3010,21 +3073,27 @@ export function AdminHR() {
       description: request.description ?? '',
       observations: request.observations ?? '',
     });
+    setEditingRequestComment('');
   };
 
   const closeEditRequestModal = () => {
     setEditingRequest(null);
+    setEditingRequestComment('');
   };
 
   const handleSaveRequestEdit = async () => {
     if (!editingRequest) return;
     setSavingRequestEdit(true);
     try {
-      await updateVacationRequest(editingRequest.id, {
-        reason: editingRequestForm.reason,
-        description: editingRequestForm.description,
-        observations: editingRequestForm.observations,
-      });
+      await updateVacationRequest(
+        editingRequest.id,
+        {
+          reason: editingRequestForm.reason,
+          description: editingRequestForm.description,
+          observations: editingRequestForm.observations,
+        },
+        editingRequestComment.trim(),
+      );
       toast.success('Solicitud actualizada');
       closeEditRequestModal();
       await loadVacationRows();
@@ -3952,7 +4021,7 @@ export function AdminHR() {
                 { id: 'vacations', label: 'Solicitudes', icon: CalendarClock, desc: 'Vacaciones y permisos' },
                 { id: 'calendar', label: 'Calendario', icon: CalendarDays, desc: 'Novedades y cumpleaños' },
                 { id: 'orgchart', label: 'Organigrama', icon: Network, desc: 'Jerarquía de la empresa' },
-                { id: 'documents', label: 'Documentos', icon: FileText, desc: 'Reglamento y políticas' },
+                { id: 'documents', label: 'Normativa', icon: FileText, desc: 'Reglamento y políticas' },
               ] as const).map((item) => {
                 const Icon = item.icon;
                 const active = activeTab === item.id;
@@ -5094,8 +5163,12 @@ export function AdminHR() {
                 <div className="space-y-2 max-h-64 overflow-y-auto">
                   {viewingRequest.history.map((item) => (
                     <div key={item.id} className="text-xs border-b border-gray-100 pb-2">
-                      <div className="font-medium text-gray-900">{item.action}</div>
-                      <div className="text-gray-400">{item.old_status || 'Inicio'} → {item.new_status || 'Sin cambio'}</div>
+                      <div className="font-medium text-gray-900">{getHistoryActionLabel(item)}</div>
+                      {item.old_status !== item.new_status && (
+                        <div className="text-gray-400">
+                          {item.old_status ? requestStatusLabel(item.old_status as VacationRequestStatus) : 'Inicio'} → {item.new_status ? requestStatusLabel(item.new_status as VacationRequestStatus) : 'Sin cambio'}
+                        </div>
+                      )}
                       <div className="text-gray-400">{item.comment || 'Sin comentario'} · {parseDate(item.created_at)}</div>
                     </div>
                   ))}
@@ -5270,6 +5343,16 @@ export function AdminHR() {
                 className={inputCls + ' resize-none'}
               />
             </div>
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Comentario para el historial (opcional)</label>
+              <textarea
+                value={editingRequestComment}
+                onChange={(event) => setEditingRequestComment(event.target.value)}
+                placeholder="Ej: el empleado pidió corregir el motivo por error de digitación"
+                rows={2}
+                className={inputCls + ' resize-none'}
+              />
+            </div>
             <div className="flex justify-end gap-2">
               <button onClick={closeEditRequestModal} className="px-4 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
                 Cancelar
@@ -5329,10 +5412,85 @@ export function AdminHR() {
       </Modal>
 
       <Modal title="Corregir fecha/hora" open={Boolean(correctingRequest)} onClose={closeCorrectScheduleModal}>
-        {correctingRequest && (
+        {correctingRequest && correctingRequest.request_type === 'OVERTIME' && (
           <div className="space-y-4">
             <p className="text-xs text-gray-500">
-              Corrige la fecha/hora que digitó el empleado en la solicitud {correctingRequest.request_number || ''}. El cambio queda registrado en el historial. Solo disponible mientras la solicitud sigue pendiente de resolución.
+              Corrige los turnos de horas extra de la solicitud {correctingRequest.request_number || ''}. El total de horas y el rango de fechas se recalculan automáticamente. El cambio queda registrado en el historial, incluso si la solicitud ya fue aprobada.
+            </p>
+
+            <div className="space-y-3">
+              {correctingShifts.map((shift, index) => (
+                <div key={index} className="rounded-lg border border-gray-200 p-3 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Turno {index + 1}</span>
+                    <button
+                      type="button"
+                      onClick={() => setCorrectingShifts(correctingShifts.filter((_, i) => i !== index))}
+                      className="text-[11px] font-semibold text-red-600 hover:underline"
+                    >
+                      Quitar
+                    </button>
+                  </div>
+                  <TextInput
+                    label="Fecha"
+                    type="date"
+                    value={shift.date}
+                    onChange={(value) => setCorrectingShifts(correctingShifts.map((s, i) => (i === index ? { ...s, date: value } : s)))}
+                  />
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <TextInput
+                      label="Hora inicio"
+                      type="time"
+                      value={shift.start_time}
+                      onChange={(value) => setCorrectingShifts(correctingShifts.map((s, i) => (i === index ? { ...s, start_time: value } : s)))}
+                    />
+                    <TextInput
+                      label="Hora fin"
+                      type="time"
+                      value={shift.end_time}
+                      onChange={(value) => setCorrectingShifts(correctingShifts.map((s, i) => (i === index ? { ...s, end_time: value } : s)))}
+                    />
+                  </div>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setCorrectingShifts([...correctingShifts, { date: correctingRequest.start_date, start_time: '', end_time: '', notes: '' }])}
+                className="w-full px-3 py-2 border border-dashed border-gray-300 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                + Agregar turno
+              </button>
+            </div>
+
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Comentario para el historial (opcional)</label>
+              <textarea
+                value={correctingScheduleComment}
+                onChange={(event) => setCorrectingScheduleComment(event.target.value)}
+                placeholder="Ej: el empleado avisó que salió una hora después"
+                rows={2}
+                className={inputCls + ' resize-none'}
+              />
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button onClick={closeCorrectScheduleModal} className="px-4 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+                Cancelar
+              </button>
+              <button
+                onClick={() => void handleSaveScheduleCorrection()}
+                disabled={savingScheduleCorrection}
+                className="px-4 py-2 bg-[#2a4038] rounded-lg text-xs font-semibold text-white hover:bg-[#3d5c4e] transition-colors disabled:opacity-40"
+              >
+                {savingScheduleCorrection ? 'Guardando...' : 'Guardar corrección'}
+              </button>
+            </div>
+          </div>
+        )}
+        {correctingRequest && correctingRequest.request_type !== 'OVERTIME' && (
+          <div className="space-y-4">
+            <p className="text-xs text-gray-500">
+              Corrige la fecha/hora que digitó el empleado en la solicitud {correctingRequest.request_number || ''}. El cambio queda registrado en el historial, incluso si la solicitud ya fue aprobada.
             </p>
 
             <div>
@@ -5397,6 +5555,17 @@ export function AdminHR() {
                 />
               </div>
             )}
+
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Comentario para el historial (opcional)</label>
+              <textarea
+                value={correctingScheduleComment}
+                onChange={(event) => setCorrectingScheduleComment(event.target.value)}
+                placeholder="Ej: el empleado avisó que salió una hora después"
+                rows={2}
+                className={inputCls + ' resize-none'}
+              />
+            </div>
 
             <div className="flex justify-end gap-2">
               <button onClick={closeCorrectScheduleModal} className="px-4 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors">

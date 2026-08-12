@@ -523,8 +523,9 @@ class CompanyDocument(BaseModel):
     class Category(models.TextChoices):
         REGULATION = "REGULATION", "Reglamento"
         POLICY = "POLICY", "Políticas"
-        ANNOUNCEMENT = "ANNOUNCEMENT", "Comunicados"
+        ANNOUNCEMENT = "ANNOUNCEMENT", "Circulares"
         FORM = "FORM", "Formatos"
+        MISSION_VISION = "MISSION_VISION", "Misión y Visión"
 
     category = models.CharField(max_length=20, choices=Category.choices, default=Category.REGULATION)
     name = models.CharField(max_length=180)

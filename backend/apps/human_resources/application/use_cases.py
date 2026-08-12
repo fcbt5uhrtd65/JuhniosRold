@@ -271,6 +271,48 @@ class RegisterCheckOut:
         return attendance
 
 
+def _parse_overtime_shifts(shifts_data):
+    """Valida y normaliza una lista cruda de turnos (fecha + horario) en la forma
+    que usan tanto la creación como la corrección posterior de una solicitud de
+    horas extra. Comparte la misma validación para que ambos flujos rechacen los
+    mismos datos mal formados."""
+    if not shifts_data:
+        raise BusinessRuleViolation("Debes indicar al menos un turno de horas extra.")
+
+    parsed_shifts = []
+    for shift in shifts_data:
+        try:
+            shift_date = shift["date"]
+            start_time = shift["start_time"]
+            end_time = shift["end_time"]
+        except KeyError as exc:
+            raise BusinessRuleViolation(f"Falta el campo {exc} en un turno.") from exc
+
+        try:
+            if isinstance(shift_date, str):
+                shift_date = datetime.strptime(shift_date, "%Y-%m-%d").date()
+            if isinstance(start_time, str):
+                start_time = datetime.strptime(start_time[:5], "%H:%M").time()
+            if isinstance(end_time, str):
+                end_time = datetime.strptime(end_time[:5], "%H:%M").time()
+        except (TypeError, ValueError) as exc:
+            raise BusinessRuleViolation("Cada turno debe tener fecha YYYY-MM-DD y horas HH:MM validas.") from exc
+
+        if end_time <= start_time:
+            raise BusinessRuleViolation(f"La hora final debe ser posterior a la hora inicial ({shift_date}).")
+
+        shift_minutes = (end_time.hour * 60 + end_time.minute) - (start_time.hour * 60 + start_time.minute)
+        shift_hours = (Decimal(shift_minutes) / Decimal(60)).quantize(Decimal("0.01"))
+        parsed_shifts.append({
+            "date": shift_date,
+            "start_time": start_time,
+            "end_time": end_time,
+            "hours_count": shift_hours,
+            "notes": shift.get("notes", ""),
+        })
+    return parsed_shifts
+
+
 class CreateOvertimeRequestWithShifts:
     """Crea una solicitud de horas extra a partir de varios turnos (fecha + horario
     cada uno), en vez de exigir una solicitud separada por cada día distinto.
@@ -281,40 +323,7 @@ class CreateOvertimeRequestWithShifts:
 
     @transaction.atomic
     def execute(self, employee, shifts_data, reason="", description="", observations="", support_document=None):
-        if not shifts_data:
-            raise BusinessRuleViolation("Debes indicar al menos un turno de horas extra.")
-
-        parsed_shifts = []
-        for shift in shifts_data:
-            try:
-                shift_date = shift["date"]
-                start_time = shift["start_time"]
-                end_time = shift["end_time"]
-            except KeyError as exc:
-                raise BusinessRuleViolation(f"Falta el campo {exc} en un turno.") from exc
-
-            try:
-                if isinstance(shift_date, str):
-                    shift_date = datetime.strptime(shift_date, "%Y-%m-%d").date()
-                if isinstance(start_time, str):
-                    start_time = datetime.strptime(start_time[:5], "%H:%M").time()
-                if isinstance(end_time, str):
-                    end_time = datetime.strptime(end_time[:5], "%H:%M").time()
-            except (TypeError, ValueError) as exc:
-                raise BusinessRuleViolation("Cada turno debe tener fecha YYYY-MM-DD y horas HH:MM validas.") from exc
-
-            if end_time <= start_time:
-                raise BusinessRuleViolation(f"La hora final debe ser posterior a la hora inicial ({shift_date}).")
-
-            shift_minutes = (end_time.hour * 60 + end_time.minute) - (start_time.hour * 60 + start_time.minute)
-            shift_hours = (Decimal(shift_minutes) / Decimal(60)).quantize(Decimal("0.01"))
-            parsed_shifts.append({
-                "date": shift_date,
-                "start_time": start_time,
-                "end_time": end_time,
-                "hours_count": shift_hours,
-                "notes": shift.get("notes", ""),
-            })
+        parsed_shifts = _parse_overtime_shifts(shifts_data)
 
         dates = [s["date"] for s in parsed_shifts]
         total_minutes = sum(
@@ -348,6 +357,45 @@ class CreateOvertimeRequestWithShifts:
             )
             for s in parsed_shifts
         ])
+        return vacation
+
+
+class CorrectOvertimeShifts:
+    """Reemplaza los turnos de una solicitud de horas extra ya existente (por
+    ejemplo, para corregir un horario mal digitado incluso después de aprobada)
+    y recalcula start_date/end_date/hours_count/days_count del padre a partir
+    de los turnos nuevos — mismo cálculo que CreateOvertimeRequestWithShifts,
+    para que el total siga siendo consistente con lo que muestran el dashboard,
+    el PDF y la nómina."""
+
+    @transaction.atomic
+    def execute(self, vacation, shifts_data):
+        parsed_shifts = _parse_overtime_shifts(shifts_data)
+
+        vacation.overtime_shifts.all().delete()
+        OvertimeShift.objects.bulk_create([
+            OvertimeShift(
+                request=vacation,
+                date=s["date"],
+                start_time=s["start_time"],
+                end_time=s["end_time"],
+                hours_count=s["hours_count"],
+                notes=s["notes"],
+            )
+            for s in parsed_shifts
+        ])
+
+        dates = [s["date"] for s in parsed_shifts]
+        total_minutes = sum(
+            (s["end_time"].hour * 60 + s["end_time"].minute) - (s["start_time"].hour * 60 + s["start_time"].minute)
+            for s in parsed_shifts
+        )
+        total_hours = (Decimal(total_minutes) / Decimal(60)).quantize(Decimal("0.01"))
+        vacation.start_date = min(dates)
+        vacation.end_date = max(dates)
+        vacation.hours_count = total_hours
+        vacation.days_count = len(parsed_shifts)
+        vacation.save(update_fields=("start_date", "end_date", "hours_count", "days_count", "updated_at"))
         return vacation
 
 

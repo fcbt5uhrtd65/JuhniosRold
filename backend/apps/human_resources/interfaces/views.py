@@ -30,6 +30,7 @@ from ..application.use_cases import (
     CalculatePayrollPeriod,
     ConsolidateAttendanceFromPunches,
     CorrectAttendance,
+    CorrectOvertimeShifts,
     CreateOvertimeRequestWithShifts,
     CreatePayrollPeriod,
     CreateWorkScheduleTemplate,
@@ -292,6 +293,21 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
         self.required_component_action = "view" if self.action in {"list", "retrieve", "dashboard"} else "edit"
         return super().get_permissions()
 
+    # Mismas etiquetas que SCHEDULE_EDIT_NOVELTY_LABELS de AttendanceViewSet — se
+    # repite aquí porque este update() genérico (motivo/descripción/observaciones)
+    # vive en un ViewSet distinto al de correct-schedule.
+    GENERIC_EDIT_NOVELTY_LABELS = {
+        VacationRequest.RequestType.PERMISSION: "Permiso editado",
+        VacationRequest.RequestType.OVERTIME: "Hora extra editada",
+        VacationRequest.RequestType.LEAVE: "Licencia editada",
+        VacationRequest.RequestType.INCAPACITY: "Incapacidad editada",
+        VacationRequest.RequestType.VACATION: "Vacaciones editadas",
+        VacationRequest.RequestType.LOAN: "Préstamo editado",
+        VacationRequest.RequestType.SCHEDULE_CHANGE: "Cambio de horario editado",
+        VacationRequest.RequestType.OTHER: "Solicitud editada",
+    }
+    GENERIC_EDITABLE_FIELDS = ("reason", "description", "observations")
+
     def update(self, request, *args, **kwargs):
         vacation = self.get_object()
         if vacation.request_type == VacationRequest.RequestType.LOAN and not getattr(request.user, "can_manage_loans", False):
@@ -299,7 +315,32 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
                 {"detail": "Solo Tesoreria o el Administrador pueden editar solicitudes de prestamo."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        return super().update(request, *args, **kwargs)
+
+        previous = {field: getattr(vacation, field) for field in self.GENERIC_EDITABLE_FIELDS}
+        editor_comment = (request.data.get("comment") or "").strip()
+        response = super().update(request, *args, **kwargs)
+        if response.status_code >= 400:
+            return response
+
+        vacation.refresh_from_db()
+        changes = [
+            f"{field}: cambiado" for field in self.GENERIC_EDITABLE_FIELDS
+            if previous[field] != getattr(vacation, field)
+        ]
+        if changes or editor_comment:
+            novelty_label = self.GENERIC_EDIT_NOVELTY_LABELS.get(vacation.request_type, "Solicitud editada")
+            detail = f"{novelty_label} por {getattr(request.user, 'role_code', '')}"
+            if changes:
+                detail += ": " + "; ".join(changes)
+            VacationRequestHistory.objects.create(
+                request=vacation,
+                action=VacationRequestHistory.Action.UPDATED,
+                user=request.user,
+                old_status=vacation.status,
+                new_status=vacation.status,
+                comment=f"{detail}. Comentario: {editor_comment}" if editor_comment else detail,
+            )
+        return response
 
     def _self_service_queryset(self):
         return VacationRequest.objects.select_related(
@@ -723,15 +764,34 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
         VacationRequest.Status.IN_REVIEW,
         VacationRequest.Status.PENDING_HR,
         VacationRequest.Status.PENDING_ADMIN,
+        VacationRequest.Status.APPROVED,
     )
+
+    # Etiqueta de la novedad en el historial, no el nombre técnico del tipo — para
+    # que "¿qué cambió?" se lea de un vistazo sin abrir el detalle de cada fila.
+    SCHEDULE_EDIT_NOVELTY_LABELS = {
+        VacationRequest.RequestType.PERMISSION: "Permiso editado",
+        VacationRequest.RequestType.OVERTIME: "Hora extra editada",
+        VacationRequest.RequestType.LEAVE: "Licencia editada",
+        VacationRequest.RequestType.INCAPACITY: "Incapacidad editada",
+        VacationRequest.RequestType.VACATION: "Vacaciones editadas",
+        VacationRequest.RequestType.LOAN: "Préstamo editado",
+        VacationRequest.RequestType.SCHEDULE_CHANGE: "Cambio de horario editado",
+        VacationRequest.RequestType.OTHER: "Solicitud editada",
+    }
 
     @action(detail=True, methods=("post",), url_path="correct-schedule")
     def correct_schedule(self, request, pk=None):
         """Corrección administrativa de fecha/hora: permite a Admin o RRHH arreglar
         un dato mal digitado por el empleado (ej. eligió el día equivocado), sin
-        tener que rechazar y recrear todo el trámite. Solo mientras la solicitud
-        siga sin resolver — una vez aprobada/rechazada/finalizada, la fecha/hora
-        queda congelada como parte del registro histórico."""
+        tener que rechazar y recrear todo el trámite. También se permite después de
+        aprobada (ej. corregir el rango de horas de un permiso, o los turnos de una
+        solicitud de horas extra ya aprobados) — solo queda congelada una vez
+        rechazada, cancelada o finalizada, que sí son estados terminales.
+
+        Quien corrige puede añadir un comentario propio (ej. "el empleado avisó que
+        salió una hora después"), que queda en el historial junto con el detalle
+        técnico de qué cambió — visible en el detalle de la solicitud."""
         if not (getattr(request.user, "has_full_access", False) or getattr(request.user, "role_code", None) == "RRHH"):
             return Response(
                 {"detail": "Solo Administrador o Recursos Humanos pueden corregir la fecha/hora de una solicitud."},
@@ -741,9 +801,38 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
         vacation = self.get_object()
         if vacation.status not in self.EDITABLE_SCHEDULE_STATUSES:
             return Response(
-                {"detail": "Solo se puede corregir la fecha/hora mientras la solicitud sigue pendiente de resolución."},
+                {"detail": "No se puede corregir la fecha/hora de una solicitud rechazada, cancelada o finalizada."},
                 status=status.HTTP_409_CONFLICT,
             )
+
+        novelty_label = self.SCHEDULE_EDIT_NOVELTY_LABELS.get(vacation.request_type, "Solicitud editada")
+        editor_comment = (request.data.get("comment") or "").strip()
+
+        if vacation.request_type == VacationRequest.RequestType.OVERTIME and "overtime_shifts" in request.data:
+            raw_shifts = request.data.get("overtime_shifts")
+            if isinstance(raw_shifts, str):
+                try:
+                    raw_shifts = json.loads(raw_shifts)
+                except ValueError:
+                    return Response({"detail": "overtime_shifts debe ser una lista JSON válida."}, status=status.HTTP_400_BAD_REQUEST)
+            previous_summary = f"{vacation.overtime_shifts.count()} turno(s), {vacation.hours_count or 0} h totales"
+            try:
+                vacation = CorrectOvertimeShifts().execute(vacation, raw_shifts)
+            except BusinessRuleViolation as exc:
+                return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            detail = (
+                f"{novelty_label} por {getattr(request.user, 'role_code', '')}: "
+                f"{previous_summary} → {vacation.overtime_shifts.count()} turno(s), {vacation.hours_count} h totales"
+            )
+            VacationRequestHistory.objects.create(
+                request=vacation,
+                action=VacationRequestHistory.Action.UPDATED,
+                user=request.user,
+                old_status=vacation.status,
+                new_status=vacation.status,
+                comment=f"{detail}. Comentario: {editor_comment}" if editor_comment else detail,
+            )
+            return Response(self.get_serializer(vacation).data)
 
         EDITABLE_FIELDS = ("start_date", "end_date", "is_full_day", "start_time", "end_time")
         previous = {field: getattr(vacation, field) for field in EDITABLE_FIELDS}
@@ -762,14 +851,17 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
             if previous[field] != new_value:
                 changes.append(f"{field}: {previous[field] or '—'} → {new_value or '—'}")
 
-        if changes:
+        if changes or editor_comment:
+            detail = f"{novelty_label} por {getattr(request.user, 'role_code', '')}"
+            if changes:
+                detail += ": " + "; ".join(changes)
             VacationRequestHistory.objects.create(
                 request=vacation,
                 action=VacationRequestHistory.Action.UPDATED,
                 user=request.user,
                 old_status=vacation.status,
                 new_status=vacation.status,
-                comment=f"Corrección de fecha/hora por {getattr(request.user, 'role_code', '')}: " + "; ".join(changes),
+                comment=f"{detail}. Comentario: {editor_comment}" if editor_comment else detail,
             )
         return Response(self.get_serializer(vacation).data)
 

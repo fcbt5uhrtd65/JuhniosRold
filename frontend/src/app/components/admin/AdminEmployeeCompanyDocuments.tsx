@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   BookOpen,
   ClipboardList,
+  Compass,
   Download,
   Eye,
   FileText,
@@ -41,8 +42,9 @@ function formatDate(value: string): string {
 const CATEGORIES: { id: CompanyDocumentCategory; label: string; icon: React.ComponentType<{ size?: number; className?: string }> }[] = [
   { id: 'REGULATION', label: 'Reglamento', icon: ScrollText },
   { id: 'POLICY', label: 'Políticas', icon: BookOpen },
-  { id: 'ANNOUNCEMENT', label: 'Comunicados', icon: Megaphone },
+  { id: 'ANNOUNCEMENT', label: 'Circulares', icon: Megaphone },
   { id: 'FORM', label: 'Formatos', icon: ClipboardList },
+  { id: 'MISSION_VISION', label: 'Misión y Visión', icon: Compass },
 ];
 
 export function AdminEmployeeCompanyDocuments() {

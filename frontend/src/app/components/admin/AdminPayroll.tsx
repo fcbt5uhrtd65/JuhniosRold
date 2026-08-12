@@ -53,6 +53,7 @@ import {
   getPayrollPeriods,
   getPendingCorrectionAttendance,
   getPublicHolidays,
+  getVacationRequests,
   getWorkScheduleTemplates,
   markPayrollPeriodPaid,
   setEmployeeWorkSchedule,
@@ -69,6 +70,7 @@ import {
   type PayrollPeriod,
   type PayrollPeriodStatus,
   type PublicHoliday,
+  type VacationRequest,
   type WorkScheduleTemplate,
 } from '../../services/human-resources.service';
 import { getEmployees, type Employee } from '../../services/employees.service';
@@ -983,6 +985,41 @@ function biometricStatus(row: BiometricPreviewRow | undefined, holiday: PublicHo
   return 'Falto';
 }
 
+const VACATION_REQUEST_TYPE_LABELS: Record<string, string> = {
+  PERMISSION: 'Permiso',
+  LEAVE: 'Licencia',
+  INCAPACITY: 'Incapacidad',
+  VACATION: 'Vacaciones',
+};
+
+/** Solo los tipos de solicitud que justifican un dia sin marca biometrica
+ * (permiso/licencia/incapacidad/vacaciones); horas extra, prestamos y cambios
+ * de horario no aplican como novedad de ausencia. */
+function vacationRequestNoveltyLabel(request: VacationRequest): string | null {
+  const label = VACATION_REQUEST_TYPE_LABELS[request.request_type];
+  if (!label) return null;
+  const subtype = request.subtype ? ` (${request.subtype.toLowerCase()})` : '';
+  return `${label}${subtype}`;
+}
+
+/** Mapa "employeeId|fecha" -> etiqueta de novedad, para cada dia cubierto por
+ * una solicitud aprobada. Se usa solo para anotar el Excel de orden; no toca
+ * calculo de horas ni el Excel completo. */
+function buildVacationNoveltyByEmployeeDate(requests: VacationRequest[]): Map<string, string> {
+  const map = new Map<string, string>();
+  requests.forEach((request) => {
+    if (request.status !== 'APPROVED' && request.status !== 'FINALIZED') return;
+    const label = vacationRequestNoveltyLabel(request);
+    if (!label) return;
+    let cursor = request.start_date;
+    while (cursor <= request.end_date) {
+      map.set(`${request.employee}|${cursor}`, label);
+      cursor = addDays(cursor, 1);
+    }
+  });
+  return map;
+}
+
 function previewDurationLabel(row: BiometricPreviewRow | undefined): string {
   if (!row) return '';
   const checkIn = timeToMinutes(row.checkIn);
@@ -1583,15 +1620,18 @@ function buildBiometricOrderDayRows(
   holidaysByDate: Map<string, PublicHoliday>,
   dateRange: string[],
   employeeLabel: string,
+  employeeId: string | undefined,
+  vacationNoveltyByEmployeeDate: Map<string, string>,
 ): XlsxCell[][] {
   const rowsByDate = new Map(rows.map((row) => [row.date, row]));
   return dateRange.map((date) => {
     const row = rowsByDate.get(date);
     const holiday = holidaysByDate.get(date);
     const weekend = isWeekendDate(date);
+    const novelty = !row && employeeId ? vacationNoveltyByEmployeeDate.get(`${employeeId}|${date}`) : undefined;
     const rowStyle = row?.status === 'Revisar' || row?.status === 'Incompleto' ? XLSX_STYLE.warning : 3;
     return [
-      xlsxCell(row ? employeeLabel : ''),
+      xlsxCell(row || novelty ? employeeLabel : ''),
       xlsxCell(formatDate(date)),
       xlsxCell(WEEKDAY_LABELS[mondayWeekdayIndex(date)]),
       xlsxCell(row?.checkIn === '-' ? '' : row?.checkIn ?? ''),
@@ -1612,12 +1652,12 @@ function buildBiometricOrderDayRows(
       xlsxCell(''),
       xlsxCell(''),
       xlsxCell(holiday?.name ?? ''),
-      xlsxCell(biometricStatus(row, holiday, weekend)),
-      xlsxCell(biometricObservation(row, holiday, weekend)),
+      xlsxCell(novelty ? 'Justificado' : biometricStatus(row, holiday, weekend)),
+      xlsxCell(novelty ?? biometricObservation(row, holiday, weekend)),
       xlsxCell(row?.analysis ?? ''),
       xlsxCell(row?.rawMarkCount ?? ''),
       xlsxCell(row?.marks ?? ''),
-    ].map((cell) => ({ ...cell, style: cell.style || rowStyle }));
+    ].map((cell) => ({ ...cell, style: cell.style || (novelty ? 3 : rowStyle) }));
   });
 }
 
@@ -1627,6 +1667,7 @@ function buildBiometricOrderXlsx(
   dateRange: string[],
   fileName: string,
   employeeByBiometricCode: Map<string, Employee>,
+  vacationNoveltyByEmployeeDate: Map<string, string>,
 ): Blob {
   const exportRange = biometricExportDateRange(rows, dateRange);
   const byCode = new Map<string, BiometricPreviewRow[]>();
@@ -1675,7 +1716,8 @@ function buildBiometricOrderXlsx(
   const codeSheets = codeGroups.map(([code, codeRows]) => {
     const displayName = biometricCodeDisplayName(code, employeeByBiometricCode);
     const pageName = biometricCodePageName(code, employeeByBiometricCode);
-    const dayRows = buildBiometricOrderDayRows(codeRows, holidaysByDate, exportRange, pageName);
+    const employeeId = employeeByBiometricCode.get(code)?.id;
+    const dayRows = buildBiometricOrderDayRows(codeRows, holidaysByDate, exportRange, pageName, employeeId, vacationNoveltyByEmployeeDate);
     const reviewDays = codeRows.filter((row) => row.status !== 'Completo').length;
 
     return {
@@ -2987,7 +3029,7 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
     toast.success(code ? `Exportado el calendario del codigo ${code}.` : 'Exportado el calendario completo.');
   };
 
-  const exportPreviewOrderRows = (rows: BiometricPreviewRow[], code?: string) => {
+  const exportPreviewOrderRows = async (rows: BiometricPreviewRow[], code?: string) => {
     if (rows.length === 0) {
       toast.warning('No hay marcaciones para exportar.');
       return;
@@ -2997,6 +3039,23 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
     const start = exportRange[0] ?? orderedRows[0]?.date ?? uploadDateFrom;
     const end = exportRange[exportRange.length - 1] ?? orderedRows[orderedRows.length - 1]?.date ?? uploadDateTo;
     const cleanCode = code ? code.replace(/[^a-zA-Z0-9_-]/g, '_') : 'todos';
+
+    // Cruce con permisos/incapacidades/licencias/vacaciones aprobadas, para anotar
+    // como "Justificado" los dias sin marca que ya tienen una solicitud aprobada
+    // (solo afecta este Excel de orden; no toca calculos ni los otros exportadores).
+    let vacationNoveltyByEmployeeDate = new Map<string, string>();
+    const rangeStart = start || exportRange[0];
+    try {
+      const { data: vacationRequests } = await getVacationRequests({
+        start_date_from: rangeStart ? addDays(rangeStart, -31) : undefined,
+        limit: 1000,
+      });
+      vacationNoveltyByEmployeeDate = buildVacationNoveltyByEmployeeDate(vacationRequests);
+    } catch (error) {
+      console.error(error);
+      toast.warning('No se pudieron cargar los permisos/incapacidades; el Excel se genera sin esa novedad.');
+    }
+
     downloadBlob(
       `biometrico_orden_${cleanCode}_${start || 'inicio'}_${end || 'fin'}.xlsx`,
       buildBiometricOrderXlsx(
@@ -3005,6 +3064,7 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
         previewDateRange,
         previewFileName,
         employeeByBiometricCode,
+        vacationNoveltyByEmployeeDate,
       ),
     );
     toast.success(code ? `Exportado el orden del codigo ${code}.` : 'Exportado el orden completo.');

@@ -555,7 +555,7 @@ export interface EmployeeDocument {
   deleted_at: string | null;
 }
 
-export type CompanyDocumentCategory = 'REGULATION' | 'POLICY' | 'ANNOUNCEMENT' | 'FORM';
+export type CompanyDocumentCategory = 'REGULATION' | 'POLICY' | 'ANNOUNCEMENT' | 'FORM' | 'MISSION_VISION';
 
 export interface CompanyDocumentVersion {
   id: string;
@@ -801,8 +801,20 @@ export async function getRequestsDashboard(params?: ListVacationParams): Promise
   throw new Error(res.message);
 }
 
-export async function updateVacationRequest(id: string, payload: Partial<VacationRequestPayload>): Promise<VacationRequest> {
-  const res = await api.patch<VacationRequest>(`${REQUESTS_PATH}${id}/`, buildVacationRequestBody(payload as Omit<VacationRequestPayload, 'employee'>));
+/** `comment` es la nota que deja quien edita (Admin/RRHH) explicando el motivo del
+ * cambio — no es un campo del modelo VacationRequest, el backend solo la usa para
+ * anotar la entrada del historial y no la persiste en ningún otro lado. */
+export async function updateVacationRequest(
+  id: string,
+  payload: Partial<VacationRequestPayload>,
+  comment?: string,
+): Promise<VacationRequest> {
+  const body = buildVacationRequestBody(payload as Omit<VacationRequestPayload, 'employee'>);
+  if (comment) {
+    if (body instanceof FormData) body.append('comment', comment);
+    else body.comment = comment;
+  }
+  const res = await api.patch<VacationRequest>(`${REQUESTS_PATH}${id}/`, body);
   if (res.data) return res.data;
   throw new Error(res.message);
 }
@@ -1023,11 +1035,16 @@ export async function finalizeVacationRequest(id: string, comment = ''): Promise
 }
 
 export interface CorrectVacationScheduleParams {
-  start_date: string;
-  end_date: string;
-  is_full_day: boolean;
+  start_date?: string;
+  end_date?: string;
+  is_full_day?: boolean;
   start_time?: string | null;
   end_time?: string | null;
+  /** Solo para solicitudes de tipo OVERTIME: reemplaza todos los turnos de la
+   * solicitud y recalcula start_date/end_date/hours_count/days_count en el backend. */
+  overtime_shifts?: OvertimeShiftInput[];
+  /** Nota de quien corrige, explicando el motivo del cambio. Queda en el historial. */
+  comment?: string;
 }
 
 /** Corrección administrativa de fecha/hora (Admin o RRHH), para arreglar un dato
