@@ -57,6 +57,8 @@ SCHEDULE_CHANGE_DAILY_LUNCH_MINUTES = 60
 EARLY_MORNING_OPERATIONAL_CUTOFF = time(8, 0)
 EVENING_SHIFT_START = time(15, 0)
 MAX_NIGHT_SHIFT_SPAN = timedelta(hours=18)
+MAX_PLAUSIBLE_SHIFT_MINUTES = 15 * 60
+DEFAULT_DUPLICATE_PUNCH_WINDOW_MINUTES = 15
 MIN_REST_BREAK_MINUTES = 30
 MAX_REST_BREAK_MINUTES = 120
 DAY_BREAK_START_WINDOW = (time(10, 0), time(15, 30))
@@ -1228,11 +1230,13 @@ class ConsolidateAttendanceFromPunches:
             open_shift_day = None
             open_shift_start = None
             for punch in employee_punches:
-                day = self._scheduled_operational_day(punch, employee)
+                same_day_shift = self._looks_like_same_day_shift_start(punch, employee_punches)
+                day = None if same_day_shift else self._scheduled_operational_day(punch, employee)
                 if day is None:
                     day = punch.punched_at.date()
                     if (
-                        open_shift_day is not None
+                        not same_day_shift
+                        and open_shift_day is not None
                         and punch.punched_at.date() == open_shift_day + timedelta(days=1)
                         and punch.punched_at.time() < EARLY_MORNING_OPERATIONAL_CUTOFF
                         and open_shift_start is not None
@@ -1247,6 +1251,26 @@ class ConsolidateAttendanceFromPunches:
                 grouped.setdefault((employee_id, day), []).append(punch)
 
         return grouped
+
+    def _looks_like_same_day_shift_start(self, punch, employee_punches) -> bool:
+        if punch.punched_at.time() >= EARLY_MORNING_OPERATIONAL_CUTOFF:
+            return False
+
+        same_day = [
+            item
+            for item in employee_punches
+            if item.punched_at.date() == punch.punched_at.date() and item.punched_at >= punch.punched_at
+        ]
+        useful = self._collapse_duplicate_punches(same_day)
+        if len(useful) < 4 or useful[0].punched_at != punch.punched_at:
+            return False
+
+        check_in = useful[0].punched_at
+        check_out = useful[-1].punched_at
+        if self._exceeds_plausible_shift(check_in, check_out):
+            return False
+
+        return self._best_rest_break_pair([item.punched_at for item in useful[1:-1]]) is not None
 
     def _scheduled_operational_day(self, punch, employee):
         if not employee or punch.punched_at.time() >= EARLY_MORNING_OPERATIONAL_CUTOFF:
@@ -1302,8 +1326,9 @@ class ConsolidateAttendanceFromPunches:
         if action_values is not None:
             return action_values
 
-        count = len(day_punches)
-        times = [p.punched_at for p in day_punches]
+        useful_punches = self._collapse_duplicate_punches(day_punches)
+        count = len(useful_punches)
+        times = [p.punched_at for p in useful_punches]
 
         if count == 2:
             if self._looks_like_rest_break(times[0], times[1]):
@@ -1315,7 +1340,7 @@ class ConsolidateAttendanceFromPunches:
             return {
                 "check_in": times[0], "check_out": times[1],
                 "break_start": None, "break_end": None,
-                "has_incomplete_marks": False,
+                "has_incomplete_marks": self._exceeds_plausible_shift(times[0], times[1]),
             }
         if count == 3:
             if self._looks_like_rest_break(times[1], times[2]):
@@ -1335,7 +1360,7 @@ class ConsolidateAttendanceFromPunches:
             return {
                 "check_in": times[0], "break_start": times[1],
                 "break_end": times[2], "check_out": times[3],
-                "has_incomplete_marks": not has_plausible_break,
+                "has_incomplete_marks": not has_plausible_break or self._exceeds_plausible_shift(times[0], times[3]),
             }
         if count == 1:
             only = times[0]
@@ -1361,6 +1386,34 @@ class ConsolidateAttendanceFromPunches:
             "break_end": break_pair[1] if break_pair else None,
             "has_incomplete_marks": True,
         }
+
+    def _collapse_duplicate_punches(self, day_punches):
+        window = timedelta(minutes=self._duplicate_punch_window_minutes())
+        useful = []
+        last_kept = None
+        for punch in sorted(day_punches, key=lambda item: item.punched_at):
+            if getattr(punch, "is_duplicate", False):
+                continue
+            if last_kept is not None and punch.punched_at - last_kept.punched_at < window:
+                continue
+            useful.append(punch)
+            last_kept = punch
+        return useful or sorted(day_punches, key=lambda item: item.punched_at)[:1]
+
+    def _duplicate_punch_window_minutes(self) -> int:
+        configured = getattr(self, "_duplicate_window_minutes", None)
+        if configured:
+            return configured
+        try:
+            return get_attendance_intelligence_settings().duplicate_punch_window_minutes
+        except Exception:
+            return DEFAULT_DUPLICATE_PUNCH_WINDOW_MINUTES
+
+    def _exceeds_plausible_shift(self, check_in, check_out) -> bool:
+        if not check_in or not check_out or check_out <= check_in:
+            return True
+        minutes = int((check_out - check_in).total_seconds() // 60)
+        return minutes > MAX_PLAUSIBLE_SHIFT_MINUTES
 
     def _looks_like_rest_break(self, start_dt, end_dt) -> bool:
         if not start_dt or not end_dt or end_dt <= start_dt:
@@ -1678,6 +1731,9 @@ class CalculateEmployeePayrollForPeriod:
         """[(inicio, fin)] de tramos trabajados de un Attendance consolidado,
         excluyendo el descanso si está registrado."""
         lunch_minutes = SCHEDULE_CHANGE_DAILY_LUNCH_MINUTES
+        total_minutes = int((attendance.check_out - attendance.check_in).total_seconds() // 60)
+        if total_minutes <= 0 or total_minutes > MAX_PLAUSIBLE_SHIFT_MINUTES:
+            return []
         if attendance.break_start and attendance.break_end and attendance.check_in < attendance.break_start < attendance.check_out:
             lunch_start = attendance.break_start
             lunch_end = min(attendance.check_out, lunch_start + timedelta(minutes=lunch_minutes))
@@ -1689,7 +1745,6 @@ class CalculateEmployeePayrollForPeriod:
                 )
                 if segment[1] > segment[0]
             ]
-        total_minutes = int((attendance.check_out - attendance.check_in).total_seconds() // 60)
         if total_minutes >= 6 * 60:
             lunch_start = min(
                 attendance.check_in + timedelta(hours=5),
@@ -1717,11 +1772,14 @@ class CalculateEmployeePayrollForPeriod:
         while cursor <= period.period_end:
             attendance = Attendance.objects.filter(employee=employee, date=cursor).first()
             if attendance and attendance.check_in and attendance.check_out:
-                worked_days += 1
                 schedule = get_schedule_for(employee, cursor)
                 expected_minutes = schedule.expected_minutes_for(cursor.weekday()) if schedule else None
                 remaining_ordinary = expected_minutes if expected_minutes is not None else None
                 segments = self._work_segments(attendance)
+                if not segments:
+                    cursor += timedelta(days=1)
+                    continue
+                worked_days += 1
                 for seg_start, seg_end in segments:
                     seg_minutes = max(int((seg_end - seg_start).total_seconds() // 60), 0)
                     if remaining_ordinary is None:

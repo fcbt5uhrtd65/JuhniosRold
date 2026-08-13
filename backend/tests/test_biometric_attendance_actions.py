@@ -90,6 +90,115 @@ def test_night_shift_rest_break_in_early_morning_is_detected():
     assert result["has_incomplete_marks"] is False
 
 
+def test_close_duplicate_entry_is_ignored_before_inferring_day_shift():
+    service = ConsolidateAttendanceFromPunches()
+
+    result = service._infer_attendance([
+        dated_punch((2026, 5, 4), 6, 30),
+        dated_punch((2026, 5, 4), 6, 30),
+        dated_punch((2026, 5, 4), 12, 25),
+        dated_punch((2026, 5, 4), 13, 28),
+        dated_punch((2026, 5, 4), 16, 35),
+    ])
+
+    assert result["check_in"] == datetime(2026, 5, 4, 6, 30)
+    assert result["break_start"] == datetime(2026, 5, 4, 12, 25)
+    assert result["break_end"] == datetime(2026, 5, 4, 13, 28)
+    assert result["check_out"] == datetime(2026, 5, 4, 16, 35)
+    assert result["has_incomplete_marks"] is False
+
+
+def test_unsorted_extra_morning_mark_keeps_earliest_entry_and_lunch_pair():
+    service = ConsolidateAttendanceFromPunches()
+
+    result = service._infer_attendance([
+        dated_punch((2026, 5, 4), 8, 16),
+        dated_punch((2026, 5, 4), 12, 41),
+        dated_punch((2026, 5, 4), 13, 40),
+        dated_punch((2026, 5, 4), 17, 50),
+        dated_punch((2026, 5, 4), 7, 24),
+    ])
+
+    assert result["check_in"] == datetime(2026, 5, 4, 7, 24)
+    assert result["break_start"] == datetime(2026, 5, 4, 12, 41)
+    assert result["break_end"] == datetime(2026, 5, 4, 13, 40)
+    assert result["check_out"] == datetime(2026, 5, 4, 17, 50)
+    assert result["has_incomplete_marks"] is True
+
+
+def test_duplicate_morning_mark_four_minutes_apart_is_ignored():
+    service = ConsolidateAttendanceFromPunches()
+
+    result = service._infer_attendance([
+        dated_punch((2026, 5, 4), 6, 47),
+        dated_punch((2026, 5, 4), 12, 0),
+        dated_punch((2026, 5, 4), 12, 59),
+        dated_punch((2026, 5, 4), 16, 32),
+        dated_punch((2026, 5, 4), 6, 51),
+    ])
+
+    assert result["check_in"] == datetime(2026, 5, 4, 6, 47)
+    assert result["break_start"] == datetime(2026, 5, 4, 12, 0)
+    assert result["break_end"] == datetime(2026, 5, 4, 12, 59)
+    assert result["check_out"] == datetime(2026, 5, 4, 16, 32)
+    assert result["has_incomplete_marks"] is False
+
+
+def test_early_morning_entry_with_same_day_lunch_is_day_shift():
+    service = ConsolidateAttendanceFromPunches()
+
+    result = service._infer_attendance([
+        dated_punch((2026, 5, 4), 11, 6),
+        dated_punch((2026, 5, 4), 12, 0),
+        dated_punch((2026, 5, 4), 18, 6),
+        dated_punch((2026, 5, 4), 5, 43),
+    ])
+
+    assert result["check_in"] == datetime(2026, 5, 4, 5, 43)
+    assert result["break_start"] == datetime(2026, 5, 4, 11, 6)
+    assert result["break_end"] == datetime(2026, 5, 4, 12, 0)
+    assert result["check_out"] == datetime(2026, 5, 4, 18, 6)
+    assert result["has_incomplete_marks"] is False
+
+
+@pytest.mark.django_db
+def test_same_day_day_shift_evidence_wins_over_previous_night_schedule():
+    employee = Employee.objects.create(employee_code="MIXED-001", first_name="Mixto", status=Employee.Status.ACTIVE)
+    schedule = EmployeeWorkSchedule.objects.create(employee=employee, start_date="2026-04-01")
+    EmployeeWorkScheduleDay.objects.create(
+        schedule=schedule,
+        weekday=3,
+        slot=1,
+        expected_start_time=time(18, 0),
+        expected_end_time=time(6, 0),
+    )
+    service = ConsolidateAttendanceFromPunches()
+    punches = [
+        dated_punch((2026, 5, 1), 5, 43, employee=employee),
+        dated_punch((2026, 5, 1), 11, 6, employee=employee),
+        dated_punch((2026, 5, 1), 12, 0, employee=employee),
+        dated_punch((2026, 5, 1), 18, 6, employee=employee),
+    ]
+
+    grouped = service._group_punches_by_operational_day(punches, {})
+
+    assert (employee.id, datetime(2026, 5, 1).date()) in grouped
+    assert (employee.id, datetime(2026, 4, 30).date()) not in grouped
+
+
+def test_impossible_shift_duration_is_marked_incomplete():
+    service = ConsolidateAttendanceFromPunches()
+
+    result = service._infer_attendance([
+        dated_punch((2026, 5, 4), 6, 30),
+        dated_punch((2026, 5, 5), 10, 30),
+    ])
+
+    assert result["check_in"] == datetime(2026, 5, 4, 6, 30)
+    assert result["check_out"] == datetime(2026, 5, 5, 10, 30)
+    assert result["has_incomplete_marks"] is True
+
+
 def test_only_early_morning_rest_break_stays_incomplete():
     service = ConsolidateAttendanceFromPunches()
 
