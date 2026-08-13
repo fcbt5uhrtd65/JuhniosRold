@@ -1678,7 +1678,13 @@ function buildBiometricOrderXlsx(
   });
   const codeGroups = [...byCode.entries()]
     .map(([code, codeRows]) => [code, [...codeRows].sort((left, right) => left.date.localeCompare(right.date))] as const)
-    .sort(([left], [right]) => left.localeCompare(right, 'es', { numeric: true }));
+    .sort(([left], [right]) =>
+      biometricCodeDisplayName(left, employeeByBiometricCode).localeCompare(
+        biometricCodeDisplayName(right, employeeByBiometricCode),
+        'es',
+        { numeric: true },
+      ),
+    );
 
   const usedSheetNames = new Set<string>();
   const periodLabel = exportRange.length
