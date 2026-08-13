@@ -815,8 +815,10 @@ const EARLY_MORNING_OPERATIONAL_CUTOFF_MINUTES = 8 * 60;
 const EVENING_SHIFT_START_MINUTES = 15 * 60;
 const DUPLICATE_PUNCH_WINDOW_MINUTES = 5;
 const MAX_PLAUSIBLE_SHIFT_MINUTES = 15 * 60;
-const MIN_REST_BREAK_MINUTES = 30;
+const LONG_NIGHT_SHIFT_WITHOUT_BREAK_MINUTES = 10 * 60;
+const MIN_REST_BREAK_MINUTES = 20;
 const MAX_REST_BREAK_MINUTES = 120;
+const REST_BREAK_GRACE_MINUTES = 10;
 
 function punchOperationalMinutes(punch: BiometricPreviewPunch): number | null {
   return punch.operationalMinute ?? timeToMinutes(punch.time);
@@ -833,6 +835,12 @@ function looksLikeRestBreak(start: BiometricPreviewPunch, end: BiometricPreviewP
   if (startMinutes === null || endMinutes === null || clockStartMinutes === null) return false;
   const duration = endMinutes - startMinutes;
   return duration >= MIN_REST_BREAK_MINUTES && duration <= MAX_REST_BREAK_MINUTES && isRestBreakStartMinute(clockStartMinutes);
+}
+
+function payableRestBreakMinutes(duration: number): number {
+  const safeDuration = Math.max(0, Math.round(duration));
+  if (safeDuration <= FIXED_LUNCH_MINUTES + REST_BREAK_GRACE_MINUTES) return FIXED_LUNCH_MINUTES;
+  return safeDuration;
 }
 
 function collapseDuplicatePreviewPunches(punches: BiometricPreviewPunch[]): { punches: BiometricPreviewPunch[]; ignored: number } {
@@ -871,7 +879,7 @@ function previewWorkedMinutes(
     const breakStart = breakStartRaw >= checkIn ? breakStartRaw : breakStartRaw + 1440;
     const breakEnd = breakEndRaw >= breakStartRaw ? breakEndRaw : breakEndRaw + 1440;
     if (checkIn < breakStart && breakEnd <= checkOut) {
-      workedMinutes -= Math.max(0, Math.min(FIXED_LUNCH_MINUTES, breakEnd - breakStart));
+      workedMinutes -= payableRestBreakMinutes(breakEnd - breakStart);
     }
   }
   return workedMinutes;
@@ -882,6 +890,15 @@ function exceedsPlausiblePreviewShift(checkInValue: string, checkOutValue: strin
   return workedMinutes !== null && workedMinutes > MAX_PLAUSIBLE_SHIFT_MINUTES;
 }
 
+function requiresNightBreakReview(checkInValue: string, checkOutValue: string, breakStartValue = '-', breakEndValue = '-'): boolean {
+  if (timeToMinutes(breakStartValue) !== null && timeToMinutes(breakEndValue) !== null) return false;
+  const checkIn = timeToMinutes(checkInValue);
+  const checkOutRaw = timeToMinutes(checkOutValue);
+  if (checkIn === null || checkOutRaw === null || checkOutRaw >= checkIn) return false;
+  const duration = checkOutRaw + 1440 - checkIn;
+  return checkIn >= EVENING_SHIFT_START_MINUTES && checkOutRaw < EARLY_MORNING_OPERATIONAL_CUTOFF_MINUTES && duration >= LONG_NIGHT_SHIFT_WITHOUT_BREAK_MINUTES;
+}
+
 function calculatePreviewHours(row: Pick<BiometricPreviewRow, 'checkIn' | 'breakStart' | 'breakEnd' | 'checkOut'>) {
   const checkIn = timeToMinutes(row.checkIn);
   const checkOutRaw = timeToMinutes(row.checkOut);
@@ -889,6 +906,9 @@ function calculatePreviewHours(row: Pick<BiometricPreviewRow, 'checkIn' | 'break
     return { workedHours: 0, dayHours: 0, nightHours: 0 };
   }
   const checkOut = checkOutRaw >= checkIn ? checkOutRaw : checkOutRaw + 1440;
+  if (requiresNightBreakReview(row.checkIn, row.checkOut, row.breakStart, row.breakEnd)) {
+    return { workedHours: 0, dayHours: 0, nightHours: 0 };
+  }
   const breakStartRaw = timeToMinutes(row.breakStart);
   const breakEndRaw = timeToMinutes(row.breakEnd);
   const segments: Array<[number, number]> = [];
@@ -896,7 +916,8 @@ function calculatePreviewHours(row: Pick<BiometricPreviewRow, 'checkIn' | 'break
   if (breakStartRaw !== null && breakEndRaw !== null) {
     const breakStart = breakStartRaw >= checkIn ? breakStartRaw : breakStartRaw + 1440;
     if (checkIn < breakStart && breakStart < checkOut) {
-      const fixedBreakEnd = Math.min(checkOut, breakStart + FIXED_LUNCH_MINUTES);
+      const normalizedBreakEndRaw = breakEndRaw >= breakStartRaw ? breakEndRaw : breakEndRaw + 1440;
+      const fixedBreakEnd = Math.min(checkOut, breakStart + payableRestBreakMinutes(normalizedBreakEndRaw - breakStartRaw));
       segments.push([checkIn, breakStart], [fixedBreakEnd, checkOut]);
     } else {
       segments.push([checkIn, checkOut]);
@@ -966,7 +987,7 @@ function choosePlausibleCheckOut(
       checkInMinutes < breakStartMinutes &&
       breakEndMinutes <= candidateMinutes
     ) {
-      workedMinutes -= Math.max(0, Math.min(FIXED_LUNCH_MINUTES, breakEndMinutes - breakStartMinutes));
+      workedMinutes -= payableRestBreakMinutes(breakEndMinutes - breakStartMinutes);
     }
     if (workedMinutes <= MAX_PLAUSIBLE_SHIFT_MINUTES) {
       return candidate;
@@ -1012,7 +1033,12 @@ function classifyPreviewPunches(punches: BiometricPreviewPunch[], rawMarkCount: 
     if (sortedPunches.length === 2) {
       checkIn = sortedPunches[0].time;
       checkOut = sortedPunches[1].time;
-      status = 'Completo';
+      if (requiresNightBreakReview(checkIn, checkOut)) {
+        status = 'Revisar';
+        analysis.push('Turno nocturno largo sin descanso marcado; revisar antes de liquidar');
+      } else {
+        status = 'Completo';
+      }
     } else if (sortedPunches.length === 3) {
       const first = sortedPunches[0];
       const middle = sortedPunches[1];
@@ -1089,6 +1115,12 @@ function classifyPreviewPunches(punches: BiometricPreviewPunch[], rawMarkCount: 
   if (checkIn !== '-' && checkOut !== '-' && exceedsPlausiblePreviewShift(checkIn, checkOut, breakStart, breakEnd)) {
     status = 'Revisar';
     analysis.push('Jornada superior a 15 horas; revisar antes de liquidar');
+  }
+  if (checkIn !== '-' && checkOut !== '-' && requiresNightBreakReview(checkIn, checkOut, breakStart, breakEnd)) {
+    status = 'Revisar';
+    if (!analysis.some((item) => item.includes('Turno nocturno largo'))) {
+      analysis.push('Turno nocturno largo sin descanso marcado; revisar antes de liquidar');
+    }
   }
 
   return {
@@ -1249,6 +1281,7 @@ function previewDurationLabel(row: BiometricPreviewRow | undefined): string {
   if (checkIn === null || checkOutRaw === null) return '';
   const checkOut = checkOutRaw >= checkIn ? checkOutRaw : checkOutRaw + 1440;
   const minutes = Math.max(0, checkOut - checkIn);
+  if (requiresNightBreakReview(row.checkIn, row.checkOut, row.breakStart, row.breakEnd)) return '';
   const workedMinutes = previewWorkedMinutes(row.checkIn, row.checkOut, row.breakStart, row.breakEnd);
   if (workedMinutes !== null && workedMinutes > MAX_PLAUSIBLE_SHIFT_MINUTES) return '';
   return `${Math.floor(minutes / 60)}:${twoDigits(minutes % 60)}:00`;
@@ -1358,6 +1391,20 @@ function biometricPayrollBreakdown(row: BiometricPreviewRow | undefined, holiday
 
   const checkOut = checkOutRaw >= checkIn ? checkOutRaw : checkOutRaw + 1440;
   const rawMinutes = Math.max(0, checkOut - checkIn);
+  if (requiresNightBreakReview(row.checkIn, row.checkOut, row.breakStart, row.breakEnd)) {
+    return {
+      rawHours: 0,
+      ordinaryHours: 0,
+      lunchHours: 0,
+      extraDayHours: 0,
+      extraNightHours: 0,
+      nightSurchargeHours: 0,
+      sundayDayHours: 0,
+      sundayExtraDayHours: 0,
+      sundayNightHours: 0,
+      sundayExtraNightHours: 0,
+    };
+  }
   const breakStartRaw = timeToMinutes(row.breakStart);
   const breakEndRaw = timeToMinutes(row.breakEnd);
   const hasFullBreak = breakStartRaw !== null && breakEndRaw !== null;
@@ -1365,8 +1412,10 @@ function biometricPayrollBreakdown(row: BiometricPreviewRow | undefined, holiday
   let lunchMinutes = 0;
   let segments: Array<[number, number]> = [[checkIn, checkOut]];
 
-  if (hasFullBreak && breakStart !== null && checkIn < breakStart && breakStart < checkOut) {
-    const fixedBreakEnd = Math.min(checkOut, breakStart + FIXED_LUNCH_MINUTES);
+  if (breakStartRaw !== null && breakEndRaw !== null && breakStart !== null && checkIn < breakStart && breakStart < checkOut) {
+    const normalizedBreakEndRaw = breakEndRaw >= breakStartRaw ? breakEndRaw : breakEndRaw + 1440;
+    const paidBreakMinutes = payableRestBreakMinutes(normalizedBreakEndRaw - breakStartRaw);
+    const fixedBreakEnd = Math.min(checkOut, breakStart + paidBreakMinutes);
     lunchMinutes = Math.max(0, fixedBreakEnd - breakStart);
     segments = [[checkIn, breakStart], [fixedBreakEnd, checkOut]].filter(([start, end]) => end > start);
   }

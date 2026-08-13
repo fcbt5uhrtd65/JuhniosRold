@@ -58,9 +58,11 @@ EARLY_MORNING_OPERATIONAL_CUTOFF = time(8, 0)
 EVENING_SHIFT_START = time(15, 0)
 MAX_NIGHT_SHIFT_SPAN = timedelta(hours=18)
 MAX_PLAUSIBLE_SHIFT_MINUTES = 15 * 60
+LONG_NIGHT_SHIFT_WITHOUT_BREAK_MINUTES = 10 * 60
 DEFAULT_DUPLICATE_PUNCH_WINDOW_MINUTES = 5
-MIN_REST_BREAK_MINUTES = 30
+MIN_REST_BREAK_MINUTES = 20
 MAX_REST_BREAK_MINUTES = 120
+REST_BREAK_GRACE_MINUTES = 10
 DAY_BREAK_START_WINDOW = (time(10, 0), time(15, 30))
 NIGHT_BREAK_START_WINDOW = (time(1, 0), time(4, 30))
 
@@ -1340,7 +1342,7 @@ class ConsolidateAttendanceFromPunches:
             return {
                 "check_in": times[0], "check_out": times[1],
                 "break_start": None, "break_end": None,
-                "has_incomplete_marks": self._exceeds_plausible_shift(times[0], times[1]),
+                "has_incomplete_marks": self._exceeds_plausible_shift(times[0], times[1]) or self._requires_night_break_review(times[0], times[1]),
             }
         if count == 3:
             if self._looks_like_rest_break(times[1], times[2]):
@@ -1436,8 +1438,25 @@ class ConsolidateAttendanceFromPunches:
         minutes = int((check_out - check_in).total_seconds() // 60)
         if break_start and break_end and check_in < break_start < break_end <= check_out:
             break_minutes = int((break_end - break_start).total_seconds() // 60)
-            minutes -= min(SCHEDULE_CHANGE_DAILY_LUNCH_MINUTES, max(break_minutes, 0))
+            minutes -= self._payable_rest_break_minutes(break_minutes)
         return minutes > MAX_PLAUSIBLE_SHIFT_MINUTES
+
+    def _payable_rest_break_minutes(self, break_minutes) -> int:
+        break_minutes = max(int(break_minutes or 0), 0)
+        if break_minutes <= SCHEDULE_CHANGE_DAILY_LUNCH_MINUTES + REST_BREAK_GRACE_MINUTES:
+            return SCHEDULE_CHANGE_DAILY_LUNCH_MINUTES
+        return break_minutes
+
+    def _requires_night_break_review(self, check_in, check_out) -> bool:
+        if not check_in or not check_out or check_out <= check_in:
+            return False
+        minutes = int((check_out - check_in).total_seconds() // 60)
+        return (
+            check_out.date() > check_in.date()
+            and check_in.time() >= EVENING_SHIFT_START
+            and check_out.time() < EARLY_MORNING_OPERATIONAL_CUTOFF
+            and minutes >= LONG_NIGHT_SHIFT_WITHOUT_BREAK_MINUTES
+        )
 
     def _best_checkout_time(self, times, break_pair=None):
         check_in = times[0]
@@ -1498,6 +1517,8 @@ class ConsolidateAttendanceFromPunches:
         if any(getattr(punch, "is_duplicate", False) for punch in day_punches):
             has_incomplete_marks = True
         if check_in and check_out and check_out <= check_in:
+            has_incomplete_marks = True
+        if check_in and check_out and not (break_start and break_end) and self._requires_night_break_review(check_in, check_out):
             has_incomplete_marks = True
         if (break_start and not break_end) or (break_end and not break_start):
             has_incomplete_marks = True
@@ -1771,6 +1792,8 @@ class CalculateEmployeePayrollForPeriod:
             return []
         if attendance.break_start and attendance.break_end and attendance.check_in < attendance.break_start < attendance.check_out:
             lunch_start = attendance.break_start
+            raw_break_minutes = int((attendance.break_end - attendance.break_start).total_seconds() // 60)
+            lunch_minutes = self._payable_rest_break_minutes(raw_break_minutes)
             lunch_end = min(attendance.check_out, lunch_start + timedelta(minutes=lunch_minutes))
             segments = [
                 segment
@@ -1782,6 +1805,8 @@ class CalculateEmployeePayrollForPeriod:
             ]
             worked_minutes = sum(int((end - start).total_seconds() // 60) for start, end in segments)
             return [] if worked_minutes > MAX_PLAUSIBLE_SHIFT_MINUTES else segments
+        if self._requires_night_break_review(attendance.check_in, attendance.check_out):
+            return []
         if total_minutes > MAX_PLAUSIBLE_SHIFT_MINUTES:
             return []
         return [(attendance.check_in, attendance.check_out)]

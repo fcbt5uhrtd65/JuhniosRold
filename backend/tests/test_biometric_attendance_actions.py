@@ -163,6 +163,57 @@ def test_duplicate_morning_mark_four_minutes_apart_is_ignored():
     assert result["has_incomplete_marks"] is False
 
 
+def test_short_lunch_break_is_detected_as_lunch():
+    service = ConsolidateAttendanceFromPunches()
+
+    result = service._infer_attendance([
+        dated_punch((2026, 8, 12), 7, 0),
+        dated_punch((2026, 8, 12), 12, 0),
+        dated_punch((2026, 8, 12), 12, 27),
+        dated_punch((2026, 8, 12), 17, 0),
+    ])
+
+    assert result["check_in"] == datetime(2026, 8, 12, 7, 0)
+    assert result["break_start"] == datetime(2026, 8, 12, 12, 0)
+    assert result["break_end"] == datetime(2026, 8, 12, 12, 27)
+    assert result["check_out"] == datetime(2026, 8, 12, 17, 0)
+    assert result["has_incomplete_marks"] is False
+
+
+def test_short_lunch_break_counts_as_one_hour_for_work_segments():
+    service = CalculateEmployeePayrollForPeriod()
+    attendance = SimpleNamespace(
+        check_in=datetime(2026, 8, 12, 7, 0),
+        break_start=datetime(2026, 8, 12, 12, 0),
+        break_end=datetime(2026, 8, 12, 12, 27),
+        check_out=datetime(2026, 8, 12, 17, 0),
+    )
+
+    segments = service._work_segments(attendance)
+
+    assert segments == [
+        (datetime(2026, 8, 12, 7, 0), datetime(2026, 8, 12, 12, 0)),
+        (datetime(2026, 8, 12, 13, 0), datetime(2026, 8, 12, 17, 0)),
+    ]
+
+
+def test_lunch_break_over_grace_counts_actual_time_for_work_segments():
+    service = CalculateEmployeePayrollForPeriod()
+    attendance = SimpleNamespace(
+        check_in=datetime(2026, 8, 12, 7, 0),
+        break_start=datetime(2026, 8, 12, 12, 0),
+        break_end=datetime(2026, 8, 12, 13, 15),
+        check_out=datetime(2026, 8, 12, 17, 0),
+    )
+
+    segments = service._work_segments(attendance)
+
+    assert segments == [
+        (datetime(2026, 8, 12, 7, 0), datetime(2026, 8, 12, 12, 0)),
+        (datetime(2026, 8, 12, 13, 15), datetime(2026, 8, 12, 17, 0)),
+    ]
+
+
 def test_morning_mark_eleven_minutes_apart_is_kept_for_review():
     service = ConsolidateAttendanceFromPunches()
 
@@ -197,7 +248,7 @@ def test_close_repeated_entry_with_single_checkout_has_no_lunch():
     assert result["has_incomplete_marks"] is False
 
 
-def test_night_shift_with_only_entry_and_checkout_has_no_lunch():
+def test_long_night_shift_with_only_entry_and_checkout_requires_break_review():
     service = ConsolidateAttendanceFromPunches()
 
     result = service._infer_attendance([
@@ -209,6 +260,24 @@ def test_night_shift_with_only_entry_and_checkout_has_no_lunch():
     assert result["break_start"] is None
     assert result["break_end"] is None
     assert result["check_out"] == datetime(2026, 8, 13, 7, 32)
+    assert result["has_incomplete_marks"] is True
+
+
+def test_night_shift_with_early_morning_break_and_duplicate_return_counts_correctly():
+    service = ConsolidateAttendanceFromPunches()
+
+    result = service._infer_attendance([
+        dated_punch((2026, 8, 13), 3, 0),
+        dated_punch((2026, 8, 12), 17, 56),
+        dated_punch((2026, 8, 13), 2, 2),
+        dated_punch((2026, 8, 13), 3, 2),
+        dated_punch((2026, 8, 13), 6, 0),
+    ])
+
+    assert result["check_in"] == datetime(2026, 8, 12, 17, 56)
+    assert result["break_start"] == datetime(2026, 8, 13, 2, 2)
+    assert result["break_end"] == datetime(2026, 8, 13, 3, 0)
+    assert result["check_out"] == datetime(2026, 8, 13, 6, 0)
     assert result["has_incomplete_marks"] is False
 
 
@@ -224,6 +293,18 @@ def test_work_segments_do_not_discount_lunch_without_break_marks():
     segments = service._work_segments(attendance)
 
     assert segments == [(datetime(2026, 8, 12, 7, 25), datetime(2026, 8, 12, 17, 31))]
+
+
+def test_work_segments_skip_long_night_shift_without_break_marks():
+    service = CalculateEmployeePayrollForPeriod()
+    attendance = SimpleNamespace(
+        check_in=datetime(2026, 8, 12, 17, 0),
+        break_start=None,
+        break_end=None,
+        check_out=datetime(2026, 8, 13, 7, 32),
+    )
+
+    assert service._work_segments(attendance) == []
 
 
 def test_next_morning_extra_mark_does_not_replace_plausible_late_checkout():
