@@ -180,6 +180,23 @@ def test_short_lunch_break_is_detected_as_lunch():
     assert result["has_incomplete_marks"] is False
 
 
+def test_very_short_noon_lunch_break_is_detected_as_lunch():
+    service = ConsolidateAttendanceFromPunches()
+
+    result = service._infer_attendance([
+        dated_punch((2026, 8, 12), 6, 29),
+        dated_punch((2026, 8, 12), 12, 4),
+        dated_punch((2026, 8, 12), 12, 19),
+        dated_punch((2026, 8, 12), 16, 38),
+    ])
+
+    assert result["check_in"] == datetime(2026, 8, 12, 6, 29)
+    assert result["break_start"] == datetime(2026, 8, 12, 12, 4)
+    assert result["break_end"] == datetime(2026, 8, 12, 12, 19)
+    assert result["check_out"] == datetime(2026, 8, 12, 16, 38)
+    assert result["has_incomplete_marks"] is False
+
+
 def test_short_lunch_break_counts_as_one_hour_for_work_segments():
     service = CalculateEmployeePayrollForPeriod()
     attendance = SimpleNamespace(

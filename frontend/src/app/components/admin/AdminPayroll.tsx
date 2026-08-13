@@ -818,7 +818,7 @@ const EVENING_SHIFT_START_MINUTES = 15 * 60;
 const DUPLICATE_PUNCH_WINDOW_MINUTES = 5;
 const MAX_PLAUSIBLE_SHIFT_MINUTES = 15 * 60;
 const LONG_NIGHT_SHIFT_WITHOUT_BREAK_MINUTES = 10 * 60;
-const MIN_REST_BREAK_MINUTES = 20;
+const MIN_REST_BREAK_MINUTES = 10;
 const MAX_REST_BREAK_MINUTES = 120;
 const REST_BREAK_GRACE_MINUTES = 10;
 
@@ -974,7 +974,7 @@ function chooseLunchPair(punches: BiometricPreviewPunch[]): [BiometricPreviewPun
       const end = candidates[nextIndex];
       const duration = end.minutes - start.minutes;
       const startsNearLunch = isRestBreakStartMinute(timeToMinutes(start.punch.time) ?? start.minutes);
-      const reasonableDuration = duration >= 20 && duration <= 180;
+      const reasonableDuration = duration >= MIN_REST_BREAK_MINUTES && duration <= MAX_REST_BREAK_MINUTES;
       if (!startsNearLunch || !reasonableDuration) continue;
       const clockStart = timeToMinutes(start.punch.time) ?? start.minutes;
       const target = clockStart < 6 * 60 ? 3 * 60 : 13 * 60;
