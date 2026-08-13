@@ -1782,22 +1782,6 @@ class CalculateEmployeePayrollForPeriod:
             ]
             worked_minutes = sum(int((end - start).total_seconds() // 60) for start, end in segments)
             return [] if worked_minutes > MAX_PLAUSIBLE_SHIFT_MINUTES else segments
-        if total_minutes >= 6 * 60:
-            lunch_start = min(
-                attendance.check_in + timedelta(hours=5),
-                max(attendance.check_in, attendance.check_out - timedelta(minutes=lunch_minutes)),
-            )
-            lunch_end = min(attendance.check_out, lunch_start + timedelta(minutes=lunch_minutes))
-            segments = [
-                segment
-                for segment in (
-                    (attendance.check_in, lunch_start),
-                    (lunch_end, attendance.check_out),
-                )
-                if segment[1] > segment[0]
-            ]
-            worked_minutes = sum(int((end - start).total_seconds() // 60) for start, end in segments)
-            return [] if worked_minutes > MAX_PLAUSIBLE_SHIFT_MINUTES else segments
         if total_minutes > MAX_PLAUSIBLE_SHIFT_MINUTES:
             return []
         return [(attendance.check_in, attendance.check_out)]

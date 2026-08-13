@@ -901,10 +901,6 @@ function calculatePreviewHours(row: Pick<BiometricPreviewRow, 'checkIn' | 'break
     } else {
       segments.push([checkIn, checkOut]);
     }
-  } else if (checkOut - checkIn >= 6 * 60) {
-    const lunchStart = Math.min(checkIn + 5 * 60, Math.max(checkIn, checkOut - FIXED_LUNCH_MINUTES));
-    const lunchEnd = Math.min(checkOut, lunchStart + FIXED_LUNCH_MINUTES);
-    segments.push(...([[checkIn, lunchStart], [lunchEnd, checkOut]].filter(([start, end]) => end > start) as Array<[number, number]>));
   } else {
     segments.push([checkIn, checkOut]);
   }
@@ -1366,18 +1362,13 @@ function biometricPayrollBreakdown(row: BiometricPreviewRow | undefined, holiday
   const breakEndRaw = timeToMinutes(row.breakEnd);
   const hasFullBreak = breakStartRaw !== null && breakEndRaw !== null;
   const breakStart = breakStartRaw !== null && breakStartRaw < checkIn ? breakStartRaw + 1440 : breakStartRaw;
-  const fallbackLunchMinutes = !hasFullBreak && rawMinutes >= 6 * 60 && expectedOrdinaryMinutesForPreview(row.date, holiday) > 0 ? FIXED_LUNCH_MINUTES : 0;
-  let lunchMinutes = fallbackLunchMinutes;
+  let lunchMinutes = 0;
   let segments: Array<[number, number]> = [[checkIn, checkOut]];
 
   if (hasFullBreak && breakStart !== null && checkIn < breakStart && breakStart < checkOut) {
     const fixedBreakEnd = Math.min(checkOut, breakStart + FIXED_LUNCH_MINUTES);
     lunchMinutes = Math.max(0, fixedBreakEnd - breakStart);
     segments = [[checkIn, breakStart], [fixedBreakEnd, checkOut]].filter(([start, end]) => end > start);
-  } else if (fallbackLunchMinutes > 0) {
-    const lunchStart = Math.min(checkIn + 5 * 60, Math.max(checkIn, checkOut - fallbackLunchMinutes));
-    const lunchEnd = Math.min(checkOut, lunchStart + fallbackLunchMinutes);
-    segments = [[checkIn, lunchStart], [lunchEnd, checkOut]].filter(([start, end]) => end > start);
   }
 
   const expectedOrdinary = expectedOrdinaryMinutesForPreview(row.date, holiday);
