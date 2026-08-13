@@ -813,7 +813,7 @@ function dayMinutesInSegment(start: number, end: number): number {
 const FIXED_LUNCH_MINUTES = 60;
 const EARLY_MORNING_OPERATIONAL_CUTOFF_MINUTES = 8 * 60;
 const EVENING_SHIFT_START_MINUTES = 15 * 60;
-const DUPLICATE_PUNCH_WINDOW_MINUTES = 15;
+const DUPLICATE_PUNCH_WINDOW_MINUTES = 5;
 const MAX_PLAUSIBLE_SHIFT_MINUTES = 15 * 60;
 const MIN_REST_BREAK_MINUTES = 30;
 const MAX_REST_BREAK_MINUTES = 120;
@@ -854,12 +854,32 @@ function collapseDuplicatePreviewPunches(punches: BiometricPreviewPunch[]): { pu
   return { punches: useful, ignored };
 }
 
-function exceedsPlausiblePreviewShift(checkInValue: string, checkOutValue: string): boolean {
+function previewWorkedMinutes(
+  checkInValue: string,
+  checkOutValue: string,
+  breakStartValue = '-',
+  breakEndValue = '-',
+): number | null {
   const checkIn = timeToMinutes(checkInValue);
   const checkOutRaw = timeToMinutes(checkOutValue);
-  if (checkIn === null || checkOutRaw === null) return false;
+  if (checkIn === null || checkOutRaw === null) return null;
   const checkOut = checkOutRaw >= checkIn ? checkOutRaw : checkOutRaw + 1440;
-  return checkOut - checkIn > MAX_PLAUSIBLE_SHIFT_MINUTES;
+  let workedMinutes = Math.max(0, checkOut - checkIn);
+  const breakStartRaw = timeToMinutes(breakStartValue);
+  const breakEndRaw = timeToMinutes(breakEndValue);
+  if (breakStartRaw !== null && breakEndRaw !== null) {
+    const breakStart = breakStartRaw >= checkIn ? breakStartRaw : breakStartRaw + 1440;
+    const breakEnd = breakEndRaw >= breakStartRaw ? breakEndRaw : breakEndRaw + 1440;
+    if (checkIn < breakStart && breakEnd <= checkOut) {
+      workedMinutes -= Math.max(0, Math.min(FIXED_LUNCH_MINUTES, breakEnd - breakStart));
+    }
+  }
+  return workedMinutes;
+}
+
+function exceedsPlausiblePreviewShift(checkInValue: string, checkOutValue: string, breakStartValue = '-', breakEndValue = '-'): boolean {
+  const workedMinutes = previewWorkedMinutes(checkInValue, checkOutValue, breakStartValue, breakEndValue);
+  return workedMinutes !== null && workedMinutes > MAX_PLAUSIBLE_SHIFT_MINUTES;
 }
 
 function calculatePreviewHours(row: Pick<BiometricPreviewRow, 'checkIn' | 'breakStart' | 'breakEnd' | 'checkOut'>) {
@@ -869,9 +889,6 @@ function calculatePreviewHours(row: Pick<BiometricPreviewRow, 'checkIn' | 'break
     return { workedHours: 0, dayHours: 0, nightHours: 0 };
   }
   const checkOut = checkOutRaw >= checkIn ? checkOutRaw : checkOutRaw + 1440;
-  if (checkOut - checkIn > MAX_PLAUSIBLE_SHIFT_MINUTES) {
-    return { workedHours: 0, dayHours: 0, nightHours: 0 };
-  }
   const breakStartRaw = timeToMinutes(row.breakStart);
   const breakEndRaw = timeToMinutes(row.breakEnd);
   const segments: Array<[number, number]> = [];
@@ -893,6 +910,9 @@ function calculatePreviewHours(row: Pick<BiometricPreviewRow, 'checkIn' | 'break
   }
 
   const workedMinutes = segments.reduce((sum, [start, end]) => sum + Math.max(0, end - start), 0);
+  if (workedMinutes > MAX_PLAUSIBLE_SHIFT_MINUTES) {
+    return { workedHours: 0, dayHours: 0, nightHours: 0 };
+  }
   const dayMinutes = segments.reduce((sum, [start, end]) => sum + dayMinutesInSegment(start, end), 0);
   return {
     workedHours: Number((workedMinutes / 60).toFixed(2)),
@@ -929,6 +949,34 @@ function chooseLunchPair(punches: BiometricPreviewPunch[]): [BiometricPreviewPun
   }
 
   return best?.pair ?? null;
+}
+
+function choosePlausibleCheckOut(
+  punches: BiometricPreviewPunch[],
+  breakPair: [BiometricPreviewPunch, BiometricPreviewPunch] | null,
+): BiometricPreviewPunch {
+  const checkIn = punches[0];
+  const checkInMinutes = punchOperationalMinutes(checkIn);
+  for (let index = punches.length - 1; index > 0; index -= 1) {
+    const candidate = punches[index];
+    const candidateMinutes = punchOperationalMinutes(candidate);
+    if (checkInMinutes === null || candidateMinutes === null || candidateMinutes <= checkInMinutes) continue;
+    let workedMinutes = candidateMinutes - checkInMinutes;
+    const breakStartMinutes = breakPair ? punchOperationalMinutes(breakPair[0]) : null;
+    const breakEndMinutes = breakPair ? punchOperationalMinutes(breakPair[1]) : null;
+    if (
+      breakStartMinutes !== null &&
+      breakEndMinutes !== null &&
+      checkInMinutes < breakStartMinutes &&
+      breakEndMinutes <= candidateMinutes
+    ) {
+      workedMinutes -= Math.max(0, Math.min(FIXED_LUNCH_MINUTES, breakEndMinutes - breakStartMinutes));
+    }
+    if (workedMinutes <= MAX_PLAUSIBLE_SHIFT_MINUTES) {
+      return candidate;
+    }
+  }
+  return punches[punches.length - 1];
 }
 
 function classifyPreviewPunches(punches: BiometricPreviewPunch[], rawMarkCount: number): Omit<BiometricPreviewRow, 'key' | 'code' | 'date' | 'workedHours' | 'dayHours' | 'nightHours'> {
@@ -1027,13 +1075,14 @@ function classifyPreviewPunches(punches: BiometricPreviewPunch[], rawMarkCount: 
       }
     } else {
       checkIn = sortedPunches[0].time;
-      checkOut = sortedPunches[sortedPunches.length - 1].time;
       const lunchPair = chooseLunchPair(sortedPunches);
+      const plausibleCheckOut = choosePlausibleCheckOut(sortedPunches, lunchPair);
+      checkOut = plausibleCheckOut.time;
       if (lunchPair) {
         breakStart = lunchPair[0].time;
         breakEnd = lunchPair[1].time;
         status = 'Revisar';
-        analysis.push('Se sugiere entrada, almuerzo y salida, pero sobran timbradas');
+        analysis.push('Se sugiere entrada, almuerzo y salida, pero sobran timbradas visibles en timbradas');
       } else {
         status = 'Revisar';
         analysis.push('No hay par claro de almuerzo; se sugiere primera entrada y ultima salida');
@@ -1041,7 +1090,7 @@ function classifyPreviewPunches(punches: BiometricPreviewPunch[], rawMarkCount: 
     }
   }
 
-  if (checkIn !== '-' && checkOut !== '-' && exceedsPlausiblePreviewShift(checkIn, checkOut)) {
+  if (checkIn !== '-' && checkOut !== '-' && exceedsPlausiblePreviewShift(checkIn, checkOut, breakStart, breakEnd)) {
     status = 'Revisar';
     analysis.push('Jornada superior a 15 horas; revisar antes de liquidar');
   }
@@ -1056,7 +1105,10 @@ function classifyPreviewPunches(punches: BiometricPreviewPunch[], rawMarkCount: 
     checkOut,
     status,
     analysis: analysis.join('. '),
-    marks: sortedPunches.map((punch) => punch.time).join(', '),
+    marks: [...punches]
+      .sort((left, right) => (punchOperationalMinutes(left) ?? 0) - (punchOperationalMinutes(right) ?? 0))
+      .map((punch) => punch.time)
+      .join(', '),
   };
 }
 
@@ -1201,7 +1253,8 @@ function previewDurationLabel(row: BiometricPreviewRow | undefined): string {
   if (checkIn === null || checkOutRaw === null) return '';
   const checkOut = checkOutRaw >= checkIn ? checkOutRaw : checkOutRaw + 1440;
   const minutes = Math.max(0, checkOut - checkIn);
-  if (minutes > MAX_PLAUSIBLE_SHIFT_MINUTES) return '';
+  const workedMinutes = previewWorkedMinutes(row.checkIn, row.checkOut, row.breakStart, row.breakEnd);
+  if (workedMinutes !== null && workedMinutes > MAX_PLAUSIBLE_SHIFT_MINUTES) return '';
   return `${Math.floor(minutes / 60)}:${twoDigits(minutes % 60)}:00`;
 }
 
@@ -1309,20 +1362,6 @@ function biometricPayrollBreakdown(row: BiometricPreviewRow | undefined, holiday
 
   const checkOut = checkOutRaw >= checkIn ? checkOutRaw : checkOutRaw + 1440;
   const rawMinutes = Math.max(0, checkOut - checkIn);
-  if (rawMinutes > MAX_PLAUSIBLE_SHIFT_MINUTES) {
-    return {
-      rawHours: 0,
-      ordinaryHours: 0,
-      lunchHours: 0,
-      extraDayHours: 0,
-      extraNightHours: 0,
-      nightSurchargeHours: 0,
-      sundayDayHours: 0,
-      sundayExtraDayHours: 0,
-      sundayNightHours: 0,
-      sundayExtraNightHours: 0,
-    };
-  }
   const breakStartRaw = timeToMinutes(row.breakStart);
   const breakEndRaw = timeToMinutes(row.breakEnd);
   const hasFullBreak = breakStartRaw !== null && breakEndRaw !== null;
@@ -1343,6 +1382,20 @@ function biometricPayrollBreakdown(row: BiometricPreviewRow | undefined, holiday
 
   const expectedOrdinary = expectedOrdinaryMinutesForPreview(row.date, holiday);
   const totalWorkedMinutes = segments.reduce((sum, [start, end]) => sum + Math.max(0, end - start), 0);
+  if (totalWorkedMinutes > MAX_PLAUSIBLE_SHIFT_MINUTES) {
+    return {
+      rawHours: 0,
+      ordinaryHours: 0,
+      lunchHours: 0,
+      extraDayHours: 0,
+      extraNightHours: 0,
+      nightSurchargeHours: 0,
+      sundayDayHours: 0,
+      sundayExtraDayHours: 0,
+      sundayNightHours: 0,
+      sundayExtraNightHours: 0,
+    };
+  }
   const ordinaryMinutes = Math.min(totalWorkedMinutes, expectedOrdinary);
   const extraMinutes = Math.max(0, totalWorkedMinutes - ordinaryMinutes);
   const ordinarySegments = takeMinutesFromSegments(segments, ordinaryMinutes);
@@ -3415,7 +3468,7 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
           <div className="mt-4 grid grid-cols-3 gap-2">
             <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
               <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Ventana</p>
-              <p className="mt-1 text-sm font-semibold text-gray-900">{intelligenceSettings?.duplicate_punch_window_minutes ?? 15} min</p>
+              <p className="mt-1 text-sm font-semibold text-gray-900">{Math.min(intelligenceSettings?.duplicate_punch_window_minutes ?? 5, DUPLICATE_PUNCH_WINDOW_MINUTES)} min</p>
             </div>
             <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
               <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Mapeos</p>
@@ -3917,7 +3970,7 @@ function AttendanceIntelligenceModal({
 
   useEffect(() => {
     if (!open) return;
-    setDuplicateWindow(String(settings?.duplicate_punch_window_minutes ?? 15));
+    setDuplicateWindow(String(Math.min(settings?.duplicate_punch_window_minutes ?? 5, DUPLICATE_PUNCH_WINDOW_MINUTES)));
     setProximityWindow(String(settings?.schedule_proximity_minutes ?? 120));
   }, [open, settings]);
 

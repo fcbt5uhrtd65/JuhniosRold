@@ -162,6 +162,42 @@ def test_duplicate_morning_mark_four_minutes_apart_is_ignored():
     assert result["has_incomplete_marks"] is False
 
 
+def test_morning_mark_eleven_minutes_apart_is_kept_for_review():
+    service = ConsolidateAttendanceFromPunches()
+
+    result = service._infer_attendance([
+        dated_punch((2026, 5, 4), 6, 30),
+        dated_punch((2026, 5, 4), 6, 41),
+        dated_punch((2026, 5, 4), 12, 25),
+        dated_punch((2026, 5, 4), 13, 28),
+        dated_punch((2026, 5, 4), 16, 35),
+    ])
+
+    assert result["check_in"] == datetime(2026, 5, 4, 6, 30)
+    assert result["break_start"] == datetime(2026, 5, 4, 12, 25)
+    assert result["break_end"] == datetime(2026, 5, 4, 13, 28)
+    assert result["check_out"] == datetime(2026, 5, 4, 16, 35)
+    assert result["has_incomplete_marks"] is True
+
+
+def test_next_morning_extra_mark_does_not_replace_plausible_late_checkout():
+    service = ConsolidateAttendanceFromPunches()
+
+    result = service._infer_attendance([
+        dated_punch((2026, 8, 5), 7, 34),
+        dated_punch((2026, 8, 5), 14, 10),
+        dated_punch((2026, 8, 5), 15, 11),
+        dated_punch((2026, 8, 5), 23, 1),
+        dated_punch((2026, 8, 6), 7, 35),
+    ])
+
+    assert result["check_in"] == datetime(2026, 8, 5, 7, 34)
+    assert result["break_start"] == datetime(2026, 8, 5, 14, 10)
+    assert result["break_end"] == datetime(2026, 8, 5, 15, 11)
+    assert result["check_out"] == datetime(2026, 8, 5, 23, 1)
+    assert result["has_incomplete_marks"] is True
+
+
 def test_three_marks_with_lunch_pair_do_not_invent_work_checkout():
     service = ConsolidateAttendanceFromPunches()
 
@@ -209,6 +245,24 @@ def test_early_morning_day_entry_with_extra_mark_keeps_last_day_checkout():
     assert result["break_start"] == datetime(2026, 8, 10, 12, 18)
     assert result["break_end"] == datetime(2026, 8, 10, 13, 19)
     assert result["check_out"] == datetime(2026, 8, 10, 18, 7)
+    assert result["has_incomplete_marks"] is True
+
+
+def test_early_day_entry_with_later_entry_mark_keeps_lunch_and_checkout():
+    service = ConsolidateAttendanceFromPunches()
+
+    result = service._infer_attendance([
+        dated_punch((2026, 8, 12), 6, 59),
+        dated_punch((2026, 8, 12), 12, 44),
+        dated_punch((2026, 8, 12), 13, 47),
+        dated_punch((2026, 8, 12), 17, 24),
+        dated_punch((2026, 8, 12), 5, 52),
+    ])
+
+    assert result["check_in"] == datetime(2026, 8, 12, 5, 52)
+    assert result["break_start"] == datetime(2026, 8, 12, 12, 44)
+    assert result["break_end"] == datetime(2026, 8, 12, 13, 47)
+    assert result["check_out"] == datetime(2026, 8, 12, 17, 24)
     assert result["has_incomplete_marks"] is True
 
 

@@ -809,7 +809,7 @@ class AttendanceIntelligenceSettings(BaseModel):
     get_schedule_for)."""
 
     duplicate_punch_window_minutes = models.PositiveIntegerField(
-        default=15,
+        default=5,
         help_text="Marcaciones del mismo empleado separadas por menos de este tiempo se consideran "
                    "el mismo evento repetido por error (ej. marcó, creyó que falló, volvió a marcar) "
                    "y se colapsan en una sola en vez de contarse como entrada+salida real.",
@@ -838,7 +838,7 @@ def get_attendance_intelligence_settings():
     settings_row = AttendanceIntelligenceSettings.objects.filter(is_active=True).order_by("-created_at").first()
     if settings_row:
         return settings_row
-    return AttendanceIntelligenceSettings(duplicate_punch_window_minutes=15, schedule_proximity_minutes=120)
+    return AttendanceIntelligenceSettings(duplicate_punch_window_minutes=5, schedule_proximity_minutes=120)
 
 
 class EmployeeBiometricId(BaseModel):

@@ -58,7 +58,7 @@ EARLY_MORNING_OPERATIONAL_CUTOFF = time(8, 0)
 EVENING_SHIFT_START = time(15, 0)
 MAX_NIGHT_SHIFT_SPAN = timedelta(hours=18)
 MAX_PLAUSIBLE_SHIFT_MINUTES = 15 * 60
-DEFAULT_DUPLICATE_PUNCH_WINDOW_MINUTES = 15
+DEFAULT_DUPLICATE_PUNCH_WINDOW_MINUTES = 5
 MIN_REST_BREAK_MINUTES = 30
 MAX_REST_BREAK_MINUTES = 120
 DAY_BREAK_START_WINDOW = (time(10, 0), time(15, 30))
@@ -1098,7 +1098,7 @@ class ImportBiometricFile:
         """Agrupa por empleado resuelto o, si aun no hay relacion con empleado,
         por codigo biometrico, y marca como duplicadas las
         marcaciones consecutivas separadas por menos de la ventana
-        configurada en AttendanceIntelligenceSettings (default 15 min),
+        configurada en AttendanceIntelligenceSettings (maximo efectivo 5 min),
         conservando la primera de cada grupo como canónica. No borra ninguna
         fila — cubre el caso de "marqué, creí que falló, volví a marcar"."""
         by_employee: dict[str, list] = {}
@@ -1107,7 +1107,7 @@ class ImportBiometricFile:
             by_employee.setdefault(key, []).append(punch)
 
         settings_row = get_attendance_intelligence_settings()
-        window = timedelta(minutes=settings_row.duplicate_punch_window_minutes)
+        window = timedelta(minutes=min(settings_row.duplicate_punch_window_minutes, DEFAULT_DUPLICATE_PUNCH_WINDOW_MINUTES))
         duplicate_count = 0
         to_update = []
         for employee_punches in by_employee.values():
@@ -1371,7 +1371,7 @@ class ConsolidateAttendanceFromPunches:
             return {
                 "check_in": times[0], "break_start": times[1],
                 "break_end": times[2], "check_out": times[3],
-                "has_incomplete_marks": not has_plausible_break or self._exceeds_plausible_shift(times[0], times[3]),
+                "has_incomplete_marks": not has_plausible_break or self._exceeds_plausible_work_minutes(times[0], times[3], times[1], times[2]),
             }
         if count == 1:
             only = times[0]
@@ -1391,8 +1391,9 @@ class ConsolidateAttendanceFromPunches:
         # 3, o 5+ (tras colapsar duplicados cercanos al horario): 1a=check_in,
         # última=check_out, sin forzar descansos intermedios.
         break_pair = self._best_rest_break_pair(times[1:-1])
+        check_out = self._best_checkout_time(times, break_pair)
         return {
-            "check_in": times[0], "check_out": times[-1],
+            "check_in": times[0], "check_out": check_out,
             "break_start": break_pair[0] if break_pair else None,
             "break_end": break_pair[1] if break_pair else None,
             "has_incomplete_marks": True,
@@ -1414,9 +1415,12 @@ class ConsolidateAttendanceFromPunches:
     def _duplicate_punch_window_minutes(self) -> int:
         configured = getattr(self, "_duplicate_window_minutes", None)
         if configured:
-            return configured
+            return min(configured, DEFAULT_DUPLICATE_PUNCH_WINDOW_MINUTES)
         try:
-            return get_attendance_intelligence_settings().duplicate_punch_window_minutes
+            return min(
+                get_attendance_intelligence_settings().duplicate_punch_window_minutes,
+                DEFAULT_DUPLICATE_PUNCH_WINDOW_MINUTES,
+            )
         except Exception:
             return DEFAULT_DUPLICATE_PUNCH_WINDOW_MINUTES
 
@@ -1425,6 +1429,26 @@ class ConsolidateAttendanceFromPunches:
             return True
         minutes = int((check_out - check_in).total_seconds() // 60)
         return minutes > MAX_PLAUSIBLE_SHIFT_MINUTES
+
+    def _exceeds_plausible_work_minutes(self, check_in, check_out, break_start=None, break_end=None) -> bool:
+        if not check_in or not check_out or check_out <= check_in:
+            return True
+        minutes = int((check_out - check_in).total_seconds() // 60)
+        if break_start and break_end and check_in < break_start < break_end <= check_out:
+            break_minutes = int((break_end - break_start).total_seconds() // 60)
+            minutes -= min(SCHEDULE_CHANGE_DAILY_LUNCH_MINUTES, max(break_minutes, 0))
+        return minutes > MAX_PLAUSIBLE_SHIFT_MINUTES
+
+    def _best_checkout_time(self, times, break_pair=None):
+        check_in = times[0]
+        break_start = break_pair[0] if break_pair else None
+        break_end = break_pair[1] if break_pair else None
+        for candidate in reversed(times[1:]):
+            if candidate <= check_in:
+                continue
+            if not self._exceeds_plausible_work_minutes(check_in, candidate, break_start, break_end):
+                return candidate
+        return times[-1]
 
     def _looks_like_rest_break(self, start_dt, end_dt) -> bool:
         if not start_dt or not end_dt or end_dt <= start_dt:
@@ -1743,12 +1767,12 @@ class CalculateEmployeePayrollForPeriod:
         excluyendo el descanso si está registrado."""
         lunch_minutes = SCHEDULE_CHANGE_DAILY_LUNCH_MINUTES
         total_minutes = int((attendance.check_out - attendance.check_in).total_seconds() // 60)
-        if total_minutes <= 0 or total_minutes > MAX_PLAUSIBLE_SHIFT_MINUTES:
+        if total_minutes <= 0:
             return []
         if attendance.break_start and attendance.break_end and attendance.check_in < attendance.break_start < attendance.check_out:
             lunch_start = attendance.break_start
             lunch_end = min(attendance.check_out, lunch_start + timedelta(minutes=lunch_minutes))
-            return [
+            segments = [
                 segment
                 for segment in (
                     (attendance.check_in, lunch_start),
@@ -1756,13 +1780,15 @@ class CalculateEmployeePayrollForPeriod:
                 )
                 if segment[1] > segment[0]
             ]
+            worked_minutes = sum(int((end - start).total_seconds() // 60) for start, end in segments)
+            return [] if worked_minutes > MAX_PLAUSIBLE_SHIFT_MINUTES else segments
         if total_minutes >= 6 * 60:
             lunch_start = min(
                 attendance.check_in + timedelta(hours=5),
                 max(attendance.check_in, attendance.check_out - timedelta(minutes=lunch_minutes)),
             )
             lunch_end = min(attendance.check_out, lunch_start + timedelta(minutes=lunch_minutes))
-            return [
+            segments = [
                 segment
                 for segment in (
                     (attendance.check_in, lunch_start),
@@ -1770,6 +1796,10 @@ class CalculateEmployeePayrollForPeriod:
                 )
                 if segment[1] > segment[0]
             ]
+            worked_minutes = sum(int((end - start).total_seconds() // 60) for start, end in segments)
+            return [] if worked_minutes > MAX_PLAUSIBLE_SHIFT_MINUTES else segments
+        if total_minutes > MAX_PLAUSIBLE_SHIFT_MINUTES:
+            return []
         return [(attendance.check_in, attendance.check_out)]
 
     def _classify_range(self, start_dt, end_dt, holiday_dates, is_extra, rates=None):

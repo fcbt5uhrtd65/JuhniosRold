@@ -1406,6 +1406,8 @@ class AttendanceIntelligenceSettingsViewSet(HumanResourcesBaseViewSet):
             return Response({"detail": "Los minutos deben ser números enteros."}, status=status.HTTP_400_BAD_REQUEST)
         if (duplicate_window is not None and duplicate_window <= 0) or (proximity_window is not None and proximity_window <= 0):
             return Response({"detail": "Los minutos deben ser mayores a cero."}, status=status.HTTP_400_BAD_REQUEST)
+        if duplicate_window is not None:
+            duplicate_window = min(duplicate_window, 5)
 
         if settings_row:
             if duplicate_window is not None:
@@ -1415,7 +1417,7 @@ class AttendanceIntelligenceSettingsViewSet(HumanResourcesBaseViewSet):
             settings_row.save(update_fields=("duplicate_punch_window_minutes", "schedule_proximity_minutes", "updated_at"))
         else:
             settings_row = AttendanceIntelligenceSettings.objects.create(
-                duplicate_punch_window_minutes=duplicate_window or 15,
+                duplicate_punch_window_minutes=duplicate_window or 5,
                 schedule_proximity_minutes=proximity_window or 120,
             )
         self._audit("update_attendance_intelligence_settings", settings_row)
