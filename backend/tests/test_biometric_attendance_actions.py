@@ -126,6 +126,24 @@ def test_unsorted_extra_morning_mark_keeps_earliest_entry_and_lunch_pair():
     assert result["has_incomplete_marks"] is True
 
 
+def test_early_day_entry_with_extra_morning_mark_keeps_day_shift():
+    service = ConsolidateAttendanceFromPunches()
+
+    result = service._infer_attendance([
+        dated_punch((2026, 5, 4), 8, 32),
+        dated_punch((2026, 5, 4), 14, 38),
+        dated_punch((2026, 5, 4), 15, 27),
+        dated_punch((2026, 5, 4), 17, 54),
+        dated_punch((2026, 5, 4), 7, 26),
+    ])
+
+    assert result["check_in"] == datetime(2026, 5, 4, 7, 26)
+    assert result["break_start"] == datetime(2026, 5, 4, 14, 38)
+    assert result["break_end"] == datetime(2026, 5, 4, 15, 27)
+    assert result["check_out"] == datetime(2026, 5, 4, 17, 54)
+    assert result["has_incomplete_marks"] is True
+
+
 def test_duplicate_morning_mark_four_minutes_apart_is_ignored():
     service = ConsolidateAttendanceFromPunches()
 
@@ -142,6 +160,56 @@ def test_duplicate_morning_mark_four_minutes_apart_is_ignored():
     assert result["break_end"] == datetime(2026, 5, 4, 12, 59)
     assert result["check_out"] == datetime(2026, 5, 4, 16, 32)
     assert result["has_incomplete_marks"] is False
+
+
+def test_three_marks_with_lunch_pair_do_not_invent_work_checkout():
+    service = ConsolidateAttendanceFromPunches()
+
+    result = service._infer_attendance([
+        dated_punch((2026, 7, 29), 5, 42),
+        dated_punch((2026, 7, 29), 12, 16),
+        dated_punch((2026, 7, 29), 13, 18),
+    ])
+
+    assert result["check_in"] == datetime(2026, 7, 29, 5, 42)
+    assert result["break_start"] == datetime(2026, 7, 29, 12, 16)
+    assert result["break_end"] == datetime(2026, 7, 29, 13, 18)
+    assert result["check_out"] is None
+    assert result["has_incomplete_marks"] is True
+
+
+def test_three_marks_with_initial_lunch_pair_do_not_invent_work_checkin():
+    service = ConsolidateAttendanceFromPunches()
+
+    result = service._infer_attendance([
+        dated_punch((2026, 8, 12), 11, 20),
+        dated_punch((2026, 8, 12), 12, 23),
+        dated_punch((2026, 8, 12), 18, 2),
+    ])
+
+    assert result["check_in"] is None
+    assert result["break_start"] == datetime(2026, 8, 12, 11, 20)
+    assert result["break_end"] == datetime(2026, 8, 12, 12, 23)
+    assert result["check_out"] == datetime(2026, 8, 12, 18, 2)
+    assert result["has_incomplete_marks"] is True
+
+
+def test_early_morning_day_entry_with_extra_mark_keeps_last_day_checkout():
+    service = ConsolidateAttendanceFromPunches()
+
+    result = service._infer_attendance([
+        dated_punch((2026, 8, 10), 7, 58),
+        dated_punch((2026, 8, 10), 12, 18),
+        dated_punch((2026, 8, 10), 13, 19),
+        dated_punch((2026, 8, 10), 18, 7),
+        dated_punch((2026, 8, 10), 5, 47),
+    ])
+
+    assert result["check_in"] == datetime(2026, 8, 10, 5, 47)
+    assert result["break_start"] == datetime(2026, 8, 10, 12, 18)
+    assert result["break_end"] == datetime(2026, 8, 10, 13, 19)
+    assert result["check_out"] == datetime(2026, 8, 10, 18, 7)
+    assert result["has_incomplete_marks"] is True
 
 
 def test_early_morning_entry_with_same_day_lunch_is_day_shift():
@@ -184,6 +252,32 @@ def test_same_day_day_shift_evidence_wins_over_previous_night_schedule():
 
     assert (employee.id, datetime(2026, 5, 1).date()) in grouped
     assert (employee.id, datetime(2026, 4, 30).date()) not in grouped
+
+
+@pytest.mark.django_db
+def test_early_day_entry_with_extra_mark_wins_over_previous_night_schedule():
+    employee = Employee.objects.create(employee_code="MIXED-002", first_name="Mixto", status=Employee.Status.ACTIVE)
+    schedule = EmployeeWorkSchedule.objects.create(employee=employee, start_date="2026-04-01")
+    EmployeeWorkScheduleDay.objects.create(
+        schedule=schedule,
+        weekday=6,
+        slot=1,
+        expected_start_time=time(18, 0),
+        expected_end_time=time(6, 0),
+    )
+    service = ConsolidateAttendanceFromPunches()
+    punches = [
+        dated_punch((2026, 5, 4), 8, 32, employee=employee),
+        dated_punch((2026, 5, 4), 14, 38, employee=employee),
+        dated_punch((2026, 5, 4), 15, 27, employee=employee),
+        dated_punch((2026, 5, 4), 17, 54, employee=employee),
+        dated_punch((2026, 5, 4), 7, 26, employee=employee),
+    ]
+
+    grouped = service._group_punches_by_operational_day(punches, {})
+
+    assert (employee.id, datetime(2026, 5, 4).date()) in grouped
+    assert (employee.id, datetime(2026, 5, 3).date()) not in grouped
 
 
 def test_impossible_shift_duration_is_marked_incomplete():

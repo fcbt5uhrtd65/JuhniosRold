@@ -653,6 +653,13 @@ type BiometricPreviewPunch = {
   action: 'check_in' | 'break_start' | 'break_end' | 'check_out' | null;
 };
 
+type ParsedBiometricLine = {
+  code: string;
+  date: string;
+  time: string;
+  action: BiometricPreviewPunch['action'];
+};
+
 type BiometricPreviewRow = {
   key: string;
   code: string;
@@ -741,7 +748,7 @@ function punchActionFromColumns(columns: string[]): BiometricPreviewPunch['actio
   return null;
 }
 
-function parseBiometricLine(line: string): { code: string; date: string; time: string; action: BiometricPreviewPunch['action'] } | null {
+function parseBiometricLine(line: string): ParsedBiometricLine | null {
   const stripped = line.trim();
   if (!stripped) return null;
   const tabColumns = stripped.split('\t').map((item) => item.trim());
@@ -958,22 +965,40 @@ function classifyPreviewPunches(punches: BiometricPreviewPunch[], rawMarkCount: 
     status = 'Incompleto';
     analysis.push('1 timbrada; falta entrada o salida');
   } else {
-    checkIn = sortedPunches[0].time;
-    checkOut = sortedPunches[sortedPunches.length - 1].time;
-
     if (sortedPunches.length === 2) {
+      checkIn = sortedPunches[0].time;
+      checkOut = sortedPunches[1].time;
       status = 'Completo';
     } else if (sortedPunches.length === 3) {
+      const first = sortedPunches[0];
       const middle = sortedPunches[1];
+      const last = sortedPunches[2];
+      const firstMiddleIsBreak = looksLikeRestBreak(first, middle);
+      const middleLastIsBreak = looksLikeRestBreak(middle, last);
       const middleMinutes = timeToMinutes(middle.time);
-      if (middleMinutes !== null && middleMinutes >= 10 * 60 && middleMinutes <= 15 * 60 + 30) {
+
+      if (middleLastIsBreak) {
+        checkIn = first.time;
         breakStart = middle.time;
+        breakEnd = last.time;
+        analysis.push('3 timbradas; falta salida despues del almuerzo');
+      } else if (firstMiddleIsBreak) {
+        breakStart = first.time;
+        breakEnd = middle.time;
+        checkOut = last.time;
+        analysis.push('3 timbradas; falta entrada antes del almuerzo');
+      } else if (middleMinutes !== null && isRestBreakStartMinute(middleMinutes)) {
+        checkIn = first.time;
+        breakStart = middle.time;
+        checkOut = last.time;
         analysis.push('3 timbradas; hay una sola marca de almuerzo');
       } else {
-        analysis.push('3 timbradas; la marca intermedia debe revisarse');
+        analysis.push('3 timbradas sin secuencia clara; se dejan espacios en blanco para revisar');
       }
       status = 'Revisar';
     } else if (sortedPunches.length === 4) {
+      checkIn = sortedPunches[0].time;
+      checkOut = sortedPunches[sortedPunches.length - 1].time;
       // No asumir a ciegas que la 2a y 3a marca son inicio/fin de almuerzo solo
       // por su posicion: si estan muy juntas en el tiempo o fuera de un horario
       // de almuerzo razonable, lo mas probable es que el reloj duplico una
@@ -1001,6 +1026,8 @@ function classifyPreviewPunches(punches: BiometricPreviewPunch[], rawMarkCount: 
         }
       }
     } else {
+      checkIn = sortedPunches[0].time;
+      checkOut = sortedPunches[sortedPunches.length - 1].time;
       const lunchPair = chooseLunchPair(sortedPunches);
       if (lunchPair) {
         breakStart = lunchPair[0].time;
@@ -1052,35 +1079,50 @@ function buildBiometricPreviewRows(
     .sort((left, right) => left.code.localeCompare(right.code, 'es', { numeric: true }) || left.date.localeCompare(right.date));
 }
 
-function resolveBiometricOperationalPunch(
-  parsedLine: { code: string; date: string; time: string; action: BiometricPreviewPunch['action'] },
-  groups: Map<string, { code: string; date: string; punches: BiometricPreviewPunch[] }>,
-): { date: string; punch: BiometricPreviewPunch } {
-  const minutes = timeToMinutes(parsedLine.time) ?? 0;
-  if (minutes < EARLY_MORNING_OPERATIONAL_CUTOFF_MINUTES) {
-    const sameDayGroup = groups.get(`${parsedLine.code}-${parsedLine.date}`);
-    if (sameDayGroup && looksLikeSameDayPreviewShiftStart(parsedLine.time, sameDayGroup.punches)) {
-      return {
-        date: parsedLine.date,
-        punch: { time: parsedLine.time, operationalMinute: minutes, action: parsedLine.action },
-      };
+function buildOperationalBiometricGroups(parsedLines: ParsedBiometricLine[]): Map<string, { code: string; date: string; punches: BiometricPreviewPunch[] }> {
+  const calendarGroups = new Map<string, { code: string; date: string; punches: BiometricPreviewPunch[] }>();
+  parsedLines.forEach((line) => {
+    const minutes = timeToMinutes(line.time) ?? 0;
+    const key = `${line.code}-${line.date}`;
+    const group = calendarGroups.get(key) ?? { code: line.code, date: line.date, punches: [] };
+    group.punches.push({ time: line.time, operationalMinute: minutes, action: line.action });
+    calendarGroups.set(key, group);
+  });
+
+  const operationalGroups = new Map<string, { code: string; date: string; punches: BiometricPreviewPunch[] }>();
+  const orderedLines = [...parsedLines].sort((left, right) => (
+    left.code.localeCompare(right.code, 'es', { numeric: true }) ||
+    left.date.localeCompare(right.date) ||
+    left.time.localeCompare(right.time)
+  ));
+
+  orderedLines.forEach((line) => {
+    const minutes = timeToMinutes(line.time) ?? 0;
+    let operationalDate = line.date;
+    let operationalMinute = minutes;
+
+    if (minutes < EARLY_MORNING_OPERATIONAL_CUTOFF_MINUTES) {
+      const sameDayGroup = calendarGroups.get(`${line.code}-${line.date}`);
+      const sameDayOtherPunches = sameDayGroup?.punches.filter((punch) => punch.time !== line.time) ?? [];
+      const isSameDayShift = sameDayGroup && looksLikeSameDayPreviewShiftStart(line.time, sameDayOtherPunches);
+      if (!isSameDayShift) {
+        const previousDate = addDays(line.date, -1);
+        const previousGroup = calendarGroups.get(`${line.code}-${previousDate}`);
+        const hasPreviousEveningStart = previousGroup?.punches.some((punch) => (timeToMinutes(punch.time) ?? 0) >= EVENING_SHIFT_START_MINUTES);
+        if (hasPreviousEveningStart) {
+          operationalDate = previousDate;
+          operationalMinute = minutes + 1440;
+        }
+      }
     }
 
-    const previousDate = addDays(parsedLine.date, -1);
-    const previousGroup = groups.get(`${parsedLine.code}-${previousDate}`);
-    const hasPreviousEveningStart = previousGroup?.punches.some((punch) => (timeToMinutes(punch.time) ?? 0) >= EVENING_SHIFT_START_MINUTES);
-    if (hasPreviousEveningStart) {
-      return {
-        date: previousDate,
-        punch: { time: parsedLine.time, operationalMinute: minutes + 1440, action: parsedLine.action },
-      };
-    }
-  }
+    const key = `${line.code}-${operationalDate}`;
+    const group = operationalGroups.get(key) ?? { code: line.code, date: operationalDate, punches: [] };
+    group.punches.push({ time: line.time, operationalMinute, action: line.action });
+    operationalGroups.set(key, group);
+  });
 
-  return {
-    date: parsedLine.date,
-    punch: { time: parsedLine.time, operationalMinute: minutes, action: parsedLine.action },
-  };
+  return operationalGroups;
 }
 
 function looksLikeSameDayPreviewShiftStart(time: string, existingPunches: BiometricPreviewPunch[]): boolean {
@@ -2902,7 +2944,7 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
     setPreviewFileName(file.name);
     setPreviewProgress({ processed: 0, total: 0, parsed: 0 });
     setPreviewParsing(true);
-    const groups = new Map<string, { code: string; date: string; punches: BiometricPreviewPunch[] }>();
+    const parsedRows: ParsedBiometricLine[] = [];
     try {
       const text = await file.text();
       const lines = text.split(/\r?\n/);
@@ -2914,16 +2956,14 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
             (!uploadDateFrom || parsedLine.date >= uploadDateFrom) &&
             (!uploadDateTo || parsedLine.date <= uploadDateTo);
           if (inRange) {
-            const operational = resolveBiometricOperationalPunch(parsedLine, groups);
-            const key = `${parsedLine.code}-${operational.date}`;
-            const group = groups.get(key) ?? { code: parsedLine.code, date: operational.date, punches: [] };
-            group.punches.push(operational.punch);
-            groups.set(key, group);
+            parsedRows.push(parsedLine);
             parsed += 1;
           }
         }
         if ((index + 1) % 500 === 0 || index === lines.length - 1) {
-          if (parsed > 0) setPreviewRows(buildBiometricPreviewRows(groups));
+          if (parsedRows.length > 0) {
+            setPreviewRows(buildBiometricPreviewRows(buildOperationalBiometricGroups(parsedRows)));
+          }
           setPreviewProgress({ processed: index + 1, total: lines.length, parsed });
           await new Promise((resolve) => setTimeout(resolve, 0));
         }

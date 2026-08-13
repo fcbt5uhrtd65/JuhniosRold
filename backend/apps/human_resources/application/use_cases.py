@@ -1355,6 +1355,17 @@ class ConsolidateAttendanceFromPunches:
                     "break_start": times[0], "break_end": times[1],
                     "has_incomplete_marks": True,
                 }
+            if self._time_in_window(times[1].time(), DAY_BREAK_START_WINDOW) or self._time_in_window(times[1].time(), NIGHT_BREAK_START_WINDOW):
+                return {
+                    "check_in": times[0], "check_out": times[2],
+                    "break_start": times[1], "break_end": None,
+                    "has_incomplete_marks": True,
+                }
+            return {
+                "check_in": None, "check_out": None,
+                "break_start": None, "break_end": None,
+                "has_incomplete_marks": True,
+            }
         if count == 4:
             has_plausible_break = self._looks_like_rest_break(times[1], times[2])
             return {
