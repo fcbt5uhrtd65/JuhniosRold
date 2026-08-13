@@ -335,6 +335,7 @@ type XlsxCellValue = string | number | null | undefined;
 type XlsxCell = {
   value: XlsxCellValue;
   style?: number;
+  formula?: string;
 };
 
 type XlsxSheet = {
@@ -359,6 +360,10 @@ const CRC32_TABLE = (() => {
 
 function xlsxCell(value: XlsxCellValue, style = 0): XlsxCell {
   return { value, style };
+}
+
+function xlsxFormula(formula: string, value: XlsxCellValue = '', style = 0): XlsxCell {
+  return { value, style, formula };
 }
 
 const XLSX_STYLE = {
@@ -413,9 +418,13 @@ function buildWorksheetXml(sheet: XlsxSheet): string {
     : '';
   const rows = sheet.rows.map((row, rowIndex) => {
     const cells = row.map((cell, columnIndex) => {
-      if (cell.value === null || cell.value === undefined || cell.value === '') return '';
       const reference = `${xlsxColumnName(columnIndex)}${rowIndex + 1}`;
       const style = cell.style ? ` s="${cell.style}"` : '';
+      if (cell.formula) {
+        const cachedValue = typeof cell.value === 'number' && Number.isFinite(cell.value) ? `<v>${cell.value}</v>` : '';
+        return `<c r="${reference}"${style}><f>${xmlEscape(cell.formula)}</f>${cachedValue}</c>`;
+      }
+      if (cell.value === null || cell.value === undefined || cell.value === '') return '';
       if (typeof cell.value === 'number' && Number.isFinite(cell.value)) {
         return `<c r="${reference}"${style}><v>${cell.value}</v></c>`;
       }
@@ -439,6 +448,7 @@ function buildWorkbookXml(sheets: XlsxSheet[]): string {
   <sheets>
     ${sheets.map((sheet, index) => `<sheet name="${sheetNameEscape(sheet.name)}" sheetId="${index + 1}" r:id="rId${index + 1}"/>`).join('')}
   </sheets>
+  <calcPr calcId="0" fullCalcOnLoad="1" forceFullCalc="1"/>
 </workbook>`;
 }
 
@@ -1541,20 +1551,31 @@ function emptyBiometricPayrollBreakdown(): BiometricPayrollBreakdown {
   };
 }
 
+function biometricWorkedHoursFormula(rowNumber: number): string {
+  return `IF(MAX(D${rowNumber},$F$3)=$F$3,ROUNDDOWN((E${rowNumber}-MAX(D${rowNumber},$F$3))*24*2,0)/2,ROUNDDOWN((E${rowNumber}-D${rowNumber})*24*2,0)/2)`;
+}
+
+function biometricWorkedHoursCell(row: BiometricPreviewRow | undefined, rowNumber: number, fallback: number): XlsxCell {
+  if (!row || row.checkIn === '-' || row.checkOut === '-') return xlsxCell('');
+  return xlsxFormula(biometricWorkedHoursFormula(rowNumber), fallback);
+}
+
 function buildBiometricCodeDayRows(
   code: string,
   rows: BiometricPreviewRow[],
   holidaysByDate: Map<string, PublicHoliday>,
   dateRange: string[],
   employeeLabel: string,
+  startRowNumber: number,
 ): XlsxCell[][] {
   const rowsByDate = new Map(rows.map((row) => [row.date, row]));
-  return dateRange.map((date) => {
+  return dateRange.map((date, index) => {
     const row = rowsByDate.get(date);
     const holiday = holidaysByDate.get(date);
     const weekend = isWeekendDate(date);
     const breakdown = biometricPayrollBreakdown(row, holiday);
     const rowStyle = row?.status === 'Revisar' || row?.status === 'Incompleto' ? XLSX_STYLE.warning : 3;
+    const worksheetRowNumber = startRowNumber + index;
     return [
       xlsxCell(row ? employeeLabel : ''),
       xlsxCell(formatDate(date)),
@@ -1562,7 +1583,7 @@ function buildBiometricCodeDayRows(
       xlsxCell(row?.checkIn === '-' ? '' : row?.checkIn ?? ''),
       xlsxCell(row?.checkOut === '-' ? '' : row?.checkOut ?? ''),
       xlsxCell(previewDurationLabel(row)),
-      xlsxCell(breakdown.rawHours),
+      biometricWorkedHoursCell(row, worksheetRowNumber, breakdown.rawHours),
       xlsxCell(breakdown.ordinaryHours),
       xlsxCell(row?.breakStart === '-' ? '' : row?.breakStart ?? ''),
       xlsxCell(row?.breakEnd === '-' ? '' : row?.breakEnd ?? ''),
@@ -1750,7 +1771,8 @@ function buildBiometricPreviewXlsx(
       'TODAS LAS TIMBRADAS',
     ];
     const pageName = biometricCodePageName(code, employeeByBiometricCode);
-    const dayRows = buildBiometricCodeDayRows(code, codeRows, holidaysByDate, exportRange, pageName);
+    const detailStartRow = 11 + rateRows.length;
+    const dayRows = buildBiometricCodeDayRows(code, codeRows, holidaysByDate, exportRange, pageName, detailStartRow);
     const totalRow = [
       xlsxCell('TOTALES', XLSX_STYLE.total),
       xlsxCell(''),
@@ -1942,15 +1964,17 @@ function buildBiometricOrderDayRows(
   employeeLabel: string,
   employeeId: string | undefined,
   vacationNoveltyByEmployeeDate: Map<string, string>,
+  startRowNumber: number,
 ): XlsxCell[][] {
   const rowsByDate = new Map(rows.map((row) => [row.date, row]));
-  return dateRange.map((date) => {
+  return dateRange.map((date, index) => {
     const row = rowsByDate.get(date);
     const holiday = holidaysByDate.get(date);
     const weekend = isWeekendDate(date);
     const novelty = !row && employeeId ? vacationNoveltyByEmployeeDate.get(`${employeeId}|${date}`) : undefined;
     const breakdown = biometricPayrollBreakdown(row, holiday);
     const rowStyle = row?.status === 'Revisar' || row?.status === 'Incompleto' ? XLSX_STYLE.warning : 3;
+    const worksheetRowNumber = startRowNumber + index;
     return [
       xlsxCell(row || novelty ? employeeLabel : ''),
       xlsxCell(formatDate(date)),
@@ -1958,7 +1982,7 @@ function buildBiometricOrderDayRows(
       xlsxCell(row?.checkIn === '-' ? '' : row?.checkIn ?? ''),
       xlsxCell(row?.checkOut === '-' ? '' : row?.checkOut ?? ''),
       xlsxCell(previewDurationLabel(row)),
-      xlsxCell(''),
+      biometricWorkedHoursCell(row, worksheetRowNumber, breakdown.rawHours),
       xlsxCell(''),
       xlsxCell(row?.breakStart === '-' ? '' : row?.breakStart ?? ''),
       xlsxCell(row?.breakEnd === '-' ? '' : row?.breakEnd ?? ''),
@@ -2044,7 +2068,7 @@ function buildBiometricOrderXlsx(
     const displayName = biometricCodeDisplayName(code, employeeByBiometricCode);
     const pageName = biometricCodePageName(code, employeeByBiometricCode);
     const employeeId = employeeByBiometricCode.get(code)?.id;
-    const dayRows = buildBiometricOrderDayRows(codeRows, holidaysByDate, exportRange, pageName, employeeId, vacationNoveltyByEmployeeDate);
+    const dayRows = buildBiometricOrderDayRows(codeRows, holidaysByDate, exportRange, pageName, employeeId, vacationNoveltyByEmployeeDate, 7);
     const reviewDays = codeRows.filter((row) => row.status !== 'Completo').length;
 
     return {
