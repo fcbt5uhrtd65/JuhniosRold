@@ -905,6 +905,19 @@ function requiresNightBreakReview(checkInValue: string, checkOutValue: string, b
   return checkIn >= EVENING_SHIFT_START_MINUTES && checkOutRaw < EARLY_MORNING_OPERATIONAL_CUTOFF_MINUTES && duration >= LONG_NIGHT_SHIFT_WITHOUT_BREAK_MINUTES;
 }
 
+function looksLikeLateMorningNightCheckout(checkInValue: string, checkOutValue: string): boolean {
+  const checkIn = timeToMinutes(checkInValue);
+  const checkOutRaw = timeToMinutes(checkOutValue);
+  return (
+    checkIn !== null &&
+    checkOutRaw !== null &&
+    checkOutRaw < checkIn &&
+    checkIn >= EVENING_SHIFT_START_MINUTES &&
+    checkOutRaw > NIGHT_SHIFT_LATEST_CHECKOUT_MINUTES &&
+    checkOutRaw < EARLY_MORNING_OPERATIONAL_CUTOFF_MINUTES
+  );
+}
+
 function calculatePreviewHours(row: Pick<BiometricPreviewRow, 'checkIn' | 'breakStart' | 'breakEnd' | 'checkOut'>) {
   const checkIn = timeToMinutes(row.checkIn);
   const checkOutRaw = timeToMinutes(row.checkOut);
@@ -1039,7 +1052,11 @@ function classifyPreviewPunches(punches: BiometricPreviewPunch[], rawMarkCount: 
     if (sortedPunches.length === 2) {
       checkIn = sortedPunches[0].time;
       checkOut = sortedPunches[1].time;
-      if (requiresNightBreakReview(checkIn, checkOut)) {
+      if (looksLikeLateMorningNightCheckout(checkIn, checkOut)) {
+        checkOut = '-';
+        status = 'Revisar';
+        analysis.push('Marca de manana despues de 06:30 no se toma como salida nocturna; revisar dia operativo');
+      } else if (requiresNightBreakReview(checkIn, checkOut)) {
         status = 'Revisar';
         analysis.push('Turno nocturno largo sin descanso marcado; revisar antes de liquidar');
       } else {
@@ -1192,12 +1209,21 @@ function buildOperationalBiometricGroups(parsedLines: ParsedBiometricLine[]): Ma
       const sameDayOtherPunches = sameDayGroup?.punches.filter((punch) => punch.time !== line.time) ?? [];
       const isSameDayShift = sameDayGroup && looksLikeSameDayPreviewShiftStart(line.time, sameDayOtherPunches);
       if (!isSameDayShift) {
-        const previousDate = addDays(line.date, -1);
-        const previousGroup = calendarGroups.get(`${line.code}-${previousDate}`);
-        const hasPreviousEveningStart = previousGroup?.punches.some((punch) => (timeToMinutes(punch.time) ?? 0) >= EVENING_SHIFT_START_MINUTES);
-        if (hasPreviousEveningStart && canAttachToPreviousNightShift(minutes)) {
-          operationalDate = previousDate;
+        const hasSameDayEveningStart = sameDayGroup?.punches.some((punch) => (timeToMinutes(punch.time) ?? 0) >= EVENING_SHIFT_START_MINUTES);
+        const hasSameDayNightBreakEvidence = sameDayGroup?.punches.some((punch) => {
+          const punchMinutes = timeToMinutes(punch.time) ?? 0;
+          return punchMinutes >= 60 && punchMinutes <= 4 * 60 + 30;
+        });
+        if (hasSameDayEveningStart && hasSameDayNightBreakEvidence && canAttachToPreviousNightShift(minutes)) {
           operationalMinute = minutes + 1440;
+        } else {
+          const previousDate = addDays(line.date, -1);
+          const previousGroup = calendarGroups.get(`${line.code}-${previousDate}`);
+          const hasPreviousEveningStart = previousGroup?.punches.some((punch) => (timeToMinutes(punch.time) ?? 0) >= EVENING_SHIFT_START_MINUTES);
+          if (hasPreviousEveningStart && canAttachToPreviousNightShift(minutes)) {
+            operationalDate = previousDate;
+            operationalMinute = minutes + 1440;
+          }
         }
       }
     }

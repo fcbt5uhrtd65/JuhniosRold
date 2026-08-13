@@ -1341,13 +1341,19 @@ class ConsolidateAttendanceFromPunches:
 
         useful_punches = self._collapse_duplicate_punches(day_punches)
         count = len(useful_punches)
-        times = [p.punched_at for p in useful_punches]
+        times = [self._operational_punched_at(p, day_punches) for p in useful_punches]
 
         if count == 2:
             if self._looks_like_rest_break(times[0], times[1]):
                 return {
                     "check_in": None, "check_out": None,
                     "break_start": times[0], "break_end": times[1],
+                    "has_incomplete_marks": True,
+                }
+            if self._looks_like_late_morning_night_checkout(times[0], times[1]):
+                return {
+                    "check_in": times[0], "check_out": None,
+                    "break_start": None, "break_end": None,
                     "has_incomplete_marks": True,
                 }
             return {
@@ -1415,15 +1421,29 @@ class ConsolidateAttendanceFromPunches:
     def _collapse_duplicate_punches(self, day_punches):
         window = timedelta(minutes=self._duplicate_punch_window_minutes())
         useful = []
-        last_kept = None
-        for punch in sorted(day_punches, key=lambda item: item.punched_at):
+        last_kept_at = None
+        for punch in sorted(day_punches, key=lambda item: self._operational_punched_at(item, day_punches)):
             if getattr(punch, "is_duplicate", False):
                 continue
-            if last_kept is not None and punch.punched_at - last_kept.punched_at < window:
+            punched_at = self._operational_punched_at(punch, day_punches)
+            if last_kept_at is not None and punched_at - last_kept_at < window:
                 continue
             useful.append(punch)
-            last_kept = punch
-        return useful or sorted(day_punches, key=lambda item: item.punched_at)[:1]
+            last_kept_at = punched_at
+        return useful or sorted(day_punches, key=lambda item: self._operational_punched_at(item, day_punches))[:1]
+
+    def _operational_punched_at(self, punch, day_punches):
+        punched_at = punch.punched_at
+        same_calendar = [item for item in day_punches if item.punched_at.date() == punched_at.date()]
+        has_evening_start = any(item.punched_at.time() >= EVENING_SHIFT_START for item in same_calendar)
+        has_night_break_evidence = any(self._time_in_window(item.punched_at.time(), NIGHT_BREAK_START_WINDOW) for item in same_calendar)
+        if (
+            has_evening_start
+            and has_night_break_evidence
+            and self._can_attach_to_previous_night_shift(punched_at.time())
+        ):
+            return punched_at + timedelta(days=1)
+        return punched_at
 
     def _duplicate_punch_window_minutes(self) -> int:
         configured = getattr(self, "_duplicate_window_minutes", None)
@@ -1467,6 +1487,16 @@ class ConsolidateAttendanceFromPunches:
             and check_in.time() >= EVENING_SHIFT_START
             and check_out.time() < EARLY_MORNING_OPERATIONAL_CUTOFF
             and minutes >= LONG_NIGHT_SHIFT_WITHOUT_BREAK_MINUTES
+        )
+
+    def _looks_like_late_morning_night_checkout(self, check_in, check_out) -> bool:
+        return (
+            check_in
+            and check_out
+            and check_out > check_in
+            and check_out.date() > check_in.date()
+            and check_in.time() >= EVENING_SHIFT_START
+            and NIGHT_SHIFT_LATEST_CHECKOUT < check_out.time() < EARLY_MORNING_OPERATIONAL_CUTOFF
         )
 
     def _best_checkout_time(self, times, break_pair=None):

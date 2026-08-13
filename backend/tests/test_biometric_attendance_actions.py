@@ -259,7 +259,7 @@ def test_long_night_shift_with_only_entry_and_checkout_requires_break_review():
     assert result["check_in"] == datetime(2026, 8, 12, 17, 0)
     assert result["break_start"] is None
     assert result["break_end"] is None
-    assert result["check_out"] == datetime(2026, 8, 13, 7, 32)
+    assert result["check_out"] is None
     assert result["has_incomplete_marks"] is True
 
 
@@ -278,6 +278,24 @@ def test_night_shift_with_early_morning_break_and_duplicate_return_counts_correc
     assert result["break_start"] == datetime(2026, 8, 13, 2, 2)
     assert result["break_end"] == datetime(2026, 8, 13, 3, 0)
     assert result["check_out"] == datetime(2026, 8, 13, 6, 0)
+    assert result["has_incomplete_marks"] is False
+
+
+def test_same_calendar_night_shift_break_is_ordered_operationally():
+    service = ConsolidateAttendanceFromPunches()
+
+    result = service._infer_attendance([
+        dated_punch((2026, 8, 5), 3, 0),
+        dated_punch((2026, 8, 5), 17, 56),
+        dated_punch((2026, 8, 5), 2, 2),
+        dated_punch((2026, 8, 5), 3, 2),
+        dated_punch((2026, 8, 5), 6, 0),
+    ])
+
+    assert result["check_in"] == datetime(2026, 8, 5, 17, 56)
+    assert result["break_start"] == datetime(2026, 8, 6, 2, 2)
+    assert result["break_end"] == datetime(2026, 8, 6, 3, 0)
+    assert result["check_out"] == datetime(2026, 8, 6, 6, 0)
     assert result["has_incomplete_marks"] is False
 
 
