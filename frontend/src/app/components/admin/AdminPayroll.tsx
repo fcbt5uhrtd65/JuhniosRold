@@ -811,7 +811,9 @@ function dayMinutesInSegment(start: number, end: number): number {
 }
 
 const FIXED_LUNCH_MINUTES = 60;
+const DAY_SHIFT_EARLY_START_MINUTES = 5 * 60;
 const EARLY_MORNING_OPERATIONAL_CUTOFF_MINUTES = 8 * 60;
+const NIGHT_SHIFT_LATEST_CHECKOUT_MINUTES = 6 * 60 + 30;
 const EVENING_SHIFT_START_MINUTES = 15 * 60;
 const DUPLICATE_PUNCH_WINDOW_MINUTES = 5;
 const MAX_PLAUSIBLE_SHIFT_MINUTES = 15 * 60;
@@ -826,6 +828,10 @@ function punchOperationalMinutes(punch: BiometricPreviewPunch): number | null {
 
 function isRestBreakStartMinute(minutes: number): boolean {
   return (minutes >= 10 * 60 && minutes <= 15 * 60 + 30) || (minutes >= 60 && minutes <= 4 * 60 + 30);
+}
+
+function canAttachToPreviousNightShift(minutes: number): boolean {
+  return minutes <= NIGHT_SHIFT_LATEST_CHECKOUT_MINUTES || (minutes >= 60 && minutes <= 4 * 60 + 30);
 }
 
 function looksLikeRestBreak(start: BiometricPreviewPunch, end: BiometricPreviewPunch): boolean {
@@ -1189,7 +1195,7 @@ function buildOperationalBiometricGroups(parsedLines: ParsedBiometricLine[]): Ma
         const previousDate = addDays(line.date, -1);
         const previousGroup = calendarGroups.get(`${line.code}-${previousDate}`);
         const hasPreviousEveningStart = previousGroup?.punches.some((punch) => (timeToMinutes(punch.time) ?? 0) >= EVENING_SHIFT_START_MINUTES);
-        if (hasPreviousEveningStart) {
+        if (hasPreviousEveningStart && canAttachToPreviousNightShift(minutes)) {
           operationalDate = previousDate;
           operationalMinute = minutes + 1440;
         }
@@ -1208,15 +1214,21 @@ function buildOperationalBiometricGroups(parsedLines: ParsedBiometricLine[]): Ma
 function looksLikeSameDayPreviewShiftStart(time: string, existingPunches: BiometricPreviewPunch[]): boolean {
   const minutes = timeToMinutes(time);
   if (minutes === null) return false;
+  if (minutes < DAY_SHIFT_EARLY_START_MINUTES) return false;
 
   const candidate: BiometricPreviewPunch = { time, operationalMinute: minutes, action: null };
   const useful = collapseDuplicatePreviewPunches([candidate, ...existingPunches]).punches;
-  if (useful.length < 4 || useful[0].time !== time) return false;
+  if (useful.length < 2) return false;
+  if (useful[0].time !== time) {
+    const firstMinutes = punchOperationalMinutes(useful[0]);
+    if (firstMinutes === null || minutes - firstMinutes >= DUPLICATE_PUNCH_WINDOW_MINUTES) return false;
+  }
 
   const checkIn = punchOperationalMinutes(useful[0]);
   const checkOut = punchOperationalMinutes(useful[useful.length - 1]);
   if (checkIn === null || checkOut === null || checkOut - checkIn > MAX_PLAUSIBLE_SHIFT_MINUTES) return false;
 
+  if ((timeToMinutes(useful[useful.length - 1].time) ?? 0) >= 12 * 60) return true;
   return Boolean(chooseLunchPair(useful));
 }
 
@@ -1911,6 +1923,7 @@ function buildBiometricOrderDayRows(
     const holiday = holidaysByDate.get(date);
     const weekend = isWeekendDate(date);
     const novelty = !row && employeeId ? vacationNoveltyByEmployeeDate.get(`${employeeId}|${date}`) : undefined;
+    const breakdown = biometricPayrollBreakdown(row, holiday);
     const rowStyle = row?.status === 'Revisar' || row?.status === 'Incompleto' ? XLSX_STYLE.warning : 3;
     return [
       xlsxCell(row || novelty ? employeeLabel : ''),
@@ -1923,7 +1936,7 @@ function buildBiometricOrderDayRows(
       xlsxCell(''),
       xlsxCell(row?.breakStart === '-' ? '' : row?.breakStart ?? ''),
       xlsxCell(row?.breakEnd === '-' ? '' : row?.breakEnd ?? ''),
-      xlsxCell(''),
+      xlsxCell(breakdown.lunchHours || ''),
       xlsxCell(''),
       xlsxCell(''),
       xlsxCell(''),

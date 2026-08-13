@@ -281,6 +281,44 @@ def test_night_shift_with_early_morning_break_and_duplicate_return_counts_correc
     assert result["has_incomplete_marks"] is False
 
 
+@pytest.mark.django_db
+def test_night_shift_early_morning_break_groups_with_previous_evening():
+    employee = Employee.objects.create(employee_code="NIGHT-GROUP-001", first_name="Nocturno", status=Employee.Status.ACTIVE)
+    service = ConsolidateAttendanceFromPunches()
+    punches = [
+        dated_punch((2026, 8, 13), 3, 0, employee=employee),
+        dated_punch((2026, 8, 12), 17, 56, employee=employee),
+        dated_punch((2026, 8, 13), 2, 2, employee=employee),
+        dated_punch((2026, 8, 13), 3, 2, employee=employee),
+        dated_punch((2026, 8, 13), 6, 0, employee=employee),
+    ]
+
+    grouped = service._group_punches_by_operational_day(punches, {})
+    values = service._infer_attendance(grouped[(employee.id, datetime(2026, 8, 12).date())])
+
+    assert values["check_in"] == datetime(2026, 8, 12, 17, 56)
+    assert values["break_start"] == datetime(2026, 8, 13, 2, 2)
+    assert values["break_end"] == datetime(2026, 8, 13, 3, 0)
+    assert values["check_out"] == datetime(2026, 8, 13, 6, 0)
+    assert (employee.id, datetime(2026, 8, 13).date()) not in grouped
+
+
+@pytest.mark.django_db
+def test_late_morning_mark_is_not_attached_as_night_shift_checkout():
+    employee = Employee.objects.create(employee_code="DAY-002", first_name="Diurno", status=Employee.Status.ACTIVE)
+    service = ConsolidateAttendanceFromPunches()
+    punches = [
+        dated_punch((2026, 8, 12), 17, 0, employee=employee),
+        dated_punch((2026, 8, 13), 7, 40, employee=employee),
+    ]
+
+    grouped = service._group_punches_by_operational_day(punches, {})
+
+    assert (employee.id, datetime(2026, 8, 12).date()) in grouped
+    assert (employee.id, datetime(2026, 8, 13).date()) in grouped
+    assert [p.punched_at.time() for p in grouped[(employee.id, datetime(2026, 8, 13).date())]] == [time(7, 40)]
+
+
 def test_work_segments_do_not_discount_lunch_without_break_marks():
     service = CalculateEmployeePayrollForPeriod()
     attendance = SimpleNamespace(
@@ -459,6 +497,31 @@ def test_early_day_entry_with_extra_mark_wins_over_previous_night_schedule():
 
     assert (employee.id, datetime(2026, 5, 4).date()) in grouped
     assert (employee.id, datetime(2026, 5, 3).date()) not in grouped
+
+
+@pytest.mark.django_db
+def test_day_shift_early_entry_is_not_attached_to_previous_day_checkout():
+    employee = Employee.objects.create(employee_code="DAY-001", first_name="Diurno", status=Employee.Status.ACTIVE)
+    service = ConsolidateAttendanceFromPunches()
+    punches = [
+        dated_punch((2026, 7, 29), 7, 25, employee=employee),
+        dated_punch((2026, 7, 29), 17, 31, employee=employee),
+        dated_punch((2026, 7, 29), 7, 28, employee=employee),
+        dated_punch((2026, 7, 30), 17, 0, employee=employee),
+        dated_punch((2026, 7, 30), 7, 32, employee=employee),
+    ]
+
+    grouped = service._group_punches_by_operational_day(punches, {})
+
+    assert [p.punched_at.time() for p in grouped[(employee.id, datetime(2026, 7, 29).date())]] == [
+        time(7, 25),
+        time(7, 28),
+        time(17, 31),
+    ]
+    assert [p.punched_at.time() for p in grouped[(employee.id, datetime(2026, 7, 30).date())]] == [
+        time(7, 32),
+        time(17, 0),
+    ]
 
 
 def test_impossible_shift_duration_is_marked_incomplete():

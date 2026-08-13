@@ -54,7 +54,9 @@ RECHARGE_LABEL_TO_CONCEPT_CODE = {
 }
 SCHEDULE_CHANGE_WEEKLY_MINUTES = 42 * 60
 SCHEDULE_CHANGE_DAILY_LUNCH_MINUTES = 60
+DAY_SHIFT_EARLY_START = time(5, 0)
 EARLY_MORNING_OPERATIONAL_CUTOFF = time(8, 0)
+NIGHT_SHIFT_LATEST_CHECKOUT = time(6, 30)
 EVENING_SHIFT_START = time(15, 0)
 MAX_NIGHT_SHIFT_SPAN = timedelta(hours=18)
 MAX_PLAUSIBLE_SHIFT_MINUTES = 15 * 60
@@ -1240,7 +1242,7 @@ class ConsolidateAttendanceFromPunches:
                         not same_day_shift
                         and open_shift_day is not None
                         and punch.punched_at.date() == open_shift_day + timedelta(days=1)
-                        and punch.punched_at.time() < EARLY_MORNING_OPERATIONAL_CUTOFF
+                        and self._can_attach_to_previous_night_shift(punch.punched_at.time())
                         and open_shift_start is not None
                         and punch.punched_at - open_shift_start <= MAX_NIGHT_SHIFT_SPAN
                     ):
@@ -1257,6 +1259,8 @@ class ConsolidateAttendanceFromPunches:
     def _looks_like_same_day_shift_start(self, punch, employee_punches) -> bool:
         if punch.punched_at.time() >= EARLY_MORNING_OPERATIONAL_CUTOFF:
             return False
+        if punch.punched_at.time() < DAY_SHIFT_EARLY_START:
+            return False
 
         same_day = [
             item
@@ -1264,7 +1268,7 @@ class ConsolidateAttendanceFromPunches:
             if item.punched_at.date() == punch.punched_at.date() and item.punched_at >= punch.punched_at
         ]
         useful = self._collapse_duplicate_punches(same_day)
-        if len(useful) < 4 or useful[0].punched_at != punch.punched_at:
+        if len(useful) < 2 or useful[0].punched_at != punch.punched_at:
             return False
 
         check_in = useful[0].punched_at
@@ -1272,10 +1276,14 @@ class ConsolidateAttendanceFromPunches:
         if self._exceeds_plausible_shift(check_in, check_out):
             return False
 
+        if check_out.time() >= time(12, 0):
+            return True
         return self._best_rest_break_pair([item.punched_at for item in useful[1:-1]]) is not None
 
     def _scheduled_operational_day(self, punch, employee):
         if not employee or punch.punched_at.time() >= EARLY_MORNING_OPERATIONAL_CUTOFF:
+            return None
+        if not self._can_attach_to_previous_night_shift(punch.punched_at.time()):
             return None
 
         punch_day = punch.punched_at.date()
@@ -1294,6 +1302,9 @@ class ConsolidateAttendanceFromPunches:
             if start_dt - proximity <= punch.punched_at <= end_dt + proximity:
                 return previous_day
         return None
+
+    def _can_attach_to_previous_night_shift(self, clock_time) -> bool:
+        return clock_time <= NIGHT_SHIFT_LATEST_CHECKOUT or self._time_in_window(clock_time, NIGHT_BREAK_START_WINDOW)
 
     def _working_slots_for(self, schedule, day):
         return [
