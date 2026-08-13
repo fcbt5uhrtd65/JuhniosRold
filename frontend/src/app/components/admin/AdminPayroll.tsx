@@ -1552,7 +1552,7 @@ function emptyBiometricPayrollBreakdown(): BiometricPayrollBreakdown {
 }
 
 function biometricWorkedHoursFormula(rowNumber: number): string {
-  return `MAX(0,IFERROR(ROUNDDOWN(F${rowNumber}*24*2,0)/2,ROUNDDOWN(TIMEVALUE(F${rowNumber})*24*2,0)/2)-N(K${rowNumber}))`;
+  return `MAX(0,INT(IFERROR(F${rowNumber}*24,TIMEVALUE(F${rowNumber})*24))+IF(MOD(IFERROR(F${rowNumber}*24,TIMEVALUE(F${rowNumber})*24),1)>=25/60,0.5,0)-N(K${rowNumber}))`;
 }
 
 function biometricWorkedHoursCell(row: BiometricPreviewRow | undefined, rowNumber: number, fallback: number): XlsxCell {
