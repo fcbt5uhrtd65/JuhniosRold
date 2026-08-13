@@ -649,6 +649,7 @@ function describeApiError(error: unknown, fallback: string): string {
 
 type BiometricPreviewPunch = {
   time: string;
+  operationalMinute?: number;
   action: 'check_in' | 'break_start' | 'break_end' | 'check_out' | null;
 };
 
@@ -803,6 +804,27 @@ function dayMinutesInSegment(start: number, end: number): number {
 }
 
 const FIXED_LUNCH_MINUTES = 60;
+const EARLY_MORNING_OPERATIONAL_CUTOFF_MINUTES = 8 * 60;
+const EVENING_SHIFT_START_MINUTES = 15 * 60;
+const MIN_REST_BREAK_MINUTES = 30;
+const MAX_REST_BREAK_MINUTES = 120;
+
+function punchOperationalMinutes(punch: BiometricPreviewPunch): number | null {
+  return punch.operationalMinute ?? timeToMinutes(punch.time);
+}
+
+function isRestBreakStartMinute(minutes: number): boolean {
+  return (minutes >= 10 * 60 && minutes <= 15 * 60 + 30) || (minutes >= 60 && minutes <= 4 * 60 + 30);
+}
+
+function looksLikeRestBreak(start: BiometricPreviewPunch, end: BiometricPreviewPunch): boolean {
+  const startMinutes = punchOperationalMinutes(start);
+  const endMinutes = punchOperationalMinutes(end);
+  const clockStartMinutes = timeToMinutes(start.time);
+  if (startMinutes === null || endMinutes === null || clockStartMinutes === null) return false;
+  const duration = endMinutes - startMinutes;
+  return duration >= MIN_REST_BREAK_MINUTES && duration <= MAX_REST_BREAK_MINUTES && isRestBreakStartMinute(clockStartMinutes);
+}
 
 function calculatePreviewHours(row: Pick<BiometricPreviewRow, 'checkIn' | 'breakStart' | 'breakEnd' | 'checkOut'>) {
   const checkIn = timeToMinutes(row.checkIn);
@@ -847,7 +869,7 @@ function enrichPreviewRow(row: Omit<BiometricPreviewRow, 'workedHours' | 'dayHou
 function chooseLunchPair(punches: BiometricPreviewPunch[]): [BiometricPreviewPunch, BiometricPreviewPunch] | null {
   const candidates = punches
     .slice(1, -1)
-    .map((punch) => ({ punch, minutes: timeToMinutes(punch.time) }))
+    .map((punch) => ({ punch, minutes: punchOperationalMinutes(punch) }))
     .filter((item): item is { punch: BiometricPreviewPunch; minutes: number } => item.minutes !== null);
   let best: { pair: [BiometricPreviewPunch, BiometricPreviewPunch]; score: number } | null = null;
 
@@ -856,11 +878,13 @@ function chooseLunchPair(punches: BiometricPreviewPunch[]): [BiometricPreviewPun
       const start = candidates[index];
       const end = candidates[nextIndex];
       const duration = end.minutes - start.minutes;
-      const startsNearLunch = start.minutes >= 10 * 60 && start.minutes <= 15 * 60 + 30;
+      const startsNearLunch = isRestBreakStartMinute(timeToMinutes(start.punch.time) ?? start.minutes);
       const reasonableDuration = duration >= 20 && duration <= 180;
       if (!startsNearLunch || !reasonableDuration) continue;
-      const center = (start.minutes + end.minutes) / 2;
-      const score = Math.abs(center - 13 * 60) + Math.abs(duration - 60) * 0.8;
+      const clockStart = timeToMinutes(start.punch.time) ?? start.minutes;
+      const target = clockStart < 6 * 60 ? 3 * 60 : 13 * 60;
+      const center = ((clockStart + (timeToMinutes(end.punch.time) ?? end.minutes)) / 2);
+      const score = Math.abs(center - target) + Math.abs(duration - 60) * 0.8;
       if (!best || score < best.score) best = { pair: [start.punch, end.punch], score };
     }
   }
@@ -869,7 +893,7 @@ function chooseLunchPair(punches: BiometricPreviewPunch[]): [BiometricPreviewPun
 }
 
 function classifyPreviewPunches(punches: BiometricPreviewPunch[], rawMarkCount: number): Omit<BiometricPreviewRow, 'key' | 'code' | 'date' | 'workedHours' | 'dayHours' | 'nightHours'> {
-  const sortedPunches = [...punches].sort((left, right) => left.time.localeCompare(right.time));
+  const sortedPunches = [...punches].sort((left, right) => (punchOperationalMinutes(left) ?? 0) - (punchOperationalMinutes(right) ?? 0));
   const analysis: string[] = [];
   const ignoredMarkCount = 0;
   if (rawMarkCount > 4) analysis.push(`${rawMarkCount} timbradas en el dia; revisar antes de liquidar`);
@@ -916,9 +940,32 @@ function classifyPreviewPunches(punches: BiometricPreviewPunch[], rawMarkCount: 
       }
       status = 'Revisar';
     } else if (sortedPunches.length === 4) {
-      breakStart = sortedPunches[1].time;
-      breakEnd = sortedPunches[2].time;
-      status = 'Completo';
+      // No asumir a ciegas que la 2a y 3a marca son inicio/fin de almuerzo solo
+      // por su posicion: si estan muy juntas en el tiempo o fuera de un horario
+      // de almuerzo razonable, lo mas probable es que el reloj duplico una
+      // marcacion (ej. 6:30 y 6:37 marcando la entrada dos veces) y no que haya
+      // un almuerzo real de minutos. En ese caso se conserva solo una de las dos
+      // como la marca real y la otra queda registrada como novedad, sin inventar
+      // un almuerzo que no ocurrio.
+      const second = sortedPunches[1];
+      const third = sortedPunches[2];
+      const secondMinutes = punchOperationalMinutes(second);
+      const thirdMinutes = punchOperationalMinutes(third);
+      const gapMinutes = secondMinutes !== null && thirdMinutes !== null ? thirdMinutes - secondMinutes : null;
+      const looksLikeLunch = looksLikeRestBreak(second, third);
+
+      if (looksLikeLunch) {
+        breakStart = second.time;
+        breakEnd = third.time;
+        status = 'Completo';
+      } else {
+        status = 'Revisar';
+        if (gapMinutes !== null && gapMinutes < 15) {
+          analysis.push(`Timbradas duplicadas a las ${second.time} y ${third.time}; se descarta la marca repetida y no se cuenta como almuerzo`);
+        } else {
+          analysis.push('4 timbradas, pero la 2a y 3a no parecen almuerzo; revisar secuencia del dia');
+        }
+      }
     } else {
       const lunchPair = chooseLunchPair(sortedPunches);
       if (lunchPair) {
@@ -964,6 +1011,29 @@ function buildBiometricPreviewRows(
       });
     })
     .sort((left, right) => left.code.localeCompare(right.code, 'es', { numeric: true }) || left.date.localeCompare(right.date));
+}
+
+function resolveBiometricOperationalPunch(
+  parsedLine: { code: string; date: string; time: string; action: BiometricPreviewPunch['action'] },
+  groups: Map<string, { code: string; date: string; punches: BiometricPreviewPunch[] }>,
+): { date: string; punch: BiometricPreviewPunch } {
+  const minutes = timeToMinutes(parsedLine.time) ?? 0;
+  if (minutes < EARLY_MORNING_OPERATIONAL_CUTOFF_MINUTES) {
+    const previousDate = addDays(parsedLine.date, -1);
+    const previousGroup = groups.get(`${parsedLine.code}-${previousDate}`);
+    const hasPreviousEveningStart = previousGroup?.punches.some((punch) => (timeToMinutes(punch.time) ?? 0) >= EVENING_SHIFT_START_MINUTES);
+    if (hasPreviousEveningStart) {
+      return {
+        date: previousDate,
+        punch: { time: parsedLine.time, operationalMinute: minutes + 1440, action: parsedLine.action },
+      };
+    }
+  }
+
+  return {
+    date: parsedLine.date,
+    punch: { time: parsedLine.time, operationalMinute: minutes, action: parsedLine.action },
+  };
 }
 
 function biometricExportDateRange(rows: BiometricPreviewRow[], dateRange?: string[]): string[] {
@@ -2767,9 +2837,10 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
             (!uploadDateFrom || parsedLine.date >= uploadDateFrom) &&
             (!uploadDateTo || parsedLine.date <= uploadDateTo);
           if (inRange) {
-            const key = `${parsedLine.code}-${parsedLine.date}`;
-            const group = groups.get(key) ?? { code: parsedLine.code, date: parsedLine.date, punches: [] };
-            group.punches.push({ time: parsedLine.time, action: parsedLine.action });
+            const operational = resolveBiometricOperationalPunch(parsedLine, groups);
+            const key = `${parsedLine.code}-${operational.date}`;
+            const group = groups.get(key) ?? { code: parsedLine.code, date: operational.date, punches: [] };
+            group.punches.push(operational.punch);
             groups.set(key, group);
             parsed += 1;
           }

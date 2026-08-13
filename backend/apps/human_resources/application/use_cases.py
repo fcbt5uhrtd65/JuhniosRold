@@ -1,7 +1,7 @@
 import json
 import re
 import unicodedata
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 
 from django.db import models, transaction
@@ -54,6 +54,13 @@ RECHARGE_LABEL_TO_CONCEPT_CODE = {
 }
 SCHEDULE_CHANGE_WEEKLY_MINUTES = 42 * 60
 SCHEDULE_CHANGE_DAILY_LUNCH_MINUTES = 60
+EARLY_MORNING_OPERATIONAL_CUTOFF = time(8, 0)
+EVENING_SHIFT_START = time(15, 0)
+MAX_NIGHT_SHIFT_SPAN = timedelta(hours=18)
+MIN_REST_BREAK_MINUTES = 30
+MAX_REST_BREAK_MINUTES = 120
+DAY_BREAK_START_WINDOW = (time(10, 0), time(15, 30))
+NIGHT_BREAK_START_WINDOW = (time(1, 0), time(4, 30))
 
 PUNCH_ACTION_FIELDS = ("check_in", "check_out", "break_start", "break_end")
 PUNCH_ACTION_NUMERIC_CODES = {
@@ -1149,16 +1156,12 @@ class ConsolidateAttendanceFromPunches:
             .order_by("matched_employee_id", "punched_at")
         )
 
-        by_employee_day: dict[tuple, list] = {}
-        for punch in punches:
-            key = (punch.matched_employee_id, punch.punched_at.date())
-            by_employee_day.setdefault(key, []).append(punch)
-
         created = 0
         updated = 0
         skipped_corrected = 0
         incomplete = 0
         employees_cache: dict[str, object] = {}
+        by_employee_day = self._group_punches_by_operational_day(punches, employees_cache)
 
         for (employee_id, day), day_punches in by_employee_day.items():
             day_punches.sort(key=lambda p: p.punched_at)
@@ -1201,6 +1204,88 @@ class ConsolidateAttendanceFromPunches:
             "incomplete": incomplete,
         }
 
+    def _group_punches_by_operational_day(self, punches, employees_cache: dict[str, object]) -> dict[tuple, list]:
+        """Agrupa por dia operativo, no siempre por fecha calendario.
+
+        Un turno nocturno que inicia a las 18:00 y marca descanso/salida a las
+        02:00-06:00 del dia siguiente debe quedar en una sola asistencia del
+        dia de inicio. Primero se respeta el horario configurado; si no existe,
+        se usa una heuristica conservadora: marcas de madrugada se pegan al
+        turno anterior solo si ya vimos una marca vespertina del empleado.
+        """
+        by_employee: dict[str, list] = {}
+        for punch in punches:
+            by_employee.setdefault(punch.matched_employee_id, []).append(punch)
+
+        grouped: dict[tuple, list] = {}
+        for employee_id, employee_punches in by_employee.items():
+            employee_punches.sort(key=lambda p: p.punched_at)
+            employee = employees_cache.get(employee_id)
+            if employee is None and employee_punches:
+                employee = employee_punches[0].matched_employee
+                employees_cache[employee_id] = employee
+
+            open_shift_day = None
+            open_shift_start = None
+            for punch in employee_punches:
+                day = self._scheduled_operational_day(punch, employee)
+                if day is None:
+                    day = punch.punched_at.date()
+                    if (
+                        open_shift_day is not None
+                        and punch.punched_at.date() == open_shift_day + timedelta(days=1)
+                        and punch.punched_at.time() < EARLY_MORNING_OPERATIONAL_CUTOFF
+                        and open_shift_start is not None
+                        and punch.punched_at - open_shift_start <= MAX_NIGHT_SHIFT_SPAN
+                    ):
+                        day = open_shift_day
+
+                if punch.punched_at.time() >= EVENING_SHIFT_START:
+                    open_shift_day = day
+                    open_shift_start = punch.punched_at
+
+                grouped.setdefault((employee_id, day), []).append(punch)
+
+        return grouped
+
+    def _scheduled_operational_day(self, punch, employee):
+        if not employee or punch.punched_at.time() >= EARLY_MORNING_OPERATIONAL_CUTOFF:
+            return None
+
+        punch_day = punch.punched_at.date()
+        previous_day = punch_day - timedelta(days=1)
+        schedule = get_schedule_for(employee, previous_day)
+        if not schedule:
+            return None
+
+        settings_row = get_attendance_intelligence_settings()
+        proximity = timedelta(minutes=settings_row.schedule_proximity_minutes)
+        for slot in self._working_slots_for(schedule, previous_day):
+            start_dt = self._combine_datetime(previous_day, slot.expected_start_time, punch.punched_at)
+            end_dt = self._slot_end_datetime(previous_day, slot.expected_start_time, slot.expected_end_time, punch.punched_at)
+            if end_dt.date() != punch_day:
+                continue
+            if start_dt - proximity <= punch.punched_at <= end_dt + proximity:
+                return previous_day
+        return None
+
+    def _working_slots_for(self, schedule, day):
+        return [
+            slot
+            for slot in schedule.days.all()
+            if slot.weekday == day.weekday() and slot.is_working_day
+        ]
+
+    def _slot_end_datetime(self, day, start_time, end_time, reference=None):
+        end_day = day + timedelta(days=1) if end_time <= start_time else day
+        return self._combine_datetime(end_day, end_time, reference)
+
+    def _combine_datetime(self, day, clock_time, reference=None):
+        value = datetime.combine(day, clock_time)
+        if reference is not None and timezone.is_aware(reference):
+            return timezone.make_aware(value, timezone.get_current_timezone())
+        return value
+
     def _expected_times(self, schedule, day):
         """(hora_entrada_esperada, hora_salida_esperada) del día, o (None, None)
         si no hay horario configurado o el día no tiene franjas activas."""
@@ -1221,23 +1306,43 @@ class ConsolidateAttendanceFromPunches:
         times = [p.punched_at for p in day_punches]
 
         if count == 2:
+            if self._looks_like_rest_break(times[0], times[1]):
+                return {
+                    "check_in": None, "check_out": None,
+                    "break_start": times[0], "break_end": times[1],
+                    "has_incomplete_marks": True,
+                }
             return {
                 "check_in": times[0], "check_out": times[1],
                 "break_start": None, "break_end": None,
                 "has_incomplete_marks": False,
             }
+        if count == 3:
+            if self._looks_like_rest_break(times[1], times[2]):
+                return {
+                    "check_in": times[0], "check_out": None,
+                    "break_start": times[1], "break_end": times[2],
+                    "has_incomplete_marks": True,
+                }
+            if self._looks_like_rest_break(times[0], times[1]):
+                return {
+                    "check_in": None, "check_out": times[2],
+                    "break_start": times[0], "break_end": times[1],
+                    "has_incomplete_marks": True,
+                }
         if count == 4:
+            has_plausible_break = self._looks_like_rest_break(times[1], times[2])
             return {
                 "check_in": times[0], "break_start": times[1],
                 "break_end": times[2], "check_out": times[3],
-                "has_incomplete_marks": False,
+                "has_incomplete_marks": not has_plausible_break,
             }
         if count == 1:
             only = times[0]
             expected_start, expected_end = self._expected_times(schedule, day) if day else (None, None)
             if expected_start and expected_end:
-                start_dt = datetime.combine(day, expected_start)
-                end_dt = datetime.combine(day, expected_end)
+                start_dt = self._combine_datetime(day, expected_start, only)
+                end_dt = self._slot_end_datetime(day, expected_start, expected_end, only)
                 is_closer_to_start = abs(only - start_dt) <= abs(only - end_dt)
             else:
                 is_closer_to_start = only.hour < 12
@@ -1249,11 +1354,37 @@ class ConsolidateAttendanceFromPunches:
             }
         # 3, o 5+ (tras colapsar duplicados cercanos al horario): 1a=check_in,
         # última=check_out, sin forzar descansos intermedios.
+        break_pair = self._best_rest_break_pair(times[1:-1])
         return {
             "check_in": times[0], "check_out": times[-1],
-            "break_start": None, "break_end": None,
+            "break_start": break_pair[0] if break_pair else None,
+            "break_end": break_pair[1] if break_pair else None,
             "has_incomplete_marks": True,
         }
+
+    def _looks_like_rest_break(self, start_dt, end_dt) -> bool:
+        if not start_dt or not end_dt or end_dt <= start_dt:
+            return False
+        duration = int((end_dt - start_dt).total_seconds() // 60)
+        if duration < MIN_REST_BREAK_MINUTES or duration > MAX_REST_BREAK_MINUTES:
+            return False
+        return self._time_in_window(start_dt.time(), DAY_BREAK_START_WINDOW) or self._time_in_window(start_dt.time(), NIGHT_BREAK_START_WINDOW)
+
+    def _time_in_window(self, value, window) -> bool:
+        start, end = window
+        return start <= value <= end
+
+    def _best_rest_break_pair(self, times):
+        best = None
+        for index in range(len(times) - 1):
+            start_dt = times[index]
+            for end_dt in times[index + 1:]:
+                if not self._looks_like_rest_break(start_dt, end_dt):
+                    continue
+                duration_score = abs(int((end_dt - start_dt).total_seconds() // 60) - SCHEDULE_CHANGE_DAILY_LUNCH_MINUTES)
+                if best is None or duration_score < best[2]:
+                    best = (start_dt, end_dt, duration_score)
+        return (best[0], best[1]) if best else None
 
     def _infer_attendance_from_punch_actions(self, day_punches) -> dict | None:
         action_punches = {field: [] for field in PUNCH_ACTION_FIELDS}

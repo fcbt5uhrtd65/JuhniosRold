@@ -738,6 +738,8 @@ class EmployeeWorkSchedule(BaseModel):
             start = day.expected_start_time
             end = day.expected_end_time
             minutes = (end.hour * 60 + end.minute) - (start.hour * 60 + start.minute)
+            if minutes <= 0:
+                minutes += 24 * 60
             if minutes > 0:
                 total += minutes
         return total

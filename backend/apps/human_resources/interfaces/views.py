@@ -252,15 +252,32 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
 
     OWNER_DELETABLE_STATUSES = (VacationRequest.Status.PENDING, VacationRequest.Status.IN_REVIEW)
 
+    def _apply_request_query_filters(self, queryset):
+        start_from = self.request.query_params.get("start_date_from")
+        start_to = self.request.query_params.get("start_date_to")
+        if start_from:
+            queryset = queryset.filter(start_date__gte=start_from)
+        if start_to:
+            queryset = queryset.filter(end_date__lte=start_to)
+
+        remuneration = (self.request.query_params.get("remuneration") or self.request.query_params.get("is_remunerated") or "").strip().lower()
+        if remuneration in ("remunerated", "true", "1", "yes", "si", "sí"):
+            return queryset.filter(Q(is_remunerated=True) | Q(request_type=VacationRequest.RequestType.OVERTIME))
+        if remuneration in ("not_remunerated", "false", "0", "no"):
+            return queryset.filter(is_remunerated=False)
+        if remuneration in ("pending", "null", "undefined"):
+            return queryset.filter(is_remunerated__isnull=True).exclude(request_type=VacationRequest.RequestType.OVERTIME)
+        return queryset
+
     def get_queryset(self):
         queryset = super().get_queryset()
         if self.action == "dashboard":
-            return VacationRequest.objects.select_related(
+            queryset = VacationRequest.objects.select_related(
                 "employee",
                 "employee__department",
                 "employee__branch",
             ).prefetch_related("employee__immediate_managers__user")
-        if self.action == "list":
+        elif self.action == "list":
             queryset = VacationRequest.objects.select_related(
                 "employee",
                 "employee__department",
@@ -269,17 +286,13 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
                 "reviewed_by",
             ).prefetch_related("overtime_shifts", "employee__immediate_managers__user")
         else:
+            if self.action in ("export_list_pdf", "export_xlsx"):
+                return self._apply_request_query_filters(queryset)
             return queryset
         # Filtro por rango de fecha de la SOLICITUD (start_date/end_date, el
         # periodo del permiso/vacación/etc.), no la fecha en que se creó el
         # registro — para poder organizar el listado por cuándo es el permiso.
-        start_from = self.request.query_params.get("start_date_from")
-        start_to = self.request.query_params.get("start_date_to")
-        if start_from:
-            queryset = queryset.filter(start_date__gte=start_from)
-        if start_to:
-            queryset = queryset.filter(end_date__lte=start_to)
-        return queryset
+        return self._apply_request_query_filters(queryset)
 
     def get_serializer_context(self):
         context = super().get_serializer_context()

@@ -125,6 +125,7 @@ import {
   type EmployeeDocumentStatus,
   type EmployeeDocumentType,
   type HRNotification,
+  type RequestRemunerationFilter,
   type RequestsDashboard,
   type VacationRequest,
   type VacationRequestHistory,
@@ -1217,6 +1218,11 @@ function getRequestTypeLabel(type: string, subtype?: string): string {
 }
 
 const REQUEST_TYPE_FILTER_OPTIONS: VacationRequestType[] = ['PERMISSION', 'OVERTIME', 'LEAVE', 'INCAPACITY', 'VACATION', 'LOAN', 'SCHEDULE_CHANGE', 'OTHER'];
+const REMUNERATION_FILTER_OPTIONS: Array<{ value: RequestRemunerationFilter; label: string }> = [
+  { value: 'REMUNERATED', label: 'Remuneradas' },
+  { value: 'NOT_REMUNERATED', label: 'No remuneradas' },
+  { value: 'PENDING', label: 'Pendientes por definir' },
+];
 
 const HISTORY_ACTION_LABELS: Record<VacationRequestHistory['action'], string> = {
   CREATED: 'Creación',
@@ -1261,6 +1267,18 @@ function getRequestSubtypeLabel(subtype: string): string {
     OTHER: 'Otro',
   };
   return labels[subtype] ?? (subtype || 'Sin subtipo');
+}
+
+function getRequestRemunerationLabel(request: VacationRequest): string {
+  if (request.request_type === 'OVERTIME') return 'Sí';
+  if (request.is_remunerated === null) return 'Pendiente';
+  return request.is_remunerated ? 'Sí' : 'No';
+}
+
+function getRequestRemunerationBadgeColor(request: VacationRequest): BadgeColor {
+  if (request.request_type === 'OVERTIME' || request.is_remunerated === true) return 'green';
+  if (request.is_remunerated === false) return 'red';
+  return 'gray';
 }
 
 function approvalStepLabel(step: string): string {
@@ -1816,6 +1834,7 @@ export function AdminHR() {
   const [vacationFilterStatus, setVacationFilterStatus] = useState<string>('all');
   const [vacationFilterEmployee, setVacationFilterEmployee] = useState<string>('all');
   const [vacationFilterType, setVacationFilterType] = useState<string>('all');
+  const [vacationFilterRemuneration, setVacationFilterRemuneration] = useState<string>('all');
   const [vacationFilterStartFrom, setVacationFilterStartFrom] = useState('');
   const [vacationFilterStartTo, setVacationFilterStartTo] = useState('');
   const [vacationSort, setVacationSort] = useState<'created_at' | 'request_type' | 'start_date'>('created_at');
@@ -1965,12 +1984,16 @@ export function AdminHR() {
         branch: vacationFilterBranch === 'all' ? undefined : vacationFilterBranch,
         status: vacationFilterStatus === 'all' ? undefined : (vacationFilterStatus as VacationRequestStatus),
         employee: vacationFilterEmployee === 'all' ? undefined : vacationFilterEmployee,
+        request_type: vacationFilterType === 'all' ? undefined : (vacationFilterType as VacationRequestType),
+        remuneration: vacationFilterRemuneration === 'all' ? undefined : (vacationFilterRemuneration as RequestRemunerationFilter),
+        start_date_from: vacationFilterStartFrom || undefined,
+        start_date_to: vacationFilterStartTo || undefined,
       });
       setRequestsDashboard(dashboard);
     } catch (error) {
       console.error(error);
     }
-  }, [vacationSearch, vacationFilterDepartment, vacationFilterBranch, vacationFilterStatus, vacationFilterEmployee]);
+  }, [vacationSearch, vacationFilterDepartment, vacationFilterBranch, vacationFilterStatus, vacationFilterEmployee, vacationFilterType, vacationFilterRemuneration, vacationFilterStartFrom, vacationFilterStartTo]);
 
   useEffect(() => {
     void loadData();
@@ -2146,6 +2169,7 @@ export function AdminHR() {
         status: vacationFilterStatus === 'all' ? undefined : (vacationFilterStatus as VacationRequestStatus),
         employee: vacationFilterEmployee === 'all' ? undefined : vacationFilterEmployee,
         request_type: vacationFilterType === 'all' ? undefined : (vacationFilterType as VacationRequestType),
+        remuneration: vacationFilterRemuneration === 'all' ? undefined : (vacationFilterRemuneration as RequestRemunerationFilter),
         ordering: orderingMap[vacationSort],
         start_date_from: vacationFilterStartFrom || undefined,
         start_date_to: vacationFilterStartTo || undefined,
@@ -2158,7 +2182,7 @@ export function AdminHR() {
     } finally {
       setVacationLoading(false);
     }
-  }, [vacationPage, vacationPageSize, vacationSearch, vacationFilterDepartment, vacationFilterBranch, vacationFilterStatus, vacationFilterEmployee, vacationFilterType, vacationSort, vacationFilterStartFrom, vacationFilterStartTo, toast]);
+  }, [vacationPage, vacationPageSize, vacationSearch, vacationFilterDepartment, vacationFilterBranch, vacationFilterStatus, vacationFilterEmployee, vacationFilterType, vacationFilterRemuneration, vacationSort, vacationFilterStartFrom, vacationFilterStartTo, toast]);
 
   useEffect(() => {
     if (activeTab !== 'vacations') return;
@@ -2168,7 +2192,7 @@ export function AdminHR() {
 
   useEffect(() => {
     setVacationPage(1);
-  }, [vacationSearch, vacationFilterDepartment, vacationFilterBranch, vacationFilterStatus, vacationFilterEmployee, vacationFilterType, vacationSort, vacationFilterStartFrom, vacationFilterStartTo, vacationPageSize]);
+  }, [vacationSearch, vacationFilterDepartment, vacationFilterBranch, vacationFilterStatus, vacationFilterEmployee, vacationFilterType, vacationFilterRemuneration, vacationSort, vacationFilterStartFrom, vacationFilterStartTo, vacationPageSize]);
 
   const paginatedVacationRequests = vacationRows;
   const filteredVacationRequestsCount = vacationTotal;
@@ -2952,7 +2976,9 @@ export function AdminHR() {
         employee__department: vacationFilterDepartment === 'all' ? undefined : vacationFilterDepartment,
         employee__branch: vacationFilterBranch === 'all' ? undefined : vacationFilterBranch,
         status: vacationFilterStatus === 'all' ? undefined : (vacationFilterStatus as VacationRequestStatus),
+        employee: vacationFilterEmployee === 'all' ? undefined : vacationFilterEmployee,
         request_type: vacationFilterType === 'all' ? undefined : (vacationFilterType as VacationRequestType),
+        remuneration: vacationFilterRemuneration === 'all' ? undefined : (vacationFilterRemuneration as RequestRemunerationFilter),
         order_by: orderingMap[vacationSort],
         start_date_from: vacationFilterStartFrom || undefined,
         start_date_to: vacationFilterStartTo || undefined,
@@ -4116,7 +4142,7 @@ export function AdminHR() {
               <div className="flex flex-col lg:flex-row lg:items-center gap-2.5">
                 <SearchBar value={vacationSearch} onChange={setVacationSearch} placeholder="Buscar empleado, motivo o clave..." className="w-full lg:flex-1" />
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  {(vacationSearch || vacationFilterEmployee !== 'all' || vacationFilterDepartment !== 'all' || vacationFilterBranch !== 'all' || vacationFilterStatus !== 'all' || vacationFilterType !== 'all' || vacationFilterStartFrom || vacationFilterStartTo) && (
+                  {(vacationSearch || vacationFilterEmployee !== 'all' || vacationFilterDepartment !== 'all' || vacationFilterBranch !== 'all' || vacationFilterStatus !== 'all' || vacationFilterType !== 'all' || vacationFilterRemuneration !== 'all' || vacationFilterStartFrom || vacationFilterStartTo) && (
                     <button
                       type="button"
                       onClick={() => {
@@ -4126,6 +4152,7 @@ export function AdminHR() {
                         setVacationFilterBranch('all');
                         setVacationFilterStatus('all');
                         setVacationFilterType('all');
+                        setVacationFilterRemuneration('all');
                         setVacationFilterStartFrom('');
                         setVacationFilterStartTo('');
                       }}
@@ -4146,7 +4173,7 @@ export function AdminHR() {
                   </button>
                 </div>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2.5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-7 gap-2.5">
                 <label className="block min-w-0">
                   <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Estado</span>
                   <select value={vacationFilterStatus} onChange={(event) => setVacationFilterStatus(event.target.value)} className={`${selectCls} w-full`}>
@@ -4159,6 +4186,15 @@ export function AdminHR() {
                     <option value="all">Todos</option>
                     {REQUEST_TYPE_FILTER_OPTIONS.map((value) => (
                       <option key={value} value={value}>{getRequestTypeLabel(value)}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block min-w-0">
+                  <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Remunerado</span>
+                  <select value={vacationFilterRemuneration} onChange={(event) => setVacationFilterRemuneration(event.target.value)} className={`${selectCls} w-full`}>
+                    <option value="all">Todos</option>
+                    {REMUNERATION_FILTER_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
                     ))}
                   </select>
                 </label>
@@ -4570,6 +4606,7 @@ export function AdminHR() {
                       <Th>Tipo</Th>
                       <Th>Fechas</Th>
                       <Th>Motivo</Th>
+                      <Th>Remunerado</Th>
                       <Th>Estado</Th>
                       <Th>Acciones</Th>
                     </tr>
@@ -4633,6 +4670,7 @@ export function AdminHR() {
                               <span className="text-gray-400">Sin motivo</span>
                             )}
                           </Td>
+                          <Td><Badge label={getRequestRemunerationLabel(request)} color={getRequestRemunerationBadgeColor(request)} /></Td>
                           <Td><Badge label={requestStatusLabel(request.status)} color={statusBadge(request.status)} /></Td>
                           <Td className={actionsCellCls} onClick={(e) => e.stopPropagation()}>
                             <ActionsMenu

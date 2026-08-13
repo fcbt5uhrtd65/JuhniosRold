@@ -142,6 +142,7 @@ export type HRRequestSubtype =
 export type PayrollStatus = 'DRAFT' | 'APPROVED' | 'PAID';
 export type PayrollPeriodStatus = 'OPEN' | 'CALCULATED' | 'APPROVED' | 'PAID' | 'CLOSED';
 export type PayrollItemSource = 'MANUAL' | 'ATTENDANCE' | 'VACATION_REQUEST' | 'LOAN_INSTALLMENT' | 'SYSTEM';
+export type RequestRemunerationFilter = 'REMUNERATED' | 'NOT_REMUNERATED' | 'PENDING';
 export type BiometricImportStatus = 'PROCESSING' | 'COMPLETED' | 'FAILED';
 export type AttendanceSource = 'MANUAL' | 'BIOMETRIC' | 'MANUAL_CORRECTION';
 export type PublicHolidayKind = 'FIXED' | 'FIXED_MOVED_TO_MONDAY' | 'EASTER_BASED';
@@ -692,6 +693,7 @@ export interface ListVacationParams {
   status?: HRRequestStatus;
   request_type?: VacationRequestType;
   subtype?: HRRequestSubtype;
+  remuneration?: RequestRemunerationFilter;
   department?: string;
   branch?: string;
   search?: string;
@@ -769,6 +771,7 @@ export async function getVacationRequests(params?: ListVacationParams): Promise<
     status: params?.status,
     request_type: params?.request_type,
     subtype: params?.subtype,
+    remuneration: params?.remuneration,
     employee__department: params?.department,
     employee__branch: params?.branch,
     search: params?.search,
@@ -792,9 +795,12 @@ export async function getRequestsDashboard(params?: ListVacationParams): Promise
     status: params?.status,
     request_type: params?.request_type,
     subtype: params?.subtype,
+    remuneration: params?.remuneration,
     employee__department: params?.department,
     employee__branch: params?.branch,
     search: params?.search,
+    start_date_from: params?.start_date_from,
+    start_date_to: params?.start_date_to,
   });
   const res = await api.get<RequestsDashboard>(`${REQUESTS_PATH}dashboard/${query}`);
   if (res.data) return res.data;
@@ -1078,8 +1084,10 @@ export async function openVacationRequestPdf(id: string): Promise<void> {
 export interface ExportRequestsXlsxParams {
   request_type?: VacationRequestType;
   status?: HRRequestStatus;
+  employee?: string;
   employee__department?: string;
   employee__branch?: string;
+  remuneration?: RequestRemunerationFilter;
   search?: string;
   order_by?: 'created_at' | 'request_type' | 'start_date' | 'employee';
   start_date_from?: string;
