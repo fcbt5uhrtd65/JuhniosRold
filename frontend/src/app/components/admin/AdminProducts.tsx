@@ -20,6 +20,14 @@ import { requestProductsExport, getCategories, getProductById, updateProductVari
 import { createInitialStock } from '../../services/inventory.service';
 import { getProductReviews, type ProductReview } from '../../services/reviews.service';
 import { getWholesaleSettingsApi, updateWholesaleSettingsApi } from '../../services/cart.service';
+import { getEmployees, type Employee } from '../../services/employees.service';
+import {
+  createSellerDiscountCode,
+  getSellerDiscountCodes,
+  updateSellerDiscountCode,
+  type DiscountType,
+  type SellerDiscountCode,
+} from '../../services/promotions.service';
 import { pollExportStatus, downloadFile } from '../../utils/pollExportStatus';
 import { resolveBackendUrl, ApiError } from '../../services/api';
 import { getWholesaleSettings, saveWholesaleSettings } from '../../utils/wholesale';
@@ -31,6 +39,15 @@ type ViewMode = 'grid' | 'table';
 type SortField = 'nombre' | 'precio' | 'categoria' | 'estado' | 'stock';
 type SortOrder = 'asc' | 'desc';
 type ModalMode = 'create' | 'edit' | 'view' | null;
+
+interface SellerCodeFormState {
+  seller: string;
+  discountType: DiscountType;
+  discountValue: number;
+  durationHours: number;
+  minOrderAmount: number;
+  maxUses: number;
+}
 
 const TIPOS = ['Aceite', 'Gel', 'Silicona', 'Shampoo', 'Tratamiento', 'Acondicionador', 'Crema', 'Sérum', 'Mascarilla'];
 const PRESENTATION_UNITS: NonNullable<Product['presentacionUnidad']>[] = ['ML', 'LT', 'GR', 'KG', 'UND'];
@@ -58,6 +75,24 @@ const EMPTY_FORM: Omit<Product, 'id'> = {
   stockInicial: 0,
   fechaCreacion: '',
 };
+
+const EMPTY_SELLER_CODE_FORM: SellerCodeFormState = {
+  seller: '',
+  discountType: 'PERCENTAGE',
+  discountValue: 10,
+  durationHours: 24,
+  minOrderAmount: 0,
+  maxUses: 1,
+};
+
+function formatAdminMoney(value: number): string {
+  return `$${Math.max(0, value).toLocaleString('es-CO')}`;
+}
+
+function employeeDisplayName(employee: Employee): string {
+  const name = `${employee.first_name} ${employee.last_name}`.trim();
+  return name || employee.employee_code || 'Empleado sin nombre';
+}
 
 function variantImageList(variant: ProductVariant | undefined, fallback?: string): string[] {
   if (!variant) return fallback ? [fallback] : [];
@@ -263,6 +298,11 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
 
   const [formData, setFormData] = useState<Omit<Product, 'id'>>(EMPTY_FORM);
   const [wholesaleSettings, setWholesaleSettings] = useState(getWholesaleSettings);
+  const [sellerEmployees, setSellerEmployees] = useState<Employee[]>([]);
+  const [sellerCodes, setSellerCodes] = useState<SellerDiscountCode[]>([]);
+  const [sellerCodeForm, setSellerCodeForm] = useState<SellerCodeFormState>(EMPTY_SELLER_CODE_FORM);
+  const [isLoadingSellerCodes, setIsLoadingSellerCodes] = useState(false);
+  const [isSavingSellerCode, setIsSavingSellerCode] = useState(false);
   const [catalogCategories, setCatalogCategories] = useState<string[]>([]);
   const [editVariants, setEditVariants] = useState<ProductVariant[]>([]);
   const [editingVariantId, setEditingVariantId] = useState<string | null>(null);
@@ -294,6 +334,31 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
       .catch(() => undefined);
   }, []);
 
+  const loadSellerDiscountCodes = async () => {
+    setIsLoadingSellerCodes(true);
+    try {
+      const [employeesResult, codesResult] = await Promise.all([
+        getEmployees({ limit: 300, status: 'ACTIVE' }),
+        getSellerDiscountCodes(),
+      ]);
+      setSellerEmployees(employeesResult.data);
+      setSellerCodes(codesResult);
+      setSellerCodeForm(prev => {
+        if (prev.seller || employeesResult.data.length === 0) return prev;
+        const preferredSeller = employeesResult.data.find(employee => employee.is_salesperson) ?? employeesResult.data[0];
+        return { ...prev, seller: preferredSeller.id };
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudieron cargar los codigos de vendedor');
+    } finally {
+      setIsLoadingSellerCodes(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadSellerDiscountCodes();
+  }, []);
+
   const saveWholesale = async () => {
     saveWholesaleSettings(wholesaleSettings);
     try {
@@ -305,6 +370,48 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
       toast.success('Regla mayorista actualizada');
     } catch {
       toast.success('Regla mayorista guardada localmente');
+    }
+  };
+
+  const saveSellerDiscountCode = async () => {
+    if (!sellerCodeForm.seller) {
+      toast.error('Selecciona un vendedor para generar el codigo.');
+      return;
+    }
+    if (sellerCodeForm.discountValue <= 0) {
+      toast.error('El descuento debe ser mayor a cero.');
+      return;
+    }
+    setIsSavingSellerCode(true);
+    try {
+      const created = await createSellerDiscountCode({
+        seller: sellerCodeForm.seller,
+        discount_type: sellerCodeForm.discountType,
+        discount_value: sellerCodeForm.discountValue,
+        duration_hours: sellerCodeForm.durationHours,
+        min_order_amount: sellerCodeForm.minOrderAmount,
+        max_uses: sellerCodeForm.maxUses,
+        is_active: true,
+      });
+      setSellerCodes(prev => [created, ...prev]);
+      setSellerEmployees(prev => prev.map(employee => (
+        employee.id === sellerCodeForm.seller ? { ...employee, is_salesperson: true } : employee
+      )));
+      toast.success(`Codigo generado: ${created.code}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo generar el codigo.');
+    } finally {
+      setIsSavingSellerCode(false);
+    }
+  };
+
+  const toggleSellerDiscountCode = async (code: SellerDiscountCode) => {
+    try {
+      const updated = await updateSellerDiscountCode(code.id, { is_active: !code.is_active });
+      setSellerCodes(prev => prev.map(item => item.id === updated.id ? updated : item));
+      toast.success(updated.is_active ? 'Codigo activado' : 'Codigo desactivado');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo actualizar el codigo.');
     }
   };
 
@@ -689,6 +796,8 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
   };
 
   const margen = margenGanancia(formData.precio, formData.precioCosto);
+  const sellerOptions = sellerEmployees.filter(employee => employee.status === 'ACTIVE');
+  const recentSellerCodes = sellerCodes.slice(0, 5);
 
   return (
     <div>
@@ -745,6 +854,141 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
           >
             Guardar regla
           </button>
+        </div>
+      </Card>
+
+      <Card className="p-4 mb-6">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(340px,0.9fr)]">
+          <div>
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Codigos de descuento por vendedor</p>
+                <p className="mt-1 text-xs text-gray-500">
+                  Genera un codigo temporal para que el cliente lo use en el carrito y la factura guarde el vendedor asociado.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void loadSellerDiscountCodes()}
+                className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50"
+              >
+                Actualizar
+              </button>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-6">
+              <div className="lg:col-span-2">
+                <FormLabel>Vendedor</FormLabel>
+                <select
+                  value={sellerCodeForm.seller}
+                  onChange={event => setSellerCodeForm(prev => ({ ...prev, seller: event.target.value }))}
+                  className={selectCls}
+                >
+                  <option value="">Seleccionar</option>
+                  {sellerOptions.map(employee => (
+                    <option key={employee.id} value={employee.id}>
+                      {employeeDisplayName(employee)}{employee.is_salesperson ? '' : ' · marcar vendedor'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <FormLabel>Tipo</FormLabel>
+                <select
+                  value={sellerCodeForm.discountType}
+                  onChange={event => setSellerCodeForm(prev => ({ ...prev, discountType: event.target.value as DiscountType }))}
+                  className={selectCls}
+                >
+                  <option value="PERCENTAGE">Porcentaje</option>
+                  <option value="FIXED_AMOUNT">Monto fijo</option>
+                </select>
+              </div>
+              <div>
+                <FormLabel>{sellerCodeForm.discountType === 'PERCENTAGE' ? 'Descuento %' : 'Descuento $'}</FormLabel>
+                <input
+                  type="number"
+                  min="0"
+                  max={sellerCodeForm.discountType === 'PERCENTAGE' ? 100 : undefined}
+                  value={sellerCodeForm.discountValue}
+                  onChange={event => setSellerCodeForm(prev => ({ ...prev, discountValue: Number(event.target.value) }))}
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <FormLabel>Horas</FormLabel>
+                <input
+                  type="number"
+                  min="1"
+                  max="720"
+                  value={sellerCodeForm.durationHours}
+                  onChange={event => setSellerCodeForm(prev => ({ ...prev, durationHours: Number(event.target.value) }))}
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <FormLabel>Usos</FormLabel>
+                <input
+                  type="number"
+                  min="1"
+                  value={sellerCodeForm.maxUses}
+                  onChange={event => setSellerCodeForm(prev => ({ ...prev, maxUses: Number(event.target.value) }))}
+                  className={inputCls}
+                />
+              </div>
+              <div className="lg:col-span-2">
+                <FormLabel>Compra minima</FormLabel>
+                <input
+                  type="number"
+                  min="0"
+                  step="1000"
+                  value={sellerCodeForm.minOrderAmount}
+                  onChange={event => setSellerCodeForm(prev => ({ ...prev, minOrderAmount: Number(event.target.value) }))}
+                  className={inputCls}
+                />
+              </div>
+              <div className="lg:col-span-4 flex items-end">
+                <button
+                  type="button"
+                  onClick={saveSellerDiscountCode}
+                  disabled={isSavingSellerCode || sellerOptions.length === 0}
+                  className="h-10 rounded-lg bg-[#2a4038] px-4 text-xs font-semibold text-white transition-colors hover:bg-[#3d5c4e] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isSavingSellerCode ? 'Generando...' : 'Generar codigo'}
+                </button>
+              </div>
+            </div>
+          </div>
+          <div className="rounded-xl border border-gray-100 bg-gray-50/60 p-3">
+            <p className="mb-3 text-xs font-semibold text-gray-700">Ultimos codigos</p>
+            {isLoadingSellerCodes ? (
+              <p className="text-xs text-gray-400">Cargando codigos...</p>
+            ) : recentSellerCodes.length === 0 ? (
+              <p className="text-xs text-gray-400">Aun no hay codigos generados.</p>
+            ) : (
+              <div className="space-y-2">
+                {recentSellerCodes.map(code => (
+                  <div key={code.id} className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-bold text-gray-900">{code.code} · {code.seller_name}</p>
+                      <p className="text-[11px] text-gray-500">
+                        {code.discount_type === 'PERCENTAGE' ? `${code.discount_value}%` : formatAdminMoney(code.discount_value)}
+                        {' · '}
+                        {code.uses_count}/{code.max_uses ?? '∞'} usos
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void toggleSellerDiscountCode(code)}
+                      className={`rounded-full px-3 py-1 text-[11px] font-semibold ${
+                        code.is_active ? 'bg-[#eef4f1] text-[#2a4038]' : 'bg-gray-100 text-gray-500'
+                      }`}
+                    >
+                      {code.is_active ? 'Activo' : 'Inactivo'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </Card>
 

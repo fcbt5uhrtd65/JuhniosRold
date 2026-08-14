@@ -128,6 +128,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
         "uniform_pants",
         "uniform_shoes",
         "uniform_other",
+        "is_salesperson",
         "salary_type",
     )
 

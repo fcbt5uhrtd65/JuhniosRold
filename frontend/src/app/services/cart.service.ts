@@ -59,10 +59,11 @@ export const clearActiveCart = () => cartRequest('delete', '/commerce/cart/');
 export async function checkoutActiveCart(
   shippingAddress: string,
   wholesaleCode?: string,
+  discountCode?: string,
 ): Promise<{ id: string; number: string; status: string }> {
   const response = await api.post<{ id: string; number: string; status: string }>(
     '/commerce/cart/checkout/',
-    { shipping_address: shippingAddress, wholesale_code: wholesaleCode ?? '' },
+    { shipping_address: shippingAddress, wholesale_code: wholesaleCode ?? '', discount_code: discountCode ?? '' },
   );
   if (!response.data) throw new Error(response.message);
   return response.data;

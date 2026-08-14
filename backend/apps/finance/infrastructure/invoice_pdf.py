@@ -522,18 +522,42 @@ def render_invoice_pdf(invoice):
         _draw_text(c, x_col1 + 5, bottom_top - 84, "NDEF", size=5.8)
     else:
         _draw_text(c, x_col1 + col1_w / 2, bottom_top - 10, "VENTA VIRTUAL", size=6.3, bold=True, align="center")
-        _draw_text(c, x_col1 + col1_w / 2, bottom_top - 21, "SIN DESPACHO EN TIENDA", size=6.3, bold=True, align="center")
-        _draw_wrapped_text(
-            c,
-            x_col1 + 5,
-            bottom_top - 38,
-            "Pedido generado y pagado en linea a traves de la tienda virtual. "
-            "No requiere vendedor ni firma de despacho.",
-            max_width=col1_w - 10,
-            size=5.4,
-            leading=6.5,
-            max_lines=5,
-        )
+        if getattr(order, "seller_name", ""):
+            _draw_text(c, x_col1 + col1_w / 2, bottom_top - 21, "VENDEDOR ASOCIADO", size=6.3, bold=True, align="center")
+            _draw_wrapped_text(
+                c,
+                x_col1 + 5,
+                bottom_top - 38,
+                f"Vendedor: {_safe(order.seller_name, '-')}",
+                max_width=col1_w - 10,
+                size=5.4,
+                leading=6.5,
+                max_lines=2,
+            )
+            _draw_wrapped_text(
+                c,
+                x_col1 + 5,
+                bottom_top - 58,
+                f"Codigo: {_safe(order.seller_discount_code_text, '-')}",
+                max_width=col1_w - 10,
+                size=5.4,
+                leading=6.5,
+                max_lines=2,
+            )
+            _draw_text(c, x_col1 + 5, bottom_top - 78, f"Desc.: {_money(order.seller_discount_amount)}", size=5.8)
+        else:
+            _draw_text(c, x_col1 + col1_w / 2, bottom_top - 21, "SIN DESPACHO EN TIENDA", size=6.3, bold=True, align="center")
+            _draw_wrapped_text(
+                c,
+                x_col1 + 5,
+                bottom_top - 38,
+                "Pedido generado y pagado en linea a traves de la tienda virtual. "
+                "No requiere vendedor ni firma de despacho.",
+                max_width=col1_w - 10,
+                size=5.4,
+                leading=6.5,
+                max_lines=5,
+            )
 
     # QR
     try:

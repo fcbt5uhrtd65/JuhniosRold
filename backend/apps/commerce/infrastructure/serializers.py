@@ -212,6 +212,7 @@ class CheckoutSerializer(serializers.Serializer):
     location_id = serializers.UUIDField(required=False)
     shipping_address = serializers.CharField()
     wholesale_code = serializers.CharField(required=False, allow_blank=True)
+    discount_code = serializers.CharField(required=False, allow_blank=True)
 
 
 class AddCartItemSerializer(serializers.Serializer):
@@ -245,6 +246,7 @@ class DirectCheckoutSerializer(serializers.Serializer):
     shipping_address = serializers.CharField()
     location_id = serializers.UUIDField(required=False)
     wholesale_code = serializers.CharField(required=False, allow_blank=True)
+    discount_code = serializers.CharField(required=False, allow_blank=True)
 
 
 class WholesaleSettingsSerializer(serializers.ModelSerializer):

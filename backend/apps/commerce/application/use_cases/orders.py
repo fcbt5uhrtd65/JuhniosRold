@@ -9,9 +9,17 @@ from django.utils import timezone
 from shared.domain.exceptions import BusinessRuleViolation
 
 from apps.catalog.infrastructure.models import ProductVariant
+from apps.promotions.infrastructure.models import normalize_seller_discount_code
 
 from ..services import OrderInventoryService
-from ...infrastructure.models import Cart, Order, OrderItem, OrderStatusHistory, WholesaleSettings
+from ...infrastructure.models import (
+    Cart,
+    Order,
+    OrderItem,
+    OrderStatusHistory,
+    SellerDiscountRedemption,
+    WholesaleSettings,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +37,52 @@ def _wholesale_discount(subtotal, customer=None):
     if not ws.is_active or subtotal < ws.minimum_purchase:
         return Decimal("0")
     return (subtotal * (ws.discount_percentage / Decimal("100"))).quantize(Decimal("0.01"))
+
+
+def _resolve_seller_discount(code_text, subtotal):
+    from apps.promotions.infrastructure.models import SellerDiscountCode
+
+    code_text = normalize_seller_discount_code(code_text)
+    if not code_text:
+        return None, Decimal("0.00")
+
+    code = (
+        SellerDiscountCode.objects.select_for_update()
+        .select_related("seller")
+        .filter(code=code_text, deleted_at__isnull=True)
+        .first()
+    )
+    if code is None:
+        raise BusinessRuleViolation("El codigo de descuento no existe.")
+    if not code.is_currently_active():
+        raise BusinessRuleViolation("El codigo de descuento no esta vigente.")
+    if subtotal < code.min_order_amount:
+        raise BusinessRuleViolation(f"Este codigo requiere una compra minima de {code.min_order_amount}.")
+
+    discount_amount = code.discount_for(subtotal)
+    if discount_amount <= 0:
+        raise BusinessRuleViolation("El codigo no genera descuento para este pedido.")
+    return code, discount_amount
+
+
+def _apply_seller_discount(order, customer, code, discount_amount):
+    if code is None or discount_amount <= 0:
+        return
+    code.uses_count += 1
+    code.save(update_fields=("uses_count", "updated_at"))
+    order.seller_discount_code = code
+    order.seller_discount_code_text = code.code
+    order.seller_discount_amount = discount_amount
+    order.seller = code.seller
+    order.seller_name = code.seller_name
+    SellerDiscountRedemption.objects.create(
+        order=order,
+        code=code,
+        customer=customer,
+        seller=code.seller,
+        code_text=code.code,
+        discount_amount=discount_amount,
+    )
 
 
 def _resolve_shipping(order, payable_subtotal):
@@ -106,7 +160,7 @@ def _enqueue_placed_notification(order_id):
 
 class CheckoutCart:
     @transaction.atomic
-    def execute(self, *, cart, location, shipping_address, actor=None, wholesale_code=""):
+    def execute(self, *, cart, location, shipping_address, actor=None, wholesale_code="", discount_code=""):
         cart = Cart.objects.select_for_update().get(pk=cart.pk)
         if cart.checked_out_at:
             raise BusinessRuleViolation("El carrito ya fue procesado.")
@@ -144,11 +198,17 @@ class CheckoutCart:
                 subtotal=line_total,
             )
 
-        discount_amount = _wholesale_discount(total, cart.customer)
+        wholesale_discount_amount = _wholesale_discount(total, cart.customer)
+        seller_discount_code, seller_discount_amount = _resolve_seller_discount(
+            discount_code,
+            max(Decimal("0"), total - wholesale_discount_amount),
+        )
+        discount_amount = min(total, wholesale_discount_amount + seller_discount_amount)
         payable_subtotal = max(Decimal("0"), total - discount_amount)
         shipping_cost = _resolve_shipping(order, payable_subtotal)
         order.subtotal = total
         order.discount_amount = discount_amount
+        _apply_seller_discount(order, cart.customer, seller_discount_code, seller_discount_amount)
         order.shipping_cost = shipping_cost
         order.total = payable_subtotal + shipping_cost
         order.wholesale_code = wholesale_code or getattr(cart.customer, "wholesale_code", "")
@@ -158,6 +218,11 @@ class CheckoutCart:
                 "subtotal",
                 "discount_amount",
                 "wholesale_code",
+                "seller_discount_code",
+                "seller_discount_code_text",
+                "seller_discount_amount",
+                "seller",
+                "seller_name",
                 "shipping_cost",
                 "total",
                 "inventory_reserved_at",
@@ -177,7 +242,7 @@ class CheckoutCart:
 
 class CreateOrder:
     @transaction.atomic
-    def execute(self, *, customer, location, shipping_address, items, actor=None, wholesale_code=""):
+    def execute(self, *, customer, location, shipping_address, items, actor=None, wholesale_code="", discount_code=""):
         if not items:
             raise BusinessRuleViolation("El pedido debe contener al menos un producto.")
 
@@ -217,11 +282,17 @@ class CreateOrder:
                 subtotal=line_total,
             )
 
-        discount_amount = _wholesale_discount(subtotal, customer)
+        wholesale_discount_amount = _wholesale_discount(subtotal, customer)
+        seller_discount_code, seller_discount_amount = _resolve_seller_discount(
+            discount_code,
+            max(Decimal("0"), subtotal - wholesale_discount_amount),
+        )
+        discount_amount = min(subtotal, wholesale_discount_amount + seller_discount_amount)
         payable_subtotal = max(Decimal("0"), subtotal - discount_amount)
         shipping_cost = _resolve_shipping(order, payable_subtotal)
         order.subtotal = subtotal
         order.discount_amount = discount_amount
+        _apply_seller_discount(order, customer, seller_discount_code, seller_discount_amount)
         order.shipping_cost = shipping_cost
         order.total = payable_subtotal + shipping_cost
         order.wholesale_code = wholesale_code or getattr(customer, "wholesale_code", "")
@@ -231,6 +302,11 @@ class CreateOrder:
                 "subtotal",
                 "discount_amount",
                 "wholesale_code",
+                "seller_discount_code",
+                "seller_discount_code_text",
+                "seller_discount_amount",
+                "seller",
+                "seller_name",
                 "shipping_cost",
                 "total",
                 "inventory_reserved_at",

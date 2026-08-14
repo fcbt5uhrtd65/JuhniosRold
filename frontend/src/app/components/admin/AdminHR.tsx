@@ -274,6 +274,7 @@ interface EmployeeFormState {
   uniform_pants: string;
   uniform_shoes: string;
   uniform_other: string;
+  is_salesperson: boolean;
   eps: string;
   pension_fund: string;
   severance_fund: string;
@@ -417,6 +418,7 @@ const EMPTY_EMPLOYEE_FORM: EmployeeFormState = {
   uniform_pants: '',
   uniform_shoes: '',
   uniform_other: '',
+  is_salesperson: false,
   eps: '',
   pension_fund: '',
   severance_fund: '',
@@ -1510,6 +1512,7 @@ function mapEmployeeToForm(employee: Employee): EmployeeFormState {
     uniform_pants: employee.uniform_pants,
     uniform_shoes: employee.uniform_shoes,
     uniform_other: employee.uniform_other,
+    is_salesperson: employee.is_salesperson,
     eps: employee.eps,
     pension_fund: employee.pension_fund,
     severance_fund: employee.severance_fund,
@@ -1588,6 +1591,7 @@ function buildEmployeePayload(form: EmployeeFormState): EmployeePayload {
     uniform_pants: form.uniform_pants.trim(),
     uniform_shoes: form.uniform_shoes.trim(),
     uniform_other: form.uniform_other.trim(),
+    is_salesperson: form.is_salesperson,
     eps: form.eps.trim(),
     pension_fund: form.pension_fund.trim(),
     severance_fund: form.severance_fund.trim(),
@@ -3573,6 +3577,18 @@ export function AdminHR() {
           <TextInput label="Zapato" value={employeeForm.uniform_shoes} onChange={(value) => setFormField('uniform_shoes', value)} />
         </div>
         <TextareaInput label="Otro" value={employeeForm.uniform_other} onChange={(value) => setFormField('uniform_other', value)} />
+        <label className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3">
+          <input
+            type="checkbox"
+            checked={employeeForm.is_salesperson}
+            onChange={(event) => setFormField('is_salesperson', event.target.checked)}
+            className="h-4 w-4 rounded border-gray-300 text-[#2a4038] focus:ring-[#2a4038]"
+          />
+          <span>
+            <span className="block text-sm font-semibold text-gray-900">Marcar como vendedor</span>
+            <span className="block text-xs text-gray-500">Disponible para generar codigos de descuento por vendedor.</span>
+          </span>
+        </label>
       </div>
     );
   };

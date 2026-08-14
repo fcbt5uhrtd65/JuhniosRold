@@ -68,6 +68,23 @@ class Order(BaseModel):
     subtotal = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     discount_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     wholesale_code = models.CharField(max_length=40, blank=True)
+    seller_discount_code = models.ForeignKey(
+        "promotions.SellerDiscountCode",
+        on_delete=models.PROTECT,
+        related_name="orders",
+        null=True,
+        blank=True,
+    )
+    seller_discount_code_text = models.CharField(max_length=40, blank=True)
+    seller_discount_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    seller = models.ForeignKey(
+        "employees.Employee",
+        on_delete=models.PROTECT,
+        related_name="seller_orders",
+        null=True,
+        blank=True,
+    )
+    seller_name = models.CharField(max_length=180, blank=True)
     shipping_cost = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     total = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     shipping_address = models.TextField()
@@ -110,6 +127,19 @@ class OrderItem(BaseModel):
     quantity = models.DecimalField(max_digits=12, decimal_places=3)
     unit_price = models.DecimalField(max_digits=14, decimal_places=2)
     subtotal = models.DecimalField(max_digits=14, decimal_places=2)
+
+
+class SellerDiscountRedemption(BaseModel):
+    order = models.OneToOneField(Order, on_delete=models.PROTECT, related_name="seller_discount_redemption")
+    code = models.ForeignKey(
+        "promotions.SellerDiscountCode",
+        on_delete=models.PROTECT,
+        related_name="redemptions",
+    )
+    customer = models.ForeignKey("customers.Customer", on_delete=models.PROTECT, related_name="seller_discount_redemptions")
+    seller = models.ForeignKey("employees.Employee", on_delete=models.PROTECT, related_name="discount_redemptions")
+    code_text = models.CharField(max_length=40)
+    discount_amount = models.DecimalField(max_digits=14, decimal_places=2)
 
 
 class WholesaleSettings(BaseModel):

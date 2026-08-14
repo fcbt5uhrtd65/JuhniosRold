@@ -134,6 +134,7 @@ class ActiveCartCheckoutView(APIView):
             shipping_address=serializer.validated_data["shipping_address"],
             actor=request.user,
             wholesale_code=serializer.validated_data.get("wholesale_code", ""),
+            discount_code=serializer.validated_data.get("discount_code", ""),
         )
         return Response(OrderSerializer(order).data, status=status.HTTP_201_CREATED)
 

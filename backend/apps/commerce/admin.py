@@ -8,6 +8,7 @@ from .models import (
     OrderStatusHistory,
     Payment,
     PaymentWebhookEvent,
+    SellerDiscountRedemption,
     WholesaleSettings,
 )
 
@@ -65,7 +66,7 @@ class CartItemAdmin(admin.ModelAdmin):
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-    list_display = ("number", "customer", "status", "subtotal", "discount_amount", "shipping_cost", "total", "created_at")
+    list_display = ("number", "customer", "status", "seller_name", "subtotal", "discount_amount", "shipping_cost", "total", "created_at")
     list_filter = ("status", "created_at")
     search_fields = (
         "number",
@@ -75,7 +76,7 @@ class OrderAdmin(admin.ModelAdmin):
         "tracking_number",
         "payment_reference",
     )
-    list_select_related = ("customer",)
+    list_select_related = ("customer", "seller")
     date_hierarchy = "created_at"
     inlines = (OrderItemInline, PaymentInline, OrderStatusHistoryInline)
 
@@ -145,3 +146,10 @@ class WholesaleSettingsAdmin(admin.ModelAdmin):
     fields = ("minimum_purchase", "discount_percentage", "is_active")
     list_filter = ("is_active",)
     readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(SellerDiscountRedemption)
+class SellerDiscountRedemptionAdmin(admin.ModelAdmin):
+    list_display = ("code_text", "seller", "customer", "order", "discount_amount", "created_at")
+    search_fields = ("code_text", "seller__first_name", "seller__last_name", "order__number", "customer__document_number")
+    list_select_related = ("code", "seller", "customer", "order")

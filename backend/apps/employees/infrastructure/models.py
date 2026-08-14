@@ -253,6 +253,7 @@ class Employee(BaseModel):
     uniform_pants = models.CharField(max_length=80, blank=True)
     uniform_shoes = models.CharField(max_length=80, blank=True)
     uniform_other = models.TextField(blank=True)
+    is_salesperson = models.BooleanField(default=False)
     eps = models.CharField(max_length=150, blank=True)
     pension_fund = models.CharField(max_length=150, blank=True)
     severance_fund = models.CharField(max_length=150, blank=True)

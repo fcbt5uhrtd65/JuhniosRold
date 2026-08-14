@@ -19,6 +19,7 @@ import {
 import { useCart } from '../contexts/CartContext';
 import { Checkout } from './Checkout';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
+import { validateSellerDiscountCode, type SellerDiscountValidation } from '../services/promotions.service';
 
 interface ShoppingCartProps {
   onLoginRequired?: () => void;
@@ -35,13 +36,17 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [couponCode, setCouponCode] = useState('');
   const [couponMessage, setCouponMessage] = useState('');
+  const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
+  const [sellerDiscount, setSellerDiscount] = useState<SellerDiscountValidation | null>(null);
   const { items, updateQuantity, removeItem, subtotal, total, wholesaleDiscount, itemCount, reloadCart, isLoading } = useCart();
 
-  const shippingProgress = Math.min((total / SHIPPING_THRESHOLD) * 100, 100);
-  const remaining = Math.max(SHIPPING_THRESHOLD - total, 0);
-  const freeShipping = total >= SHIPPING_THRESHOLD;
+  const sellerDiscountAmount = sellerDiscount?.discount_amount ?? 0;
+  const discountedTotal = Math.max(0, total - sellerDiscountAmount);
+  const shippingProgress = Math.min((discountedTotal / SHIPPING_THRESHOLD) * 100, 100);
+  const remaining = Math.max(SHIPPING_THRESHOLD - discountedTotal, 0);
+  const freeShipping = discountedTotal >= SHIPPING_THRESHOLD;
   // El costo de envío real depende de la dirección y se calcula en el checkout; aquí solo sabemos si aplica envío gratis.
-  const finalTotal = freeShipping ? total : null;
+  const finalTotal = freeShipping ? discountedTotal : null;
   const primaryItem = items[0];
   const restItems = items.slice(1);
 
@@ -62,8 +67,15 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
     void reloadCart();
   };
 
-  const applyCoupon = () => {
+  useEffect(() => {
+    if (!sellerDiscount) return;
+    setSellerDiscount(null);
+    setCouponMessage('El carrito cambio. Vuelve a aplicar el codigo para recalcular el descuento.');
+  }, [itemCount, subtotal]);
+
+  const applyCoupon = async () => {
     const code = couponCode.trim();
+    setSellerDiscount(null);
     if (!code) {
       setCouponMessage('Ingresa un código de cupón para validarlo.');
       return;
@@ -76,7 +88,17 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
       );
       return;
     }
-    setCouponMessage('El cupón se validará antes del pago. No modifica el total hasta ser aprobado.');
+    setIsApplyingCoupon(true);
+    try {
+      const result = await validateSellerDiscountCode(code, total);
+      setSellerDiscount(result);
+      setCouponCode(result.code);
+      setCouponMessage(`Codigo aplicado con ${result.seller_name}.`);
+    } catch (error) {
+      setCouponMessage(error instanceof Error ? error.message : 'No se pudo validar el codigo.');
+    } finally {
+      setIsApplyingCoupon(false);
+    }
   };
 
   return (
@@ -342,6 +364,7 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
                             onChange={(event) => {
                               setCouponCode(event.target.value.toUpperCase());
                               setCouponMessage('');
+                              setSellerDiscount(null);
                             }}
                             placeholder="Ingresa tu código"
                             className="min-w-0 flex-1 rounded-2xl border border-stone-200 bg-[#F8F7F4] px-4 py-3 text-[13px] text-stone-900 placeholder:text-stone-400 focus:outline-none focus:border-[#2D3A1F]"
@@ -349,13 +372,20 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
                           <button
                             type="button"
                             onClick={applyCoupon}
+                            disabled={isApplyingCoupon}
                             className="rounded-2xl bg-stone-950 px-4 py-3 text-[11px] font-bold uppercase tracking-wide text-white hover:bg-[#2D3A1F] transition-colors"
                           >
-                            Aplicar
+                            {isApplyingCoupon ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Aplicar'}
                           </button>
                         </div>
                         {couponMessage && (
                           <p className="mt-2 text-[11px] leading-relaxed text-stone-500">{couponMessage}</p>
+                        )}
+                        {sellerDiscount && (
+                          <div className="mt-3 rounded-2xl bg-[#eef4f1] px-3 py-2 text-[11px] text-[#2a4038]">
+                            <p className="font-semibold">{sellerDiscount.code} · {sellerDiscount.seller_name}</p>
+                            <p>Descuento aplicado: {formatMoney(sellerDiscount.discount_amount)}</p>
+                          </div>
                         )}
                       </section>
                     </div>
@@ -378,9 +408,15 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
                               <span className="font-semibold">-{formatMoney(wholesaleDiscount.discount)}</span>
                             </div>
                           )}
+                          {sellerDiscountAmount > 0 && (
+                            <div className="flex justify-between text-sm text-emerald-700">
+                              <span>Codigo vendedor {sellerDiscount?.code}</span>
+                              <span className="font-semibold">-{formatMoney(sellerDiscountAmount)}</span>
+                            </div>
+                          )}
                           <div className="flex justify-between text-sm">
                             <span className="text-stone-500">Subtotal con descuento</span>
-                            <span className="font-medium text-stone-900">{formatMoney(total)}</span>
+                            <span className="font-medium text-stone-900">{formatMoney(discountedTotal)}</span>
                           </div>
                           <div className="flex justify-between text-sm">
                             <span className="text-stone-500">Envío</span>
@@ -390,7 +426,7 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
                           </div>
                           <div className="flex justify-between border-t border-stone-200 pt-3 text-base font-bold text-stone-950">
                             <span>Total</span>
-                            <span>{finalTotal !== null ? formatMoney(finalTotal) : `${formatMoney(total)} + envío`}</span>
+                            <span>{finalTotal !== null ? formatMoney(finalTotal) : `${formatMoney(discountedTotal)} + envío`}</span>
                           </div>
                         </div>
                       </div>
@@ -433,6 +469,8 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
         isOpen={checkoutOpen}
         onClose={() => setCheckoutOpen(false)}
         onLoginRequired={onLoginRequired}
+        discountCode={sellerDiscount?.code ?? ''}
+        sellerDiscount={sellerDiscount}
       />
     </>
   );

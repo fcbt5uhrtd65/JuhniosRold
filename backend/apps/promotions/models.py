@@ -1,3 +1,3 @@
-from .infrastructure.models import Promotion
+from .infrastructure.models import Promotion, SellerDiscountCode
 
-__all__ = ("Promotion",)
+__all__ = ("Promotion", "SellerDiscountCode")

@@ -37,11 +37,14 @@ import { DeliveryLocationSection } from './ui/DeliveryLocationSection';
 import { geographyService, type City } from '../services/geography.service';
 import { EMPTY_LOCATION, type LocationValue } from '../services/geography.types';
 import { EMPTY_DELIVERY_LOCATION, type DeliveryLocationValue } from '../services/delivery-location.types';
+import type { SellerDiscountValidation } from '../services/promotions.service';
 
 interface CheckoutProps {
   isOpen: boolean;
   onClose: () => void;
   onLoginRequired?: () => void;
+  discountCode?: string;
+  sellerDiscount?: SellerDiscountValidation | null;
 }
 
 interface MockPayment {
@@ -65,7 +68,7 @@ function formatMoney(value: number): string {
   return `$${value.toLocaleString('es-CO')}`;
 }
 
-export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
+export function Checkout({ isOpen, onClose, onLoginRequired, discountCode = '', sellerDiscount = null }: CheckoutProps) {
   const { items, subtotal, total, wholesaleDiscount, reloadCart } = useCart();
   const { refreshSoon: refreshNotificationsSoon } = useNotifications();
   const { currentUser } = useUser();
@@ -95,7 +98,9 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
   const [shippingQuoteError, setShippingQuoteError] = useState('');
 
   const shippingCost = shippingQuote ? Number(shippingQuote.shipping_cost) : 0;
-  const finalTotal = total + shippingCost;
+  const sellerDiscountAmount = sellerDiscount?.discount_amount ?? 0;
+  const checkoutSubtotal = Math.max(0, total - sellerDiscountAmount);
+  const finalTotal = checkoutSubtotal + shippingCost;
   const hasRegisteredAddress = Boolean(currentUser?.direccion);
   const registeredAddress = {
     fullName: currentUser?.nombre ?? '',
@@ -333,6 +338,7 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
       const order = await checkoutActiveCart(
         shippingAddress(),
         isWholesaleCustomer ? currentUser?.codigoMayorista : undefined,
+        discountCode,
       );
       refreshNotificationsSoon();
       const payment = await initiatePayment(order.id);
@@ -728,6 +734,21 @@ export function Checkout({ isOpen, onClose, onLoginRequired }: CheckoutProps) {
                             <div className="flex justify-between text-sm">
                               <span className="text-stone-500">Subtotal con descuento</span>
                               <span className="font-medium text-stone-900">{formatMoney(total)}</span>
+                            </div>
+                          </>
+                        )}
+                        {sellerDiscountAmount > 0 && (
+                          <>
+                            <div className="flex justify-between text-sm text-emerald-700">
+                              <span>Codigo vendedor {sellerDiscount?.code}</span>
+                              <span className="font-semibold">-{formatMoney(sellerDiscountAmount)}</span>
+                            </div>
+                            <div className="rounded-2xl bg-[#eef4f1] px-3 py-2 text-[11px] text-[#2a4038]">
+                              Vendedor asociado: {sellerDiscount?.seller_name}
+                            </div>
+                            <div className="flex justify-between text-sm">
+                              <span className="text-stone-500">Subtotal final</span>
+                              <span className="font-medium text-stone-900">{formatMoney(checkoutSubtotal)}</span>
                             </div>
                           </>
                         )}

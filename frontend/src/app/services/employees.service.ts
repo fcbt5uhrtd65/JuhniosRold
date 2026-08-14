@@ -232,6 +232,7 @@ export interface Employee {
   uniform_pants: string;
   uniform_shoes: string;
   uniform_other: string;
+  is_salesperson: boolean;
   eps: string;
   pension_fund: string;
   severance_fund: string;
@@ -351,6 +352,7 @@ export interface EmployeePayload {
   uniform_pants?: string;
   uniform_shoes?: string;
   uniform_other?: string;
+  is_salesperson?: boolean;
   eps?: string;
   pension_fund?: string;
   severance_fund?: string;
