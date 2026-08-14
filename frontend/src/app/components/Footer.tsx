@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Mail, MapPin, Phone, X, ArrowRight, Check } from 'lucide-react';
 import { openWhatsApp } from '../utils/whatsapp';
+import paymentMethodsBar from '../../imports/payment-methods-bar.png';
 
 const OLIVE = '#2D3A1F';
 
@@ -9,39 +10,13 @@ type LegalModal = 'terms' | 'privacy' | 'cookies' | 'shipping' | 'returns' | 'wa
 
 /* ── SVG logos de medios de pago reales ── */
 const PaymentIcons = () => (
-  <div className="flex items-center gap-3 flex-wrap">
-    {/* Visa */}
-    <svg viewBox="0 0 50 16" className="h-5 w-auto" aria-label="Visa">
-      <rect width="50" height="16" rx="2" fill="#1A1F71"/>
-      <text x="7" y="12" fontSize="10" fill="white" fontFamily="Arial" fontWeight="bold" letterSpacing="0.5">VISA</text>
-    </svg>
-    {/* Mastercard */}
-    <svg viewBox="0 0 36 24" className="h-5 w-auto" aria-label="Mastercard">
-      <rect width="36" height="24" rx="3" fill="#252525"/>
-      <circle cx="14" cy="12" r="8" fill="#EB001B"/>
-      <circle cx="22" cy="12" r="8" fill="#F79E1B"/>
-      <path d="M18 6.5a8 8 0 010 11A8 8 0 0118 6.5z" fill="#FF5F00"/>
-    </svg>
-    {/* PSE */}
-    <svg viewBox="0 0 44 24" className="h-5 w-auto" aria-label="PSE">
-      <rect width="44" height="24" rx="3" fill="#007BC4"/>
-      <text x="7" y="16" fontSize="9" fill="white" fontFamily="Arial" fontWeight="bold">PSE</text>
-    </svg>
-    {/* Nequi */}
-    <svg viewBox="0 0 52 24" className="h-5 w-auto" aria-label="Nequi">
-      <rect width="52" height="24" rx="3" fill="#6B0FA8"/>
-      <text x="8" y="16" fontSize="9" fill="white" fontFamily="Arial" fontWeight="bold">nequi</text>
-    </svg>
-    {/* Daviplata */}
-    <svg viewBox="0 0 64 24" className="h-5 w-auto" aria-label="Daviplata">
-      <rect width="64" height="24" rx="3" fill="#ED1C24"/>
-      <text x="5" y="16" fontSize="8.5" fill="white" fontFamily="Arial" fontWeight="bold">daviplata</text>
-    </svg>
-    {/* Efecty */}
-    <svg viewBox="0 0 54 24" className="h-5 w-auto" aria-label="Efecty">
-      <rect width="54" height="24" rx="3" fill="#F5A800"/>
-      <text x="7" y="16" fontSize="8.5" fill="#1A1A1A" fontFamily="Arial" fontWeight="bold">efecty</text>
-    </svg>
+  <div className="w-[260px] sm:w-[340px] md:w-[390px] max-w-full h-10 overflow-hidden rounded-lg bg-white shadow-sm">
+    <img
+      src={paymentMethodsBar}
+      alt="Medios de pago: Visa, Mastercard, PSE, Nequi, Bancolombia y Efecty"
+      className="h-full w-full object-cover object-center"
+      loading="lazy"
+    />
   </div>
 );
 

@@ -98,7 +98,7 @@ function PublicSite({ onLoginClick }: { onLoginClick: () => void }) {
         <Comunidad />
 
         {/* Modo Pro */}
-        <ModoPro />
+        <ModoPro onLoginRequired={onLoginClick} />
 
         {/* Referral program */}
         <ReferralProgram />

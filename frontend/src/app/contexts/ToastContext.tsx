@@ -65,16 +65,16 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const getStyles = (type: ToastType) => {
+  const getIconColor = (type: ToastType) => {
     switch (type) {
       case 'success':
-        return 'bg-green-50 border-green-200 text-green-800';
+        return 'text-emerald-600 bg-emerald-50';
       case 'error':
-        return 'bg-red-50 border-red-200 text-red-800';
+        return 'text-red-600 bg-red-50';
       case 'warning':
-        return 'bg-orange-50 border-orange-200 text-orange-800';
+        return 'text-amber-600 bg-amber-50';
       case 'info':
-        return 'bg-blue-50 border-blue-200 text-blue-800';
+        return 'text-sky-600 bg-sky-50';
     }
   };
 
@@ -88,7 +88,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
 
       {/* Toast Container */}
-      <div className="fixed top-6 right-6 z-[300] space-y-3 pointer-events-none">
+      <div className="fixed top-6 right-6 z-[300] space-y-3 pointer-events-none max-w-[calc(100vw-2rem)]">
         <AnimatePresence>
           {toasts.map((toast) => (
             <motion.div
@@ -97,9 +97,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, x: 100, scale: 0.95 }}
               transition={{ type: 'spring', duration: 0.4 }}
-              className={`flex items-center gap-3 px-4 py-3 border shadow-lg min-w-[300px] max-w-md pointer-events-auto ${getStyles(toast.type)}`}
+              className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3 text-stone-800 shadow-[0_18px_50px_rgba(28,25,23,0.16)] min-w-[280px] max-w-md pointer-events-auto"
             >
-              {getIcon(toast.type)}
+              <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${getIconColor(toast.type)}`}>
+                {getIcon(toast.type)}
+              </span>
               <div className="flex-1 text-sm">{toast.message}</div>
               <button
                 onClick={() => removeToast(toast.id)}
