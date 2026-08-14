@@ -558,6 +558,10 @@ function getRequestScheduleLabel(request: VacationRequest): string {
     return dateLabel;
   }
 
+  if (request.request_type === 'LABOR_CERTIFICATE') {
+    return `${dateLabel} · Disponible 5 días al aprobar`;
+  }
+
   if (request.request_type === 'OVERTIME' && request.overtime_shifts?.length) {
     const sortedShifts = [...request.overtime_shifts].sort((left, right) => `${left.date} ${left.start_time}`.localeCompare(`${right.date} ${right.start_time}`));
     const shiftsLabel = sortedShifts
@@ -683,6 +687,7 @@ const REQUEST_TYPE_ICONS: Record<VacationRequestType, React.ComponentType<{ size
   LEAVE: Briefcase,
   LOAN: HandCoins,
   SCHEDULE_CHANGE: CalendarCog,
+  LABOR_CERTIFICATE: BadgeCheck,
   OTHER: FileText,
 };
 
@@ -891,6 +896,7 @@ const REQUEST_TYPE_PDF_COLORS: Record<VacationRequestType, { fill: PdfRgb; strok
   INCAPACITY: { fill: [254, 226, 226], stroke: [239, 68, 68], text: [153, 27, 27] },
   LOAN: { fill: [252, 231, 243], stroke: [219, 39, 119], text: [157, 23, 77] },
   SCHEDULE_CHANGE: { fill: [220, 252, 231], stroke: [34, 197, 94], text: [22, 101, 52] },
+  LABOR_CERTIFICATE: { fill: [204, 251, 241], stroke: [20, 184, 166], text: [15, 118, 110] },
   OTHER: { fill: [243, 244, 246], stroke: [107, 114, 128], text: [55, 65, 81] },
 };
 
@@ -990,7 +996,7 @@ async function exportRequestsCalendarPdf({
     pdf.setFontSize(7);
     pdf.text(`Filtros: ${typeFilterLabel} | ${departmentFilterLabel} | Eventos: ${totalEvents}`, margin, metaY);
 
-    const legendItems: VacationRequestType[] = ['PERMISSION', 'OVERTIME', 'VACATION', 'LEAVE', 'INCAPACITY', 'LOAN', 'SCHEDULE_CHANGE', 'OTHER'];
+    const legendItems: VacationRequestType[] = ['PERMISSION', 'OVERTIME', 'VACATION', 'LEAVE', 'INCAPACITY', 'LOAN', 'SCHEDULE_CHANGE', 'LABOR_CERTIFICATE', 'OTHER'];
     let legendX = margin;
     for (const type of legendItems) {
       const colors = REQUEST_TYPE_PDF_COLORS[type];
@@ -1214,6 +1220,7 @@ function documentStatusLabel(status: EmployeeDocumentStatus): string {
 }
 
 function getRequestTypeLabel(type: string, subtype?: string): string {
+  if (type === 'LABOR_CERTIFICATE') return 'Certificado laboral';
   if (type === 'SCHEDULE_CHANGE' || subtype === 'SCHEDULE_CHANGE') return 'Cambio de horario empleado';
   const labels: Record<string, string> = {
     PERMISSION: 'Permiso',
@@ -1223,12 +1230,13 @@ function getRequestTypeLabel(type: string, subtype?: string): string {
     VACATION: 'Vacaciones',
     LOAN: 'Préstamo',
     SCHEDULE_CHANGE: 'Cambio de horario empleado',
+    LABOR_CERTIFICATE: 'Certificado laboral',
     OTHER: 'Otro',
   };
   return labels[type] ?? type;
 }
 
-const REQUEST_TYPE_FILTER_OPTIONS: VacationRequestType[] = ['PERMISSION', 'OVERTIME', 'LEAVE', 'INCAPACITY', 'VACATION', 'LOAN', 'SCHEDULE_CHANGE', 'OTHER'];
+const REQUEST_TYPE_FILTER_OPTIONS: VacationRequestType[] = ['PERMISSION', 'OVERTIME', 'LEAVE', 'INCAPACITY', 'VACATION', 'LOAN', 'SCHEDULE_CHANGE', 'LABOR_CERTIFICATE', 'OTHER'];
 const REMUNERATION_FILTER_OPTIONS: Array<{ value: RequestRemunerationFilter; label: string }> = [
   { value: 'REMUNERATED', label: 'Remuneradas' },
   { value: 'NOT_REMUNERATED', label: 'No remuneradas' },
@@ -2224,6 +2232,7 @@ export function AdminHR() {
     INCAPACITY: 'red',
     LOAN: 'pink',
     SCHEDULE_CHANGE: 'green',
+    LABOR_CERTIFICATE: 'blue',
     OTHER: 'pink',
   };
 
@@ -4750,7 +4759,7 @@ export function AdminHR() {
                                   onClick: () => openCorrectScheduleModal(request),
                                   disabled: !CORRECTABLE_STATUSES.includes(request.status),
                                 }] : []),
-                                ...(isAdmin && !['LOAN', 'OVERTIME', 'SCHEDULE_CHANGE'].includes(request.request_type) && request.is_remunerated === null ? [{
+                                ...(isAdmin && !['LOAN', 'OVERTIME', 'SCHEDULE_CHANGE', 'LABOR_CERTIFICATE'].includes(request.request_type) && request.is_remunerated === null ? [{
                                   label: 'Definir remuneración',
                                   icon: Wallet,
                                   onClick: () => openRemunerationModal(request),
@@ -5345,7 +5354,7 @@ export function AdminHR() {
             onChange={setApproveComment}
             placeholder="Comentario opcional que verá el empleado"
           />
-          {isAdmin && approvingRequest && !['LOAN', 'OVERTIME', 'SCHEDULE_CHANGE'].includes(approvingRequest.request_type) && (
+          {isAdmin && approvingRequest && !['LOAN', 'OVERTIME', 'SCHEDULE_CHANGE', 'LABOR_CERTIFICATE'].includes(approvingRequest.request_type) && (
             approvingRequest?.is_remunerated === null ? (
               <div>
                 <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">

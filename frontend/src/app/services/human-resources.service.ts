@@ -111,7 +111,7 @@ export type HRRequestStatus =
   | 'FINALIZED'
   | 'EXPIRED';
 export type VacationRequestStatus = HRRequestStatus;
-export type VacationRequestType = 'PERMISSION' | 'OVERTIME' | 'LEAVE' | 'INCAPACITY' | 'VACATION' | 'LOAN' | 'SCHEDULE_CHANGE' | 'OTHER';
+export type VacationRequestType = 'PERMISSION' | 'OVERTIME' | 'LEAVE' | 'INCAPACITY' | 'VACATION' | 'LOAN' | 'SCHEDULE_CHANGE' | 'LABOR_CERTIFICATE' | 'OTHER';
 export type LoanFrequency = 'BIWEEKLY' | 'MONTHLY';
 export type HRRequestSubtype =
   | 'PERSONAL'
@@ -293,6 +293,8 @@ export interface VacationRequest {
   approval_steps: VacationRequestApprovalStep[];
   history: VacationRequestHistory[];
   overtime_shifts: OvertimeShift[];
+  labor_certificate_download_available: boolean;
+  labor_certificate_download_expires_at: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -1078,6 +1080,29 @@ export async function openVacationRequestPdf(id: string): Promise<void> {
   const blob = await response.blob();
   const url = URL.createObjectURL(blob);
   window.open(url, '_blank');
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+export async function openLaborCertificateRequestPdf(id: string): Promise<void> {
+  const token = getAccessToken();
+  if (!token) {
+    throw new Error('Tu sesiÃ³n expirÃ³. Inicia sesiÃ³n de nuevo.');
+  }
+  const response = await fetch(`${API_BASE_URL}${REQUESTS_PATH}${id}/labor-certificate-pdf/`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null);
+    throw new Error(detail?.detail || 'No se pudo descargar el certificado laboral.');
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `certificado-laboral-${new Date().toISOString().slice(0, 10)}.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 

@@ -538,8 +538,9 @@ class ResolveVacationRequestByRole:
         if role not in ("ADMIN", "HR", "MANAGER"):
             raise BusinessRuleViolation("Rol no autorizado para resolver solicitudes.")
         is_schedule_change = is_schedule_change_request(vacation)
-        if is_schedule_change and role == "MANAGER":
-            raise BusinessRuleViolation("El cambio de horario empleado solo puede aprobarlo Recursos Humanos o el Administrador.")
+        is_labor_certificate = vacation.request_type == VacationRequest.RequestType.LABOR_CERTIFICATE
+        if (is_schedule_change or is_labor_certificate) and role == "MANAGER":
+            raise BusinessRuleViolation("Esta solicitud solo puede aprobarla Recursos Humanos o el Administrador.")
         if (
             is_schedule_change
             and decision == VacationRequest.Status.APPROVED
@@ -652,7 +653,7 @@ class ResolveVacationRequestByRole:
             vacation.status = VacationRequest.Status.REJECTED
         elif role == "ADMIN":
             vacation.status = VacationRequest.Status.APPROVED
-        elif is_loan or is_schedule_change:
+        elif is_loan or is_schedule_change or is_labor_certificate:
             vacation.status = VacationRequest.Status.APPROVED
         else:  # role == "HR", decision == APPROVED
             if vacation.admin_decision == VacationRequest.Status.APPROVED:
@@ -663,6 +664,9 @@ class ResolveVacationRequestByRole:
         vacation.reviewed_by = reviewer
         vacation.reviewed_at = now
         update_fields += ["reviewed_by", "reviewed_at"]
+        if is_labor_certificate and vacation.status == VacationRequest.Status.APPROVED:
+            vacation.due_date = timezone.localdate() + timedelta(days=5)
+            update_fields.append("due_date")
         vacation.save(update_fields=update_fields)
 
         # Efecto secundario de "Cambio de horario": solo cuando la solicitud queda

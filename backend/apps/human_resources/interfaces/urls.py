@@ -12,6 +12,7 @@ from .views import (
     EmployeeDocumentViewSet,
     EmployeeWorkScheduleViewSet,
     HRNotificationViewSet,
+    LaborCertificateRequestPdfView,
     PayrollLegalParameterViewSet,
     PayrollPeriodViewSet,
     PayrollViewSet,
@@ -46,5 +47,6 @@ router.register("attendance-intelligence-settings", AttendanceIntelligenceSettin
 
 urlpatterns = [
     path("requests/<uuid:pk>/pdf/", VacationRequestPdfView.as_view(), name="vacation-request-pdf"),
+    path("requests/<uuid:pk>/labor-certificate-pdf/", LaborCertificateRequestPdfView.as_view(), name="labor-certificate-request-pdf"),
     *router.urls,
 ]

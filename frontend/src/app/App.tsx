@@ -33,6 +33,7 @@ import { PaymentResult } from './components/PaymentResult';
 import { CatalogPage } from './components/CatalogPage';
 import { ProfilePage } from './components/ProfilePage';
 import { ChatbotLauncher } from './components/ChatbotLauncher';
+import { CookieConsentBar } from './components/CookieConsentBar';
 
 
 function PublicSite({ onLoginClick }: { onLoginClick: () => void }) {
@@ -111,6 +112,7 @@ function PublicSite({ onLoginClick }: { onLoginClick: () => void }) {
       <ScrollToTop />
       <ChatbotLauncher />
       <FirstPurchasePopup />
+      <CookieConsentBar />
       <ApiStatus />
     </div>
   );
@@ -189,6 +191,7 @@ function AppContent() {
     return (
       <>
         <CatalogPage onLoginClick={() => setShowLoginModal(true)} />
+        <CookieConsentBar />
         <LoginModal
           isOpen={showLoginModal}
           onClose={() => setShowLoginModal(false)}
@@ -205,6 +208,7 @@ function AppContent() {
     return (
       <>
         <ProfilePage onLoginClick={() => setShowLoginModal(true)} />
+        <CookieConsentBar />
         <LoginModal
           isOpen={showLoginModal}
           onClose={() => setShowLoginModal(false)}

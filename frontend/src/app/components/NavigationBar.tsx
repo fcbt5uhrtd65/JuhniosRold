@@ -20,6 +20,7 @@ interface NavigationBarProps {
   onLoginClick?: () => void;
   variant?: 'solid' | 'transparent';
   mobileStatic?: boolean;
+  onNavigateClick?: (href: string) => void;
 }
 
 const TikTokIcon = ({ className }: { className?: string }) => (
@@ -75,7 +76,7 @@ function timeAgo(dateStr: string): string {
   return `Hace ${Math.floor(diff / 86400)} d`;
 }
 
-export function NavigationBar({ onLoginClick, variant = 'solid', mobileStatic = false }: NavigationBarProps) {
+export function NavigationBar({ onLoginClick, variant = 'solid', mobileStatic = false, onNavigateClick }: NavigationBarProps) {
   const { searchQuery, setSearchQuery, isSearchOpen, setIsSearchOpen } = useSearch();
   const { currentUser, logout, orders, savedProducts } = useUser();
   const { notifications, unreadCount, markRead, markAllRead } = useNotifications();
@@ -108,6 +109,7 @@ export function NavigationBar({ onLoginClick, variant = 'solid', mobileStatic = 
   useBodyScrollLock(menuOpen);
 
   const handleNavClick = (href: string, e: React.MouseEvent) => {
+    onNavigateClick?.(href);
     if (href.startsWith('/')) {
       e.preventDefault();
       setMenuOpen(false);
@@ -173,6 +175,7 @@ export function NavigationBar({ onLoginClick, variant = 'solid', mobileStatic = 
                 href="#"
                 onClick={e => {
                   e.preventDefault();
+                  onNavigateClick?.('#');
                   if (window.location.pathname !== '/') { navigateTo('/'); return; }
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}

@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   ChevronRight,
   Clock3,
+  Download,
   FileCheck2,
   FileText,
   HandCoins,
@@ -25,7 +26,7 @@ import {
 } from 'lucide-react';
 import { useAdmin } from '../../contexts/AdminContext';
 import { useToast } from '../../contexts/ToastContext';
-import { getEmployees, exportMyEmployeeCertificatePdf, type Employee } from '../../services/employees.service';
+import { getEmployees, type Employee } from '../../services/employees.service';
 import {
   approveVacationRequest,
   createVacationRequestAttachment,
@@ -34,6 +35,7 @@ import {
   deleteVacationRequest,
   getMyVacationRequests,
   getTeamVacationRequests,
+  openLaborCertificateRequestPdf,
   openVacationRequestPdf,
   rejectVacationRequest,
   type EmployeeWorkScheduleDayInput,
@@ -77,6 +79,7 @@ const REQUEST_TYPE_ICONS: Record<VacationRequestType, React.ComponentType<{ size
   LEAVE: Briefcase,
   LOAN: HandCoins,
   SCHEDULE_CHANGE: CalendarCog,
+  LABOR_CERTIFICATE: BadgeCheck,
   OTHER: FileText,
 };
 
@@ -301,6 +304,7 @@ const REQUEST_TYPE_LABELS: Record<VacationRequestType, string> = {
   LEAVE: 'Licencia',
   LOAN: 'Préstamo',
   SCHEDULE_CHANGE: 'Cambio de horario empleado',
+  LABOR_CERTIFICATE: 'Solicitar certificado laboral',
   OTHER: 'Otro',
 };
 
@@ -313,6 +317,7 @@ const PERMISSION_SUBTYPE_LABELS: Record<'PERSONAL' | 'MEDICAL' | 'FAMILY' | 'ACA
 };
 
 function getRequestTypeLabel(type: VacationRequestType, subtype?: string): string {
+  if (type === 'LABOR_CERTIFICATE') return 'Certificado laboral';
   if (type === 'SCHEDULE_CHANGE' || subtype === 'SCHEDULE_CHANGE') return 'Cambio de horario empleado';
   if (type === 'PERMISSION' && subtype && subtype in PERMISSION_SUBTYPE_LABELS) {
     return `Permiso ${PERMISSION_SUBTYPE_LABELS[subtype as keyof typeof PERMISSION_SUBTYPE_LABELS].toLowerCase()}`;
@@ -341,6 +346,10 @@ function getRequestScheduleLabel(request: VacationRequest): string {
   if (request.request_type === 'SCHEDULE_CHANGE' || request.subtype === 'SCHEDULE_CHANGE') {
     const hours = scheduleInputWeeklyHours(request.requested_work_schedule_days);
     return `${dateLabel} · ${hours ? `${hours.toFixed(1)} h/semana` : 'Horario solicitado'}`;
+  }
+
+  if (request.request_type === 'LABOR_CERTIFICATE') {
+    return `${dateLabel} · Disponible 5 días al aprobar`;
   }
 
   if (request.is_full_day) {
@@ -403,10 +412,9 @@ export function AdminEmployeePortal() {
   const [requestsPageSize, setRequestsPageSize] = useState(5);
   const [expandedRequestId, setExpandedRequestId] = useState<string | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<VacationRequest | null>(null);
-  const [downloadingCertificate, setDownloadingCertificate] = useState(false);
+  const [downloadingCertificateRequestId, setDownloadingCertificateRequestId] = useState<string | null>(null);
   const [downloadingRequestPdfId, setDownloadingRequestPdfId] = useState<string | null>(null);
   const [uploadingMedicalConstancyRequestId, setUploadingMedicalConstancyRequestId] = useState<string | null>(null);
-  const [showCertificateModal, setShowCertificateModal] = useState(false);
   const [allEmployees, setAllEmployees] = useState<Employee[]>([]);
   const [teamRequests, setTeamRequests] = useState<VacationRequest[]>([]);
   const [teamRequestsTotal, setTeamRequestsTotal] = useState(0);
@@ -470,6 +478,15 @@ export function AdminEmployeePortal() {
       getStatusLabel(request.status).toLowerCase().includes(query),
     );
   }, [requests, requestsQuery]);
+
+  const activeLaborCertificateRequest = useMemo(() => {
+    return requests.find(
+      (request) =>
+        request.request_type === 'LABOR_CERTIFICATE' &&
+        request.status === 'APPROVED' &&
+        request.labor_certificate_download_available,
+    ) ?? null;
+  }, [requests]);
 
   const requestsTotalPages = Math.max(1, Math.ceil(filteredRequests.length / requestsPageSize));
 
@@ -676,6 +693,41 @@ export function AdminEmployeePortal() {
     }
   };
 
+  const handleSubmitLaborCertificate = async () => {
+    if (!employeeProfile) {
+      toast.error('Tu usuario no tiene un perfil de empleado asociado');
+      return;
+    }
+    if (!form.single_date) {
+      toast.error('Indica el día para el certificado laboral');
+      return;
+    }
+    if (!form.reason.trim()) {
+      toast.error('Indica el motivo del certificado laboral');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await createMyVacationRequest({
+        request_type: 'LABOR_CERTIFICATE',
+        subtype: 'ADMINISTRATIVE',
+        start_date: form.single_date,
+        end_date: form.single_date,
+        is_full_day: true,
+        reason: form.reason.trim(),
+      });
+      toast.success('Solicitud de certificado laboral enviada a RRHH');
+      setForm(EMPTY_FORM);
+      await loadData();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo crear la solicitud');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (form.request_type === 'OVERTIME') {
@@ -688,6 +740,10 @@ export function AdminEmployeePortal() {
     }
     if (form.request_type === 'SCHEDULE_CHANGE') {
       await handleSubmitScheduleChange();
+      return;
+    }
+    if (form.request_type === 'LABOR_CERTIFICATE') {
+      await handleSubmitLaborCertificate();
       return;
     }
     if (!employeeProfile) {
@@ -812,25 +868,25 @@ export function AdminEmployeePortal() {
     }
   };
 
-  const openCertificateModal = () => {
-    setShowCertificateModal(true);
+  const selectLaborCertificateRequest = () => {
+    setForm({
+      ...EMPTY_FORM,
+      request_type: 'LABOR_CERTIFICATE',
+      subtype: 'ADMINISTRATIVE',
+      single_date: new Date().toISOString().slice(0, 10),
+    });
   };
 
-  const closeCertificateModal = () => {
-    setShowCertificateModal(false);
-  };
-
-  const handleDownloadCertificate = async () => {
-    setDownloadingCertificate(true);
+  const handleDownloadCertificate = async (request: VacationRequest) => {
+    setDownloadingCertificateRequestId(request.id);
     try {
-      await exportMyEmployeeCertificatePdf(employeeProfile?.employee_code);
-      toast.success('Certificado laboral generado');
-      closeCertificateModal();
+      await openLaborCertificateRequestPdf(request.id);
+      toast.success('Certificado laboral descargado');
     } catch (error) {
       console.error(error);
-      toast.error(error instanceof Error ? error.message : 'No se pudo generar tu certificado laboral');
+      toast.error(error instanceof Error ? error.message : 'No se pudo descargar tu certificado laboral');
     } finally {
-      setDownloadingCertificate(false);
+      setDownloadingCertificateRequestId(null);
     }
   };
 
@@ -912,13 +968,29 @@ export function AdminEmployeePortal() {
         </div>
         <button
           type="button"
-          onClick={openCertificateModal}
+          onClick={() => {
+            if (activeLaborCertificateRequest) {
+              void handleDownloadCertificate(activeLaborCertificateRequest);
+            } else {
+              selectLaborCertificateRequest();
+            }
+          }}
+          disabled={Boolean(activeLaborCertificateRequest && downloadingCertificateRequestId === activeLaborCertificateRequest.id)}
           className="flex items-center justify-center gap-2 px-4 py-3 sm:py-2.5 bg-[#2a4038] text-white rounded-xl text-xs font-semibold hover:bg-[#3d5c4e] transition-colors w-full md:w-auto"
         >
-          <BadgeCheck size={14} />
-          Descargar certificado laboral
+          {activeLaborCertificateRequest ? <Download size={14} /> : <BadgeCheck size={14} />}
+          {activeLaborCertificateRequest
+            ? downloadingCertificateRequestId === activeLaborCertificateRequest.id
+              ? 'Descargando...'
+              : 'Descargar certificado laboral'
+            : 'Solicitar certificado laboral'}
         </button>
       </div>
+      {activeLaborCertificateRequest?.labor_certificate_download_expires_at && (
+        <div className="mb-6 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-xs text-emerald-800">
+          Tu certificado laboral aprobado está disponible hasta el {formatDate(activeLaborCertificateRequest.labor_certificate_download_expires_at)}.
+        </div>
+      )}
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
         <KpiCard label="Total" value={String(stats.total)} icon={FileText} color="text-gray-600 bg-gray-100" />
@@ -1051,7 +1123,7 @@ export function AdminEmployeePortal() {
                         setForm({
                           ...form,
                           request_type: value,
-                          subtype: value === 'PERMISSION' ? form.subtype || 'PERSONAL' : '',
+                          subtype: value === 'PERMISSION' ? form.subtype || 'PERSONAL' : value === 'LABOR_CERTIFICATE' ? 'ADMINISTRATIVE' : '',
                         })
                       }
                       className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-medium transition-colors ${
@@ -1097,7 +1169,23 @@ export function AdminEmployeePortal() {
               </div>
             )}
 
-            {form.request_type === 'SCHEDULE_CHANGE' ? (
+            {form.request_type === 'LABOR_CERTIFICATE' ? (
+              <div className="space-y-3">
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-3 text-xs leading-relaxed text-emerald-800">
+                  RRHH revisa esta solicitud y, al aprobarla con firma, podrás descargar el certificado durante 5 días.
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Día</label>
+                  <input
+                    type="date"
+                    required
+                    value={form.single_date}
+                    onChange={(event) => setForm({ ...form, single_date: event.target.value })}
+                    className={inputCls}
+                  />
+                </div>
+              </div>
+            ) : form.request_type === 'SCHEDULE_CHANGE' ? (
               <div className="space-y-4">
                 <div>
                   <div className="flex items-center justify-between gap-3 mb-2">
@@ -1481,6 +1569,7 @@ export function AdminEmployeePortal() {
                   />
                 </div>
 
+                {form.request_type !== 'LABOR_CERTIFICATE' && (
                 <div>
                   <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Documento de soporte</label>
                   <label className="flex items-center gap-3 w-full px-4 py-3 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors">
@@ -1523,6 +1612,7 @@ export function AdminEmployeePortal() {
                     />
                   </label>
                 </div>
+                )}
               </>
             )}
 
@@ -1578,6 +1668,12 @@ export function AdminEmployeePortal() {
                     ['Horas semanales', `${scheduleChangeWeeklyHours.toFixed(1)} / ${REQUIRED_SCHEDULE_CHANGE_HOURS} h`],
                     ['Días laborales', `${form.requested_work_schedule_days.filter((day) => day.is_working_day).length}`],
                     ['Documento', form.support_document ? form.support_document.name : '—'],
+                  ]
+                : form.request_type === 'LABOR_CERTIFICATE'
+                ? [
+                    ['Tipo', 'Certificado laboral'],
+                    ['Día', form.single_date ? formatDate(form.single_date) : '—'],
+                    ['Descarga', '5 días después de aprobación de RRHH'],
                   ]
                 : [
                     ['Tipo', REQUEST_TYPE_LABELS[form.request_type]],
@@ -1671,6 +1767,21 @@ export function AdminEmployeePortal() {
                     <div className="flex-shrink-0 whitespace-nowrap">
                       <Badge label={getStatusLabel(request.status)} color={getStatusColor(request.status)} />
                     </div>
+                    {request.request_type === 'LABOR_CERTIFICATE' && request.labor_certificate_download_available && (
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void handleDownloadCertificate(request);
+                        }}
+                        disabled={downloadingCertificateRequestId === request.id}
+                        className="p-2 rounded-lg text-[#2a4038] hover:bg-emerald-50 transition-colors disabled:opacity-40 flex-shrink-0"
+                        title="Descargar certificado laboral"
+                        aria-label="Descargar certificado laboral"
+                      >
+                        <Download size={14} />
+                      </button>
+                    )}
                     {canDelete && (
                       <button
                         type="button"
@@ -1768,6 +1879,17 @@ export function AdminEmployeePortal() {
                   <FileText size={13} />
                   {downloadingRequestPdfId === selectedRequest.id ? 'Abriendo...' : 'Ver PDF'}
                 </button>
+                {selectedRequest.request_type === 'LABOR_CERTIFICATE' && selectedRequest.labor_certificate_download_available && (
+                  <button
+                    type="button"
+                    onClick={() => void handleDownloadCertificate(selectedRequest)}
+                    disabled={downloadingCertificateRequestId === selectedRequest.id}
+                    className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 hover:underline disabled:opacity-50"
+                  >
+                    <Download size={13} />
+                    {downloadingCertificateRequestId === selectedRequest.id ? 'Descargando...' : 'Descargar certificado'}
+                  </button>
+                )}
               </div>
               <dl className="space-y-3 text-sm">
                 <div className="flex items-start justify-between gap-4">
@@ -1931,26 +2053,6 @@ export function AdminEmployeePortal() {
           </div>
         </div>
       )}
-
-      <Modal title="Certificado laboral" open={showCertificateModal} onClose={closeCertificateModal}>
-        <div className="space-y-4">
-          <p className="text-xs text-gray-500">
-            Tu certificado se emitirá con la firma digital registrada del Administrador.
-          </p>
-          <div className="flex justify-end gap-2">
-            <button onClick={closeCertificateModal} className="px-4 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
-              Cancelar
-            </button>
-            <button
-              onClick={handleDownloadCertificate}
-              disabled={downloadingCertificate}
-              className="px-4 py-2 bg-[#2a4038] rounded-lg text-xs font-semibold text-white hover:bg-[#3d5c4e] transition-colors disabled:opacity-40"
-            >
-              {downloadingCertificate ? 'Generando...' : 'Generar certificado'}
-            </button>
-          </div>
-        </div>
-      </Modal>
 
       <Modal
         title={teamDecisionRequest?.decision === 'reject' ? 'Firmar rechazo' : 'Firmar aprobación'}

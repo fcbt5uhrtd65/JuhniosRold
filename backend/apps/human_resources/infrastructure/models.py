@@ -50,6 +50,7 @@ class VacationRequest(BaseModel):
         VACATION = "VACATION", "Vacaciones"
         LOAN = "LOAN", "Préstamo"
         SCHEDULE_CHANGE = "SCHEDULE_CHANGE", "Cambio de horario empleado"
+        LABOR_CERTIFICATE = "LABOR_CERTIFICATE", "Certificado laboral"
         OTHER = "OTHER", "Otro"
 
     class LoanFrequency(models.TextChoices):

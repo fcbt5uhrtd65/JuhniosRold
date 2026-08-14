@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
 from django.db.models import Count, Max, Q, Sum
@@ -17,6 +17,7 @@ from django.utils import timezone
 from shared.interfaces.viewsets import SoftDeleteModelViewSet
 
 from apps.audit.application.services import AuditService
+from apps.employees.infrastructure.employee_certificate_pdf import render_employee_certificate_pdf
 from apps.employees.infrastructure.models import Employee
 from apps.identity.interfaces.permissions import HasComponentAccess
 from apps.notifications.infrastructure.models import StaffNotification
@@ -317,6 +318,7 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
         VacationRequest.RequestType.VACATION: "Vacaciones editadas",
         VacationRequest.RequestType.LOAN: "Préstamo editado",
         VacationRequest.RequestType.SCHEDULE_CHANGE: "Cambio de horario editado",
+        VacationRequest.RequestType.LABOR_CERTIFICATE: "Certificado laboral editado",
         VacationRequest.RequestType.OTHER: "Solicitud editada",
     }
     GENERIC_EDITABLE_FIELDS = ("reason", "description", "observations")
@@ -413,6 +415,7 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
         if (
             vacation.request_type == VacationRequest.RequestType.SCHEDULE_CHANGE
             or vacation.subtype == VacationRequest.RequestSubtype.SCHEDULE_CHANGE
+            or vacation.request_type == VacationRequest.RequestType.LABOR_CERTIFICATE
         ):
             flow = (
                 (VacationRequestApprovalStep.Step.REQUESTER, 1, requester or vacation.employee.user, VacationRequest.Status.APPROVED, "Solicitud creada"),
@@ -638,6 +641,7 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
     @staticmethod
     def _resolver_role(user, vacation=None):
         is_loan = vacation is not None and vacation.request_type == VacationRequest.RequestType.LOAN
+        is_labor_certificate = vacation is not None and vacation.request_type == VacationRequest.RequestType.LABOR_CERTIFICATE
 
         if is_loan:
             # Los préstamos tienen su propio circuito de aprobación, separado del
@@ -645,6 +649,11 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
             # "human_resources.loans" ocupa el paso de Tesorería y decide. No hay
             # paso ni firma final de Administrador en préstamos.
             if getattr(user, "can_manage_loans", False):
+                return "HR"
+            return None
+
+        if is_labor_certificate:
+            if getattr(user, "has_full_access", False) or getattr(user, "role_code", None) == "RRHH":
                 return "HR"
             return None
 
@@ -790,6 +799,7 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
         VacationRequest.RequestType.VACATION: "Vacaciones editadas",
         VacationRequest.RequestType.LOAN: "Préstamo editado",
         VacationRequest.RequestType.SCHEDULE_CHANGE: "Cambio de horario editado",
+        VacationRequest.RequestType.LABOR_CERTIFICATE: "Certificado laboral editado",
         VacationRequest.RequestType.OTHER: "Solicitud editada",
     }
 
@@ -1745,5 +1755,77 @@ class VacationRequestPdfView(APIView):
             pdf_buffer,
             as_attachment=False,
             filename=f"{vacation.request_number or vacation.id}.pdf",
+            content_type="application/pdf",
+        )
+
+
+class LaborCertificateRequestPdfView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request, pk):
+        queryset = VacationRequest.objects.select_related(
+            "employee",
+            "employee__department",
+            "employee__position",
+            "employee__branch",
+            "hr_decided_by",
+            "hr_decided_by__employee_profile",
+        ).prefetch_related("approval_steps")
+        vacation = get_object_or_404(queryset, pk=pk)
+
+        if vacation.request_type != VacationRequest.RequestType.LABOR_CERTIFICATE:
+            return Response(
+                {"detail": "Esta solicitud no corresponde a un certificado laboral."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user = request.user
+        requester_employee = getattr(user, "employee_profile", None)
+        is_owner = requester_employee is not None and vacation.employee_id == requester_employee.id
+        can_manage_hr = getattr(user, "has_full_access", False) or getattr(user, "role_code", None) == "RRHH" or user.has_component_access("human_resources.management", "view")
+        if not (is_owner or can_manage_hr):
+            return Response(
+                {"detail": "No tienes permiso para descargar este certificado laboral."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if vacation.status != VacationRequest.Status.APPROVED:
+            return Response(
+                {"detail": "El certificado laboral todavÃ­a no ha sido aprobado por Recursos Humanos."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        approved_at = vacation.hr_decided_at or vacation.reviewed_at
+        expires_on = vacation.due_date or (
+            timezone.localtime(approved_at).date() + timedelta(days=5) if approved_at else None
+        )
+        if not expires_on or timezone.localdate() > expires_on:
+            return Response(
+                {"detail": "El tiempo de descarga de este certificado laboral ya venciÃ³."},
+                status=status.HTTP_410_GONE,
+            )
+
+        hr_step = next(
+            (step for step in vacation.approval_steps.all() if step.step == VacationRequestApprovalStep.Step.HR),
+            None,
+        )
+        issued_by = getattr(vacation.hr_decided_by, "employee_profile", None)
+        signature_file = getattr(hr_step, "signature", None)
+        if not (signature_file or getattr(issued_by, "signature", None)):
+            return Response(
+                {"detail": "La aprobaciÃ³n no tiene una firma disponible para generar el certificado."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        pdf_buffer = render_employee_certificate_pdf(
+            vacation.employee,
+            issued_by=issued_by,
+            signature_file=signature_file,
+        )
+        safe_code = (vacation.employee.employee_code or str(vacation.employee.id)).replace(" ", "-")
+        return FileResponse(
+            pdf_buffer,
+            as_attachment=True,
+            filename=f"certificado-laboral-{safe_code}.pdf",
             content_type="application/pdf",
         )

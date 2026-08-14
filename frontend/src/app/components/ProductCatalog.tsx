@@ -26,6 +26,7 @@ import {
   type ProductReview,
 } from '../services/reviews.service';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
+import { NavigationBar } from './NavigationBar';
 
 const OLIVE = '#2D3A1F';
 
@@ -499,7 +500,10 @@ export function ProductPage({
       className="fixed inset-0 z-[80] bg-white overflow-y-auto"
     >
       {/* ── Top bar: breadcrumb + cerrar ── */}
-      <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-sm border-b border-stone-100 px-6 md:px-10 lg:px-16 py-3 flex items-center justify-between">
+      <NavigationBar variant="solid" onLoginClick={onLoginRequired} onNavigateClick={onClose} />
+      <div className="h-[78px] sm:h-[90px]" />
+
+      <div className="sticky top-[78px] sm:top-[90px] z-30 bg-white/95 backdrop-blur-sm border-b border-stone-100 px-6 md:px-10 lg:px-16 py-3 flex items-center justify-between">
         <nav className="flex items-center gap-1.5 text-[11.5px] text-stone-400">
           <button onClick={onClose} className="hover:text-stone-700 transition-colors">Inicio</button>
           <ChevronRight className="w-3 h-3" strokeWidth={1.5} />
@@ -710,15 +714,15 @@ export function ProductPage({
               </button>
             </div>
 
-            <div className="bg-stone-50 rounded-xl px-5 py-4 space-y-3 mb-6">
+            <div className="mb-6 rounded-2xl bg-[#FAF9F6] px-5 py-4">
               {[
                 { Icon: Truck, text: 'Envíos a toda Colombia' },
                 { Icon: ShieldCheck, text: 'Pagos seguros' },
                 { Icon: Leaf, text: 'Ingredientes naturales' },
               ].map(({ Icon, text }) => (
-                <div key={text} className="flex items-center gap-3">
-                  <Icon className="w-4 h-4 text-stone-400 flex-shrink-0" strokeWidth={1.3} />
-                  <span className="text-[12px] text-stone-600">{text}</span>
+                <div key={text} className="flex min-h-8 items-center gap-3">
+                  <Icon className="h-3.5 w-3.5 flex-shrink-0 text-stone-400" strokeWidth={1.45} />
+                  <span className="text-[12px] leading-snug text-stone-600">{text}</span>
                 </div>
               ))}
             </div>

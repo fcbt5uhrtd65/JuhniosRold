@@ -1,6 +1,8 @@
+from datetime import timedelta
 from pathlib import Path
 
 from django.db import DatabaseError
+from django.utils import timezone
 from rest_framework import serializers
 
 from apps.notifications.infrastructure.models import StaffNotification
@@ -98,6 +100,8 @@ class VacationRequestSerializer(serializers.ModelSerializer):
     approval_steps = serializers.SerializerMethodField()
     history = serializers.SerializerMethodField()
     overtime_shifts = serializers.SerializerMethodField()
+    labor_certificate_download_available = serializers.SerializerMethodField()
+    labor_certificate_download_expires_at = serializers.SerializerMethodField()
 
     class Meta:
         model = VacationRequest
@@ -112,6 +116,8 @@ class VacationRequestSerializer(serializers.ModelSerializer):
             "approval_steps",
             "history",
             "overtime_shifts",
+            "labor_certificate_download_available",
+            "labor_certificate_download_expires_at",
             "admin_decision",
             "admin_decided_by",
             "admin_decided_at",
@@ -156,7 +162,19 @@ class VacationRequestSerializer(serializers.ModelSerializer):
         if start_date and end_date and end_date < start_date:
             errors["end_date"] = ["La fecha final no puede ser anterior a la fecha inicial."]
 
-        if request_type == VacationRequest.RequestType.LOAN:
+        if request_type == VacationRequest.RequestType.LABOR_CERTIFICATE:
+            if not str(attrs.get("reason", getattr(instance, "reason", "")) or "").strip():
+                errors["reason"] = ["Indica el motivo del certificado laboral."]
+            if start_date and end_date and start_date != end_date:
+                errors["end_date"] = ["El certificado laboral se solicita para un solo dÃ­a."]
+            attrs["is_full_day"] = True
+            attrs["end_date"] = start_date or end_date
+            attrs["subtype"] = VacationRequest.RequestSubtype.ADMINISTRATIVE
+            if start_time is not None:
+                errors["start_time"] = ["No se debe enviar hora de inicio para certificado laboral."]
+            if end_time is not None:
+                errors["end_time"] = ["No se debe enviar hora fin para certificado laboral."]
+        elif request_type == VacationRequest.RequestType.LOAN:
             required_loan_fields = {
                 "loan_amount": "Indica el monto solicitado.",
                 "loan_requester_name": "Indica el nombre del solicitante.",
@@ -233,6 +251,24 @@ class VacationRequestSerializer(serializers.ModelSerializer):
             return OvertimeShiftSerializer(related, many=True, context=self.context).data
         except DatabaseError:
             return []
+
+    def get_labor_certificate_download_expires_at(self, obj):
+        if obj.request_type != VacationRequest.RequestType.LABOR_CERTIFICATE:
+            return None
+        if obj.status != VacationRequest.Status.APPROVED:
+            return None
+        if obj.due_date:
+            return obj.due_date.isoformat()
+        decided_at = obj.hr_decided_at or obj.reviewed_at
+        if not decided_at:
+            return None
+        return (timezone.localtime(decided_at).date() + timedelta(days=5)).isoformat()
+
+    def get_labor_certificate_download_available(self, obj):
+        expires_at = self.get_labor_certificate_download_expires_at(obj)
+        if not expires_at:
+            return False
+        return timezone.localdate().isoformat() <= expires_at
 
     def validate_support_document(self, file):
         if not file:
