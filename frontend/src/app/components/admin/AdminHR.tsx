@@ -151,6 +151,7 @@ function toBranchDecimalString(value: number | string): string {
 
 type HRTab = 'employees' | 'branches' | 'catalog' | 'vacations' | 'calendar' | 'orgchart' | 'documents';
 type HRCalendarView = 'requests' | 'birthdays';
+type UniformField = 'uniform_sweater' | 'uniform_pants' | 'uniform_shoes' | 'uniform_other';
 type EmployeeDataQualityFilter =
   | 'all'
   | 'missing_age'
@@ -774,6 +775,142 @@ function slugifyFilename(value: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 80) || 'empleados';
+}
+
+const EMPTY_UNIFORM_VALUE = 'Sin dato';
+
+const UNIFORM_FIELDS: Array<{ field: UniformField; label: string }> = [
+  { field: 'uniform_sweater', label: 'Suéter' },
+  { field: 'uniform_pants', label: 'Pantalón' },
+  { field: 'uniform_shoes', label: 'Zapato' },
+  { field: 'uniform_other', label: 'Otro' },
+];
+
+function uniformValue(value: string | null | undefined): string {
+  const trimmed = String(value ?? '').trim();
+  return trimmed || EMPTY_UNIFORM_VALUE;
+}
+
+function getEmployeeUniformValue(employee: Employee, field: UniformField): string {
+  return uniformValue(employee[field]);
+}
+
+function buildUniformOptions(employees: Employee[], field: UniformField): string[] {
+  return [...new Set(employees.map((employee) => getEmployeeUniformValue(employee, field)))]
+    .sort((left, right) => {
+      if (left === EMPTY_UNIFORM_VALUE) return 1;
+      if (right === EMPTY_UNIFORM_VALUE) return -1;
+      return left.localeCompare(right, 'es', { numeric: true, sensitivity: 'base' });
+    });
+}
+
+function buildUniformCounts(employees: Employee[], field: UniformField): Array<{ value: string; count: number }> {
+  const counts = new Map<string, number>();
+  employees.forEach((employee) => {
+    const value = getEmployeeUniformValue(employee, field);
+    counts.set(value, (counts.get(value) ?? 0) + 1);
+  });
+  return [...counts.entries()]
+    .map(([value, count]) => ({ value, count }))
+    .sort((left, right) => {
+      if (right.count !== left.count) return right.count - left.count;
+      if (left.value === EMPTY_UNIFORM_VALUE) return 1;
+      if (right.value === EMPTY_UNIFORM_VALUE) return -1;
+      return left.value.localeCompare(right.value, 'es', { numeric: true, sensitivity: 'base' });
+    });
+}
+
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function worksheetRow(cells: Array<string | number>): string {
+  return `<Row>${cells.map((cell) => {
+    const isNumber = typeof cell === 'number' && Number.isFinite(cell);
+    return `<Cell><Data ss:Type="${isNumber ? 'Number' : 'String'}">${escapeXml(String(cell))}</Data></Cell>`;
+  }).join('')}</Row>`;
+}
+
+function worksheetXml(name: string, rows: Array<Array<string | number>>): string {
+  const safeName = name.replace(/[\\/?*[\]:]/g, ' ').slice(0, 31) || 'Hoja';
+  return `<Worksheet ss:Name="${escapeXml(safeName)}"><Table>${rows.map(worksheetRow).join('')}</Table></Worksheet>`;
+}
+
+function downloadExcelXml(filename: string, sheets: Array<{ name: string; rows: Array<Array<string | number>> }>) {
+  const workbook = `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+${sheets.map((sheet) => worksheetXml(sheet.name, sheet.rows)).join('')}
+</Workbook>`;
+  const blob = new Blob([workbook], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function exportEmployeeUniformExcel({
+  employees,
+  filters,
+  departmentById,
+  positionById,
+  branchById,
+}: {
+  employees: Employee[];
+  filters: string[];
+  departmentById: Map<string, Department>;
+  positionById: Map<string, Position>;
+  branchById: Map<string, Branch>;
+}) {
+  const summaryRows: Array<Array<string | number>> = [
+    ['Juhnios Rold - Dotación de empleados'],
+    ['Generado', new Date().toLocaleString('es-CO')],
+    ['Empleados filtrados', employees.length],
+    ['Filtros', filters.length ? filters.join(' | ') : 'Sin filtros'],
+    [],
+    ['Tipo', 'Talla / dato', 'Cantidad'],
+  ];
+
+  UNIFORM_FIELDS.forEach(({ field, label }) => {
+    buildUniformCounts(employees, field).forEach(({ value, count }) => {
+      summaryRows.push([label, value, count]);
+    });
+    summaryRows.push([]);
+  });
+
+  const detailRows: Array<Array<string | number>> = [
+    ['Nombre', 'Código', 'Documento', 'Área', 'Cargo', 'Sede', 'Estado', 'Suéter', 'Pantalón', 'Zapato', 'Otro'],
+    ...employees.map((employee) => [
+      getEmployeeName(employee),
+      employee.employee_code || '',
+      employee.document_number || '',
+      employee.department ? departmentById.get(employee.department)?.name ?? '' : '',
+      employee.position ? positionById.get(employee.position)?.name ?? '' : '',
+      employee.branch ? branchById.get(employee.branch)?.name ?? '' : '',
+      statusLabel(employee.status),
+      getEmployeeUniformValue(employee, 'uniform_sweater'),
+      getEmployeeUniformValue(employee, 'uniform_pants'),
+      getEmployeeUniformValue(employee, 'uniform_shoes'),
+      getEmployeeUniformValue(employee, 'uniform_other'),
+    ]),
+  ];
+
+  downloadExcelXml(`dotacion-empleados-${new Date().toISOString().slice(0, 10)}.xls`, [
+    { name: 'Resumen dotación', rows: summaryRows },
+    { name: 'Detalle empleados', rows: detailRows },
+  ]);
 }
 
 async function exportFilteredEmployeesPdf({
@@ -1840,6 +1977,10 @@ export function AdminHR() {
   const [filterEmploymentType, setFilterEmploymentType] = useState<string>('all');
   const [filterContractType, setFilterContractType] = useState<string>('all');
   const [filterDataQuality, setFilterDataQuality] = useState<EmployeeDataQualityFilter>('all');
+  const [filterUniformSweater, setFilterUniformSweater] = useState<string>('all');
+  const [filterUniformPants, setFilterUniformPants] = useState<string>('all');
+  const [filterUniformShoes, setFilterUniformShoes] = useState<string>('all');
+  const [filterUniformOther, setFilterUniformOther] = useState<string>('all');
   const [calendarView, setCalendarView] = useState<HRCalendarView>('requests');
   const [calendarMonth, setCalendarMonth] = useState<Date>(() => {
     const now = new Date();
@@ -1878,6 +2019,7 @@ export function AdminHR() {
   const [savingBranch, setSavingBranch] = useState(false);
   const [exportingCalendarPdf, setExportingCalendarPdf] = useState(false);
   const [exportingEmployeesPdf, setExportingEmployeesPdf] = useState(false);
+  const [exportingUniformExcel, setExportingUniformExcel] = useState(false);
   const [exportingBranchesPdf, setExportingBranchesPdf] = useState(false);
   const [deletingEmployeeId, setDeletingEmployeeId] = useState<string | null>(null);
   const [exportingProfileId, setExportingProfileId] = useState<string | null>(null);
@@ -2050,6 +2192,18 @@ export function AdminHR() {
     () => filterDepartment === 'all' ? positions : positions.filter((position) => position.department === filterDepartment),
     [filterDepartment, positions],
   );
+  const uniformFilterOptions = useMemo(() => ({
+    uniform_sweater: buildUniformOptions(employees, 'uniform_sweater'),
+    uniform_pants: buildUniformOptions(employees, 'uniform_pants'),
+    uniform_shoes: buildUniformOptions(employees, 'uniform_shoes'),
+    uniform_other: buildUniformOptions(employees, 'uniform_other'),
+  }), [employees]);
+  const uniformFilters = useMemo<Record<UniformField, string>>(() => ({
+    uniform_sweater: filterUniformSweater,
+    uniform_pants: filterUniformPants,
+    uniform_shoes: filterUniformShoes,
+    uniform_other: filterUniformOther,
+  }), [filterUniformOther, filterUniformPants, filterUniformShoes, filterUniformSweater]);
 
   const filteredEmployees = useMemo(() => {
     const query = normalizeSearchText(searchQuery);
@@ -2075,9 +2229,22 @@ export function AdminHR() {
       const matchesEmploymentType = filterEmploymentType === 'all' || employee.employment_type === filterEmploymentType;
       const matchesContractType = filterContractType === 'all' || employee.contract_type === filterContractType;
       const matchesDataQuality = matchesEmployeeDataQuality(employee, filterDataQuality);
-      return matchesSearch && matchesDepartment && matchesPosition && matchesBranch && matchesStatus && matchesProfileStatus && matchesEmploymentType && matchesContractType && matchesDataQuality;
+      const matchesUniform = UNIFORM_FIELDS.every(({ field }) => {
+        const selected = uniformFilters[field];
+        return selected === 'all' || getEmployeeUniformValue(employee, field) === selected;
+      });
+      return matchesSearch && matchesDepartment && matchesPosition && matchesBranch && matchesStatus && matchesProfileStatus && matchesEmploymentType && matchesContractType && matchesDataQuality && matchesUniform;
     });
-  }, [branchById, departmentById, employees, filterBranch, filterContractType, filterDataQuality, filterDepartment, filterEmploymentType, filterPosition, filterProfileStatus, filterStatus, positionById, searchQuery]);
+  }, [branchById, departmentById, employees, filterBranch, filterContractType, filterDataQuality, filterDepartment, filterEmploymentType, filterPosition, filterProfileStatus, filterStatus, positionById, searchQuery, uniformFilters]);
+
+  const uniformSummary = useMemo(() => (
+    UNIFORM_FIELDS.map(({ field, label }) => ({
+      field,
+      label,
+      counts: buildUniformCounts(filteredEmployees, field),
+      withData: filteredEmployees.filter((employee) => getEmployeeUniformValue(employee, field) !== EMPTY_UNIFORM_VALUE).length,
+    }))
+  ), [filteredEmployees]);
 
   const sortedEmployees = useMemo(() => {
     return [...filteredEmployees].sort((left, right) => {
@@ -2116,14 +2283,18 @@ export function AdminHR() {
     if (filterEmploymentType !== 'all') labels.push(`Vinculacion: ${employmentTypeLabel(filterEmploymentType as EmploymentType)}`);
     if (filterContractType !== 'all') labels.push(`Contrato: ${contractTypeLabel(filterContractType as ContractType)}`);
     if (filterDataQuality !== 'all') labels.push(optionLabel(EMPLOYEE_DATA_QUALITY_FILTER_OPTIONS, filterDataQuality));
+    UNIFORM_FIELDS.forEach(({ field, label }) => {
+      const selected = uniformFilters[field];
+      if (selected !== 'all') labels.push(`${label}: ${selected}`);
+    });
     return labels;
-  }, [branchById, departmentById, filterBranch, filterContractType, filterDataQuality, filterDepartment, filterEmploymentType, filterPosition, filterProfileStatus, filterStatus, positionById, searchQuery]);
+  }, [branchById, departmentById, filterBranch, filterContractType, filterDataQuality, filterDepartment, filterEmploymentType, filterPosition, filterProfileStatus, filterStatus, positionById, searchQuery, uniformFilters]);
 
   const hasActiveEmployeeFilters = activeEmployeeFilterLabels.length > 0;
 
   useEffect(() => {
     setEmployeePage(1);
-  }, [searchQuery, filterDepartment, filterPosition, filterBranch, filterStatus, filterProfileStatus, filterEmploymentType, filterContractType, filterDataQuality, employeePageSize]);
+  }, [searchQuery, filterDepartment, filterPosition, filterBranch, filterStatus, filterProfileStatus, filterEmploymentType, filterContractType, filterDataQuality, filterUniformSweater, filterUniformPants, filterUniformShoes, filterUniformOther, employeePageSize]);
 
   useEffect(() => {
     if (filterDepartment !== 'all' && filterPosition !== 'all') {
@@ -2652,6 +2823,29 @@ export function AdminHR() {
     }
   };
 
+  const handleUniformExcelExport = async () => {
+    if (sortedEmployees.length === 0) {
+      toast.error('No hay empleados para exportar con los filtros actuales');
+      return;
+    }
+    setExportingUniformExcel(true);
+    try {
+      exportEmployeeUniformExcel({
+        employees: sortedEmployees,
+        filters: activeEmployeeFilterLabels,
+        departmentById,
+        positionById,
+        branchById,
+      });
+      toast.success(`Excel de dotación generado con ${sortedEmployees.length} empleado${sortedEmployees.length === 1 ? '' : 's'}`);
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo exportar el Excel de dotación');
+    } finally {
+      setExportingUniformExcel(false);
+    }
+  };
+
   const handleCalendarPdfExport = async () => {
     const typeFilterLabel = calendarTypeFilter === 'all'
       ? 'Todos los tipos'
@@ -3169,6 +3363,10 @@ export function AdminHR() {
     setFilterEmploymentType('all');
     setFilterContractType('all');
     setFilterDataQuality('all');
+    setFilterUniformSweater('all');
+    setFilterUniformPants('all');
+    setFilterUniformShoes('all');
+    setFilterUniformOther('all');
   };
 
   const openManagerAssignmentModal = () => {
@@ -4055,6 +4253,14 @@ export function AdminHR() {
                 {exportingEmployeesPdf ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
                 {exportingEmployeesPdf ? 'Generando PDF...' : 'Exportar filtro PDF'}
               </button>
+              <button
+                onClick={() => void handleUniformExcelExport()}
+                disabled={exportingUniformExcel || isLoading || sortedEmployees.length === 0}
+                className="flex items-center gap-2 px-4 py-2.5 border border-[#2a4038] text-[#2a4038] text-xs font-semibold rounded-xl hover:bg-[#eef4f1] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {exportingUniformExcel ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
+                {exportingUniformExcel ? 'Generando Excel...' : 'Exportar dotación Excel'}
+              </button>
             </>
           )}
           {activeTab === 'branches' && (
@@ -4176,6 +4382,55 @@ export function AdminHR() {
                 <select value={filterDataQuality} onChange={(event) => setFilterDataQuality(event.target.value as EmployeeDataQualityFilter)} className={`${selectCls} w-full`}>
                   {EMPLOYEE_DATA_QUALITY_FILTER_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
+                <select value={filterUniformSweater} onChange={(event) => setFilterUniformSweater(event.target.value)} className={`${selectCls} w-full`}>
+                  <option value="all">Suéter: todas las tallas</option>
+                  {uniformFilterOptions.uniform_sweater.map((value) => <option key={value} value={value}>Suéter: {value}</option>)}
+                </select>
+                <select value={filterUniformPants} onChange={(event) => setFilterUniformPants(event.target.value)} className={`${selectCls} w-full`}>
+                  <option value="all">Pantalón: todas las tallas</option>
+                  {uniformFilterOptions.uniform_pants.map((value) => <option key={value} value={value}>Pantalón: {value}</option>)}
+                </select>
+                <select value={filterUniformShoes} onChange={(event) => setFilterUniformShoes(event.target.value)} className={`${selectCls} w-full`}>
+                  <option value="all">Zapato: todas las tallas</option>
+                  {uniformFilterOptions.uniform_shoes.map((value) => <option key={value} value={value}>Zapato: {value}</option>)}
+                </select>
+                <select value={filterUniformOther} onChange={(event) => setFilterUniformOther(event.target.value)} className={`${selectCls} w-full`}>
+                  <option value="all">Otro: todos</option>
+                  {uniformFilterOptions.uniform_other.map((value) => <option key={value} value={value}>Otro: {value}</option>)}
+                </select>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5">
+                {uniformSummary.map(({ field, label, counts, withData }) => (
+                  <div key={field} className="rounded-xl bg-gray-50 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{label}</p>
+                        <p className="mt-1 text-lg font-bold text-gray-900">{withData}</p>
+                      </div>
+                      <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-semibold text-gray-500">
+                        {filteredEmployees.length} total
+                      </span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {counts.slice(0, 5).map(({ value, count }) => (
+                        <button
+                          key={`${field}-${value}`}
+                          type="button"
+                          onClick={() => {
+                            if (field === 'uniform_sweater') setFilterUniformSweater(value);
+                            if (field === 'uniform_pants') setFilterUniformPants(value);
+                            if (field === 'uniform_shoes') setFilterUniformShoes(value);
+                            if (field === 'uniform_other') setFilterUniformOther(value);
+                          }}
+                          className="rounded-full bg-white px-2.5 py-1 text-[10.5px] font-semibold text-gray-600 transition-colors hover:bg-[#eef4f1] hover:text-[#2a4038]"
+                        >
+                          {value}: {count}
+                        </button>
+                      ))}
+                      {counts.length === 0 && <span className="text-[11px] text-gray-400">Sin datos</span>}
+                    </div>
+                  </div>
+                ))}
               </div>
               <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex flex-wrap gap-1.5">
@@ -4336,6 +4591,7 @@ export function AdminHR() {
                       <SortableTh label="Cargo / Sede" sortKey="department" active={employeeSort} onSort={setEmployeeSort} />
                       <SortableTh label="Estado" sortKey="status" active={employeeSort} onSort={setEmployeeSort} />
                       <SortableTh label="Perfil" sortKey="profile" active={employeeSort} onSort={setEmployeeSort} />
+                      <Th>Dotación</Th>
                       <Th>Documentos</Th>
                       <Th>Acciones</Th>
                     </tr>
@@ -4383,6 +4639,18 @@ export function AdminHR() {
                             </div>
                             <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
                               <div className="h-full bg-[#2a4038]" style={{ width: `${employee.profile_completion_percentage}%` }} />
+                            </div>
+                          </Td>
+                          <Td>
+                            <div className="flex flex-wrap gap-1.5">
+                              {UNIFORM_FIELDS.map(({ field, label }) => {
+                                const value = getEmployeeUniformValue(employee, field);
+                                return (
+                                  <span key={field} className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-600">
+                                    {label}: {value}
+                                  </span>
+                                );
+                              })}
                             </div>
                           </Td>
                           <Td>

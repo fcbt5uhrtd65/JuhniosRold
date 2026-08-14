@@ -11,16 +11,16 @@ import { Plus, Search, X, Save, Loader2, Inbox, AlertCircle, Upload, MoreVertica
 export type BadgeColor = 'green' | 'yellow' | 'red' | 'blue' | 'gray' | 'purple';
 
 const BADGE_STYLES: Record<BadgeColor, string> = {
-  green: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
-  yellow: 'bg-amber-50 text-amber-700 border border-amber-200',
-  red: 'bg-red-50 text-red-700 border border-red-200',
-  blue: 'bg-blue-50 text-blue-700 border border-blue-200',
-  gray: 'bg-gray-50 text-gray-600 border border-gray-200',
-  purple: 'bg-purple-50 text-purple-700 border border-purple-200',
+  green: 'bg-emerald-50 text-emerald-700',
+  yellow: 'bg-amber-50 text-amber-700',
+  red: 'bg-rose-50 text-rose-700',
+  blue: 'bg-sky-50 text-sky-700',
+  gray: 'bg-gray-100 text-gray-600',
+  purple: 'bg-violet-50 text-violet-700',
 };
 
 export function Badge({ label, color }: { label: ReactNode; color: BadgeColor }) {
-  return <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold ${BADGE_STYLES[color]}`}>{label}</span>;
+  return <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${BADGE_STYLES[color]}`}>{label}</span>;
 }
 
 export function Field({ label, required, children }: { label: string; required?: boolean; children: ReactNode }) {

@@ -297,7 +297,7 @@ function ProductReviewsSection({
 
       <div className="grid md:grid-cols-2 gap-8">
         {/* Formulario para escribir/editar reseña */}
-        <div className="bg-white border border-stone-100 rounded-xl p-5">
+        <div className="bg-white rounded-2xl p-5 shadow-[0_14px_40px_rgba(28,25,23,0.07)]">
           <p className="text-[12.5px] font-semibold text-stone-700 mb-3">
             {myReview ? 'Edita tu reseña' : '¿Ya probaste este producto?'}
           </p>
@@ -308,12 +308,12 @@ function ProductReviewsSection({
               onChange={e => setComment(e.target.value)}
               placeholder="Cuéntanos qué te pareció..."
               rows={3}
-              className="w-full rounded-lg border border-stone-200 px-3 py-2.5 text-[13px] text-stone-700 outline-none focus:border-stone-400 resize-none bg-white"
+              className="w-full rounded-xl border-0 bg-stone-50 px-3 py-2.5 text-[13px] text-stone-700 outline-none focus:bg-white focus:ring-2 focus:ring-stone-200 resize-none transition"
             />
             <button
               type="submit"
               disabled={submitting || rating === 0}
-              className="px-5 py-2.5 text-[11px] tracking-[0.2em] uppercase font-semibold rounded-lg text-white disabled:opacity-40 transition-opacity"
+              className="px-5 py-2.5 text-[11px] tracking-[0.2em] uppercase font-semibold rounded-xl text-white disabled:opacity-40 transition-opacity active:scale-[0.98]"
               style={{ backgroundColor: OLIVE }}
             >
               {submitting ? 'Enviando...' : myReview ? 'Actualizar reseña' : 'Publicar reseña'}
@@ -322,7 +322,7 @@ function ProductReviewsSection({
         </div>
 
         {/* Resumen */}
-        <div className="flex items-center justify-center bg-white border border-stone-100 rounded-xl p-5">
+        <div className="flex items-center justify-center bg-white rounded-2xl p-5 shadow-[0_14px_40px_rgba(28,25,23,0.07)]">
           {reviews.length > 0 ? (
             <div className="text-center">
               <p className="text-[36px] font-semibold text-stone-900 leading-none mb-1">
@@ -341,10 +341,10 @@ function ProductReviewsSection({
       <div className="mt-8 space-y-5">
         {loading && <p className="text-[13px] text-stone-400">Cargando reseñas...</p>}
         {!loading && reviews.map(review => (
-          <div key={review.id} className="border-b border-stone-100 pb-5">
+          <div key={review.id} className="rounded-2xl bg-white p-5 shadow-[0_12px_36px_rgba(28,25,23,0.06)]">
             <div className="flex items-center justify-between mb-1.5">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-full bg-stone-200 flex items-center justify-center text-[12px] font-semibold text-stone-600">
+                <div className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-[12px] font-semibold text-stone-600">
                   {review.userName.charAt(0).toUpperCase()}
                 </div>
                 <div>
@@ -1219,7 +1219,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                       role="button"
                       tabIndex={0}
                       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setQuickViewProduct(product); } }}
-                      className="group flex gap-4 bg-white rounded-2xl border border-stone-100 p-4 hover:border-stone-200 active:border-stone-300 active:bg-stone-50/60 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-300 touch-manipulation"
+                      className="group flex gap-4 bg-white rounded-2xl p-4 shadow-[0_12px_34px_rgba(28,25,23,0.06)] hover:shadow-[0_18px_48px_rgba(28,25,23,0.09)] active:bg-stone-50/60 transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-200 touch-manipulation"
                     >
                       <div className="w-24 h-24 rounded-xl overflow-hidden bg-white flex-shrink-0 relative">
                         <motion.img
@@ -1241,8 +1241,8 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                           {sizes.slice(0, 3).map(s => (
                             <button key={s}
                               onClick={e => { e.stopPropagation(); setSelectedSizes({ ...selectedSizes, [product.id]: s }); }}
-                              className={`px-2.5 py-0.5 text-[9px] border rounded-md transition-colors ${
-                                selSize === s ? 'text-white border-transparent' : 'border-stone-200 text-stone-500'
+                              className={`px-2.5 py-0.5 text-[9px] rounded-full transition-colors ${
+                                selSize === s ? 'text-white' : 'bg-stone-100 text-stone-500 hover:bg-stone-200/70'
                               }`}
                               style={selSize === s ? { backgroundColor: OLIVE } : {}}
                             >{s}</button>
@@ -1273,14 +1273,14 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                         <div className="flex items-center gap-2">
                           <button
                             onClick={e => { e.stopPropagation(); setQuickViewProduct(product); }}
-                            className="p-2 border border-stone-200 rounded-lg text-stone-400 hover:border-stone-400 hover:text-stone-700 transition-all"
+                            className="p-2 rounded-xl bg-stone-100 text-stone-500 hover:bg-stone-200/70 hover:text-stone-700 transition-all"
                           >
                             <Eye className="w-3.5 h-3.5" strokeWidth={1.5} />
                           </button>
                           <button
                             onClick={e => { e.stopPropagation(); handleAddToCart(product); }}
                             disabled={isOutOfStock}
-                            className="flex items-center gap-1.5 px-4 py-2 text-white text-[10px] tracking-wide font-medium rounded-lg transition-opacity hover:opacity-85 disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="flex items-center gap-1.5 px-4 py-2 text-white text-[10px] tracking-wide font-medium rounded-xl transition-opacity hover:opacity-85 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
                             style={{ backgroundColor: OLIVE }}
                           >
                             <ShoppingBag className="w-3 h-3" strokeWidth={1.5} />
@@ -1304,7 +1304,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                     role="button"
                     tabIndex={0}
                     onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setQuickViewProduct(product); } }}
-                    className="group flex flex-col bg-white rounded-2xl border border-stone-100 overflow-hidden hover:border-stone-200 hover:shadow-sm active:border-stone-300 active:bg-stone-50/60 transition-all duration-300 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-300 touch-manipulation"
+                    className="group flex flex-col bg-white rounded-2xl overflow-hidden shadow-[0_12px_34px_rgba(28,25,23,0.06)] hover:shadow-[0_20px_54px_rgba(28,25,23,0.1)] active:bg-stone-50/60 transition-all duration-300 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-200 touch-manipulation"
                   >
                     {/* Imagen */}
                     <div className="relative overflow-hidden bg-white aspect-[4/5]">
@@ -1320,7 +1320,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
 
                       {/* Badge: solo se muestra cuando el producto está en oferta */}
                       {badge === 'oferta' && (
-                        <div className="absolute top-3 left-3 z-10 flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-semibold border bg-red-600 text-white border-red-600">
+                        <div className="absolute top-3 left-3 z-10 flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-semibold bg-rose-600 text-white shadow-sm">
                           {`-${getDiscountPercentage(product) ?? ''}% OFERTA`}
                         </div>
                       )}
@@ -1370,8 +1370,8 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                           <button
                             key={s}
                             onClick={e => { e.stopPropagation(); setSelectedSizes({ ...selectedSizes, [product.id]: s }); }}
-                            className={`px-2.5 py-0.5 text-[9.5px] border rounded-md transition-colors ${
-                              selSize === s ? 'text-white border-transparent' : 'border-stone-200 text-stone-500 hover:border-stone-400'
+                            className={`px-2.5 py-0.5 text-[9.5px] rounded-full transition-colors ${
+                              selSize === s ? 'text-white' : 'bg-stone-100 text-stone-500 hover:bg-stone-200/70'
                             }`}
                             style={selSize === s ? { backgroundColor: OLIVE } : {}}
                           >

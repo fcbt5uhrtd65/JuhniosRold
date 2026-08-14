@@ -103,7 +103,7 @@ export function MonthCalendar({
                 key={toDateKey(date)}
                 className={`min-h-[92px] sm:min-h-[108px] rounded-xl border p-1.5 flex flex-col gap-1 ${
                   inCurrentMonth ? 'bg-white border-gray-100' : 'bg-gray-50/60 border-gray-50'
-                } ${isToday ? 'ring-2 ring-[#2a4038]/30' : ''}`}
+                } ${isToday ? 'shadow-[inset_0_0_0_1px_rgba(42,64,56,0.18),0_8px_24px_rgba(28,25,23,0.06)]' : ''}`}
               >
                 <span className={`text-[11px] font-semibold ${inCurrentMonth ? 'text-gray-700' : 'text-gray-300'} ${isToday ? 'text-[#2a4038]' : ''}`}>
                   {date.getDate()}
@@ -121,12 +121,12 @@ export function MonthCalendar({
 export type CalendarChipColor = 'green' | 'blue' | 'amber' | 'purple' | 'red' | 'pink';
 
 const CALENDAR_CHIP_STYLES: Record<CalendarChipColor, string> = {
-  green: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  blue: 'bg-blue-50 text-blue-700 border-blue-200',
-  amber: 'bg-amber-50 text-amber-700 border-amber-200',
-  purple: 'bg-purple-50 text-purple-700 border-purple-200',
-  red: 'bg-red-50 text-red-700 border-red-200',
-  pink: 'bg-pink-50 text-pink-700 border-pink-200',
+  green: 'bg-emerald-50/80 text-emerald-700',
+  blue: 'bg-sky-50/80 text-sky-700',
+  amber: 'bg-amber-50/80 text-amber-700',
+  purple: 'bg-violet-50/80 text-violet-700',
+  red: 'bg-rose-50/80 text-rose-700',
+  pink: 'bg-pink-50/80 text-pink-700',
 };
 
 export function CalendarChip({
@@ -142,7 +142,7 @@ export function CalendarChip({
     <button
       type="button"
       onClick={onClick}
-      className={`w-full text-left px-1.5 py-0.5 rounded-md border text-[9.5px] sm:text-[10.5px] font-medium truncate transition-colors ${CALENDAR_CHIP_STYLES[color]} ${onClick ? 'hover:opacity-75 cursor-pointer' : 'cursor-default'}`}
+      className={`w-full text-left px-1.5 py-0.5 rounded-md text-[9.5px] sm:text-[10.5px] font-medium truncate transition-all ${CALENDAR_CHIP_STYLES[color]} ${onClick ? 'hover:brightness-[0.97] active:scale-[0.99] cursor-pointer' : 'cursor-default'}`}
       title={label}
     >
       {label}

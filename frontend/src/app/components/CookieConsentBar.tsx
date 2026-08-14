@@ -23,11 +23,11 @@ export function CookieConsentBar() {
     <AnimatePresence>
       {visible && (
         <motion.div
-          initial={{ y: -18, opacity: 0 }}
+          initial={{ y: 18, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          exit={{ y: -18, opacity: 0 }}
+          exit={{ y: 18, opacity: 0 }}
           transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-          className="fixed left-0 right-0 top-0 z-[140] border-b border-emerald-200/70 bg-[#DDF7EE] text-[#2D3A1F] shadow-[0_8px_24px_rgba(45,58,31,0.08)]"
+          className="fixed bottom-0 left-0 right-0 z-[140] border-t border-emerald-200/70 bg-[#DDF7EE] text-[#2D3A1F] shadow-[0_-8px_24px_rgba(45,58,31,0.08)]"
           role="dialog"
           aria-label="Aviso de cookies"
         >

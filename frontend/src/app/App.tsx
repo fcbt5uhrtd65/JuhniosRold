@@ -12,6 +12,7 @@ import { ShippingInfo } from './components/ShippingInfo';
 import { PowerProducts } from './components/PowerProducts';
 import { ProductCatalog } from './components/ProductCatalog';
 import { BeforeAfter } from './components/BeforeAfter';
+import { ProductReviews } from './components/ProductReviews';
 import { Ingredients } from './components/Ingredients';
 import { OilsSection } from './components/OilsSection';
 import { WholesaleBuyers } from './components/WholesaleBuyers';
@@ -79,6 +80,9 @@ function PublicSite({ onLoginClick }: { onLoginClick: () => void }) {
 
         {/* Before/After transformations */}
         <BeforeAfter />
+
+        {/* Verified customer reviews */}
+        <ProductReviews />
 
         {/* Hair diagnosis quiz */}
         <DiagnosticoCapilar />
