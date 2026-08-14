@@ -124,6 +124,10 @@ class EmployeeSerializer(serializers.ModelSerializer):
         "branch_id",
         "cost_center",
         "work_modality",
+        "uniform_sweater",
+        "uniform_pants",
+        "uniform_shoes",
+        "uniform_other",
         "salary_type",
     )
 

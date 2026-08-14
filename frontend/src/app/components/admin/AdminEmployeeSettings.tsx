@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from 'react';
-import { Eye, EyeOff, FileUp, HeartPulse, Landmark, LockKeyhole, Save, ShieldCheck, UserRound } from 'lucide-react';
+import { Eye, EyeOff, FileUp, HeartPulse, Landmark, LockKeyhole, Save, ShieldCheck, Shirt, UserRound } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import {
   getMyEmployeeProfile,
@@ -30,7 +30,7 @@ import {
 } from '../../utils/socialSecurityCatalog';
 import { Badge, type BadgeColor, Card, EmptyState, inputCls, LoadingState, selectCls } from './AdminUI';
 
-type SettingsTab = 'personal' | 'social' | 'banking' | 'emergency' | 'documents' | 'security';
+type SettingsTab = 'personal' | 'dotacion' | 'social' | 'banking' | 'emergency' | 'documents' | 'security';
 
 type ProfileForm = {
   document_type: DocumentType;
@@ -59,6 +59,10 @@ type ProfileForm = {
   bank_account_number: string;
   bank_account_holder: string;
   bank_account_holder_document: string;
+  uniform_sweater: string;
+  uniform_pants: string;
+  uniform_shoes: string;
+  uniform_other: string;
   emergency_contact_name: string;
   emergency_contact_relationship: string;
   emergency_contact_mobile: string;
@@ -93,6 +97,10 @@ const EMPTY_PROFILE_FORM: ProfileForm = {
   bank_account_number: '',
   bank_account_holder: '',
   bank_account_holder_document: '',
+  uniform_sweater: '',
+  uniform_pants: '',
+  uniform_shoes: '',
+  uniform_other: '',
   emergency_contact_name: '',
   emergency_contact_relationship: '',
   emergency_contact_mobile: '',
@@ -102,6 +110,7 @@ const EMPTY_PROFILE_FORM: ProfileForm = {
 
 const TABS: Array<{ id: SettingsTab; label: string; icon: ComponentType<{ size?: number; className?: string }> }> = [
   { id: 'personal', label: 'Personal', icon: UserRound },
+  { id: 'dotacion', label: 'Dotación', icon: Shirt },
   { id: 'social', label: 'Seguridad social', icon: ShieldCheck },
   { id: 'banking', label: 'Banco', icon: Landmark },
   { id: 'emergency', label: 'Emergencia', icon: HeartPulse },
@@ -174,6 +183,10 @@ function employeeToForm(employee: Employee): ProfileForm {
     bank_account_number: employee.bank_account_number ?? '',
     bank_account_holder: employee.bank_account_holder ?? '',
     bank_account_holder_document: employee.bank_account_holder_document ?? '',
+    uniform_sweater: employee.uniform_sweater ?? '',
+    uniform_pants: employee.uniform_pants ?? '',
+    uniform_shoes: employee.uniform_shoes ?? '',
+    uniform_other: employee.uniform_other ?? '',
     emergency_contact_name: employee.emergency_contact_name ?? '',
     emergency_contact_relationship: employee.emergency_contact_relationship ?? '',
     emergency_contact_mobile: employee.emergency_contact_mobile ?? '',
@@ -355,6 +368,10 @@ export function AdminEmployeeSettings() {
       bank_account_number: form.bank_account_number.trim(),
       bank_account_holder: form.bank_account_holder.trim(),
       bank_account_holder_document: form.bank_account_holder_document.trim(),
+      uniform_sweater: form.uniform_sweater.trim(),
+      uniform_pants: form.uniform_pants.trim(),
+      uniform_shoes: form.uniform_shoes.trim(),
+      uniform_other: form.uniform_other.trim(),
       emergency_contact_name: form.emergency_contact_name.trim(),
       emergency_contact_relationship: form.emergency_contact_relationship.trim(),
       emergency_contact_mobile: form.emergency_contact_mobile.trim(),
@@ -493,6 +510,26 @@ export function AdminEmployeeSettings() {
             <label className="block sm:col-span-2 lg:col-span-3">
               <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Dirección de residencia</span>
               <textarea value={form.address} onChange={(event) => setField('address', event.target.value)} rows={3} className={`${inputCls} resize-none`} />
+            </label>
+          </div>
+        );
+      case 'dotacion':
+        return (
+          <div className="space-y-4">
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <Field label="Suéter">
+                <input value={form.uniform_sweater} onChange={(event) => setField('uniform_sweater', event.target.value)} className={inputCls} />
+              </Field>
+              <Field label="Pantalón">
+                <input value={form.uniform_pants} onChange={(event) => setField('uniform_pants', event.target.value)} className={inputCls} />
+              </Field>
+              <Field label="Zapato">
+                <input value={form.uniform_shoes} onChange={(event) => setField('uniform_shoes', event.target.value)} className={inputCls} />
+              </Field>
+            </div>
+            <label className="block">
+              <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Otro</span>
+              <textarea value={form.uniform_other} onChange={(event) => setField('uniform_other', event.target.value)} rows={3} className={`${inputCls} resize-none`} />
             </label>
           </div>
         );

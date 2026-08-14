@@ -228,6 +228,10 @@ export interface Employee {
   work_modality: WorkModality;
   termination_reason: string;
   work_observations: string;
+  uniform_sweater: string;
+  uniform_pants: string;
+  uniform_shoes: string;
+  uniform_other: string;
   eps: string;
   pension_fund: string;
   severance_fund: string;
@@ -343,6 +347,10 @@ export interface EmployeePayload {
   work_modality?: WorkModality;
   termination_reason?: string;
   work_observations?: string;
+  uniform_sweater?: string;
+  uniform_pants?: string;
+  uniform_shoes?: string;
+  uniform_other?: string;
   eps?: string;
   pension_fund?: string;
   severance_fund?: string;

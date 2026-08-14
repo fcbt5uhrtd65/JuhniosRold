@@ -34,6 +34,7 @@ import {
   Search,
   Save,
   ShieldCheck,
+  Shirt,
   Eye,
   EyeOff,
   RefreshCcw,
@@ -217,6 +218,7 @@ const EMPLOYEE_DATA_QUALITY_FILTER_OPTIONS: Array<{ value: EmployeeDataQualityFi
 ];
 type EmployeeModalTab =
   | 'personal'
+  | 'dotacion'
   | 'labor'
   | 'social'
   | 'banking'
@@ -267,6 +269,10 @@ interface EmployeeFormState {
   work_modality: string;
   termination_reason: string;
   work_observations: string;
+  uniform_sweater: string;
+  uniform_pants: string;
+  uniform_shoes: string;
+  uniform_other: string;
   eps: string;
   pension_fund: string;
   severance_fund: string;
@@ -406,6 +412,10 @@ const EMPTY_EMPLOYEE_FORM: EmployeeFormState = {
   work_modality: '',
   termination_reason: '',
   work_observations: '',
+  uniform_sweater: '',
+  uniform_pants: '',
+  uniform_shoes: '',
+  uniform_other: '',
   eps: '',
   pension_fund: '',
   severance_fund: '',
@@ -485,6 +495,7 @@ const REQUIRED_DOCUMENT_TYPES = new Set<EmployeeDocumentType>([
 
 const MODAL_TABS: Array<{ id: EmployeeModalTab; label: string; icon: typeof Users }> = [
   { id: 'personal', label: 'Información Personal', icon: Users },
+  { id: 'dotacion', label: 'Dotación', icon: Shirt },
   { id: 'labor', label: 'Información Laboral', icon: Briefcase },
   { id: 'social', label: 'Seguridad Social', icon: ShieldCheck },
   { id: 'banking', label: 'Datos Bancarios', icon: Landmark },
@@ -1350,6 +1361,10 @@ function mapEmployeeToForm(employee: Employee): EmployeeFormState {
     work_modality: employee.work_modality,
     termination_reason: employee.termination_reason,
     work_observations: employee.work_observations,
+    uniform_sweater: employee.uniform_sweater,
+    uniform_pants: employee.uniform_pants,
+    uniform_shoes: employee.uniform_shoes,
+    uniform_other: employee.uniform_other,
     eps: employee.eps,
     pension_fund: employee.pension_fund,
     severance_fund: employee.severance_fund,
@@ -1424,6 +1439,10 @@ function buildEmployeePayload(form: EmployeeFormState): EmployeePayload {
     work_modality: form.work_modality as EmployeePayload['work_modality'],
     termination_reason: form.termination_reason.trim(),
     work_observations: form.work_observations.trim(),
+    uniform_sweater: form.uniform_sweater.trim(),
+    uniform_pants: form.uniform_pants.trim(),
+    uniform_shoes: form.uniform_shoes.trim(),
+    uniform_other: form.uniform_other.trim(),
     eps: form.eps.trim(),
     pension_fund: form.pension_fund.trim(),
     severance_fund: form.severance_fund.trim(),
@@ -3328,6 +3347,29 @@ export function AdminHR() {
     </div>
   );
 
+  const renderDotacionTab = () => {
+    const displayName = `${employeeForm.first_name} ${employeeForm.last_name}`.trim() || editingEmployee?.employee_code || 'Empleado sin nombre';
+    const departmentName = employeeForm.department ? departmentById.get(employeeForm.department)?.name : '';
+    const positionName = employeeForm.position ? positionById.get(employeeForm.position)?.name : '';
+
+    return (
+      <div className="space-y-4">
+        <div className="rounded-xl border border-[#2a4038]/15 bg-[#eef4f1] px-4 py-3">
+          <p className="text-sm font-semibold text-gray-900">{displayName}</p>
+          <p className="mt-1 text-xs text-[#2a4038]/75">
+            {[departmentName || 'Sin área', positionName || 'Sin cargo'].join(' · ')}
+          </p>
+        </div>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <TextInput label="Suéter" value={employeeForm.uniform_sweater} onChange={(value) => setFormField('uniform_sweater', value)} />
+          <TextInput label="Pantalón" value={employeeForm.uniform_pants} onChange={(value) => setFormField('uniform_pants', value)} />
+          <TextInput label="Zapato" value={employeeForm.uniform_shoes} onChange={(value) => setFormField('uniform_shoes', value)} />
+        </div>
+        <TextareaInput label="Otro" value={employeeForm.uniform_other} onChange={(value) => setFormField('uniform_other', value)} />
+      </div>
+    );
+  };
+
   const renderLaborTab = () => (
     <div className="space-y-4">
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -3805,6 +3847,7 @@ export function AdminHR() {
   const renderModalTab = () => {
     switch (employeeModalTab) {
       case 'personal': return renderPersonalTab();
+      case 'dotacion': return renderDotacionTab();
       case 'labor': return renderLaborTab();
       case 'social': return renderSocialTab();
       case 'banking': return renderBankingTab();
@@ -3841,6 +3884,16 @@ export function AdminHR() {
             ['Género', employee.gender],
             ['Estado civil', employee.marital_status],
           ]
+        : employeeModalTab === 'dotacion'
+          ? [
+              ['Nombre', getEmployeeName(employee)],
+              ['Área', department],
+              ['Cargo', position],
+              ['Suéter', employee.uniform_sweater],
+              ['Pantalón', employee.uniform_pants],
+              ['Zapato', employee.uniform_shoes],
+              ['Otro', employee.uniform_other],
+            ]
         : employeeModalTab === 'labor'
           ? [
               ['Código interno', employee.employee_code],
