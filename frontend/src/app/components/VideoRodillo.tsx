@@ -151,8 +151,8 @@ export function VideoRodillo() {
 
         {/* Rodillo de reels */}
         <div
-          className="relative flex items-center justify-center select-none"
-          style={{ height: 'min(84vw, 560px)', touchAction: 'pan-y' }}
+          className="relative mt-3 flex items-center justify-center select-none sm:mt-0"
+          style={{ height: 'clamp(360px, 112vw, 560px)', touchAction: 'pan-y' }}
           onTouchStart={handleTouchStart}
           onTouchEnd={handleTouchEnd}
         >

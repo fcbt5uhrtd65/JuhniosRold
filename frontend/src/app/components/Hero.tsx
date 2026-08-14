@@ -73,10 +73,14 @@ export function Hero({ onLoginClick }: HeroProps = {}) {
   }, []);
 
   return (
-    <section
-      className="relative mx-3 aspect-[1920/800] overflow-hidden rounded-[20px] bg-[#F7F1EA] md:mx-5 md:aspect-auto md:h-[min(100vh,680px)] md:min-h-[480px] lg:mx-7"
-      style={{ marginTop: 14 }}
-    >
+    <>
+      <div className="md:hidden">
+        <NavigationBar variant="transparent" mobileStatic onLoginClick={onLoginClick} />
+      </div>
+
+      <section
+        className="relative mx-3 mt-3 aspect-[1920/800] overflow-hidden rounded-[20px] bg-[#F7F1EA] md:mx-5 md:mt-[14px] md:aspect-auto md:h-[min(100vh,680px)] md:min-h-[480px] lg:mx-7"
+      >
       {/* Fondo: rota entre las imágenes del banner */}
       <AnimatePresence initial={false} mode="sync">
         <motion.img
@@ -93,7 +97,9 @@ export function Hero({ onLoginClick }: HeroProps = {}) {
         />
       </AnimatePresence>
 
-      <NavigationBar variant="transparent" onLoginClick={onLoginClick} />
+      <div className="hidden md:block">
+        <NavigationBar variant="transparent" onLoginClick={onLoginClick} />
+      </div>
 
       {/* Barra de beneficio único */}
       <motion.div
@@ -131,6 +137,7 @@ export function Hero({ onLoginClick }: HeroProps = {}) {
           />
         ))}
       </div>
-    </section>
+      </section>
+    </>
   );
 }

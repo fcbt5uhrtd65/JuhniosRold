@@ -19,6 +19,7 @@ import logoImg from '../../assets/logo.png';
 interface NavigationBarProps {
   onLoginClick?: () => void;
   variant?: 'solid' | 'transparent';
+  mobileStatic?: boolean;
 }
 
 const TikTokIcon = ({ className }: { className?: string }) => (
@@ -74,7 +75,7 @@ function timeAgo(dateStr: string): string {
   return `Hace ${Math.floor(diff / 86400)} d`;
 }
 
-export function NavigationBar({ onLoginClick, variant = 'solid' }: NavigationBarProps) {
+export function NavigationBar({ onLoginClick, variant = 'solid', mobileStatic = false }: NavigationBarProps) {
   const { searchQuery, setSearchQuery, isSearchOpen, setIsSearchOpen } = useSearch();
   const { currentUser, logout, orders, savedProducts } = useUser();
   const { notifications, unreadCount, markRead, markAllRead } = useNotifications();
@@ -137,9 +138,8 @@ export function NavigationBar({ onLoginClick, variant = 'solid' }: NavigationBar
         animate={{ y: hidden ? -90 : 0, opacity: 1 }}
         transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
         className={isTransparent
-          ? 'absolute left-0 right-0 z-40 transition-all duration-300'
-          : 'fixed left-3 right-3 md:left-5 md:right-5 lg:left-7 lg:right-7 z-40'}
-        style={{ top: isTransparent ? '10px' : '10px' }}
+          ? `${mobileStatic ? 'relative mt-2.5 md:absolute md:mt-0 md:top-[10px]' : 'absolute top-[10px]'} left-0 right-0 z-40 transition-all duration-300`
+          : 'fixed left-3 right-3 md:left-5 md:right-5 lg:left-7 lg:right-7 top-[10px] z-40'}
       >
         <div className={
           isTransparent
