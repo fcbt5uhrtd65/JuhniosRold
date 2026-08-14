@@ -347,9 +347,13 @@ function ProductPage({
           <ChevronRight className="w-3 h-3" strokeWidth={1.5} />
           <span className="text-stone-800 font-medium">{product.name}</span>
         </nav>
-        <button onClick={onClose} className="p-2 rounded-full hover:bg-stone-100 transition-colors text-stone-400 hover:text-stone-700">
+        <motion.button
+          whileTap={{ scale: 0.92 }}
+          onClick={onClose}
+          className="p-2 rounded-full hover:bg-stone-100 active:bg-stone-100 transition-colors text-stone-400 hover:text-stone-700 touch-manipulation"
+        >
           <X className="w-4 h-4" strokeWidth={1.5} />
-        </button>
+        </motion.button>
       </div>
 
       <div className="max-w-[1160px] mx-auto px-6 md:px-10 lg:px-16 py-10">

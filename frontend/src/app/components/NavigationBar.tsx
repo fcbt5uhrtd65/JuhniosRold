@@ -13,7 +13,7 @@ import { useUser } from '../contexts/UserContext';
 import { useNotifications } from '../contexts/NotificationsContext';
 import type { NotificationType } from '../services/notifications.service';
 import { navigateTo } from '../services/navigate';
-import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
+import { forceBodyScrollUnlock, useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import logoImg from '../../assets/logo.png';
 
 interface NavigationBarProps {
@@ -123,7 +123,22 @@ export function NavigationBar({ onLoginClick, variant = 'solid', mobileStatic = 
       navigateTo(href === '#' ? '/' : `/${href}`);
       return;
     }
-    if (href === '#') { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+    if (href.startsWith('#')) {
+      e.preventDefault();
+      setActiveLink(href);
+      setMenuOpen(false);
+      window.setTimeout(() => {
+        forceBodyScrollUnlock();
+        if (href === '#') {
+          window.history.pushState({}, '', window.location.pathname);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+        }
+        window.history.pushState({}, '', href);
+        document.getElementById(href.slice(1))?.scrollIntoView({ behavior: 'smooth' });
+      }, menuOpen ? 80 : 0);
+      return;
+    }
     setActiveLink(href);
     setMenuOpen(false);
   };
@@ -304,7 +319,7 @@ export function NavigationBar({ onLoginClick, variant = 'solid', mobileStatic = 
                 {/* Hamburguesa mobile */}
                 <button
                   onClick={() => setMenuOpen(true)}
-                  className="lg:hidden flex h-9 w-9 flex-col items-center justify-center gap-[5px] rounded-full hover:bg-stone-100 transition-colors"
+                  className="lg:hidden flex h-9 w-9 flex-col items-center justify-center gap-[5px] rounded-full hover:bg-stone-100 active:scale-95 active:bg-stone-100 transition-all touch-manipulation"
                   aria-label="Abrir menú"
                 >
                   <span className="block w-4 h-px bg-stone-700" />
@@ -336,7 +351,7 @@ export function NavigationBar({ onLoginClick, variant = 'solid', mobileStatic = 
                   <img src={logoImg} alt="Juhnios Rold" className="h-8 w-auto object-contain" />
                   <div className="text-[8px] tracking-[0.25em] uppercase text-[#8B7355] mt-1.5">CUIDADO CAPILAR Y COSMÉTICO</div>
                 </div>
-                <button onClick={() => setMenuOpen(false)} className="p-2 rounded-full hover:bg-stone-100 transition-colors">
+                <button onClick={() => setMenuOpen(false)} className="p-2 rounded-full hover:bg-stone-100 active:scale-95 active:bg-stone-100 transition-all touch-manipulation">
                   <X className="w-4 h-4 text-stone-400" strokeWidth={1.5} />
                 </button>
               </div>
@@ -361,7 +376,7 @@ export function NavigationBar({ onLoginClick, variant = 'solid', mobileStatic = 
                       <a
                         href={link.href === '#' ? undefined : link.href}
                         onClick={e => handleNavClick(link.href, e)}
-                        className={`group flex items-center justify-between px-4 py-3.5 rounded-xl transition-all duration-200 ${
+                        className={`group flex items-center justify-between px-4 py-3.5 rounded-xl transition-all duration-200 active:scale-[0.98] active:bg-stone-100 touch-manipulation ${
                           activeLink === link.href ? 'bg-stone-100' : 'hover:bg-stone-50'
                         }`}
                       >

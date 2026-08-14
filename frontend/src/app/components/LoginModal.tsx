@@ -488,13 +488,10 @@ export function LoginModal({ isOpen, onClose, onAdminAccess, onGoogleNewUser }: 
                       <span className="text-[10px] text-stone-400">o continúa con</span>
                       <div className="flex-1 h-px bg-stone-100" />
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex">
                       <button type="button" onClick={handleGoogleButtonClick} disabled={!googleClientId || submitting}
                         className="flex-1 flex items-center justify-center gap-1.5 py-2 border border-stone-200 rounded-lg text-xs text-stone-600 font-medium hover:bg-stone-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
                         <GoogleG /> Google
-                      </button>
-                      <button type="button" className="flex-1 flex items-center justify-center gap-1.5 py-2 border border-stone-200 rounded-lg text-xs text-stone-600 font-medium hover:bg-stone-50 transition-colors">
-                        <svg width="13" height="13" viewBox="0 0 814 1000" fill="currentColor"><path d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155.5 123.1s-85.5-39.5-164-39.5c-76 0-103.7 40.8-165.9 40.8s-105-43.4-150.3-109.2c-52.1-73.1-96.2-187.6-96.2-295.1C172 151.1 359.4 75 542.8 75c81.1 0 148.1 32.1 200.8 84.4 30.4 29.7 60.4 65.2 63.5 181.5z"/><path d="M554.2 0c2.6 27.2-7.7 55.8-21.6 76.1-15.2 22.5-42.5 40.7-71.3 38.3-3.7-28.4 9.2-58.1 24-77.2 16.4-21.2 43.6-38.9 68.9-37.2z"/></svg> Apple
                       </button>
                     </div>
 

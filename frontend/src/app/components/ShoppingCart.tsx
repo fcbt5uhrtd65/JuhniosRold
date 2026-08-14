@@ -10,7 +10,6 @@ import {
   Plus,
   ShieldCheck,
   ShoppingBag,
-  Sparkles,
   Tag,
   Trash2,
   Truck,
@@ -18,7 +17,6 @@ import {
   Loader2,
 } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
-import { useSearch } from '../contexts/SearchContext';
 import { Checkout } from './Checkout';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 
@@ -27,54 +25,6 @@ interface ShoppingCartProps {
 }
 
 const SHIPPING_THRESHOLD = 80000;
-
-const recommendedProducts = [
-  {
-    id: 'argan-oil',
-    name: 'Aceite de Argán',
-    benefit: 'Brillo y suavidad',
-    price: 32900,
-    promo: 'Rutina nutritiva',
-    query: 'aceite argán',
-    image: 'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?w=240&q=80',
-  },
-  {
-    id: 'hair-mask',
-    name: 'Mascarilla nutritiva',
-    benefit: 'Reparación profunda',
-    price: 26900,
-    promo: 'Ideal post-lavado',
-    query: 'mascarilla nutritiva',
-    image: 'https://images.unsplash.com/photo-1587049352846-4a222e784d38?w=240&q=80',
-  },
-  {
-    id: 'hair-serum',
-    name: 'Sérum capilar',
-    benefit: 'Control de frizz',
-    price: 29900,
-    promo: 'Acabado ligero',
-    query: 'sérum capilar',
-    image: 'https://images.unsplash.com/photo-1519415510236-718bdfcd89c8?w=240&q=80',
-  },
-  {
-    id: 'repair-shampoo',
-    name: 'Shampoo reparador',
-    benefit: 'Limpieza fortalecedora',
-    price: 34900,
-    promo: 'Más vendido',
-    query: 'shampoo reparador',
-    image: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=240&q=80',
-  },
-  {
-    id: 'hydrating-conditioner',
-    name: 'Acondicionador hidratante',
-    benefit: 'Desenreda y suaviza',
-    price: 31900,
-    promo: 'Complemento clave',
-    query: 'acondicionador hidratante',
-    image: 'https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=240&q=80',
-  },
-];
 
 function formatMoney(value: number): string {
   return `$${Math.max(0, value).toLocaleString('es-CO')}`;
@@ -86,7 +36,6 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
   const [couponCode, setCouponCode] = useState('');
   const [couponMessage, setCouponMessage] = useState('');
   const { items, updateQuantity, removeItem, subtotal, total, wholesaleDiscount, itemCount, reloadCart, isLoading } = useCart();
-  const { setSearchQuery } = useSearch();
 
   const shippingProgress = Math.min((total / SHIPPING_THRESHOLD) * 100, 100);
   const remaining = Math.max(SHIPPING_THRESHOLD - total, 0);
@@ -111,14 +60,6 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
   const openCart = () => {
     setIsOpen(true);
     void reloadCart();
-  };
-
-  const goToRecommendedProduct = (query: string) => {
-    setSearchQuery(query);
-    setIsOpen(false);
-    window.setTimeout(() => {
-      document.getElementById('catalogo')?.scrollIntoView({ behavior: 'smooth' });
-    }, 120);
   };
 
   const applyCoupon = () => {
@@ -381,39 +322,6 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
                           </div>
                         </motion.div>
                       ))}
-
-                      <section className="rounded-2xl bg-white border border-stone-100 p-3.5 shadow-sm">
-                        <div className="flex items-center justify-between gap-2 mb-3">
-                          <div className="flex items-center gap-2">
-                          <Sparkles className="w-4 h-4 text-amber-500" strokeWidth={1.7} />
-                            <h3 className="text-[12px] font-bold text-stone-900">También puede servirte</h3>
-                          </div>
-                          <span className="text-[10px] text-stone-400">Opcional</span>
-                        </div>
-                        <div className="grid gap-2">
-                          {recommendedProducts.slice(0, 3).map((product) => (
-                            <button
-                              key={product.id}
-                              type="button"
-                              onClick={() => goToRecommendedProduct(product.query)}
-                              className="grid grid-cols-[54px_1fr_auto] items-center gap-3 rounded-xl border border-stone-100 bg-[#FBFAF7] p-2 text-left transition-colors hover:border-[#2D3A1F]/30 hover:bg-white"
-                            >
-                              <div className="h-[54px] w-[54px] overflow-hidden rounded-lg bg-stone-100">
-                                <img src={product.image} alt={product.name} className="h-full w-full object-cover" />
-                              </div>
-                              <div className="min-w-0">
-                                <p className="truncate text-[12px] font-bold text-stone-950">{product.name}</p>
-                                <p className="truncate text-[10px] text-stone-500">{product.benefit}</p>
-                                <p className="mt-1 text-[11px] font-semibold text-stone-900">{formatMoney(product.price)}</p>
-                              </div>
-                              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-stone-950 text-white">
-                                <Plus className="w-3.5 h-3.5" strokeWidth={2.2} />
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      </section>
-
                       <section className="rounded-2xl bg-white p-3.5 shadow-sm border border-stone-100">
                         <div className="flex items-center gap-2 mb-3">
                           <Tag className="w-4 h-4 text-[#2D3A1F]" strokeWidth={1.7} />

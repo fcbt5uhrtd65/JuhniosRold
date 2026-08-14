@@ -507,12 +507,13 @@ export function ProductPage({
           <ChevronRight className="w-3 h-3" strokeWidth={1.5} />
           <span className="text-stone-800 font-medium truncate max-w-[200px]">{product.name}</span>
         </nav>
-        <button
+        <motion.button
+          whileTap={{ scale: 0.92 }}
           onClick={onClose}
-          className="p-2 rounded-full hover:bg-stone-100 transition-colors text-stone-400 hover:text-stone-700"
+          className="p-2 rounded-full hover:bg-stone-100 active:bg-stone-100 transition-colors text-stone-400 hover:text-stone-700 touch-manipulation"
         >
           <X className="w-4 h-4" strokeWidth={1.5} />
-        </button>
+        </motion.button>
       </div>
 
       {/* ── CUERPO PRINCIPAL ── */}
@@ -1209,11 +1210,12 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                       initial={{ opacity: 0, x: -8 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: index * 0.03 }}
+                      whileTap={{ scale: 0.99 }}
                       onClick={() => setQuickViewProduct(product)}
                       role="button"
                       tabIndex={0}
                       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setQuickViewProduct(product); } }}
-                      className="group flex gap-4 bg-white rounded-2xl border border-stone-100 p-4 hover:border-stone-200 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-300"
+                      className="group flex gap-4 bg-white rounded-2xl border border-stone-100 p-4 hover:border-stone-200 active:border-stone-300 active:bg-stone-50/60 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-300 touch-manipulation"
                     >
                       <div className="w-24 h-24 rounded-xl overflow-hidden bg-white flex-shrink-0 relative">
                         <motion.img
@@ -1293,11 +1295,12 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                     initial={{ opacity: 0, y: 28 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.04, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+                    whileTap={{ scale: 0.985 }}
                     onClick={() => setQuickViewProduct(product)}
                     role="button"
                     tabIndex={0}
                     onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setQuickViewProduct(product); } }}
-                    className="group flex flex-col bg-white rounded-2xl border border-stone-100 overflow-hidden hover:border-stone-200 hover:shadow-sm transition-all duration-300 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-300"
+                    className="group flex flex-col bg-white rounded-2xl border border-stone-100 overflow-hidden hover:border-stone-200 hover:shadow-sm active:border-stone-300 active:bg-stone-50/60 transition-all duration-300 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-300 touch-manipulation"
                   >
                     {/* Imagen */}
                     <div className="relative overflow-hidden bg-white aspect-[4/5]">
