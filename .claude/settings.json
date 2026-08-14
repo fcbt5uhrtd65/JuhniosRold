@@ -4,7 +4,8 @@
       "PowerShell(Get-PSDrive -PSProvider FileSystem | Select-Object Name, @{N='FreeGB';E={[math]::Round\\($_.Free/1GB,2\\)}}, @{N='UsedGB';E={[math]::Round\\($_.Used/1GB,2\\)}})",
       "PowerShell(cd \"c:\\\\Users\\\\Innova y Diseño PJR\\\\Documents\\\\JuhniosRold\\\\backend\"; python -m py_compile apps\\\\human_resources\\\\infrastructure\\\\models.py apps\\\\human_resources\\\\migrations\\\\0036_company_document_mission_vision_category.py; echo \"OK: $?\")",
       "PowerShell(cd \"c:\\\\Users\\\\Innova y Diseño PJR\\\\Documents\\\\JuhniosRold\\\\backend\"; python -m py_compile apps\\\\human_resources\\\\interfaces\\\\views.py apps\\\\human_resources\\\\application\\\\use_cases.py; echo \"OK: $?\")",
-      "PowerShell(cd \"c:\\\\Users\\\\Innova y Diseño PJR\\\\Documents\\\\JuhniosRold\\\\backend\"; python -m py_compile apps\\\\human_resources\\\\interfaces\\\\views.py; echo \"OK: $?\")"
+      "PowerShell(cd \"c:\\\\Users\\\\Innova y Diseño PJR\\\\Documents\\\\JuhniosRold\\\\backend\"; python -m py_compile apps\\\\human_resources\\\\interfaces\\\\views.py; echo \"OK: $?\")",
+      "PowerShell(Get-ChildItem -Path . -Directory -Depth 1 | Where-Object { $_.FullName -notmatch 'node_modules' } | Select-Object FullName)"
     ]
   }
 }

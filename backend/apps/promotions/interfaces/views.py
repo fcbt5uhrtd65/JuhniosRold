@@ -1,7 +1,9 @@
 from decimal import Decimal
 
+from django.core.exceptions import ObjectDoesNotExist
 from rest_framework import permissions, status
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
 from apps.identity.interfaces.permissions import HasComponentAccess
@@ -26,6 +28,15 @@ class PromotionViewSet(SoftDeleteModelViewSet):
 
 
 class SellerDiscountCodeViewSet(SoftDeleteModelViewSet):
+    """CRUD de códigos de descuento por vendedor.
+
+    Un administrador (``has_full_access``) puede gestionar el código de
+    cualquier vendedor. Un vendedor sin ese privilegio solo puede ver,
+    crear y regenerar el código asociado a su propio registro de empleado
+    (``request.user.employee_profile``) — nunca el de otro vendedor, aunque
+    tenga acceso al componente ``catalog.management``.
+    """
+
     queryset = SellerDiscountCode.objects.select_related("seller")
     serializer_class = SellerDiscountCodeSerializer
     required_component = "catalog.management"
@@ -37,6 +48,38 @@ class SellerDiscountCodeViewSet(SoftDeleteModelViewSet):
         if self.action == "validate":
             return (permissions.IsAuthenticated(),)
         return (HasComponentAccess(),)
+
+    def _own_employee(self):
+        user = self.request.user
+        try:
+            employee = user.employee_profile
+        except ObjectDoesNotExist:
+            employee = None
+        if employee is None:
+            raise PermissionDenied("Tu usuario no tiene un registro de empleado asociado.")
+        return employee
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        user = self.request.user
+        if getattr(user, "has_full_access", False):
+            return queryset
+        return queryset.filter(seller=self._own_employee())
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        if getattr(user, "has_full_access", False):
+            serializer.save()
+            return
+        serializer.save(seller=self._own_employee())
+
+    def perform_update(self, serializer):
+        user = self.request.user
+        if getattr(user, "has_full_access", False):
+            serializer.save()
+            return
+        # Un vendedor solo puede editar su propio código; nunca reasignarlo a otro.
+        serializer.save(seller=self._own_employee())
 
     @action(detail=False, methods=("post",), url_path="validate")
     def validate(self, request):

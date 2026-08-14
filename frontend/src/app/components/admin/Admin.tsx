@@ -23,6 +23,7 @@ import { AdminComponents } from './AdminComponents';
 import { AdminReferrals } from './AdminReferrals';
 import { AdminShipping } from './AdminShipping';
 import { AdminFlipbookCatalogs } from './AdminFlipbookCatalogs';
+import { AdminSellerDiscount } from './AdminSellerDiscount';
 
 function getDefaultViewForRole(role?: string) {
   switch (role) {
@@ -33,7 +34,7 @@ function getDefaultViewForRole(role?: string) {
     case 'EMPLEADO':
       return 'employee-portal';
     case 'SELLER':
-      return 'products';
+      return 'dashboard';
     case 'DISTRIBUTOR':
       return 'orders';
     case 'PLANEACION':
@@ -119,6 +120,8 @@ export function Admin() {
         return <AdminReferrals />;
       case 'shipping':
         return <AdminShipping />;
+      case 'seller-discount':
+        return <AdminSellerDiscount />;
       default:
         return <AdminDashboard />;
     }

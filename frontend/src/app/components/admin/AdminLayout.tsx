@@ -26,6 +26,7 @@ import {
   Banknote,
   Settings,
   ScrollText,
+  Ticket,
 } from 'lucide-react';
 
 interface AdminLayoutProps {
@@ -66,10 +67,11 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['ADMIN', 'SELLER'] },
-    { id: 'products', label: 'Productos', icon: Package, roles: ['ADMIN', 'SELLER'] },
+    { id: 'products', label: 'Productos', icon: Package, roles: ['ADMIN'] },
     { id: 'flipbook-catalogs', label: 'Catálogos', icon: BookOpen, roles: ['ADMIN'] },
-    { id: 'inventory', label: 'Stock Rápido', icon: Warehouse, roles: ['ADMIN', 'SELLER'] },
-    { id: 'inventory-production', label: 'Inventario', icon: Boxes, roles: ['ADMIN', 'SELLER'] },
+    { id: 'inventory', label: 'Stock Rápido', icon: Warehouse, roles: ['ADMIN'] },
+    { id: 'inventory-production', label: 'Inventario', icon: Boxes, roles: ['ADMIN'] },
+    { id: 'seller-discount', label: 'Descuentos', icon: Ticket, roles: ['SELLER'] },
     {
       id: 'manufacturing',
       label: 'Producción',
@@ -90,11 +92,11 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
       ],
     },
     { id: 'orders', label: 'Pedidos', icon: ShoppingCart, roles: ['ADMIN', 'SELLER', 'DISTRIBUTOR', 'PEDIDOS'] },
-    { id: 'customers', label: 'Clientes', icon: Users, roles: ['ADMIN', 'SELLER'] },
+    { id: 'customers', label: 'Clientes', icon: Users, roles: ['ADMIN'] },
     { id: 'referrals', label: 'Referidos', icon: Gift, roles: ['ADMIN'] },
     { id: 'shipping', label: 'Configuración de Envíos', icon: Truck, roles: ['ADMIN', 'PEDIDOS'] },
-    { id: 'payments', label: 'Pagos', icon: CreditCard, roles: ['ADMIN', 'SELLER'] },
-    { id: 'reports', label: 'Reportes', icon: BarChart3, roles: ['ADMIN', 'SELLER'] },
+    { id: 'payments', label: 'Pagos', icon: CreditCard, roles: ['ADMIN'] },
+    { id: 'reports', label: 'Reportes', icon: BarChart3, roles: ['ADMIN'] },
     { id: 'hr', label: 'RRHH', icon: Briefcase, roles: ['ADMIN', 'RRHH'] },
     { id: 'payroll', label: 'Nómina', icon: Banknote, roles: ['ADMIN', 'RRHH', 'CONTABILIDAD', 'TESORERIA'] },
     { id: 'employee-portal', label: 'Mis solicitudes', icon: CalendarClock, roles: ['ADMIN', 'SELLER', 'DISTRIBUTOR', 'RRHH', 'EMPLEADO', 'PEDIDOS'] },
