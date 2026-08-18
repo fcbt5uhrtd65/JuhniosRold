@@ -278,6 +278,7 @@ def build_default_role_permissions():
         "catalog.management": {"can_view": True, "can_edit": True},
         "commerce.orders": {"can_view": True, "can_edit": True},
         "customers.management": {"can_view": True, "can_edit": False},
+        "employees.management": {"can_view": True, "can_edit": False},
         "inventory.management": {"can_view": True, "can_edit": False},
         "envios.tracking": {"can_view": True, "can_edit": False},
     }
