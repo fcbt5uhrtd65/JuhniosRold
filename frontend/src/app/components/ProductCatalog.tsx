@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Search, SlidersHorizontal, Grid, List,
-  Heart, Eye, ShoppingBag,
+  Heart, Eye, ShoppingBag, Share2,
   Package, Star, X, ChevronLeft, ChevronRight,
   Minus, Plus, ChevronUp, ChevronDown, Truck, ShieldCheck, Leaf,
 } from 'lucide-react';
@@ -43,6 +43,8 @@ type ProductGalleryItem = {
 const FALLBACK_IMAGE =
   'https://images.unsplash.com/photo-1608248597279-f99d160bfcbc?w=900&q=80';
 const PRODUCTS_PER_PAGE = 6;
+const PRODUCT_LINK_PARAM = 'producto';
+const PRODUCT_VARIANT_PARAM = 'variante';
 
 /* ── Helpers ── */
 function formatPrice(price: number | null, currency = 'COP'): string {
@@ -151,8 +153,39 @@ function getProductBadge(product: CatalogProduct): CatalogBadge | undefined {
   return undefined;
 }
 
+function getProductLinkKey(product: CatalogProduct): string {
+  return product.slug || product.id;
+}
+
+function getProductShareUrl(product: CatalogProduct, variant?: ProductVariant | null): string {
+  const url = new URL('/', window.location.origin);
+  url.searchParams.set(PRODUCT_LINK_PARAM, getProductLinkKey(product));
+  if (variant?.id) {
+    url.searchParams.set(PRODUCT_VARIANT_PARAM, variant.id);
+  }
+  url.hash = 'catalogo';
+  return url.toString();
+}
+
+function findProductByLink(products: CatalogProduct[], value: string | null): CatalogProduct | null {
+  if (!value) return null;
+  const normalized = decodeURIComponent(value).trim().toLowerCase();
+  return products.find(product => (
+    product.slug.toLowerCase() === normalized ||
+    product.id.toLowerCase() === normalized
+  )) ?? null;
+}
+
+function getPrimaryVariantImage(variant?: ProductVariant | null): string | null {
+  if (!variant) return null;
+  const primaryImage = [...variant.images].sort((left, right) => (
+    left.is_primary === right.is_primary ? left.position - right.position : left.is_primary ? -1 : 1
+  ))[0];
+  return primaryImage?.image || variant.image_url || null;
+}
+
 function getProductImage(product: CatalogProduct, variant?: ProductVariant | null): string {
-  return variant?.image_url || product.primary_image || product.image_urls[0] || FALLBACK_IMAGE;
+  return getPrimaryVariantImage(variant) || product.primary_image || product.image_urls[0] || FALLBACK_IMAGE;
 }
 
 
@@ -478,6 +511,25 @@ export function ProductPage({
     }
   };
 
+  const handleShare = async () => {
+    const url = getProductShareUrl(product, selVariant);
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: product.name,
+          text: `Mira este producto de Juhnios Rold: ${product.name}`,
+          url,
+        });
+        return;
+      }
+      await navigator.clipboard.writeText(url);
+      toast.success('Link del producto copiado');
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      toast.error('No se pudo compartir el producto. Copia el enlace desde la barra del navegador.');
+    }
+  };
+
   const handleReviewDelete = async (reviewId: string) => {
     try {
       await deleteProductReview(reviewId);
@@ -511,13 +563,24 @@ export function ProductPage({
           <ChevronRight className="w-3 h-3" strokeWidth={1.5} />
           <span className="text-[12px] leading-none text-stone-800 font-medium truncate max-w-[200px]">{product.name}</span>
         </nav>
-        <motion.button
-          whileTap={{ scale: 0.92 }}
-          onClick={onClose}
-          className="p-2 rounded-full hover:bg-stone-100 active:bg-stone-100 transition-colors text-stone-400 hover:text-stone-700 touch-manipulation"
-        >
-          <X className="w-4 h-4" strokeWidth={1.5} />
-        </motion.button>
+        <div className="flex items-center gap-1.5">
+          <motion.button
+            whileTap={{ scale: 0.92 }}
+            onClick={handleShare}
+            className="p-2 rounded-full hover:bg-stone-100 active:bg-stone-100 transition-colors text-stone-400 hover:text-stone-700 touch-manipulation"
+            aria-label="Compartir producto"
+          >
+            <Share2 className="w-4 h-4" strokeWidth={1.5} />
+          </motion.button>
+          <motion.button
+            whileTap={{ scale: 0.92 }}
+            onClick={onClose}
+            className="p-2 rounded-full hover:bg-stone-100 active:bg-stone-100 transition-colors text-stone-400 hover:text-stone-700 touch-manipulation"
+            aria-label="Cerrar producto"
+          >
+            <X className="w-4 h-4" strokeWidth={1.5} />
+          </motion.button>
+        </div>
       </div>
 
       {/* ── CUERPO PRINCIPAL ── */}
@@ -861,6 +924,44 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
   const [error, setError]                 = useState<string | null>(null);
   const [currentPage, setCurrentPage]     = useState(1);
 
+  const writeProductUrl = useCallback((product: CatalogProduct, mode: 'push' | 'replace' = 'push', variantId?: string | null) => {
+    const url = new URL(window.location.href);
+    url.pathname = '/';
+    url.searchParams.set(PRODUCT_LINK_PARAM, getProductLinkKey(product));
+    if (variantId) {
+      url.searchParams.set(PRODUCT_VARIANT_PARAM, variantId);
+    } else {
+      url.searchParams.delete(PRODUCT_VARIANT_PARAM);
+    }
+    url.hash = 'catalogo';
+    const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+    if (`${window.location.pathname}${window.location.search}${window.location.hash}` === nextUrl) return;
+    window.history[mode === 'replace' ? 'replaceState' : 'pushState']({ productId: product.id }, '', nextUrl);
+    window.dispatchEvent(new Event('app:navigate'));
+  }, []);
+
+  const clearProductUrl = useCallback(() => {
+    const url = new URL(window.location.href);
+    url.pathname = '/';
+    url.searchParams.delete(PRODUCT_LINK_PARAM);
+    url.searchParams.delete(PRODUCT_VARIANT_PARAM);
+    url.hash = 'catalogo';
+    const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+    if (`${window.location.pathname}${window.location.search}${window.location.hash}` === nextUrl) return;
+    window.history.pushState({}, '', nextUrl);
+    window.dispatchEvent(new Event('app:navigate'));
+  }, []);
+
+  const openProduct = useCallback((product: CatalogProduct, mode: 'push' | 'replace' = 'push', variantId?: string | null) => {
+    setQuickViewProduct(product);
+    writeProductUrl(product, mode, variantId);
+  }, [writeProductUrl]);
+
+  const closeProduct = useCallback(() => {
+    setQuickViewProduct(null);
+    clearProductUrl();
+  }, [clearProductUrl]);
+
   useEffect(() => {
     let isMounted = true;
     async function load() {
@@ -882,6 +983,35 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
     load();
     return () => { isMounted = false; };
   }, []);
+
+  useEffect(() => {
+    if (products.length === 0) return;
+
+    const syncProductFromUrl = () => {
+      const params = new URLSearchParams(window.location.search);
+      const productParam = params.get(PRODUCT_LINK_PARAM);
+      const variantParam = params.get(PRODUCT_VARIANT_PARAM);
+      const linkedProduct = findProductByLink(products, productParam);
+      if (linkedProduct) {
+        const linkedVariant = variantParam
+          ? linkedProduct.variants.find(variant => variant.id === variantParam)
+          : null;
+        if (linkedVariant?.presentation) {
+          setSelectedSizes(prev => ({ ...prev, [linkedProduct.id]: linkedVariant.presentation }));
+        }
+        setQuickViewProduct(linkedProduct);
+        requestAnimationFrame(() => {
+          document.getElementById('catalogo')?.scrollIntoView({ behavior: 'smooth' });
+        });
+      } else if (!productParam) {
+        setQuickViewProduct(null);
+      }
+    };
+
+    syncProductFromUrl();
+    window.addEventListener('popstate', syncProductFromUrl);
+    return () => window.removeEventListener('popstate', syncProductFromUrl);
+  }, [products]);
 
   useEffect(() => {
     if (globalSearchQuery) setLocalSearchQuery(globalSearchQuery);
@@ -949,7 +1079,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
 
   const handleAddToCart = async (product: CatalogProduct, closeModal?: boolean) => {
     if (!currentUser) {
-      if (closeModal) setQuickViewProduct(null);
+      if (closeModal) closeProduct();
       toast.info('Inicia sesión para añadir productos al carrito');
       onLoginRequired?.();
       return;
@@ -967,7 +1097,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
       image: getProductImage(product, variant),
     });
     if (added) toast.success(`${product.name} añadido al carrito`);
-    if (closeModal) setQuickViewProduct(null);
+    if (closeModal) closeProduct();
   };
 
   const handleToggleSave = (productId: string, productName: string) => {
@@ -979,6 +1109,13 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
     const was = isProductSaved(productId);
     toggleSaveProduct(productId);
     toast[was ? 'info' : 'success'](was ? `${productName} eliminado de guardados` : `${productName} guardado`);
+  };
+
+  const handleSelectSize = (productId: string, size: string) => {
+    setSelectedSizes(prev => ({ ...prev, [productId]: size }));
+    if (quickViewProduct?.id !== productId) return;
+    const variant = quickViewProduct.variants.find(item => item.presentation === size);
+    writeProductUrl(quickViewProduct, 'replace', variant?.id);
   };
 
   return (
@@ -1215,10 +1352,10 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: index * 0.03 }}
                       whileTap={{ scale: 0.99 }}
-                      onClick={() => setQuickViewProduct(product)}
+                      onClick={() => openProduct(product, 'push', selVariant?.id)}
                       role="button"
                       tabIndex={0}
-                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setQuickViewProduct(product); } }}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openProduct(product, 'push', selVariant?.id); } }}
                       className="group flex gap-4 bg-white rounded-2xl p-4 shadow-[0_12px_34px_rgba(28,25,23,0.06)] hover:shadow-[0_18px_48px_rgba(28,25,23,0.09)] active:bg-stone-50/60 transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-200 touch-manipulation"
                     >
                       <div className="w-24 h-24 rounded-xl overflow-hidden bg-white flex-shrink-0 relative">
@@ -1240,7 +1377,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                         <div className="flex flex-wrap gap-1.5">
                           {sizes.slice(0, 3).map(s => (
                             <button key={s}
-                              onClick={e => { e.stopPropagation(); setSelectedSizes({ ...selectedSizes, [product.id]: s }); }}
+                              onClick={e => { e.stopPropagation(); handleSelectSize(product.id, s); }}
                               className={`px-2.5 py-0.5 text-[9px] rounded-full transition-colors ${
                                 selSize === s ? 'text-white' : 'bg-stone-100 text-stone-500 hover:bg-stone-200/70'
                               }`}
@@ -1272,7 +1409,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                         )}
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={e => { e.stopPropagation(); setQuickViewProduct(product); }}
+                            onClick={e => { e.stopPropagation(); openProduct(product, 'push', selVariant?.id); }}
                             className="p-2 rounded-xl bg-stone-100 text-stone-500 hover:bg-stone-200/70 hover:text-stone-700 transition-all"
                           >
                             <Eye className="w-3.5 h-3.5" strokeWidth={1.5} />
@@ -1300,10 +1437,10 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.04, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
                     whileTap={{ scale: 0.985 }}
-                    onClick={() => setQuickViewProduct(product)}
+                    onClick={() => openProduct(product, 'push', selVariant?.id)}
                     role="button"
                     tabIndex={0}
-                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setQuickViewProduct(product); } }}
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openProduct(product, 'push', selVariant?.id); } }}
                     className="group flex flex-col bg-white rounded-2xl overflow-hidden shadow-[0_12px_34px_rgba(28,25,23,0.06)] hover:shadow-[0_20px_54px_rgba(28,25,23,0.1)] active:bg-stone-50/60 transition-all duration-300 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-200 touch-manipulation"
                   >
                     {/* Imagen */}
@@ -1328,7 +1465,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                       <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/0 p-2 opacity-0 pointer-events-none transition-all duration-300 group-hover:bg-black/15 group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:bg-black/15 group-focus-within:opacity-100 group-focus-within:pointer-events-auto">
                         <motion.button
                           whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-                          onClick={e => { e.stopPropagation(); setQuickViewProduct(product); }}
+                          onClick={e => { e.stopPropagation(); openProduct(product, 'push', selVariant?.id); }}
                           className="p-2 md:p-3 bg-white rounded-full text-stone-700 shadow-md hover:bg-stone-50 transition-colors"
                           aria-label="Vista rápida"
                         >
@@ -1369,7 +1506,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                         {sizes.slice(0, 3).map(s => (
                           <button
                             key={s}
-                            onClick={e => { e.stopPropagation(); setSelectedSizes({ ...selectedSizes, [product.id]: s }); }}
+                            onClick={e => { e.stopPropagation(); handleSelectSize(product.id, s); }}
                             className={`px-2.5 py-0.5 text-[9.5px] rounded-full transition-colors ${
                               selSize === s ? 'text-white' : 'bg-stone-100 text-stone-500 hover:bg-stone-200/70'
                             }`}
@@ -1491,13 +1628,13 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
             product={quickViewProduct}
             allProducts={products}
             selectedSizes={selectedSizes}
-            onSelectSize={(id, size) => setSelectedSizes(prev => ({ ...prev, [id]: size }))}
+            onSelectSize={handleSelectSize}
             onAddToCart={handleAddToCart}
             onToggleSave={handleToggleSave}
             isSaved={isProductSaved(quickViewProduct.id)}
-            onClose={() => setQuickViewProduct(null)}
+            onClose={closeProduct}
             isProductSaved={isProductSaved}
-            onNavigateTo={p => setQuickViewProduct(p)}
+            onNavigateTo={p => openProduct(p)}
             onLoginRequired={onLoginRequired}
           />
         )}

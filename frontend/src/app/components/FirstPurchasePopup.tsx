@@ -7,6 +7,8 @@ export function FirstPurchasePopup() {
 
   useEffect(() => {
     const timer = setTimeout(() => {
+      const isProductLink = new URLSearchParams(window.location.search).has('producto');
+      if (isProductLink) return;
       const hasSeenPopup = localStorage.getItem('hasSeenFirstPurchasePopup');
       if (!hasSeenPopup) {
         setIsOpen(true);
