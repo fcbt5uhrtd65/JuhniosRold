@@ -89,6 +89,14 @@ function buildShortDescription(description: string): string {
   return clean.length > 110 ? `${clean.slice(0, 107).trim()}...` : clean;
 }
 
+function warmImageCache(urls: string[]): void {
+  urls.filter(Boolean).slice(0, 5).forEach(src => {
+    const image = new Image();
+    image.decoding = 'async';
+    image.src = src;
+  });
+}
+
 function productBadge(product: CatalogProduct): Product['badge'] {
   if (product.active_promotion || product.variants.some(variant => variant.active_promotion)) return 'oferta';
   const createdAt = new Date(product.created_at).getTime();
@@ -265,6 +273,7 @@ function ProductPage({
   isProductSavedFn,
   onClose,
   onNavigateTo,
+  onLoginRequired,
 }: {
   product: Product;
   allProducts: Product[];
@@ -276,6 +285,7 @@ function ProductPage({
   isProductSavedFn: (id: string) => boolean;
   onClose: () => void;
   onNavigateTo: (p: Product) => void;
+  onLoginRequired?: () => void;
 }) {
   const [activeImg, setActiveImg] = useState(0);
   const [qty, setQty] = useState(1);
@@ -339,7 +349,7 @@ function ProductPage({
       ref={scrollRef}
       className="fixed inset-0 z-[80] bg-white overflow-y-auto"
     >
-      <NavigationBar variant="solid" onNavigateClick={onClose} />
+      <NavigationBar variant="solid" onLoginClick={onLoginRequired} onNavigateClick={onClose} />
       <div className="h-[78px] sm:h-[90px]" />
 
       {/* Breadcrumb + cerrar */}
@@ -383,7 +393,7 @@ function ProductPage({
                     isActive ? 'border-stone-800 shadow-sm' : 'border-stone-200 opacity-55 hover:opacity-100 hover:border-stone-400'
                   }`}
                 >
-                  <img src={item.src} alt="" className="w-full h-full object-contain p-2" draggable={false} />
+                  <img src={item.src} alt="" className="w-full h-full object-contain p-2" draggable={false} loading="lazy" decoding="async" />
                 </button>
               );
             })}
@@ -409,6 +419,9 @@ function ProductPage({
                 transition={{ duration: 0.18 }}
                 className="w-full h-full object-contain p-5 sm:p-7 lg:p-8"
                 draggable={false}
+                loading="eager"
+                decoding="async"
+                fetchPriority="high"
               />
             </AnimatePresence>
             {/* Flechas móvil */}
@@ -562,6 +575,8 @@ function ProductPage({
                         whileHover={{ scale: 1.05 }} transition={{ duration: 0.45 }}
                         src={rp.images[0]} alt={rp.name}
                         className="w-full h-full object-contain p-4"
+                        loading="lazy"
+                        decoding="async"
                       />
                       {/* Overlay eye */}
                       <motion.div
@@ -655,6 +670,14 @@ function StarProductsCarousel({ product, onView, onAddToCart, onSelectSize }: {
   }, [total]);
 
   useEffect(() => {
+    warmImageCache([
+      items[active]?.image,
+      items[(active + 1) % total]?.image,
+      items[(active - 1 + total) % total]?.image,
+    ]);
+  }, [active, items, total]);
+
+  useEffect(() => {
     if (active >= total) setActive(0);
   }, [active, total]);
 
@@ -729,6 +752,9 @@ function StarProductsCarousel({ product, onView, onAddToCart, onSelectSize }: {
                     alt={`${product.name} ${item.presentation}`}
                     className="absolute inset-0 w-full h-full object-contain p-6"
                     draggable={false}
+                    loading={isActive ? 'eager' : 'lazy'}
+                    decoding="async"
+                    fetchPriority={isActive ? 'high' : 'auto'}
                     initial={{ y: 0, rotate: 0, scale: 1 }}
                     whileHover={isActive ? {
                       y: [-24, 0, -6, 0],
@@ -1002,6 +1028,7 @@ export function PowerProducts({ onLoginRequired }: { onLoginRequired?: () => voi
             isProductSavedFn={isProductSaved}
             onClose={() => setViewProduct(null)}
             onNavigateTo={p => setViewProduct(p)}
+            onLoginRequired={onLoginRequired}
           />
         )}
       </AnimatePresence>

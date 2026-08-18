@@ -13,6 +13,8 @@ import { useUser } from '../contexts/UserContext';
 import { useToast } from '../contexts/ToastContext';
 import {
   getCategories,
+  getProductById,
+  getProductBySlug,
   getProducts,
   type Product as CatalogProduct,
   type ProductCategory,
@@ -43,8 +45,11 @@ type ProductGalleryItem = {
 const FALLBACK_IMAGE =
   'https://images.unsplash.com/photo-1608248597279-f99d160bfcbc?w=900&q=80';
 const PRODUCTS_PER_PAGE = 6;
+const INITIAL_PRODUCTS_LIMIT = 24;
+const FULL_PRODUCTS_LIMIT = 100;
 const PRODUCT_LINK_PARAM = 'producto';
 const PRODUCT_VARIANT_PARAM = 'variante';
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /* ── Helpers ── */
 function formatPrice(price: number | null, currency = 'COP'): string {
@@ -174,6 +179,46 @@ function findProductByLink(products: CatalogProduct[], value: string | null): Ca
     product.slug.toLowerCase() === normalized ||
     product.id.toLowerCase() === normalized
   )) ?? null;
+}
+
+function mergeProducts(base: CatalogProduct[], extras: Array<CatalogProduct | null | undefined>): CatalogProduct[] {
+  const merged = [...base];
+  extras.filter(Boolean).forEach(product => {
+    const existingIndex = merged.findIndex(item => item.id === product.id);
+    if (existingIndex >= 0) {
+      merged[existingIndex] = product;
+    } else {
+      merged.unshift(product);
+    }
+  });
+  return merged;
+}
+
+async function fetchLinkedProduct(value: string | null): Promise<CatalogProduct | null> {
+  if (!value) return null;
+  const key = decodeURIComponent(value).trim();
+  if (!key) return null;
+
+  try {
+    return await getProductBySlug(key);
+  } catch {
+    if (!UUID_PATTERN.test(key)) return null;
+  }
+
+  try {
+    const product = await getProductById(key);
+    return product.is_active ? product : null;
+  } catch {
+    return null;
+  }
+}
+
+function warmImageCache(urls: string[]): void {
+  urls.filter(Boolean).slice(0, 6).forEach(src => {
+    const image = new Image();
+    image.decoding = 'async';
+    image.src = src;
+  });
 }
 
 function getPrimaryVariantImage(variant?: ProductVariant | null): string | null {
@@ -609,7 +654,7 @@ export function ProductPage({
                       : 'border-stone-200 opacity-55 hover:opacity-100 hover:border-stone-400'
                   }`}
                 >
-                  <img src={item.src} alt="" className="w-full h-full object-contain p-2" draggable={false} />
+                  <img src={item.src} alt="" className="w-full h-full object-contain p-2" draggable={false} loading="lazy" decoding="async" />
                 </button>
               );
             })}
@@ -636,6 +681,9 @@ export function ProductPage({
                   transition={{ duration: 0.18 }}
                   className="w-full h-full object-contain p-5 sm:p-7 lg:p-8"
                   draggable={false}
+                  loading="eager"
+                  decoding="async"
+                  fetchPriority="high"
                 />
               </AnimatePresence>
               {images.length > 1 && (
@@ -677,7 +725,7 @@ export function ProductPage({
                         : 'border-stone-200 opacity-60 hover:opacity-100 hover:border-stone-400'
                     }`}
                   >
-                    <img src={item.src} alt="" className="w-full h-full object-contain p-1.5" draggable={false} />
+                    <img src={item.src} alt="" className="w-full h-full object-contain p-1.5" draggable={false} loading="lazy" decoding="async" />
                   </button>
                 ))}
               </div>
@@ -843,6 +891,8 @@ export function ProductPage({
                         whileHover={{ scale: 1.05 }} transition={{ duration: 0.45 }}
                         src={getProductImage(rp)} alt={rp.name}
                         className="w-full h-full object-contain p-4"
+                        loading="lazy"
+                        decoding="async"
                       />
                       {/* Overlay hover */}
                       <motion.div
@@ -970,13 +1020,39 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
     async function load() {
       setIsLoading(true); setError(null);
       try {
-        const [cats, prods] = await Promise.all([
+        const params = new URLSearchParams(window.location.search);
+        const productParam = params.get(PRODUCT_LINK_PARAM);
+        const [cats, prods, linkedProduct] = await Promise.all([
           getCategories(),
-          getProducts({ limit: 100, active: true, ordering: 'name' }),
+          getProducts({ limit: INITIAL_PRODUCTS_LIMIT, active: true, ordering: 'name' }),
+          fetchLinkedProduct(productParam),
         ]);
         if (!isMounted) return;
         setCategories(cats.filter(c => c.is_active));
-        setProducts(prods.data.filter(p => p.is_active));
+        setProducts(mergeProducts(prods.data.filter(p => p.is_active), [linkedProduct]));
+        if (linkedProduct) {
+          const variantParam = params.get(PRODUCT_VARIANT_PARAM);
+          const linkedVariant = variantParam
+            ? linkedProduct.variants.find(variant => variant.id === variantParam)
+            : null;
+          if (linkedVariant?.presentation) {
+            setSelectedSizes(prev => ({ ...prev, [linkedProduct.id]: linkedVariant.presentation }));
+          }
+          setQuickViewProduct(linkedProduct);
+          requestAnimationFrame(() => {
+            document.getElementById('catalogo')?.scrollIntoView({ behavior: 'smooth' });
+          });
+        }
+        if (prods.total > prods.data.length) {
+          window.setTimeout(() => {
+            getProducts({ limit: FULL_PRODUCTS_LIMIT, active: true, ordering: 'name' })
+              .then(full => {
+                if (!isMounted) return;
+                setProducts(mergeProducts(full.data.filter(p => p.is_active), [linkedProduct]));
+              })
+              .catch(() => undefined);
+          }, 250);
+        }
       } catch (e) {
         if (isMounted) setError(getErrorMessage(e));
       } finally {
@@ -1073,6 +1149,18 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
     const start = (currentPage - 1) * PRODUCTS_PER_PAGE;
     return currentProducts.slice(start, start + PRODUCTS_PER_PAGE);
   }, [currentPage, currentProducts]);
+
+  useEffect(() => {
+    warmImageCache(
+      paginatedProducts.map(product => {
+        const sizes = getProductSizes(product);
+        const selSize = selectedSizes[product.id] ?? sizes[0];
+        const selVariant = product.variants.find(v => v.presentation === selSize) ?? product.variants[0];
+        return getProductImage(product, selVariant);
+      }),
+    );
+  }, [paginatedProducts, selectedSizes]);
+
   const pageNumbers = useMemo(() => (
     Array.from({ length: totalPages }, (_, index) => index + 1)
   ), [totalPages]);
@@ -1369,6 +1457,9 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                           whileHover={{ scale: 1.06 }} transition={{ duration: 0.4 }}
                           src={getProductImage(product, selVariant)} alt={product.name}
                           className="w-full h-full object-contain p-3"
+                          loading={index < 2 ? 'eager' : 'lazy'}
+                          decoding="async"
+                          fetchPriority={index < 2 ? 'high' : 'auto'}
                         />
                       </div>
                       <div className="flex-1 min-w-0">
@@ -1457,8 +1548,9 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                         src={getProductImage(product, selVariant)}
                         alt={product.name}
                         className="w-full h-full object-contain p-4"
-                        loading="lazy"
+                        loading={index < 2 ? 'eager' : 'lazy'}
                         decoding="async"
+                        fetchPriority={index < 2 ? 'high' : 'auto'}
                       />
 
                       {/* Badge: solo se muestra cuando el producto está en oferta */}
