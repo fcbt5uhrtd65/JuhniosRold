@@ -39,7 +39,7 @@ def _wholesale_discount(subtotal, customer=None):
     return (subtotal * (ws.discount_percentage / Decimal("100"))).quantize(Decimal("0.01"))
 
 
-def _resolve_seller_discount(code_text, subtotal):
+def _resolve_seller_discount(code_text, subtotal, customer=None):
     from apps.promotions.infrastructure.models import SellerDiscountCode
 
     code_text = normalize_seller_discount_code(code_text)
@@ -54,8 +54,9 @@ def _resolve_seller_discount(code_text, subtotal):
     )
     if code is None:
         raise BusinessRuleViolation("El codigo de descuento no existe.")
-    if not code.is_currently_active():
-        raise BusinessRuleViolation("El codigo de descuento no esta vigente.")
+    availability_error = code.availability_error(customer=customer)
+    if availability_error:
+        raise BusinessRuleViolation(availability_error)
     if subtotal < code.min_order_amount:
         raise BusinessRuleViolation(f"Este codigo requiere una compra minima de {code.min_order_amount}.")
 
@@ -202,6 +203,7 @@ class CheckoutCart:
         seller_discount_code, seller_discount_amount = _resolve_seller_discount(
             discount_code,
             max(Decimal("0"), total - wholesale_discount_amount),
+            cart.customer,
         )
         discount_amount = min(total, wholesale_discount_amount + seller_discount_amount)
         payable_subtotal = max(Decimal("0"), total - discount_amount)
@@ -286,6 +288,7 @@ class CreateOrder:
         seller_discount_code, seller_discount_amount = _resolve_seller_discount(
             discount_code,
             max(Decimal("0"), subtotal - wholesale_discount_amount),
+            customer,
         )
         discount_amount = min(subtotal, wholesale_discount_amount + seller_discount_amount)
         payable_subtotal = max(Decimal("0"), subtotal - discount_amount)

@@ -925,7 +925,7 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
                 />
               </div>
               <div>
-                <FormLabel>Usos</FormLabel>
+                <FormLabel>Usos por cliente</FormLabel>
                 <input
                   type="number"
                   min="1"
@@ -972,7 +972,7 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
                       <p className="text-[11px] text-gray-500">
                         {code.discount_type === 'PERCENTAGE' ? `${code.discount_value}%` : formatAdminMoney(code.discount_value)}
                         {' · '}
-                        {code.uses_count}/{code.max_uses ?? '∞'} usos
+                        {code.uses_count} canjes totales · {code.max_uses ?? '∞'} por cliente
                       </p>
                     </div>
                     <button

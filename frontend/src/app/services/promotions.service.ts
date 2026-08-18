@@ -144,6 +144,7 @@ export interface SellerDiscountValidation {
   starts_at: string;
   ends_at: string;
   uses_count: number;
+  customer_uses_count: number;
   max_uses: number | null;
   is_active: boolean;
 }
@@ -272,6 +273,7 @@ export async function validateSellerDiscountCode(code: string, subtotal: number)
     starts_at: String(res.data.starts_at),
     ends_at: String(res.data.ends_at),
     uses_count: Number(res.data.uses_count) || 0,
+    customer_uses_count: Number(res.data.customer_uses_count) || 0,
     max_uses: res.data.max_uses === null ? null : Number(res.data.max_uses),
     is_active: Boolean(res.data.is_active),
   };

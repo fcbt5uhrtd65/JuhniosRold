@@ -87,6 +87,12 @@ class SellerDiscountCodeViewSet(SoftDeleteModelViewSet):
         serializer.is_valid(raise_exception=True)
         code_text = serializer.validated_data["code"]
         subtotal = serializer.validated_data.get("subtotal", Decimal("0"))
+        customer = getattr(request.user, "customer_profile", None)
+        if customer is None:
+            return Response(
+                {"detail": "El usuario no tiene un perfil de cliente."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         code = (
             SellerDiscountCode.objects.select_related("seller")
@@ -95,8 +101,9 @@ class SellerDiscountCodeViewSet(SoftDeleteModelViewSet):
         )
         if code is None:
             return Response({"detail": "El codigo de descuento no existe."}, status=status.HTTP_404_NOT_FOUND)
-        if not code.is_currently_active():
-            return Response({"detail": "El codigo de descuento no esta vigente."}, status=status.HTTP_400_BAD_REQUEST)
+        availability_error = code.availability_error(customer=customer)
+        if availability_error:
+            return Response({"detail": availability_error}, status=status.HTTP_400_BAD_REQUEST)
         if subtotal and subtotal < code.min_order_amount:
             return Response(
                 {"detail": f"Este codigo requiere una compra minima de {code.min_order_amount}."},
@@ -117,6 +124,7 @@ class SellerDiscountCodeViewSet(SoftDeleteModelViewSet):
                 "starts_at": code.starts_at,
                 "ends_at": code.ends_at,
                 "uses_count": code.uses_count,
+                "customer_uses_count": code.usage_count_for_customer(customer),
                 "max_uses": code.max_uses,
                 "is_active": code.is_active,
             }

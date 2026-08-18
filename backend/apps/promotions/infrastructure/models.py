@@ -172,17 +172,39 @@ class SellerDiscountCode(BaseModel):
         self.clean()
         super().save(*args, **kwargs)
 
-    def is_currently_active(self, at=None):
+    def usage_count_for_customer(self, customer):
+        if customer is None:
+            return 0
+        from apps.commerce.infrastructure.models import SellerDiscountRedemption
+
+        return SellerDiscountRedemption.objects.filter(
+            code=self,
+            customer=customer,
+            deleted_at__isnull=True,
+        ).count()
+
+    def availability_error(self, *, customer=None, at=None):
         at = at or timezone.now()
-        if not self.is_active or self.deleted_at is not None:
-            return False
+        if self.deleted_at is not None:
+            return "El codigo de descuento no existe."
+        if not self.is_active:
+            return "El codigo de descuento esta inactivo."
         if self.starts_at > at:
-            return False
+            return "El codigo de descuento aun no esta vigente."
         if self.ends_at <= at:
-            return False
-        if self.max_uses is not None and self.uses_count >= self.max_uses:
-            return False
-        return True
+            return "El codigo de descuento esta vencido."
+        if (
+            customer is not None
+            and self.max_uses is not None
+            and self.usage_count_for_customer(customer) >= self.max_uses
+        ):
+            if self.max_uses == 1:
+                return "Este cliente ya uso este codigo de descuento."
+            return "Este cliente ya alcanzo el limite de usos de este codigo."
+        return ""
+
+    def is_currently_active(self, at=None, customer=None):
+        return not self.availability_error(customer=customer, at=at)
 
     def discount_for(self, amount: Decimal) -> Decimal:
         if amount <= 0:

@@ -127,7 +127,7 @@ export function AdminSellerDiscount() {
                 <p className="text-[11px] text-gray-500">
                   {myCode.discount_type === 'PERCENTAGE' ? `${myCode.discount_value}%` : formatMoney(myCode.discount_value)}
                   {' · '}
-                  {myCode.uses_count}/{myCode.max_uses ?? '∞'} usos
+                  {myCode.uses_count} canjes totales · {myCode.max_uses ?? '∞'} por cliente
                 </p>
               </div>
             </div>
@@ -182,7 +182,7 @@ export function AdminSellerDiscount() {
               className={inputCls}
             />
           </Field>
-          <Field label="Usos maximos">
+          <Field label="Usos por cliente">
             <input
               type="number"
               min="1"
@@ -203,7 +203,7 @@ export function AdminSellerDiscount() {
           </Field>
         </div>
         <p className="mt-3 text-[11px] text-gray-400">
-          Elige el rango de tiempo que quieras (entre 1 y 720 horas, es decir hasta 30 dias). Al regenerar, tu codigo actual se reemplaza por uno nuevo con esta vigencia.
+          Elige el rango de tiempo que quieras (entre 1 y 720 horas, es decir hasta 30 dias). El limite de usos se aplica por cliente. Al regenerar, tu codigo actual se reemplaza por uno nuevo con esta vigencia.
         </p>
         <div className="mt-4 flex justify-end">
           <button

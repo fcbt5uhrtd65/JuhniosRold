@@ -4607,7 +4607,6 @@ export function AdminHR() {
                       <SortableTh label="Cargo / Sede" sortKey="department" active={employeeSort} onSort={setEmployeeSort} />
                       <SortableTh label="Estado" sortKey="status" active={employeeSort} onSort={setEmployeeSort} />
                       <SortableTh label="Perfil" sortKey="profile" active={employeeSort} onSort={setEmployeeSort} />
-                      <Th>Dotación</Th>
                       <Th>Documentos</Th>
                       <Th>Acciones</Th>
                     </tr>
@@ -4655,18 +4654,6 @@ export function AdminHR() {
                             </div>
                             <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
                               <div className="h-full bg-[#2a4038]" style={{ width: `${employee.profile_completion_percentage}%` }} />
-                            </div>
-                          </Td>
-                          <Td>
-                            <div className="flex flex-wrap gap-1.5">
-                              {UNIFORM_FIELDS.map(({ field, label }) => {
-                                const value = getEmployeeUniformValue(employee, field);
-                                return (
-                                  <span key={field} className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-600">
-                                    {label}: {value}
-                                  </span>
-                                );
-                              })}
                             </div>
                           </Td>
                           <Td>
