@@ -413,6 +413,26 @@ function pickPrimaryImage(images: ProductImage[]): string | null {
   return ordered[0]?.image ?? null;
 }
 
+function pickPrimaryVariantImage(variants: ProductVariant[]): string | null {
+  for (const variant of variants) {
+    if (variant.images.length > 0) {
+      const ordered = [...variant.images].sort((left, right) => {
+        if (left.is_primary !== right.is_primary) {
+          return left.is_primary ? -1 : 1;
+        }
+
+        return left.position - right.position;
+      });
+      const image = ordered[0]?.image;
+      if (image) return image;
+    }
+
+    if (variant.image_url) return variant.image_url;
+  }
+
+  return null;
+}
+
 function pickProductPrice(variants: ProductVariant[]): { price: number | null; currency: string | null } {
   const prices = variants
     .map((variant) => variant.prices.find((price) => price.is_active) ?? variant.prices[0] ?? null)
@@ -465,6 +485,9 @@ function normalizeProduct(
   const variants = product.variants.map(normalizeVariant);
   const images = product.images.map(normalizeImage);
   const { price, currency } = pickProductPrice(variants);
+  const primaryProductImage = pickPrimaryImage(images);
+  const primaryVariantImage = pickPrimaryVariantImage(variants);
+  const productImageUrls = images.map((image) => image.image);
 
   return {
     id: product.id,
@@ -479,10 +502,12 @@ function normalizeProduct(
     price,
     currency,
     primary_image:
-      (pickPrimaryImage(images) ?? product.image_url) ||
+      (primaryProductImage || product.image_url || primaryVariantImage) ||
       category?.image_url ||
       null,
-    image_urls: images.length > 0 ? images.map((image) => image.image) : (product.image_url ? [product.image_url] : []),
+    image_urls: productImageUrls.length > 0
+      ? productImageUrls
+      : (product.image_url ? [product.image_url] : (primaryVariantImage ? [primaryVariantImage] : [])),
     images,
     variants,
     sizes: uniqueValues(variants.map((variant) => variant.presentation)),

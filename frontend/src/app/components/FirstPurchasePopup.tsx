@@ -1,11 +1,9 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X } from 'lucide-react';
-import { openWhatsApp } from '../utils/whatsapp';
 
 export function FirstPurchasePopup() {
   const [isOpen, setIsOpen] = useState(false);
-  const [email, setEmail] = useState('');
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -17,15 +15,6 @@ export function FirstPurchasePopup() {
 
     return () => clearTimeout(timer);
   }, []);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    localStorage.setItem('hasSeenFirstPurchasePopup', 'true');
-    openWhatsApp(
-      `Hola, quiero mi 15% de descuento en mi primera compra. Mi correo es: ${email}`,
-    );
-    setIsOpen(false);
-  };
 
   const handleClose = () => {
     localStorage.setItem('hasSeenFirstPurchasePopup', 'true');
@@ -61,34 +50,21 @@ export function FirstPurchasePopup() {
             </div>
 
             <h3 className="text-3xl mb-4">
-              15% OFF<br />
-              Primera compra
+              Bienvenida a<br />
+              Juhnios Rold
             </h3>
 
             <p className="text-xs text-muted-foreground mb-6 leading-relaxed">
-              Únete a nuestra comunidad y recibe un descuento exclusivo en tu primera compra.
+              Gracias por visitarnos. Explora nuestras lineas de cuidado capilar y cosmetico, creadas para acompanar tu rutina diaria.
             </p>
 
-            <form onSubmit={handleSubmit} className="space-y-3">
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="tu@email.com"
-                required
-                className="w-full px-3 py-3 bg-transparent border border-border text-xs focus:outline-none focus:border-foreground transition-colors"
-              />
-              <button
-                type="submit"
-                className="w-full py-3 bg-foreground text-background text-xs tracking-wider uppercase hover:opacity-90 transition-opacity"
-              >
-                Obtener descuento
-              </button>
-            </form>
-
-            <div className="mt-4 text-[10px] text-center text-muted-foreground">
-              * Válido solo para nuevos clientes
-            </div>
+            <button
+              type="button"
+              onClick={handleClose}
+              className="w-full py-3 bg-foreground text-background text-xs tracking-wider uppercase hover:opacity-90 transition-opacity"
+            >
+              Entrar a la tienda
+            </button>
           </motion.div>
         </motion.div>
       )}

@@ -418,6 +418,9 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
   const openCreate = () => {
     setFormData(EMPTY_FORM);
     setSelectedProduct(null);
+    setEditVariantImages([]);
+    setEditingVariantId(null);
+    setPrimaryVariantId(null);
     setActiveSection('general');
     setModalMode('create');
   };
@@ -578,7 +581,12 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
         await Promise.all(tasks);
         toast.success('Producto actualizado correctamente');
       } else {
-        await addProduct(formData);
+        const variantImages = editVariantImages.filter(Boolean).slice(0, 3);
+        await addProduct({
+          ...formData,
+          imagen: variantImages[0] ?? formData.imagen,
+          imagenes: variantImages,
+        });
         toast.success('Producto creado correctamente');
       }
       closeModal();

@@ -186,9 +186,6 @@ export function NavigationBar({ onLoginClick, variant = 'solid', mobileStatic = 
                   alt="Juhnios Rold"
                   className="h-8 max-w-[96px] sm:h-9 sm:max-w-none md:h-10 w-auto object-contain opacity-90 group-hover:opacity-100 transition-opacity"
                 />
-                <div className="text-[7.5px] tracking-[0.28em] uppercase text-[#8B7355] mt-2.5 font-light hidden sm:block">
-                  CUIDADO CAPILAR Y COSMÉTICO
-                </div>
               </a>
 
               {/* MENÚ CENTRAL */}
@@ -350,9 +347,8 @@ export function NavigationBar({ onLoginClick, variant = 'solid', mobileStatic = 
               className="fixed top-0 right-0 bottom-0 z-[160] w-[86%] max-w-sm bg-white shadow-2xl flex flex-col rounded-l-3xl overflow-hidden"
             >
               <div className="flex items-center justify-between px-7 py-5 border-b border-stone-100">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center">
                   <img src={logoImg} alt="Juhnios Rold" className="h-8 w-auto object-contain" />
-                  <div className="text-[8px] tracking-[0.25em] uppercase text-[#8B7355] mt-1.5">CUIDADO CAPILAR Y COSMÉTICO</div>
                 </div>
                 <button onClick={() => setMenuOpen(false)} className="p-2 rounded-full hover:bg-stone-100 active:scale-95 active:bg-stone-100 transition-all touch-manipulation">
                   <X className="w-4 h-4 text-stone-400" strokeWidth={1.5} />

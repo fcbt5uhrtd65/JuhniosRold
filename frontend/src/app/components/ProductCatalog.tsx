@@ -504,12 +504,12 @@ export function ProductPage({
       <div className="h-[78px] sm:h-[90px]" />
 
       <div className="sticky top-[78px] sm:top-[90px] z-30 bg-white/95 backdrop-blur-sm border-b border-stone-100 px-6 md:px-10 lg:px-16 py-3 flex items-center justify-between">
-        <nav className="flex items-center gap-1.5 text-[11.5px] text-stone-400">
-          <button onClick={onClose} className="hover:text-stone-700 transition-colors">Inicio</button>
+        <nav className="flex items-center gap-1.5 text-[12px] leading-none text-stone-400">
+          <button onClick={onClose} className="text-[12px] leading-none hover:text-stone-700 transition-colors">Inicio</button>
           <ChevronRight className="w-3 h-3" strokeWidth={1.5} />
-          <span className="text-stone-500">{product.category_name}</span>
+          <span className="text-[12px] leading-none text-stone-500">{product.category_name}</span>
           <ChevronRight className="w-3 h-3" strokeWidth={1.5} />
-          <span className="text-stone-800 font-medium truncate max-w-[200px]">{product.name}</span>
+          <span className="text-[12px] leading-none text-stone-800 font-medium truncate max-w-[200px]">{product.name}</span>
         </nav>
         <motion.button
           whileTap={{ scale: 0.92 }}

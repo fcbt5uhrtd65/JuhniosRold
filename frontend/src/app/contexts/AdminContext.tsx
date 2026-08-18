@@ -661,6 +661,8 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         category: product.categoria,
         price: product.precio,
         cost: product.precioCosto,
+        image_url: product.imagen,
+        images: product.imagenes?.filter(Boolean),
         variant_image_url: product.imagen,
         variant_images: product.imagenes?.filter(Boolean),
         variant_name: product.presentacion,
