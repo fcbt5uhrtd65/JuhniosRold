@@ -25,7 +25,7 @@ import {
   deleteProductReview,
   type ProductReview,
 } from '../services/reviews.service';
-import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
+import { forceBodyScrollUnlock, useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { NavigationBar } from './NavigationBar';
 
 const OLIVE = '#2D3A1F';
@@ -960,6 +960,9 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
   const closeProduct = useCallback(() => {
     setQuickViewProduct(null);
     clearProductUrl();
+    window.setTimeout(() => {
+      forceBodyScrollUnlock();
+    }, 250);
   }, [clearProductUrl]);
 
   useEffect(() => {
@@ -1005,6 +1008,9 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
         });
       } else if (!productParam) {
         setQuickViewProduct(null);
+        window.setTimeout(() => {
+          forceBodyScrollUnlock();
+        }, 250);
       }
     };
 
