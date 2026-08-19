@@ -352,6 +352,12 @@ function normalizeAccessPart(value: string): string {
     .replace(/^\.+|\.+$/g, '');
 }
 
+const EMAIL_FORMAT_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function isValidEmailFormat(value: string): boolean {
+  return EMAIL_FORMAT_REGEX.test(value.trim());
+}
+
 function generateAccessEmail(firstName: string, lastName: string, employees: Employee[], editingEmployeeId?: string): string {
   const first = normalizeAccessPart(firstName).split('.')[0] || 'empleado';
   const last = normalizeAccessPart(lastName).split('.')[0] || 'juhnios';
@@ -1651,6 +1657,7 @@ export function TextInput({
   required = false,
   placeholder = '',
   disabled = false,
+  error,
 }: {
   label: string;
   value: string;
@@ -1659,6 +1666,7 @@ export function TextInput({
   required?: boolean;
   placeholder?: string;
   disabled?: boolean;
+  error?: string;
 }) {
   return (
     <label className="block">
@@ -1668,10 +1676,11 @@ export function TextInput({
         required={required}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className={inputCls}
+        className={error ? `${inputCls} border-red-400 focus:border-red-500 focus:ring-red-200` : inputCls}
         placeholder={placeholder}
         disabled={disabled}
       />
+      {error && <span className="block text-[11px] text-red-500 mt-1">{error}</span>}
     </label>
   );
 }
@@ -2055,6 +2064,7 @@ export function AdminHR() {
   const [exportingAccessId, setExportingAccessId] = useState<string | null>(null);
   const [regeneratingAccessId, setRegeneratingAccessId] = useState<string | null>(null);
   const [showAccessPassword, setShowAccessPassword] = useState(false);
+  const [showAccessReminderModal, setShowAccessReminderModal] = useState(false);
   const [showCertificateModal, setShowCertificateModal] = useState(false);
   const [certificateEmployee, setCertificateEmployee] = useState<Employee | null>(null);
   const [certificateNeedsSignature, setCertificateNeedsSignature] = useState(false);
@@ -2751,8 +2761,7 @@ export function AdminHR() {
     }
   };
 
-  const handleEmployeeSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
+  const saveEmployeeNow = async () => {
     setSavingEmployee(true);
     try {
       const formWithLocation = {
@@ -2782,6 +2791,50 @@ export function AdminHR() {
     } finally {
       setSavingEmployee(false);
     }
+  };
+
+  const getEmployeeModalTabError = (tab: EmployeeModalTab): string | null => {
+    if (tab === 'personal' && employeeForm.email && !isValidEmailFormat(employeeForm.email)) {
+      return 'Corrige el correo electrónico antes de continuar.';
+    }
+    if (tab === 'access' && employeeForm.user_email && !isValidEmailFormat(employeeForm.user_email)) {
+      return 'Corrige el usuario / correo de acceso antes de continuar.';
+    }
+    return null;
+  };
+
+  const handleEmployeeModalTabChange = (tab: EmployeeModalTab) => {
+    const error = getEmployeeModalTabError(employeeModalTab);
+    if (error) {
+      toast.error(error);
+      return;
+    }
+    setEmployeeModalTab(tab);
+  };
+
+  const handleEmployeeSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const activeTabError = getEmployeeModalTabError(employeeModalTab);
+    if (activeTabError) {
+      toast.error(activeTabError);
+      return;
+    }
+    const hasAccessCredentials = Boolean(employeeForm.user_role) || Boolean(employeeForm.user_password.trim());
+    if (!editingEmployee && !hasAccessCredentials) {
+      setShowAccessReminderModal(true);
+      return;
+    }
+    await saveEmployeeNow();
+  };
+
+  const handleAccessReminderSetupNow = () => {
+    setShowAccessReminderModal(false);
+    setEmployeeModalTab('access');
+  };
+
+  const handleAccessReminderLater = () => {
+    setShowAccessReminderModal(false);
+    void saveEmployeeNow();
   };
 
   const handleDeleteEmployee = async (employee: Employee) => {
@@ -3503,9 +3556,23 @@ export function AdminHR() {
         <TextInput label="Apellidos" value={employeeForm.last_name} onChange={(value) => setFormField('last_name', value)} />
         <TextInput label="Fecha de nacimiento" type="date" value={employeeForm.date_of_birth} onChange={(value) => setFormField('date_of_birth', value)} />
         <TextInput label="Celular" type="tel" value={employeeForm.phone} onChange={(value) => setFormField('phone', value)} />
-        <TextInput label="Correo electrónico" type="email" value={employeeForm.email} onChange={(value) => {
-          setEmployeeForm((current) => ({ ...current, email: value, user_email: current.user_email || value, user_email_confirm: current.user_email_confirm || value }));
-        }} />
+        <TextInput
+          label="Correo electrónico"
+          type="email"
+          value={employeeForm.email}
+          error={employeeForm.email && !isValidEmailFormat(employeeForm.email) ? 'Ingresa un correo válido (ej. nombre@dominio.com)' : undefined}
+          onChange={(value) => {
+            setEmployeeForm((current) => {
+              const wasMirroringAccessEmail = !current.user_email || current.user_email === current.email;
+              return {
+                ...current,
+                email: value,
+                user_email: wasMirroringAccessEmail ? value : current.user_email,
+                user_email_confirm: wasMirroringAccessEmail ? value : current.user_email_confirm,
+              };
+            });
+          }}
+        />
         <TextInput label="Nacionalidad" value={employeeForm.nationality} onChange={(value) => setFormField('nationality', value)} />
         <div className="sm:col-span-2 lg:col-span-2">
           <LocationPicker
@@ -3927,10 +3994,17 @@ export function AdminHR() {
               })}
             </div>
           </div>
-          <TextInput label="Usuario / correo" type="email" value={employeeForm.user_email} onChange={(value) => {
-            const email = value.trim().toLowerCase();
-            setEmployeeForm((current) => ({ ...current, user_email: email, user_email_confirm: email }));
-          }} disabled={!canManageAccessCredentials} />
+          <TextInput
+            label="Usuario / correo"
+            type="email"
+            value={employeeForm.user_email}
+            error={employeeForm.user_email && !isValidEmailFormat(employeeForm.user_email) ? 'Ingresa un correo válido (ej. nombre@dominio.com)' : undefined}
+            onChange={(value) => {
+              const email = value.trim().toLowerCase();
+              setEmployeeForm((current) => ({ ...current, user_email: email, user_email_confirm: email }));
+            }}
+            disabled={!canManageAccessCredentials}
+          />
           <label className="block sm:col-span-2">
             <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Clave</span>
             <div className="flex gap-2">
@@ -6230,7 +6304,7 @@ export function AdminHR() {
                       <button
                         key={tab.id}
                         type="button"
-                        onClick={() => setEmployeeModalTab(tab.id)}
+                        onClick={() => handleEmployeeModalTabChange(tab.id)}
                         className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${active ? 'bg-white text-[#2a4038] shadow-sm font-semibold' : 'text-gray-500 hover:text-gray-700'}`}
                       >
                         <Icon size={12} />
@@ -6275,6 +6349,39 @@ export function AdminHR() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showAccessReminderModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setShowAccessReminderModal(false)} />
+          <div className="relative bg-white max-w-sm w-full rounded-2xl shadow-2xl p-6 flex flex-col gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-full bg-amber-100 text-amber-600">
+                <KeyRound size={18} />
+              </div>
+              <h3 className="font-semibold text-gray-900">Credenciales de acceso</h3>
+            </div>
+            <p className="text-sm text-gray-600">
+              Aún no has registrado las credenciales para este empleado, ¿quieres registrarlas antes de guardar o prefieres dejarlo para más tarde?
+            </p>
+            <div className="flex gap-3 pt-1">
+              <button
+                type="button"
+                onClick={handleAccessReminderLater}
+                className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
+              >
+                Más tarde
+              </button>
+              <button
+                type="button"
+                onClick={handleAccessReminderSetupNow}
+                className="flex-1 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold hover:bg-[#3d5c4e]"
+              >
+                Sí
+              </button>
+            </div>
           </div>
         </div>
       )}
