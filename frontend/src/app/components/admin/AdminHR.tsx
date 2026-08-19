@@ -2049,6 +2049,7 @@ export function AdminHR() {
   const [exportingAccessId, setExportingAccessId] = useState<string | null>(null);
   const [regeneratingAccessId, setRegeneratingAccessId] = useState<string | null>(null);
   const [showAccessPassword, setShowAccessPassword] = useState(false);
+  const [showAccessReminderModal, setShowAccessReminderModal] = useState(false);
   const [showCertificateModal, setShowCertificateModal] = useState(false);
   const [certificateEmployee, setCertificateEmployee] = useState<Employee | null>(null);
   const [certificateNeedsSignature, setCertificateNeedsSignature] = useState(false);
@@ -2744,8 +2745,7 @@ export function AdminHR() {
     }
   };
 
-  const handleEmployeeSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
+  const saveEmployeeNow = async () => {
     setSavingEmployee(true);
     try {
       const formWithLocation = {
@@ -2775,6 +2775,26 @@ export function AdminHR() {
     } finally {
       setSavingEmployee(false);
     }
+  };
+
+  const handleEmployeeSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const hasAccessCredentials = Boolean(employeeForm.user_role) || Boolean(employeeForm.user_password.trim());
+    if (!editingEmployee && !hasAccessCredentials) {
+      setShowAccessReminderModal(true);
+      return;
+    }
+    await saveEmployeeNow();
+  };
+
+  const handleAccessReminderSetupNow = () => {
+    setShowAccessReminderModal(false);
+    setEmployeeModalTab('access');
+  };
+
+  const handleAccessReminderLater = () => {
+    setShowAccessReminderModal(false);
+    void saveEmployeeNow();
   };
 
   const handleDeleteEmployee = async (employee: Employee) => {
@@ -6224,6 +6244,39 @@ export function AdminHR() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showAccessReminderModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setShowAccessReminderModal(false)} />
+          <div className="relative bg-white max-w-sm w-full rounded-2xl shadow-2xl p-6 flex flex-col gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-full bg-amber-100 text-amber-600">
+                <KeyRound size={18} />
+              </div>
+              <h3 className="font-semibold text-gray-900">Credenciales de acceso</h3>
+            </div>
+            <p className="text-sm text-gray-600">
+              Aún no has registrado las credenciales para este empleado, ¿quieres registrarlas antes de guardar o prefieres dejarlo para más tarde?
+            </p>
+            <div className="flex gap-3 pt-1">
+              <button
+                type="button"
+                onClick={handleAccessReminderLater}
+                className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
+              >
+                Más tarde
+              </button>
+              <button
+                type="button"
+                onClick={handleAccessReminderSetupNow}
+                className="flex-1 py-2.5 bg-[#2a4038] text-white rounded-xl text-sm font-semibold hover:bg-[#3d5c4e]"
+              >
+                Sí
+              </button>
+            </div>
           </div>
         </div>
       )}
