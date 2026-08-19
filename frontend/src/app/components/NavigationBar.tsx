@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Search, X, User, Bell, Package, Tag, Info, AlertCircle,
   ArrowRight, ChevronDown, Instagram, CheckCheck,
-  Heart, Leaf, Settings, LogOut,
+  Heart, Settings, LogOut,
 } from 'lucide-react';
 import { ShoppingCart } from './ShoppingCart';
 import { UserDropdown } from './UserDropdown';
@@ -12,6 +12,7 @@ import { useSearch } from '../contexts/SearchContext';
 import { useUser } from '../contexts/UserContext';
 import { useNotifications } from '../contexts/NotificationsContext';
 import type { NotificationType } from '../services/notifications.service';
+import { getCategories, type ProductCategory } from '../services/products.service';
 import { navigateTo } from '../services/navigate';
 import { forceBodyScrollUnlock, useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import logoImg from '../../assets/logo.png';
@@ -54,34 +55,6 @@ const allNavLinks = [
 
 const OLIVE = '#2D3A1F';
 
-const productMenuGroups = [
-  {
-    title: 'Capilar',
-    href: '#catalogo',
-    items: ['Shampoo', 'Acondicionadores', 'Mascarillas', 'Tratamientos', 'Aceites capilares'],
-  },
-  {
-    title: 'Corporal',
-    href: '#catalogo',
-    items: ['Cremas', 'Exfoliantes', 'Jabones', 'Aceites corporales', 'Bienestar'],
-  },
-  {
-    title: 'Bebe',
-    href: '#bebe',
-    items: ['Limpieza suave', 'Hidratacion', 'Proteccion', 'Cuidado capilar'],
-  },
-  {
-    title: 'Modo PRO',
-    href: '#pro',
-    items: ['Rutinas profesionales', 'Kits de venta', 'Asesoria', 'Mayoristas'],
-  },
-  {
-    title: 'Materias primas',
-    href: '/materias-primas',
-    items: ['Bases', 'Activos', 'Aceites', 'Fragancias'],
-  },
-];
-
 function notifIcon(type: NotificationType) {
   if (type.startsWith('order')) return <Package className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" strokeWidth={1.5} />;
   if (type === 'promo') return <Tag className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" strokeWidth={1.5} />;
@@ -114,6 +87,7 @@ export function NavigationBar({ onLoginClick, variant = 'solid', mobileStatic = 
   const [hidden, setHidden]                        = useState(false);
   const [menuOpen, setMenuOpen]                   = useState(false);
   const [productsMenuOpen, setProductsMenuOpen]   = useState(false);
+  const [productCategories, setProductCategories] = useState<ProductCategory[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [activeLink, setActiveLink]               = useState('#');
   const [notifAnchor, setNotifAnchor] = useState<{ top: number; right: number } | null>(null);
@@ -138,6 +112,40 @@ export function NavigationBar({ onLoginClick, variant = 'solid', mobileStatic = 
   }, []);
 
   useBodyScrollLock(menuOpen);
+
+  useEffect(() => {
+    let mounted = true;
+    getCategories()
+      .then(categories => {
+        if (mounted) setProductCategories(categories.filter(category => category.is_active));
+      })
+      .catch(() => {
+        if (mounted) setProductCategories([]);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const productMenuGroups = useMemo(() => {
+    const byParent = new Map<string, ProductCategory[]>();
+    productCategories.forEach(category => {
+      if (!category.parent) return;
+      byParent.set(category.parent, [...(byParent.get(category.parent) ?? []), category]);
+    });
+
+    const roots = productCategories.filter(category => !category.parent);
+    const base = roots.length > 0 ? roots : productCategories;
+
+    return base
+      .map(category => ({
+        category,
+        children: (byParent.get(category.id) ?? [])
+          .sort((left, right) => left.name.localeCompare(right.name, 'es', { sensitivity: 'base' })),
+      }))
+      .sort((left, right) => left.category.name.localeCompare(right.category.name, 'es', { sensitivity: 'base' }))
+      .slice(0, 6);
+  }, [productCategories]);
 
   const handleNavClick = (href: string, e: React.MouseEvent) => {
     onNavigateClick?.(href);
@@ -175,6 +183,30 @@ export function NavigationBar({ onLoginClick, variant = 'solid', mobileStatic = 
     }
     setActiveLink(href);
     setMenuOpen(false);
+  };
+
+  const handleCategoryClick = (category: ProductCategory, e: React.MouseEvent) => {
+    e.preventDefault();
+    setProductsMenuOpen(false);
+    setMenuOpen(false);
+    sessionStorage.setItem('catalogCategoryId', category.id);
+    sessionStorage.setItem('catalogCategoryName', category.name);
+
+    const goCatalog = () => {
+      window.dispatchEvent(new CustomEvent('catalog:category', {
+        detail: { categoryId: category.id },
+      }));
+      document.getElementById('catalogo')?.scrollIntoView({ behavior: 'smooth' });
+    };
+
+    if (window.location.pathname !== '/') {
+      navigateTo('/#catalogo');
+      window.setTimeout(goCatalog, 120);
+      return;
+    }
+
+    window.history.pushState({}, '', '#catalogo');
+    goCatalog();
   };
 
   const isTransparent = variant === 'transparent';
@@ -374,51 +406,60 @@ export function NavigationBar({ onLoginClick, variant = 'solid', mobileStatic = 
               className="absolute left-0 right-0 top-[calc(100%+8px)] hidden lg:block"
             >
               <div className="overflow-hidden rounded-[18px] border border-stone-100 bg-white shadow-[0_22px_70px_rgba(28,25,23,0.13)]">
-                <div className="grid grid-cols-[220px_1fr]">
-                  <div className="border-r border-stone-100 bg-[#F7F5F1] p-7">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-stone-400">Productos</p>
-                    <h3 className="mt-3 font-serif text-3xl font-semibold leading-tight text-[#17351f]">Categorias</h3>
-                    <p className="mt-3 text-sm leading-6 text-stone-500">Explora por necesidad, tipo de cuidado o linea profesional.</p>
+                <div className="border-b border-stone-100 px-8 py-5">
+                  <div className="flex items-center justify-between gap-6">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-stone-400">Productos</p>
+                      <h3 className="mt-1 font-serif text-2xl font-semibold leading-tight text-[#17351f]">Categorias del catalogo</h3>
+                    </div>
                     <a
                       href="#catalogo"
                       onClick={e => handleNavClick('#catalogo', e)}
-                      className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#2D3A1F] px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-white transition-opacity hover:opacity-90"
+                      className="inline-flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.18em] text-stone-900 underline underline-offset-4"
                     >
-                      Ver catalogo
+                      Ver todo
                       <ArrowRight className="h-3.5 w-3.5" strokeWidth={1.8} />
                     </a>
                   </div>
+                </div>
 
-                  <div className="grid grid-cols-5 gap-0 px-7 py-7">
+                {productMenuGroups.length === 0 ? (
+                  <div className="px-8 py-10 text-sm text-stone-500">
+                    No hay categorias activas configuradas en el catalogo.
+                  </div>
+                ) : (
+                  <div className="grid gap-0 px-7 py-7" style={{ gridTemplateColumns: `repeat(${Math.min(productMenuGroups.length, 6)}, minmax(0, 1fr))` }}>
                     {productMenuGroups.map(group => (
-                      <div key={group.title} className="px-4">
+                      <div key={group.category.id} className="px-4">
                         <a
-                          href={group.href}
-                          onClick={e => handleNavClick(group.href, e)}
-                          className="group/title inline-flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.2em] text-stone-900"
+                          href="#catalogo"
+                          onClick={e => handleCategoryClick(group.category, e)}
+                          className="inline-flex text-[12px] font-bold uppercase tracking-[0.2em] text-stone-900 underline-offset-4 hover:underline"
                         >
-                          <Leaf className="h-3.5 w-3.5 text-[#2D3A1F]" strokeWidth={1.6} />
-                          <span className="underline-offset-4 group-hover/title:underline">{group.title}</span>
+                          {group.category.name}
                         </a>
                         <div className="mt-5">
-                          {group.items.map((item, index) => (
+                          {group.children.map((child, index) => (
                             <a
-                              key={item}
-                              href={group.href}
-                              onClick={e => handleNavClick(group.href, e)}
+                              key={child.id}
+                              href="#catalogo"
+                              onClick={e => handleCategoryClick(child, e)}
                               className="group/item relative flex min-h-8 items-start gap-3 py-1.5 text-[14px] leading-snug tracking-[0.08em] text-stone-600 transition-colors hover:text-stone-950"
                             >
                               <span className="relative mt-2 h-px w-5 shrink-0 bg-stone-200 transition-colors group-hover/item:bg-[#2D3A1F]">
-                                {index < group.items.length - 1 && (
+                                {index < group.children.length - 1 && (
                                   <span className="absolute left-0 top-0 h-8 w-px bg-stone-200" />
                                 )}
                               </span>
-                              <span>{item}</span>
+                              <span>{child.name}</span>
                             </a>
                           ))}
+                          {group.children.length === 0 && (
+                            <p className="py-1.5 text-[12px] leading-relaxed text-stone-400">Sin subcategorias.</p>
+                          )}
                           <a
-                            href={group.href}
-                            onClick={e => handleNavClick(group.href, e)}
+                            href="#catalogo"
+                            onClick={e => handleCategoryClick(group.category, e)}
                             className="mt-3 inline-flex text-[12px] font-bold uppercase tracking-[0.18em] text-stone-900 underline underline-offset-4"
                           >
                             Ver todo
@@ -427,7 +468,7 @@ export function NavigationBar({ onLoginClick, variant = 'solid', mobileStatic = 
                       </div>
                     ))}
                   </div>
-                </div>
+                )}
               </div>
             </motion.div>
           )}

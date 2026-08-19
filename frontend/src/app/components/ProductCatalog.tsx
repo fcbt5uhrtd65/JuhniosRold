@@ -1100,6 +1100,27 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
   }, [globalSearchQuery]);
 
   useEffect(() => {
+    const applyCategory = (categoryId: string | null) => {
+      if (!categoryId) return;
+      setActiveCategory(categoryId);
+      setLocalSearchQuery('');
+      setShowFilters(false);
+      sessionStorage.removeItem('catalogCategoryId');
+      sessionStorage.removeItem('catalogCategoryName');
+    };
+
+    applyCategory(sessionStorage.getItem('catalogCategoryId'));
+
+    const handleCatalogCategory = (event: Event) => {
+      const detail = (event as CustomEvent<{ categoryId?: string }>).detail;
+      applyCategory(detail?.categoryId ?? null);
+    };
+
+    window.addEventListener('catalog:category', handleCatalogCategory);
+    return () => window.removeEventListener('catalog:category', handleCatalogCategory);
+  }, []);
+
+  useEffect(() => {
     if (activeCategory !== 'all' && categories.length > 0 &&
       !categories.some(c => c.id === activeCategory)) {
       setActiveCategory('all');
@@ -1110,20 +1131,42 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
     setCurrentPage(1);
   }, [activeCategory, collectionFilter, localSearchQuery, priceRange]);
 
+  const categoryDescendantIds = useMemo(() => {
+    const childrenByParent = new Map<string, string[]>();
+    categories.forEach(category => {
+      if (!category.parent) return;
+      childrenByParent.set(category.parent, [...(childrenByParent.get(category.parent) ?? []), category.id]);
+    });
+
+    const collect = (id: string): Set<string> => {
+      const ids = new Set<string>([id]);
+      (childrenByParent.get(id) ?? []).forEach(childId => {
+        collect(childId).forEach(nextId => ids.add(nextId));
+      });
+      return ids;
+    };
+
+    return new Map(categories.map(category => [category.id, collect(category.id)]));
+  }, [categories]);
+
   const categoryTabs = useMemo(() => [
     { id: 'all', label: 'Todos', count: products.length },
     ...categories
-      .map(c => ({
-        id: c.id,
-        label: c.name,
-        count: products.filter(p => p.category_id === c.id).length,
-      }))
+      .map(c => {
+        const ids = categoryDescendantIds.get(c.id) ?? new Set([c.id]);
+        return {
+          id: c.id,
+          label: c.name,
+          count: products.filter(p => ids.has(p.category_id)).length,
+        };
+      })
       .filter(tab => tab.count > 0),
-  ], [categories, products]);
+  ], [categories, categoryDescendantIds, products]);
 
   const currentProducts = useMemo(() => {
     return products.filter(product => {
-      const matchCat = activeCategory === 'all' || product.category_id === activeCategory;
+      const activeCategoryIds = categoryDescendantIds.get(activeCategory) ?? new Set([activeCategory]);
+      const matchCat = activeCategory === 'all' || activeCategoryIds.has(product.category_id);
       const q = localSearchQuery.trim().toLowerCase();
       const matchSearch = !q ||
         product.name.toLowerCase().includes(q) ||
@@ -1142,7 +1185,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
         isRecentProduct(product.created_at);
       return matchCat && matchSearch && matchPrice && matchCol;
     });
-  }, [activeCategory, collectionFilter, localSearchQuery, priceRange, products]);
+  }, [activeCategory, categoryDescendantIds, collectionFilter, localSearchQuery, priceRange, products]);
 
   const totalPages = Math.max(1, Math.ceil(currentProducts.length / PRODUCTS_PER_PAGE));
   const paginatedProducts = useMemo(() => {

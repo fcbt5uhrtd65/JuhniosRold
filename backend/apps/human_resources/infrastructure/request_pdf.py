@@ -240,14 +240,19 @@ def _draw_wrapped_text(c, x, y, text, max_width, size=9, leading=None, color=TEX
     return y - (len(lines) * leading)
 
 
-def _draw_key_value_cell(c, x, y, label, value, cell_width, label_width=118):
+def _draw_key_value_cell(c, x, y, label, value, cell_width, label_width=118, compact=False):
     value_x = x + label_width
     value_width = max(cell_width - label_width - 8, 48)
-    value_size = 9
-    leading = 11.5
+    value_size = 8.2 if compact else 9
+    leading = 9.8 if compact else 11.5
 
-    _text(c, x, y, f"{label}:", size=8.6, bold=True, color=MUTED)
+    _text(c, x, y, f"{label}:", size=7.8 if compact else 8.6, bold=True, color=MUTED)
     lines = _wrap_lines(value, value_width, FONT, value_size)
+    if compact and len(lines) > 2:
+        lines = lines[:2]
+        while lines[-1] and stringWidth(f"{lines[-1]}...", FONT, value_size) > value_width:
+            lines[-1] = lines[-1][:-1].rstrip()
+        lines[-1] = f"{lines[-1]}..."
     c.setFillColor(TEXT)
     c.setFont(FONT, value_size)
     for index, line in enumerate(lines):
@@ -313,22 +318,22 @@ def _draw_letterhead(c, page_w, page_h, x0, x1, variant="default"):
     return draw_letterhead_header(c, page_w, page_h, x0, x1, variant=variant)
 
 
-def _draw_title(c, x0, x1, cx, y, vacation, request_number):
+def _draw_title(c, x0, x1, cx, y, vacation, request_number, compact=False):
     _text(c, x0, y, f"Gestión de Talento Humano  ·  {request_number}", size=8.5, bold=True, color=MUTED)
     now = timezone.now()
     _text(c, x1, y, f"Generado el {now:%d/%m/%Y} a las {_time_label(now)}", size=8, color=MUTED, align="right")
-    y -= 38
+    y -= 26 if compact else 38
 
-    _text(c, cx, y, "CONSTANCIA DE SOLICITUD", size=17, bold=True, color=TEXT, align="center")
-    y -= 18
+    _text(c, cx, y, "CONSTANCIA DE SOLICITUD", size=14.5 if compact else 17, bold=True, color=TEXT, align="center")
+    y -= 14 if compact else 18
     status_color = _status_color(vacation.status)
-    _text(c, cx, y, vacation.get_status_display().upper(), size=9.5, bold=True, color=status_color, align="center")
+    _text(c, cx, y, vacation.get_status_display().upper(), size=8.5 if compact else 9.5, bold=True, color=status_color, align="center")
 
-    return y - 36
+    return y - (24 if compact else 36)
 
 
 # ── Cuerpo narrativo ───────────────────────────────────────────────────────────
-def _draw_body(c, x0, x1, y, vacation, employee):
+def _draw_body(c, x0, x1, y, vacation, employee, compact=False):
     w = x1 - x0
     today = timezone.now()
 
@@ -348,11 +353,12 @@ def _draw_body(c, x0, x1, y, vacation, employee):
         (f"en el área de {hire_area}, sede {hire_branch}, fue registrada el {vacation.created_at:%d/%m/%Y} a las {_time_label(vacation.created_at)} y actualmente se encuentra en estado", False),
         (f" {vacation.get_status_display().upper()}.", True),
     ]
-    y = _draw_rich_paragraph(c, x0, y, intro_parts, w, size=10, leading=15)
-    y -= 14
+    loan_compact = compact and _is_loan(vacation)
+    y = _draw_rich_paragraph(c, x0, y, intro_parts, w, size=9 if loan_compact else 10, leading=12 if loan_compact else 15)
+    y -= 8 if loan_compact else 14
 
     if _is_loan(vacation):
-        return _draw_loan_details(c, x0, x1, y, vacation, employee)
+        return _draw_loan_details(c, x0, x1, y, vacation, employee, compact=compact)
 
     period_parts = [
         ("El periodo solicitado comprende desde el", False),
@@ -397,7 +403,7 @@ def _draw_body(c, x0, x1, y, vacation, employee):
 
 
 # ── Bloque exclusivo de solicitudes de tipo PRÉSTAMO ────────────────────────────
-def _draw_loan_details(c, x0, x1, y, vacation, employee):
+def _draw_loan_details(c, x0, x1, y, vacation, employee, compact=False):
     w = x1 - x0
 
     rows = [
@@ -419,15 +425,15 @@ def _draw_loan_details(c, x0, x1, y, vacation, employee):
         rows.append(("Monto aprobado", _money_label(vacation.loan_approved_amount)))
 
     _text(c, x0, y, "Datos del préstamo", size=10.5, bold=True, color=TEXT)
-    y -= 20
+    y -= 14 if compact else 20
     col_w = w / 2
     for row_start in range(0, len(rows), 2):
         row_height = 0
         for col, (label, value) in enumerate(rows[row_start:row_start + 2]):
             col_x = x0 + col * col_w
-            row_height = max(row_height, _draw_key_value_cell(c, col_x, y, label, value, col_w))
-        y -= row_height + 5
-    y -= 15
+            row_height = max(row_height, _draw_key_value_cell(c, col_x, y, label, value, col_w, label_width=94 if compact else 118, compact=compact))
+        y -= row_height + (3 if compact else 5)
+    y -= 8 if compact else 15
 
     frequency_label = _loan_frequency_label(vacation).lower()
     installments = vacation.loan_installments_count or "-"
@@ -441,8 +447,8 @@ def _draw_loan_details(c, x0, x1, y, vacation, employee):
         (f" {installments} cuota(s), ", True),
         ("el valor correspondiente a este préstamo. Así mismo, autorizo se cobre de mi liquidación de prestaciones sociales, salarios e indemnización, el saldo pendiente de este préstamo si llegase a finalizar mi contrato de trabajo antes de cancelarlo en su totalidad.", False),
     ]
-    y = _draw_rich_paragraph(c, x0, y, authorization_parts, w, size=9.6, leading=14, align="justify")
-    y -= 18
+    y = _draw_rich_paragraph(c, x0, y, authorization_parts, w, size=8.2 if compact else 9.6, leading=10.2 if compact else 14, align="justify")
+    y -= 8 if compact else 18
 
     return y
 
@@ -512,10 +518,25 @@ def _draw_approval_narrative(c, x0, x1, y, vacation, compact=False):
     _text(c, x0, y, "Trazabilidad del proceso de aprobación", size=10.5, bold=True, color=TEXT)
     y -= 20 if compact else 22
 
+    loan_compact = compact and _is_loan(vacation)
     steps = _approval_steps_data(vacation)
     if not steps:
         _text(c, x0, y, "Aún no se han registrado pasos de aprobación para esta solicitud.", size=9, color=MUTED)
         return y - 14
+
+    if loan_compact:
+        line_size = 7.6
+        line_leading = 9
+        for index, step in enumerate(steps, start=1):
+            summary = (
+                f"{index}. {step['label']}: {step['status']} - "
+                f"{step['actor']} - {step['date'] or 'sin fecha'}"
+            )
+            y = _draw_wrapped_text(c, x0, y, summary, w, size=line_size, leading=line_leading, color=MUTED)
+            if step["detail"] and "registrada" not in step["detail"].lower():
+                y = _draw_wrapped_text(c, x0 + 10, y - 1, step["detail"], w - 10, size=7.2, leading=8.2, color=MUTED)
+            y -= 4
+        return y - 2
 
     label_size = 9 if compact else 9.5
     detail_size = 8.2 if compact else 8.6
@@ -587,19 +608,27 @@ def _signature_columns(vacation):
 # luego reducida a 120 por error) subestimaba el alto real (~88-90px solo
 # hasta el texto de rol) y dejaba que la firma invadiera el pie de página.
 SIGNATURES_SECTION_HEIGHT = 60 + 28 + 40
+LOAN_COMPACT_SIGNATURES_SECTION_HEIGHT = 92
 
 
-def _draw_signatures_section(c, x0, x1, y, vacation):
+def _signatures_section_height(vacation, compact=False):
+    if compact and _is_loan(vacation):
+        return LOAN_COMPACT_SIGNATURES_SECTION_HEIGHT
+    return SIGNATURES_SECTION_HEIGHT
+
+
+def _draw_signatures_section(c, x0, x1, y, vacation, compact=False):
     w = x1 - x0
+    loan_compact = compact and _is_loan(vacation)
     _text(c, x0, y, "Firmas de aprobación", size=10.5, bold=True, color=TEXT)
-    y -= 60
+    y -= 50 if loan_compact else 60
 
     columns = _signature_columns(vacation)
     if not columns:
         return y - 14
 
     count = len(columns)
-    gap = 20 if count >= 3 else 30
+    gap = 18 if loan_compact else (20 if count >= 3 else 30)
     col_w = (w - gap * (count - 1)) / count
     for index, (signer_name, role_label, signature_file) in enumerate(columns):
         col_x = x0 + index * (col_w + gap)
@@ -615,7 +644,7 @@ def _draw_signatures_section(c, x0, x1, y, vacation):
             navy=TEXT,
             muted=MUTED,
         )
-    return y - 40
+    return y - (30 if loan_compact else 40)
 
 
 def _render_request_page(c, page_w, page_h, x0, x1, cx, vacation, employee, compact):
@@ -626,12 +655,13 @@ def _render_request_page(c, page_w, page_h, x0, x1, cx, vacation, employee, comp
     bottom_limit = footer_h + 26
 
     y = _draw_letterhead(c, page_w, page_h, x0, x1, variant=variant)
-    y = _draw_title(c, x0, x1, cx, y, vacation, vacation.request_number or str(vacation.id))
-    y = _draw_body(c, x0, x1, y, vacation, employee)
+    loan_compact = compact and _is_loan(vacation)
+    y = _draw_title(c, x0, x1, cx, y, vacation, vacation.request_number or str(vacation.id), compact=loan_compact)
+    y = _draw_body(c, x0, x1, y, vacation, employee, compact=compact)
     y = _draw_approval_narrative(c, x0, x1, y, vacation, compact=compact)
     y -= 8
 
-    fits_one_page = (y - SIGNATURES_SECTION_HEIGHT) >= bottom_limit
+    fits_one_page = (y - _signatures_section_height(vacation, compact=compact)) >= bottom_limit
     return y, bottom_limit, fits_one_page
 
 
@@ -758,7 +788,7 @@ def render_request_pdf(vacation):
     y, bottom_limit, fits_one_page = _render_request_page(c, page_w, page_h, x0, x1, cx, vacation, employee, compact=compact)
 
     if fits_one_page:
-        _draw_signatures_section(c, x0, x1, y, vacation)
+        _draw_signatures_section(c, x0, x1, y, vacation, compact=compact)
         _draw_footer_note(c, page_w, bottom_limit, employee)
     else:
         # Ni siquiera con espaciado compacto entra el bloque de firmas sin
@@ -771,7 +801,7 @@ def render_request_pdf(vacation):
         y = _draw_letterhead(c, page_w, page_h, x0, x1, variant=variant)
         _text(c, x0, y, f"Gestión de Talento Humano  ·  {vacation.request_number or vacation.id}  ·  continuación", size=8.5, bold=True, color=MUTED)
         y -= 34
-        _draw_signatures_section(c, x0, x1, y, vacation)
+        _draw_signatures_section(c, x0, x1, y, vacation, compact=compact)
         _draw_footer_note(c, page_w, bottom_limit, employee)
 
     c.save()
