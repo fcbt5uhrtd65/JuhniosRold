@@ -352,6 +352,12 @@ function normalizeAccessPart(value: string): string {
     .replace(/^\.+|\.+$/g, '');
 }
 
+const EMAIL_FORMAT_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function isValidEmailFormat(value: string): boolean {
+  return EMAIL_FORMAT_REGEX.test(value.trim());
+}
+
 function generateAccessEmail(firstName: string, lastName: string, employees: Employee[], editingEmployeeId?: string): string {
   const first = normalizeAccessPart(firstName).split('.')[0] || 'empleado';
   const last = normalizeAccessPart(lastName).split('.')[0] || 'juhnios';
@@ -1646,6 +1652,7 @@ export function TextInput({
   required = false,
   placeholder = '',
   disabled = false,
+  error,
 }: {
   label: string;
   value: string;
@@ -1654,6 +1661,7 @@ export function TextInput({
   required?: boolean;
   placeholder?: string;
   disabled?: boolean;
+  error?: string;
 }) {
   return (
     <label className="block">
@@ -1663,10 +1671,11 @@ export function TextInput({
         required={required}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className={inputCls}
+        className={error ? `${inputCls} border-red-400 focus:border-red-500 focus:ring-red-200` : inputCls}
         placeholder={placeholder}
         disabled={disabled}
       />
+      {error && <span className="block text-[11px] text-red-500 mt-1">{error}</span>}
     </label>
   );
 }
@@ -2777,8 +2786,32 @@ export function AdminHR() {
     }
   };
 
+  const getEmployeeModalTabError = (tab: EmployeeModalTab): string | null => {
+    if (tab === 'personal' && employeeForm.email && !isValidEmailFormat(employeeForm.email)) {
+      return 'Corrige el correo electrónico antes de continuar.';
+    }
+    if (tab === 'access' && employeeForm.user_email && !isValidEmailFormat(employeeForm.user_email)) {
+      return 'Corrige el usuario / correo de acceso antes de continuar.';
+    }
+    return null;
+  };
+
+  const handleEmployeeModalTabChange = (tab: EmployeeModalTab) => {
+    const error = getEmployeeModalTabError(employeeModalTab);
+    if (error) {
+      toast.error(error);
+      return;
+    }
+    setEmployeeModalTab(tab);
+  };
+
   const handleEmployeeSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    const activeTabError = getEmployeeModalTabError(employeeModalTab);
+    if (activeTabError) {
+      toast.error(activeTabError);
+      return;
+    }
     const hasAccessCredentials = Boolean(employeeForm.user_role) || Boolean(employeeForm.user_password.trim());
     if (!editingEmployee && !hasAccessCredentials) {
       setShowAccessReminderModal(true);
@@ -3515,9 +3548,23 @@ export function AdminHR() {
         <TextInput label="Apellidos" value={employeeForm.last_name} onChange={(value) => setFormField('last_name', value)} />
         <TextInput label="Fecha de nacimiento" type="date" value={employeeForm.date_of_birth} onChange={(value) => setFormField('date_of_birth', value)} />
         <TextInput label="Celular" type="tel" value={employeeForm.phone} onChange={(value) => setFormField('phone', value)} />
-        <TextInput label="Correo electrónico" type="email" value={employeeForm.email} onChange={(value) => {
-          setEmployeeForm((current) => ({ ...current, email: value, user_email: current.user_email || value, user_email_confirm: current.user_email_confirm || value }));
-        }} />
+        <TextInput
+          label="Correo electrónico"
+          type="email"
+          value={employeeForm.email}
+          error={employeeForm.email && !isValidEmailFormat(employeeForm.email) ? 'Ingresa un correo válido (ej. nombre@dominio.com)' : undefined}
+          onChange={(value) => {
+            setEmployeeForm((current) => {
+              const wasMirroringAccessEmail = !current.user_email || current.user_email === current.email;
+              return {
+                ...current,
+                email: value,
+                user_email: wasMirroringAccessEmail ? value : current.user_email,
+                user_email_confirm: wasMirroringAccessEmail ? value : current.user_email_confirm,
+              };
+            });
+          }}
+        />
         <TextInput label="Nacionalidad" value={employeeForm.nationality} onChange={(value) => setFormField('nationality', value)} />
         <div className="sm:col-span-2 lg:col-span-2">
           <LocationPicker
@@ -3939,10 +3986,17 @@ export function AdminHR() {
               })}
             </div>
           </div>
-          <TextInput label="Usuario / correo" type="email" value={employeeForm.user_email} onChange={(value) => {
-            const email = value.trim().toLowerCase();
-            setEmployeeForm((current) => ({ ...current, user_email: email, user_email_confirm: email }));
-          }} disabled={!canManageAccessCredentials} />
+          <TextInput
+            label="Usuario / correo"
+            type="email"
+            value={employeeForm.user_email}
+            error={employeeForm.user_email && !isValidEmailFormat(employeeForm.user_email) ? 'Ingresa un correo válido (ej. nombre@dominio.com)' : undefined}
+            onChange={(value) => {
+              const email = value.trim().toLowerCase();
+              setEmployeeForm((current) => ({ ...current, user_email: email, user_email_confirm: email }));
+            }}
+            disabled={!canManageAccessCredentials}
+          />
           <label className="block sm:col-span-2">
             <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Clave</span>
             <div className="flex gap-2">
@@ -6199,7 +6253,7 @@ export function AdminHR() {
                       <button
                         key={tab.id}
                         type="button"
-                        onClick={() => setEmployeeModalTab(tab.id)}
+                        onClick={() => handleEmployeeModalTabChange(tab.id)}
                         className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${active ? 'bg-white text-[#2a4038] shadow-sm font-semibold' : 'text-gray-500 hover:text-gray-700'}`}
                       >
                         <Icon size={12} />
