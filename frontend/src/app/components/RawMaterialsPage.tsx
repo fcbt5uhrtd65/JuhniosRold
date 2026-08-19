@@ -265,7 +265,7 @@ export function RawMaterialsPage({ onLoginClick }: { onLoginClick: () => void })
               <p className="text-sm font-semibold text-stone-900">No hay materias primas con esos filtros.</p>
             </div>
           ) : (
-            <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
+            <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">
               {filteredItems.map((item) => (
                 <article
                   key={item.id}
@@ -278,45 +278,52 @@ export function RawMaterialsPage({ onLoginClick }: { onLoginClick: () => void })
                       setSelectedItem(item);
                     }
                   }}
-                  className="grid cursor-pointer gap-4 rounded-xl border border-stone-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#1f4b24]/20 sm:grid-cols-[minmax(140px,38%)_minmax(0,1fr)] md:grid-cols-1 lg:grid-cols-[minmax(160px,40%)_minmax(0,1fr)] 2xl:grid-cols-1"
+                  className="grid min-h-[184px] cursor-pointer grid-cols-[104px_minmax(0,1fr)] gap-3 rounded-xl border border-stone-200 bg-white p-3 shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#1f4b24]/25 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#1f4b24]/20 sm:grid-cols-[128px_minmax(0,1fr)]"
                 >
-                  <div className="flex aspect-[4/3] min-h-[180px] items-center justify-center overflow-hidden rounded-lg bg-[#f5f4ef] sm:min-h-0">
+                  <div className="flex h-full min-h-[160px] items-center justify-center overflow-hidden rounded-lg bg-[#f5f4ef]">
                     {item.imageUrl ? (
-                      <img src={item.imageUrl} alt={item.name} className="h-full w-full object-contain p-2" />
+                      <img src={item.imageUrl} alt={item.name} className="h-full w-full object-cover" />
                     ) : (
                       <div className="text-center text-[#1f4b24]/35">
-                        <Beaker className="mx-auto mb-2 h-12 w-12" strokeWidth={1.4} />
-                        <p className="text-[11px] font-semibold uppercase tracking-wider">Materia prima</p>
+                        <Beaker className="mx-auto mb-2 h-8 w-8" strokeWidth={1.4} />
+                        <p className="text-[9px] font-semibold uppercase tracking-wider">Materia prima</p>
                       </div>
                     )}
                   </div>
-                  <div className="flex min-w-0 flex-col">
-                    <div className="min-w-0">
-                      <h2 className="font-serif text-xl font-semibold leading-tight text-[#17351f] line-clamp-2">{item.name}</h2>
-                      <p className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-green-600">
-                        <span className="h-2 w-2 rounded-full bg-green-500" />
-                        Disponible
+                  <div className="flex min-w-0 flex-col py-0.5">
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <h2 className="min-w-0 font-serif text-lg font-semibold leading-tight text-[#17351f] line-clamp-2">{item.name}</h2>
+                        <span className="mt-0.5 inline-flex h-5 shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-2 text-[10px] font-semibold text-emerald-700">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                          Stock
+                        </span>
+                      </div>
+                      <p className="truncate text-[11px] font-medium uppercase tracking-wider text-stone-400">
+                        {item.itemTypeName || item.itemGroupName || item.code}
                       </p>
                     </div>
-                    <div className="my-4 h-px bg-stone-100" />
-                    <div>
-                      <p className="text-sm text-stone-500">Precio por {unitText(item)}</p>
-                      <p className="font-serif text-3xl font-semibold leading-tight text-[#17351f]">{formatCost(item.cost)}</p>
-                      <span className="mt-3 inline-flex rounded-full bg-[#edf2ec] px-4 py-1.5 text-xs font-medium text-[#1f4b24]">
+                    <div className="my-3 h-px bg-stone-100" />
+                    <div className="grid gap-2">
+                      <div>
+                        <p className="text-xs text-stone-500">Precio por {unitText(item)}</p>
+                        <p className="font-serif text-2xl font-semibold leading-none text-[#17351f]">{formatCost(item.cost)}</p>
+                      </div>
+                      <span className="inline-flex w-fit rounded-full bg-[#edf2ec] px-3 py-1 text-[11px] font-semibold text-[#1f4b24]">
                         {presentationText(item)}
                       </span>
                     </div>
-                    <div className="mt-auto grid gap-3 pt-5 sm:grid-cols-[132px_minmax(0,1fr)] md:grid-cols-1 lg:grid-cols-[132px_minmax(0,1fr)] 2xl:grid-cols-1">
+                    <div className="mt-auto grid gap-2 pt-4 sm:grid-cols-[116px_minmax(0,1fr)]">
                       <div
-                        className="grid h-11 min-w-[132px] grid-cols-3 overflow-hidden rounded-lg border border-stone-200 bg-white text-[#17351f]"
+                        className="grid h-10 min-w-[116px] grid-cols-3 overflow-hidden rounded-lg border border-stone-200 bg-white text-[#17351f]"
                         onClick={(event) => event.stopPropagation()}
                       >
                         <button type="button" onClick={() => setQuantity(item.id, getQuantity(item.id) - 1)} className="flex items-center justify-center hover:bg-stone-50">
-                          <Minus className="h-4 w-4" />
+                          <Minus className="h-3.5 w-3.5" />
                         </button>
-                        <div className="flex items-center justify-center border-x border-stone-200 font-serif text-lg font-semibold">{getQuantity(item.id)}</div>
+                        <div className="flex items-center justify-center border-x border-stone-200 font-serif text-base font-semibold">{getQuantity(item.id)}</div>
                         <button type="button" onClick={() => setQuantity(item.id, getQuantity(item.id) + 1)} className="flex items-center justify-center hover:bg-stone-50">
-                          <Plus className="h-4 w-4" />
+                          <Plus className="h-3.5 w-3.5" />
                         </button>
                       </div>
                       <button
@@ -325,7 +332,7 @@ export function RawMaterialsPage({ onLoginClick }: { onLoginClick: () => void })
                           event.stopPropagation();
                           addToCart(item);
                         }}
-                        className="inline-flex h-11 min-w-0 items-center justify-center gap-2 rounded-lg bg-[#1f4b24] px-3 text-sm font-semibold leading-tight text-white shadow-sm transition-colors hover:bg-[#17351f]"
+                        className="inline-flex h-10 min-w-0 items-center justify-center gap-2 rounded-lg bg-[#1f4b24] px-3 text-sm font-semibold leading-tight text-white shadow-sm transition-colors hover:bg-[#17351f]"
                       >
                         <ShoppingCart className="h-4 w-4" strokeWidth={1.8} />
                         <span>Agregar</span>
