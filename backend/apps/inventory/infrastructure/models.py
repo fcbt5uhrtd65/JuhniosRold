@@ -154,6 +154,7 @@ class Item(BaseModel):
     minimum_quantity = models.DecimalField(max_digits=14, decimal_places=3, default=0)
     maximum_quantity = models.DecimalField(max_digits=14, decimal_places=3, default=0)
     description = models.TextField(blank=True)
+    image_url = models.TextField(blank=True)
     tracks_inventory = models.BooleanField(default=True)
     tracks_batches = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)

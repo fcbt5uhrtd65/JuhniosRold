@@ -3,6 +3,7 @@ import {
   Edit2,
   Filter,
   FlaskConical,
+  ImagePlus,
   Loader2,
   RefreshCw,
   Save,
@@ -56,6 +57,7 @@ type MaterialForm = {
   minimumQuantity: string;
   maximumQuantity: string;
   description: string;
+  imageUrl: string;
   tracksInventory: boolean;
   tracksBatches: boolean;
   isActive: boolean;
@@ -104,6 +106,7 @@ function emptyForm(defaults: { typeId: string; groupId: string; unitId: string }
     minimumQuantity: '0',
     maximumQuantity: '0',
     description: '',
+    imageUrl: '',
     tracksInventory: true,
     tracksBatches: true,
     isActive: true,
@@ -123,6 +126,7 @@ function formFromItem(item: Item): MaterialForm {
     minimumQuantity: String(item.minimumQuantity),
     maximumQuantity: String(item.maximumQuantity),
     description: item.description,
+    imageUrl: item.imageUrl,
     tracksInventory: item.tracksInventory,
     tracksBatches: item.tracksBatches,
     isActive: item.isActive,
@@ -233,6 +237,19 @@ export function AdminRawMaterials() {
     setForm((current) => ({ ...current, [key]: value }));
   };
 
+  const handleImageFile = (file: File | null) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Selecciona un archivo de imagen.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setFormField('imageUrl', String(reader.result ?? ''));
+    };
+    reader.readAsDataURL(file);
+  };
+
   const validateForm = () => {
     if (!form.code.trim()) return 'Indica el codigo interno.';
     if (!form.name.trim()) return 'Indica el nombre de la materia prima.';
@@ -265,6 +282,7 @@ export function AdminRawMaterials() {
         minimumQuantity: numeric(form.minimumQuantity),
         maximumQuantity: numeric(form.maximumQuantity),
         description: form.description.trim(),
+        imageUrl: form.imageUrl,
         tracksInventory: form.tracksInventory,
         tracksBatches: form.tracksBatches,
         isActive: form.isActive,
@@ -422,7 +440,8 @@ export function AdminRawMaterials() {
       ) : (
         <Table scrollable>
           <thead>
-            <tr>
+              <tr>
+              <Th>Imagen</Th>
               <Th>Materia prima</Th>
               <Th>Tipo / grupo</Th>
               <Th>Unidad</Th>
@@ -436,6 +455,15 @@ export function AdminRawMaterials() {
           <tbody>
             {filteredItems.map((item) => (
               <tr key={item.id} className="hover:bg-gray-50/50">
+                <Td>
+                  <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-xl border border-gray-100 bg-gray-50">
+                    {item.imageUrl ? (
+                      <img src={item.imageUrl} alt={item.name} className="h-full w-full object-contain p-1" />
+                    ) : (
+                      <FlaskConical size={18} className="text-gray-300" />
+                    )}
+                  </div>
+                </Td>
                 <Td>
                   <div className="font-semibold text-gray-900">{item.name}</div>
                   <div className="mt-1 text-[11px] text-gray-400">{item.code}</div>
@@ -519,6 +547,43 @@ export function AdminRawMaterials() {
           </div>
           <Field label="Descripcion">
             <textarea value={form.description} onChange={(event) => setFormField('description', event.target.value)} className={`${inputCls} min-h-24 resize-none`} />
+          </Field>
+          <Field label="Imagen">
+            <div className="grid gap-3 md:grid-cols-[160px_1fr]">
+              <div className="flex h-40 items-center justify-center overflow-hidden rounded-xl border border-gray-100 bg-gray-50">
+                {form.imageUrl ? (
+                  <img src={form.imageUrl} alt="Vista previa" className="h-full w-full object-contain p-2" />
+                ) : (
+                  <div className="text-center text-gray-300">
+                    <ImagePlus size={26} className="mx-auto mb-2" />
+                    <span className="text-[11px] font-semibold">Sin imagen</span>
+                  </div>
+                )}
+              </div>
+              <div className="space-y-2">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(event) => handleImageFile(event.target.files?.[0] ?? null)}
+                  className={inputCls}
+                />
+                <input
+                  value={form.imageUrl}
+                  onChange={(event) => setFormField('imageUrl', event.target.value)}
+                  className={inputCls}
+                  placeholder="URL o imagen cargada"
+                />
+                {form.imageUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setFormField('imageUrl', '')}
+                    className="rounded-lg border border-gray-200 px-3 py-1.5 text-[11px] font-semibold text-gray-500 hover:bg-gray-50"
+                  >
+                    Quitar imagen
+                  </button>
+                )}
+              </div>
+            </div>
           </Field>
           <div className="grid gap-3 md:grid-cols-3">
             {[

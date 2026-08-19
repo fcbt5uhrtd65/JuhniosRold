@@ -99,6 +99,7 @@ class PublicRawMaterialSerializer(serializers.ModelSerializer):
             "code",
             "name",
             "description",
+            "image_url",
             "cost",
             "minimum_quantity",
             "maximum_quantity",

@@ -249,6 +249,7 @@ export interface Item {
   minimumQuantity: number;
   maximumQuantity: number;
   description: string;
+  imageUrl: string;
   tracksInventory: boolean;
   tracksBatches: boolean;
   isActive: boolean;
@@ -267,6 +268,7 @@ interface BackendItem {
   minimum_quantity: string;
   maximum_quantity: string;
   description: string;
+  image_url: string;
   tracks_inventory: boolean;
   tracks_batches: boolean;
   is_active: boolean;
@@ -291,6 +293,7 @@ function mapItem(i: BackendItem): Item {
     minimumQuantity: toNumber(i.minimum_quantity),
     maximumQuantity: toNumber(i.maximum_quantity),
     description: i.description,
+    imageUrl: i.image_url,
     tracksInventory: i.tracks_inventory,
     tracksBatches: i.tracks_batches,
     isActive: i.is_active,
@@ -302,7 +305,7 @@ export async function getItems(): Promise<Item[]> {
   return data.map(mapItem);
 }
 
-export async function createItem(input: Omit<Item, 'id'>): Promise<Item> {
+export async function createItem(input: Omit<Item, 'id' | 'imageUrl'> & { imageUrl?: string }): Promise<Item> {
   const { data } = await api.post<BackendItem>(ITEMS_PATH, {
     code: input.code,
     name: input.name,
@@ -315,6 +318,7 @@ export async function createItem(input: Omit<Item, 'id'>): Promise<Item> {
     minimum_quantity: String(input.minimumQuantity),
     maximum_quantity: String(input.maximumQuantity),
     description: input.description,
+    image_url: input.imageUrl ?? '',
     tracks_inventory: input.tracksInventory,
     tracks_batches: input.tracksBatches,
     is_active: input.isActive,
@@ -335,6 +339,7 @@ export async function updateItem(id: UUID, input: Partial<Omit<Item, 'id'>>): Pr
   if (input.minimumQuantity !== undefined) payload.minimum_quantity = String(input.minimumQuantity);
   if (input.maximumQuantity !== undefined) payload.maximum_quantity = String(input.maximumQuantity);
   if (input.description !== undefined) payload.description = input.description;
+  if (input.imageUrl !== undefined) payload.image_url = input.imageUrl;
   if (input.tracksInventory !== undefined) payload.tracks_inventory = input.tracksInventory;
   if (input.tracksBatches !== undefined) payload.tracks_batches = input.tracksBatches;
   if (input.isActive !== undefined) payload.is_active = input.isActive;
@@ -377,6 +382,7 @@ export interface PublicRawMaterial {
   code: string;
   name: string;
   description: string;
+  imageUrl: string;
   cost: number;
   minimumQuantity: number;
   maximumQuantity: number;
@@ -395,6 +401,7 @@ interface BackendPublicRawMaterial {
   code: string;
   name: string;
   description: string;
+  image_url: string;
   cost: string;
   minimum_quantity: string;
   maximum_quantity: string;
@@ -414,6 +421,7 @@ function mapPublicRawMaterial(item: BackendPublicRawMaterial): PublicRawMaterial
     code: item.code,
     name: item.name,
     description: item.description,
+    imageUrl: item.image_url,
     cost: toNumber(item.cost),
     minimumQuantity: toNumber(item.minimum_quantity),
     maximumQuantity: toNumber(item.maximum_quantity),

@@ -3,11 +3,15 @@ import {
   AlertCircle,
   ArrowLeft,
   Beaker,
+  CheckCircle,
   Filter,
   FlaskConical,
   Loader2,
+  Minus,
   PackageCheck,
+  Plus,
   Search,
+  ShoppingCart,
   SlidersHorizontal,
   X,
 } from 'lucide-react';
@@ -39,6 +43,21 @@ function formatCost(value: number): string {
   return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(value);
 }
 
+function unitText(item: PublicRawMaterial): string {
+  return (item.unitAbbreviation || item.unitName || 'unidad').toLowerCase();
+}
+
+function presentationText(item: PublicRawMaterial): string {
+  const unit = unitText(item);
+  return unit.includes('kg') || unit.includes('kilo')
+    ? 'Presentacion: 1 kg'
+    : unit.includes('g')
+      ? 'Presentacion: 100 g'
+      : unit.includes('l')
+        ? 'Presentacion: 1 L'
+        : 'Presentacion: 1 und';
+}
+
 function costMatches(item: PublicRawMaterial, filter: CostFilter): boolean {
   if (filter === 'all') return true;
   if (filter === 'low') return item.cost > 0 && item.cost < 10000;
@@ -58,6 +77,10 @@ export function RawMaterialsPage({ onLoginClick }: { onLoginClick: () => void })
   const [batchFilter, setBatchFilter] = useState('all');
   const [costFilter, setCostFilter] = useState<CostFilter>('all');
   const [sortKey, setSortKey] = useState<SortKey>('name');
+  const [selectedItem, setSelectedItem] = useState<PublicRawMaterial | null>(null);
+  const [showCart, setShowCart] = useState(false);
+  const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [cart, setCart] = useState<Record<string, number>>({});
 
   useEffect(() => {
     let mounted = true;
@@ -118,13 +141,29 @@ export function RawMaterialsPage({ onLoginClick }: { onLoginClick: () => void })
     setSortKey('name');
   };
 
+  const getQuantity = (id: string) => quantities[id] ?? 1;
+  const setQuantity = (id: string, value: number) => {
+    setQuantities((current) => ({ ...current, [id]: Math.max(1, value) }));
+  };
+  const addToCart = (item: PublicRawMaterial) => {
+    const quantity = getQuantity(item.id);
+    setCart((current) => ({ ...current, [item.id]: (current[item.id] ?? 0) + quantity }));
+  };
+  const cartCount = Object.values(cart).reduce((sum, quantity) => sum + quantity, 0);
+  const cartItems = useMemo(
+    () => Object.entries(cart)
+      .map(([id, quantity]) => ({ item: items.find((material) => material.id === id), quantity }))
+      .filter((entry): entry is { item: PublicRawMaterial; quantity: number } => Boolean(entry.item)),
+    [cart, items],
+  );
+
   return (
     <div className="min-h-screen bg-[#F7F5F1] text-stone-950">
       <NavigationBar variant="solid" onLoginClick={onLoginClick} />
       <main className="px-4 pb-12 pt-24 md:px-8 lg:px-14">
         <section className="mx-auto max-w-7xl">
-          <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="space-y-3">
+          <div className="mb-8 flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-4">
               <button
                 type="button"
                 onClick={() => navigateBack('/')}
@@ -134,31 +173,39 @@ export function RawMaterialsPage({ onLoginClick }: { onLoginClick: () => void })
                 Inicio
               </button>
               <div>
-                <h1 className="text-2xl font-semibold leading-tight text-stone-950 md:text-3xl">Materias primas</h1>
-                <p className="mt-1 max-w-2xl text-sm text-stone-600">
-                  Insumos, fragancias, colorantes y extractos administrados desde el panel interno.
-                </p>
+                <h1 className="font-serif text-4xl font-semibold leading-tight text-[#17351f] md:text-5xl">Materias primas</h1>
+                <p className="mt-2 max-w-2xl text-base text-stone-600">Insumos profesionales para tus formulas.</p>
+              </div>
+              <div className="inline-flex flex-wrap items-center gap-2 rounded-full bg-[#1f4b24] px-4 py-2 text-sm font-medium text-white shadow-sm">
+                <FlaskConical className="h-4 w-4" strokeWidth={1.7} />
+                <span>Compra por unidad o por volumen</span>
+                <span className="hidden h-1 w-1 rounded-full bg-white/70 sm:block" />
+                <span>Envios a toda Colombia</span>
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-2 rounded-xl border border-stone-200 bg-white p-2 shadow-sm">
-              <div className="px-3 py-2">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">Total</p>
-                <p className="text-lg font-semibold text-stone-950">{items.length}</p>
+            <div className="flex w-full max-w-md items-center gap-5 rounded-xl border border-stone-200 bg-white px-4 py-3 shadow-sm lg:mt-2">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-[#edf2ec] text-[#1f4b24]">
+                <ShoppingCart className="h-7 w-7" strokeWidth={1.7} />
               </div>
-              <div className="px-3 py-2">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">Filtradas</p>
-                <p className="text-lg font-semibold text-stone-950">{filteredItems.length}</p>
+              <div className="min-w-0 flex-1">
+                <p className="font-serif text-xl font-semibold leading-tight text-[#17351f]">Tu compra</p>
+                <p className="text-sm text-stone-500">{cartCount} producto{cartCount === 1 ? '' : 's'}</p>
               </div>
-              <div className="px-3 py-2">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">Con lote</p>
-                <p className="text-lg font-semibold text-stone-950">{items.filter((item) => item.tracksBatches).length}</p>
-              </div>
+              <div className="h-12 w-px bg-stone-100" />
+              <button
+                type="button"
+                onClick={() => setShowCart(true)}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#1f4b24] px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#17351f]"
+              >
+                Ver carrito
+                <span aria-hidden>{'->'}</span>
+              </button>
             </div>
           </div>
 
-          <div className="mb-5 rounded-xl border border-stone-200 bg-white p-3 shadow-sm">
-            <div className="grid gap-2.5 md:grid-cols-2 xl:grid-cols-8">
-              <div className="relative xl:col-span-2">
+          <div className="mb-8">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[2fr_0.85fr_0.85fr_0.95fr_0.95fr_auto]">
+              <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" strokeWidth={1.7} />
                 <input
                   value={search}
@@ -168,53 +215,43 @@ export function RawMaterialsPage({ onLoginClick }: { onLoginClick: () => void })
                 />
               </div>
               <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} className="h-11 rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-800 outline-none focus:border-stone-900">
-                <option value="all">Todos los tipos</option>
+                <option value="all">Categoria</option>
                 {typeOptions.map((item) => <option key={item} value={item}>{item}</option>)}
               </select>
               <select value={groupFilter} onChange={(event) => setGroupFilter(event.target.value)} className="h-11 rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-800 outline-none focus:border-stone-900">
-                <option value="all">Todos los grupos</option>
+                <option value="all">Uso</option>
                 {groupOptions.map((item) => <option key={item} value={item}>{item}</option>)}
               </select>
-              <select value={supplierFilter} onChange={(event) => setSupplierFilter(event.target.value)} className="h-11 rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-800 outline-none focus:border-stone-900">
-                <option value="all">Todos los proveedores</option>
-                {supplierOptions.map((item) => <option key={item} value={item}>{item}</option>)}
-              </select>
               <select value={unitFilter} onChange={(event) => setUnitFilter(event.target.value)} className="h-11 rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-800 outline-none focus:border-stone-900">
-                <option value="all">Todas las unidades</option>
+                <option value="all">Presentacion</option>
                 {unitOptions.map((item) => <option key={item} value={item}>{item}</option>)}
               </select>
               <select value={batchFilter} onChange={(event) => setBatchFilter(event.target.value)} className="h-11 rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-800 outline-none focus:border-stone-900">
-                <option value="all">Todos los controles</option>
+                <option value="all">Disponibilidad</option>
                 <option value="batch">Maneja lote</option>
                 <option value="no-batch">Sin lote</option>
               </select>
-              <select value={costFilter} onChange={(event) => setCostFilter(event.target.value as CostFilter)} className="h-11 rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-800 outline-none focus:border-stone-900">
-                <option value="all">Todos los costos</option>
-                <option value="low">Menos de $10.000</option>
-                <option value="mid">$10.000 a $49.999</option>
-                <option value="high">$50.000 o mas</option>
-              </select>
-              <select value={sortKey} onChange={(event) => setSortKey(event.target.value as SortKey)} className="h-11 rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-800 outline-none focus:border-stone-900">
-                <option value="name">Ordenar por nombre</option>
-                <option value="code">Ordenar por codigo</option>
-                <option value="cost">Ordenar por costo</option>
-              </select>
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg px-3 text-xs font-semibold text-stone-600 transition-colors hover:bg-white"
+              >
+                <X className="h-3.5 w-3.5" />
+                Limpiar filtros
+              </button>
             </div>
-            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <p className="inline-flex items-center gap-1.5 text-xs font-medium text-stone-500">
-                <Filter className="h-3.5 w-3.5" />
-                {activeFilters ? `${activeFilters} filtro(s) activo(s)` : 'Sin filtros activos'}
+            <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="font-serif text-xl font-semibold text-[#17351f]">
+                {filteredItems.length} <span className="font-sans text-sm font-normal text-stone-600">materias primas</span>
               </p>
-              {activeFilters > 0 && (
-                <button
-                  type="button"
-                  onClick={clearFilters}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-stone-200 px-3 py-2 text-xs font-semibold text-stone-600 transition-colors hover:bg-stone-50"
-                >
-                  <X className="h-3.5 w-3.5" />
-                  Limpiar filtros
-                </button>
-              )}
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-stone-500">Ordenar por:</span>
+                <select value={sortKey} onChange={(event) => setSortKey(event.target.value as SortKey)} className="h-10 rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-800 outline-none focus:border-stone-900">
+                  <option value="name">Mas relevantes</option>
+                  <option value="code">Codigo</option>
+                  <option value="cost">Mayor precio</option>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -239,50 +276,71 @@ export function RawMaterialsPage({ onLoginClick }: { onLoginClick: () => void })
               <p className="text-sm font-semibold text-stone-900">No hay materias primas con esos filtros.</p>
             </div>
           ) : (
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-4 xl:grid-cols-3">
               {filteredItems.map((item) => (
-                <article key={item.id} className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
-                  <div className="mb-3 flex items-start justify-between gap-3">
-                    <div className="flex min-w-0 items-start gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#eef4f1] text-[#2a4038]">
-                        <Beaker className="h-5 w-5" strokeWidth={1.7} />
+                <article
+                  key={item.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setSelectedItem(item)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      setSelectedItem(item);
+                    }
+                  }}
+                  className="grid cursor-pointer grid-cols-[45%_1fr] gap-4 rounded-xl border border-stone-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#1f4b24]/20"
+                >
+                  <div className="flex min-h-[220px] items-center justify-center overflow-hidden rounded-lg bg-[#f5f4ef]">
+                    {item.imageUrl ? (
+                      <img src={item.imageUrl} alt={item.name} className="h-full max-h-[220px] w-full object-contain p-2" />
+                    ) : (
+                      <div className="text-center text-[#1f4b24]/35">
+                        <Beaker className="mx-auto mb-2 h-12 w-12" strokeWidth={1.4} />
+                        <p className="text-[11px] font-semibold uppercase tracking-wider">Materia prima</p>
                       </div>
-                      <div className="min-w-0">
-                        <h2 className="line-clamp-2 text-sm font-semibold text-stone-950">{item.name}</h2>
-                        <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wider text-stone-400">{item.code}</p>
-                      </div>
-                    </div>
-                    <span className="rounded-full bg-stone-100 px-2 py-1 text-[10px] font-semibold text-stone-600">
-                      {item.unitAbbreviation || item.unitName}
-                    </span>
-                  </div>
-                  <div className="mb-3 flex flex-wrap gap-1.5">
-                    <span className="rounded-full bg-[#eef4f1] px-2.5 py-1 text-[10px] font-semibold text-[#2a4038]">{item.itemTypeName}</span>
-                    <span className="rounded-full bg-stone-100 px-2.5 py-1 text-[10px] font-semibold text-stone-600">{item.itemGroupName}</span>
-                    {item.tracksBatches && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-700">
-                        <PackageCheck className="h-3 w-3" />
-                        Lote
-                      </span>
                     )}
                   </div>
-                  {item.description && <p className="mb-4 line-clamp-3 text-sm leading-6 text-stone-600">{item.description}</p>}
-                  <div className="grid grid-cols-2 gap-2 border-t border-stone-100 pt-3 text-xs">
-                    <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">Costo ref.</p>
-                      <p className="mt-0.5 font-semibold text-stone-900">{formatCost(item.cost)}</p>
+                  <div className="flex min-w-0 flex-col">
+                    <div className="min-w-0">
+                      <h2 className="font-serif text-xl font-semibold leading-tight text-[#17351f]">{item.name}</h2>
+                      <p className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-green-600">
+                        <span className="h-2 w-2 rounded-full bg-green-500" />
+                        Disponible
+                      </p>
                     </div>
+                    <div className="my-4 h-px bg-stone-100" />
                     <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">Proveedor</p>
-                      <p className="mt-0.5 truncate font-medium text-stone-700">{item.supplierName ?? 'Sin proveedor'}</p>
+                      <p className="text-sm text-stone-500">Precio por {unitText(item)}</p>
+                      <p className="font-serif text-3xl font-semibold leading-tight text-[#17351f]">{formatCost(item.cost)}</p>
+                      <span className="mt-3 inline-flex rounded-full bg-[#edf2ec] px-4 py-1.5 text-xs font-medium text-[#1f4b24]">
+                        {presentationText(item)}
+                      </span>
                     </div>
-                    <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">Minimo</p>
-                      <p className="mt-0.5 font-medium text-stone-700">{item.minimumQuantity}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">Maximo</p>
-                      <p className="mt-0.5 font-medium text-stone-700">{item.maximumQuantity}</p>
+                    <div className="mt-auto grid grid-cols-[136px_1fr] gap-3 pt-5">
+                      <div
+                        className="grid h-12 grid-cols-3 overflow-hidden rounded-lg border border-stone-200 bg-white text-[#17351f]"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <button type="button" onClick={() => setQuantity(item.id, getQuantity(item.id) - 1)} className="flex items-center justify-center hover:bg-stone-50">
+                          <Minus className="h-4 w-4" />
+                        </button>
+                        <div className="flex items-center justify-center border-x border-stone-200 font-serif text-lg font-semibold">{getQuantity(item.id)}</div>
+                        <button type="button" onClick={() => setQuantity(item.id, getQuantity(item.id) + 1)} className="flex items-center justify-center hover:bg-stone-50">
+                          <Plus className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          addToCart(item);
+                        }}
+                        className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-[#1f4b24] px-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#17351f]"
+                      >
+                        <ShoppingCart className="h-4 w-4" strokeWidth={1.8} />
+                        Agregar al carrito
+                      </button>
                     </div>
                   </div>
                 </article>
@@ -298,6 +356,122 @@ export function RawMaterialsPage({ onLoginClick }: { onLoginClick: () => void })
               </p>
             </div>
           </div>
+
+          {selectedItem && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <div className="absolute inset-0 bg-black/35 backdrop-blur-sm" onClick={() => setSelectedItem(null)} />
+              <div className="relative grid max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-2xl md:grid-cols-[42%_1fr]">
+                <div className="flex min-h-[340px] items-center justify-center bg-[#f5f4ef] p-6">
+                  {selectedItem.imageUrl ? (
+                    <img src={selectedItem.imageUrl} alt={selectedItem.name} className="max-h-[420px] w-full object-contain" />
+                  ) : (
+                    <Beaker className="h-24 w-24 text-[#1f4b24]/25" strokeWidth={1.4} />
+                  )}
+                </div>
+                <div className="overflow-y-auto p-6">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedItem(null)}
+                    className="absolute right-4 top-4 rounded-full border border-stone-200 bg-white p-2 text-stone-500 shadow-sm hover:bg-stone-50"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-stone-400">{selectedItem.code}</p>
+                  <h2 className="font-serif text-3xl font-semibold leading-tight text-[#17351f]">{selectedItem.name}</h2>
+                  <p className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-green-600">
+                    <CheckCircle className="h-4 w-4" />
+                    Disponible
+                  </p>
+                  <div className="my-5 h-px bg-stone-100" />
+                  <p className="text-sm text-stone-500">Precio por {unitText(selectedItem)}</p>
+                  <p className="mt-1 font-serif text-4xl font-semibold text-[#17351f]">{formatCost(selectedItem.cost)}</p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <span className="rounded-full bg-[#edf2ec] px-3 py-1.5 text-xs font-semibold text-[#1f4b24]">{presentationText(selectedItem)}</span>
+                    <span className="rounded-full bg-stone-100 px-3 py-1.5 text-xs font-semibold text-stone-600">{selectedItem.itemTypeName}</span>
+                    <span className="rounded-full bg-stone-100 px-3 py-1.5 text-xs font-semibold text-stone-600">{selectedItem.itemGroupName}</span>
+                    {selectedItem.tracksBatches && <span className="rounded-full bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700">Maneja lote</span>}
+                  </div>
+                  {selectedItem.description && (
+                    <p className="mt-5 text-sm leading-7 text-stone-600">{selectedItem.description}</p>
+                  )}
+                  <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
+                    <div className="rounded-xl border border-stone-100 p-3">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">Proveedor</p>
+                      <p className="mt-1 font-medium text-stone-800">{selectedItem.supplierName ?? 'Sin proveedor'}</p>
+                    </div>
+                    <div className="rounded-xl border border-stone-100 p-3">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">Unidad</p>
+                      <p className="mt-1 font-medium text-stone-800">{selectedItem.unitName}</p>
+                    </div>
+                    <div className="rounded-xl border border-stone-100 p-3">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">Stock minimo</p>
+                      <p className="mt-1 font-medium text-stone-800">{selectedItem.minimumQuantity}</p>
+                    </div>
+                    <div className="rounded-xl border border-stone-100 p-3">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">Stock maximo</p>
+                      <p className="mt-1 font-medium text-stone-800">{selectedItem.maximumQuantity}</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      addToCart(selectedItem);
+                      setSelectedItem(null);
+                    }}
+                    className="mt-6 inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-[#1f4b24] px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#17351f]"
+                  >
+                    <ShoppingCart className="h-4 w-4" />
+                    Agregar al carrito
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showCart && (
+            <div className="fixed inset-0 z-50 flex justify-end">
+              <div className="absolute inset-0 bg-black/35 backdrop-blur-sm" onClick={() => setShowCart(false)} />
+              <aside className="relative flex h-full w-full max-w-md flex-col bg-white shadow-2xl">
+                <div className="flex items-center justify-between border-b border-stone-100 px-5 py-4">
+                  <div>
+                    <p className="font-serif text-2xl font-semibold text-[#17351f]">Tu compra</p>
+                    <p className="text-sm text-stone-500">{cartCount} producto{cartCount === 1 ? '' : 's'}</p>
+                  </div>
+                  <button type="button" onClick={() => setShowCart(false)} className="rounded-full border border-stone-200 p-2 text-stone-500 hover:bg-stone-50">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-5">
+                  {cartItems.length === 0 ? (
+                    <div className="rounded-xl border border-stone-100 px-4 py-10 text-center text-sm text-stone-500">
+                      No has agregado materias primas todavia.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {cartItems.map(({ item, quantity }) => (
+                        <div key={item.id} className="grid grid-cols-[64px_1fr_auto] gap-3 rounded-xl border border-stone-100 p-3">
+                          <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-lg bg-[#f5f4ef]">
+                            {item.imageUrl ? <img src={item.imageUrl} alt={item.name} className="h-full w-full object-contain p-1" /> : <Beaker className="h-6 w-6 text-[#1f4b24]/30" />}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-stone-900">{item.name}</p>
+                            <p className="mt-1 text-xs text-stone-500">{formatCost(item.cost)} / {unitText(item)}</p>
+                            <p className="mt-1 text-xs text-stone-400">{presentationText(item)}</p>
+                          </div>
+                          <p className="font-serif text-lg font-semibold text-[#17351f]">x{quantity}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="border-t border-stone-100 p-5">
+                  <button type="button" className="h-12 w-full rounded-lg bg-[#1f4b24] text-sm font-semibold text-white hover:bg-[#17351f]">
+                    Solicitar cotizacion
+                  </button>
+                </div>
+              </aside>
+            </div>
+          )}
         </section>
       </main>
       <Footer />
