@@ -32,6 +32,7 @@ import { ApiStatus } from './components/ApiStatus';
 import { ScrollToTop } from './components/ScrollToTop';
 import { PaymentResult } from './components/PaymentResult';
 import { CatalogPage } from './components/CatalogPage';
+import { RawMaterialsPage } from './components/RawMaterialsPage';
 import { ProfilePage } from './components/ProfilePage';
 import { ChatbotLauncher } from './components/ChatbotLauncher';
 import { CookieConsentBar } from './components/CookieConsentBar';
@@ -138,6 +139,7 @@ function AppContent() {
   }, [customerUser]);
   const isPaymentResult = currentPath === '/pago/resultado';
   const isCatalogPage = currentPath === '/catalogo';
+  const isRawMaterialsPage = currentPath === '/materias-primas';
   const isProfilePage = currentPath === '/perfil';
 
   const syncPath = () => setCurrentPath(window.location.pathname);
@@ -195,6 +197,23 @@ function AppContent() {
     return (
       <>
         <CatalogPage onLoginClick={() => setShowLoginModal(true)} />
+        <CookieConsentBar />
+        <LoginModal
+          isOpen={showLoginModal}
+          onClose={() => setShowLoginModal(false)}
+          onAdminAccess={handleAdminAccess}
+          onGoogleNewUser={() => setShowOnboarding(true)}
+        />
+        <GoogleOnboardingModal isOpen={showOnboarding} initialStep={onboardingInitialStep} onClose={() => setShowOnboarding(false)} />
+        <ChatbotLauncher />
+      </>
+    );
+  }
+
+  if (isRawMaterialsPage) {
+    return (
+      <>
+        <RawMaterialsPage onLoginClick={() => setShowLoginModal(true)} />
         <CookieConsentBar />
         <LoginModal
           isOpen={showLoginModal}

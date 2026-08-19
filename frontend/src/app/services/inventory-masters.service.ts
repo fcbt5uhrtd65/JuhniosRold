@@ -1,4 +1,4 @@
-import { api } from './api';
+import { api, publicApi } from './api';
 
 const BASE = '/inventory';
 const WAREHOUSES_PATH = `${BASE}/warehouses/`;
@@ -7,6 +7,7 @@ const ITEM_GROUPS_PATH = `${BASE}/item-groups/`;
 const ITEM_TYPES_PATH = `${BASE}/item-types/`;
 const SUPPLIERS_PATH = `${BASE}/suppliers/`;
 const ITEMS_PATH = `${BASE}/items/`;
+const PUBLIC_RAW_MATERIALS_PATH = `${BASE}/public/raw-materials/`;
 
 type UUID = string;
 
@@ -344,4 +345,90 @@ export async function updateItem(id: UUID, input: Partial<Omit<Item, 'id'>>): Pr
 
 export async function deleteItem(id: UUID): Promise<void> {
   await api.delete(`${ITEMS_PATH}${id}/`);
+}
+
+async function getPublicPage<T>(path: string): Promise<T[]> {
+  const sep = path.includes('?') ? '&' : '?';
+  const firstResponse = await publicApi.get<PaginatedResponse<T>>(`${path}${sep}page_size=100`);
+  const firstPage = firstResponse.data;
+  if (!firstPage) {
+    return [];
+  }
+
+  const totalPages = Math.ceil(firstPage.count / 100);
+  if (totalPages <= 1) {
+    return firstPage.results;
+  }
+
+  const remainingPages = await Promise.all(
+    Array.from({ length: totalPages - 1 }, (_, index) =>
+      publicApi.get<PaginatedResponse<T>>(`${path}${sep}page_size=100&page=${index + 2}`),
+    ),
+  );
+
+  return [
+    ...firstPage.results,
+    ...remainingPages.flatMap(response => response.data?.results ?? []),
+  ];
+}
+
+export interface PublicRawMaterial {
+  id: UUID;
+  code: string;
+  name: string;
+  description: string;
+  cost: number;
+  minimumQuantity: number;
+  maximumQuantity: number;
+  tracksBatches: boolean;
+  itemTypeName: string;
+  itemGroupName: string;
+  unitName: string;
+  unitAbbreviation: string;
+  supplierName: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface BackendPublicRawMaterial {
+  id: UUID;
+  code: string;
+  name: string;
+  description: string;
+  cost: string;
+  minimum_quantity: string;
+  maximum_quantity: string;
+  tracks_batches: boolean;
+  item_type_name: string;
+  item_group_name: string;
+  unit_name: string;
+  unit_abbreviation: string;
+  supplier_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+function mapPublicRawMaterial(item: BackendPublicRawMaterial): PublicRawMaterial {
+  return {
+    id: item.id,
+    code: item.code,
+    name: item.name,
+    description: item.description,
+    cost: toNumber(item.cost),
+    minimumQuantity: toNumber(item.minimum_quantity),
+    maximumQuantity: toNumber(item.maximum_quantity),
+    tracksBatches: item.tracks_batches,
+    itemTypeName: item.item_type_name,
+    itemGroupName: item.item_group_name,
+    unitName: item.unit_name,
+    unitAbbreviation: item.unit_abbreviation,
+    supplierName: item.supplier_name,
+    createdAt: item.created_at,
+    updatedAt: item.updated_at,
+  };
+}
+
+export async function getPublicRawMaterials(): Promise<PublicRawMaterial[]> {
+  const data = await getPublicPage<BackendPublicRawMaterial>(PUBLIC_RAW_MATERIALS_PATH);
+  return data.map(mapPublicRawMaterial);
 }

@@ -85,6 +85,34 @@ class ItemSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
+class PublicRawMaterialSerializer(serializers.ModelSerializer):
+    item_type_name = serializers.CharField(source="item_type.name", read_only=True)
+    item_group_name = serializers.CharField(source="item_group.name", read_only=True)
+    unit_name = serializers.CharField(source="unit.name", read_only=True)
+    unit_abbreviation = serializers.CharField(source="unit.abbreviation", read_only=True)
+    supplier_name = serializers.CharField(source="supplier.name", read_only=True, allow_null=True)
+
+    class Meta:
+        model = Item
+        fields = (
+            "id",
+            "code",
+            "name",
+            "description",
+            "cost",
+            "minimum_quantity",
+            "maximum_quantity",
+            "tracks_batches",
+            "item_type_name",
+            "item_group_name",
+            "unit_name",
+            "unit_abbreviation",
+            "supplier_name",
+            "created_at",
+            "updated_at",
+        )
+
+
 # ── Compras ─────────────────────────────────────────────────────────────────
 
 class PurchaseOrderLineSerializer(serializers.ModelSerializer):

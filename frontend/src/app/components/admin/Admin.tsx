@@ -4,6 +4,7 @@ import { AdminLogin } from './AdminLogin';
 import { AdminLayout } from './AdminLayout';
 import { AdminDashboard } from './AdminDashboard';
 import { AdminProducts } from './AdminProducts';
+import { AdminRawMaterials } from './AdminRawMaterials';
 import { AdminInventory } from './AdminInventory';
 import { AdminInventarioProduccion } from './AdminInventarioProduccion';
 import { AdminManufacturing } from './AdminManufacturing';
@@ -82,6 +83,8 @@ export function Admin() {
         return <AdminDashboard />;
       case 'products':
         return <AdminProducts onViewInInventory={goToInventory} />;
+      case 'raw-materials':
+        return <AdminRawMaterials />;
       case 'flipbook-catalogs':
         return <AdminFlipbookCatalogs />;
       case 'inventory':

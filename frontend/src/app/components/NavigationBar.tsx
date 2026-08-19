@@ -32,6 +32,7 @@ const TikTokIcon = ({ className }: { className?: string }) => (
 const mainNavLinks = [
   { href: '#',            label: 'Inicio',         hasDropdown: false },
   { href: '#productos',   label: 'Productos',      hasDropdown: true  },
+  { href: '/materias-primas', label: 'Materias primas', hasDropdown: false },
   { href: '/catalogo',    label: 'Catálogo',       hasDropdown: false },
   { href: '#diagnostico', label: 'Diagnóstico',    hasDropdown: false },
   { href: '#resultados',  label: 'Antes y Después',hasDropdown: false },
@@ -42,6 +43,7 @@ const allNavLinks = [
   { href: '#',          label: 'Inicio',     sub: 'Volver al inicio' },
   { href: '/catalogo',  label: 'Catálogo',   sub: 'Flipbook comercial' },
   { href: '#productos', label: 'Productos',  sub: 'Colección completa' },
+  { href: '/materias-primas', label: 'Materias primas', sub: 'Insumos filtrados' },
   { href: '#aceites',   label: 'Aceites',    sub: 'Naturales & premium' },
   { href: '#bebe',      label: 'Bebé',       sub: 'Cuidado especial' },
   { href: '#mayorista', label: 'Mayorista',  sub: 'Materias primas' },

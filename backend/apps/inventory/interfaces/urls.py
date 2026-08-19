@@ -8,6 +8,7 @@ from .views import (
     ItemViewSet,
     LocationViewSet,
     ProductionOrderViewSet,
+    PublicRawMaterialViewSet,
     PurchaseOrderViewSet,
     StockConversionViewSet,
     StockViewSet,
@@ -26,6 +27,7 @@ router.register("item-groups", ItemGroupViewSet)
 router.register("item-types", ItemTypeViewSet)
 router.register("suppliers", SupplierViewSet)
 router.register("items", ItemViewSet)
+router.register("public/raw-materials", PublicRawMaterialViewSet, basename="public-raw-materials")
 router.register("purchase-orders", PurchaseOrderViewSet)
 router.register("formulas", FormulaViewSet)
 router.register("production-orders", ProductionOrderViewSet)

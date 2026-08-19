@@ -1,4 +1,6 @@
-from django.db.models import F
+from django.db.models import F, Q
+from rest_framework.permissions import AllowAny
+from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
@@ -29,11 +31,24 @@ from ..infrastructure.serializers import (
     LocationSerializer,
     ProductionOrderSerializer,
     PurchaseOrderSerializer,
+    PublicRawMaterialSerializer,
     StockConversionSerializer,
     StockSerializer,
     SupplierSerializer,
     UnitOfMeasureSerializer,
     WarehouseSerializer,
+)
+
+
+RAW_MATERIAL_NAME_FILTER = (
+    Q(item_type__name__icontains="materia prima")
+    | Q(item_type__name__icontains="fragancia")
+    | Q(item_type__name__icontains="colorante")
+    | Q(item_type__name__icontains="extracto")
+    | Q(item_group__name__icontains="materia prima")
+    | Q(item_group__name__icontains="fragancia")
+    | Q(item_group__name__icontains="colorante")
+    | Q(item_group__name__icontains="extracto")
 )
 
 
@@ -166,12 +181,27 @@ class ItemViewSet(SoftDeleteModelViewSet):
     required_component = "inventory.management"
     alternate_required_components = ("manufacturing.management",)
     alternate_required_component_actions = ("view",)
-    filterset_fields = ("item_type", "item_group", "supplier", "is_active")
+    filterset_fields = ("item_type", "item_group", "supplier", "is_active", "product_variant")
     search_fields = ("code", "name")
 
     def get_permissions(self):
         self.required_component_action = "view" if self.action in {"list", "retrieve"} else "edit"
         return super().get_permissions()
+
+
+class PublicRawMaterialViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = PublicRawMaterialSerializer
+    permission_classes = (AllowAny,)
+    search_fields = ("code", "name", "description", "item_type__name", "item_group__name")
+    filterset_fields = ("item_type", "item_group", "supplier")
+
+    def get_queryset(self):
+        return (
+            Item.objects.select_related("item_type", "item_group", "unit", "supplier")
+            .filter(is_active=True, product_variant__isnull=True)
+            .filter(RAW_MATERIAL_NAME_FILTER)
+            .order_by("name")
+        )
 
 
 class PurchaseOrderViewSet(SoftDeleteModelViewSet):

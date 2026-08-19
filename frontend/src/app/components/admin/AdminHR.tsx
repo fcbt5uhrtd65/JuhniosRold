@@ -872,13 +872,24 @@ function exportEmployeeUniformExcel({
   positionById: Map<string, Position>;
   branchById: Map<string, Branch>;
 }) {
+  const employeeRows: Array<Array<string | number>> = [
+    ['Nombre del empleado', 'Suéter', 'Pantalón', 'Zapato', 'Otro'],
+    ...employees.map((employee) => [
+      getEmployeeName(employee),
+      getEmployeeUniformValue(employee, 'uniform_sweater'),
+      getEmployeeUniformValue(employee, 'uniform_pants'),
+      getEmployeeUniformValue(employee, 'uniform_shoes'),
+      getEmployeeUniformValue(employee, 'uniform_other'),
+    ]),
+  ];
+
   const summaryRows: Array<Array<string | number>> = [
-    ['Juhnios Rold - Dotación interna de empleados'],
+    ['Juhnios Rold - Dotación por talla'],
     ['Generado', new Date().toLocaleString('es-CO')],
     ['Empleados filtrados', employees.length],
     ['Filtros', filters.length ? filters.join(' | ') : 'Sin filtros'],
     [],
-    ['Tipo', 'Talla / dato', 'Cantidad', 'Empleados'],
+    ['Prenda / dato', 'Talla / valor', 'Cantidad', 'Empleados'],
   ];
 
   UNIFORM_FIELDS.forEach(({ field, label }) => {
@@ -894,7 +905,7 @@ function exportEmployeeUniformExcel({
   });
 
   const detailRows: Array<Array<string | number>> = [
-    ['Empleado', 'Código', 'Documento', 'Área', 'Cargo', 'Sede', 'Estado', 'Suéter', 'Pantalón', 'Zapato', 'Otro'],
+    ['Nombre del empleado', 'Código', 'Documento', 'Área', 'Cargo', 'Sede', 'Estado', 'Suéter', 'Pantalón', 'Zapato', 'Otro'],
     ...employees.map((employee) => [
       getEmployeeName(employee),
       employee.employee_code || '',
@@ -910,30 +921,24 @@ function exportEmployeeUniformExcel({
     ]),
   ];
 
-  const itemRows: Array<Array<string | number>> = [
-    ['Empleado', 'Código', 'Área', 'Cargo', 'Sede', 'Tipo de dotación', 'Talla / dato'],
+  const filterRows: Array<Array<string | number>> = [
+    ['Juhnios Rold - Exportación de dotación'],
+    ['Generado', new Date().toLocaleString('es-CO')],
+    ['Empleados incluidos', employees.length],
+    [],
+    ['Filtros aplicados'],
   ];
-  employees.forEach((employee) => {
-    const departmentName = employee.department ? departmentById.get(employee.department)?.name ?? '' : '';
-    const positionName = employee.position ? positionById.get(employee.position)?.name ?? '' : '';
-    const branchName = employee.branch ? branchById.get(employee.branch)?.name ?? '' : '';
-    UNIFORM_FIELDS.forEach(({ field, label }) => {
-      itemRows.push([
-        getEmployeeName(employee),
-        employee.employee_code || '',
-        departmentName,
-        positionName,
-        branchName,
-        label,
-        getEmployeeUniformValue(employee, field),
-      ]);
-    });
-  });
+  if (filters.length === 0) {
+    filterRows.push(['Sin filtros: todos los empleados disponibles']);
+  } else {
+    filters.forEach((filter) => filterRows.push([filter]));
+  }
 
   downloadExcelXml(`dotacion-empleados-${new Date().toISOString().slice(0, 10)}.xls`, [
-    { name: 'Resumen interno', rows: summaryRows },
+    { name: 'Dotación por empleado', rows: employeeRows },
+    { name: 'Conteo por talla', rows: summaryRows },
     { name: 'Detalle empleados', rows: detailRows },
-    { name: 'Dotación por persona', rows: itemRows },
+    { name: 'Filtros', rows: filterRows },
   ]);
 }
 
@@ -2003,6 +2008,7 @@ export function AdminHR() {
   const [filterEmploymentType, setFilterEmploymentType] = useState<string>('all');
   const [filterContractType, setFilterContractType] = useState<string>('all');
   const [filterDataQuality, setFilterDataQuality] = useState<EmployeeDataQualityFilter>('all');
+  const [showUniformColumns, setShowUniformColumns] = useState(false);
   const [calendarView, setCalendarView] = useState<HRCalendarView>('requests');
   const [calendarMonth, setCalendarMonth] = useState<Date>(() => {
     const now = new Date();
@@ -2279,8 +2285,9 @@ export function AdminHR() {
     if (filterEmploymentType !== 'all') labels.push(`Vinculacion: ${employmentTypeLabel(filterEmploymentType as EmploymentType)}`);
     if (filterContractType !== 'all') labels.push(`Contrato: ${contractTypeLabel(filterContractType as ContractType)}`);
     if (filterDataQuality !== 'all') labels.push(optionLabel(EMPLOYEE_DATA_QUALITY_FILTER_OPTIONS, filterDataQuality));
+    if (showUniformColumns) labels.push('Dotación visible');
     return labels;
-  }, [branchById, departmentById, filterBranch, filterContractType, filterDataQuality, filterDepartment, filterEmploymentType, filterPosition, filterProfileStatus, filterStatus, positionById, searchQuery]);
+  }, [branchById, departmentById, filterBranch, filterContractType, filterDataQuality, filterDepartment, filterEmploymentType, filterPosition, filterProfileStatus, filterStatus, positionById, searchQuery, showUniformColumns]);
 
   const hasActiveEmployeeFilters = activeEmployeeFilterLabels.length > 0;
 
@@ -3355,6 +3362,7 @@ export function AdminHR() {
     setFilterEmploymentType('all');
     setFilterContractType('all');
     setFilterDataQuality('all');
+    setShowUniformColumns(false);
   };
 
   const openManagerAssignmentModal = () => {
@@ -4393,16 +4401,39 @@ export function AdminHR() {
                     <span className="text-[11px] text-gray-400">Sin filtros activos</span>
                   )}
                 </div>
-                {hasActiveEmployeeFilters && (
+                <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    onClick={clearEmployeeFilters}
-                    className="inline-flex items-center justify-center gap-1.5 self-start rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-800 lg:self-auto"
+                    onClick={() => setShowUniformColumns((current) => !current)}
+                    className={`inline-flex items-center justify-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors ${
+                      showUniformColumns
+                        ? 'border-[#2a4038] bg-[#2a4038] text-white hover:bg-[#3d5c4e]'
+                        : 'border-[#2a4038]/25 bg-[#eef4f1] text-[#2a4038] hover:bg-[#e3eee9]'
+                    }`}
                   >
-                    <X size={12} />
-                    Limpiar filtros
+                    <Shirt size={12} />
+                    {showUniformColumns ? 'Desactivar dotación' : 'Activar dotación'}
                   </button>
-                )}
+                  <button
+                    type="button"
+                    onClick={() => void handleUniformExcelExport()}
+                    disabled={exportingUniformExcel || isLoading || sortedEmployees.length === 0}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[#2a4038]/25 px-2.5 py-1.5 text-[11px] font-semibold text-[#2a4038] transition-colors hover:bg-[#eef4f1] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {exportingUniformExcel ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />}
+                    Excel dotación
+                  </button>
+                  {hasActiveEmployeeFilters && (
+                    <button
+                      type="button"
+                      onClick={clearEmployeeFilters}
+                      className="inline-flex items-center justify-center gap-1.5 self-start rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-800 lg:self-auto"
+                    >
+                      <X size={12} />
+                      Limpiar filtros
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           ) : activeTab === 'vacations' ? (
@@ -4542,6 +4573,14 @@ export function AdminHR() {
                       <SortableTh label="Cargo / Sede" sortKey="department" active={employeeSort} onSort={setEmployeeSort} />
                       <SortableTh label="Estado" sortKey="status" active={employeeSort} onSort={setEmployeeSort} />
                       <SortableTh label="Perfil" sortKey="profile" active={employeeSort} onSort={setEmployeeSort} />
+                      {showUniformColumns && (
+                        <>
+                          <Th>Suéter</Th>
+                          <Th>Pantalón</Th>
+                          <Th>Zapato</Th>
+                          <Th>Otro</Th>
+                        </>
+                      )}
                       <Th>Documentos</Th>
                       <Th>Acciones</Th>
                     </tr>
@@ -4591,6 +4630,18 @@ export function AdminHR() {
                               <div className="h-full bg-[#2a4038]" style={{ width: `${employee.profile_completion_percentage}%` }} />
                             </div>
                           </Td>
+                          {showUniformColumns && (
+                            <>
+                              <Td>{getEmployeeUniformValue(employee, 'uniform_sweater')}</Td>
+                              <Td>{getEmployeeUniformValue(employee, 'uniform_pants')}</Td>
+                              <Td>{getEmployeeUniformValue(employee, 'uniform_shoes')}</Td>
+                              <Td>
+                                <div className="max-w-[220px] whitespace-pre-wrap">
+                                  {getEmployeeUniformValue(employee, 'uniform_other')}
+                                </div>
+                              </Td>
+                            </>
+                          )}
                           <Td>
                             <div>Pendientes: {employee.pending_documents_count}</div>
                             <div className={employee.expired_documents_count > 0 ? 'text-red-600' : 'text-gray-400'}>
