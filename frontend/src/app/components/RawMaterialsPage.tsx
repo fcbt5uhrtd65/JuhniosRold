@@ -4,11 +4,9 @@ import {
   ArrowLeft,
   Beaker,
   CheckCircle,
-  Filter,
   FlaskConical,
   Loader2,
   Minus,
-  PackageCheck,
   Plus,
   Search,
   ShoppingCart,
@@ -18,6 +16,7 @@ import {
 
 import { getPublicRawMaterials, type PublicRawMaterial } from '../services/inventory-masters.service';
 import { navigateBack } from '../services/navigate';
+import { openWhatsApp } from '../utils/whatsapp';
 import { NavigationBar } from './NavigationBar';
 import { Footer } from './Footer';
 import { WhatsAppButton } from './WhatsAppButton';
@@ -156,13 +155,21 @@ export function RawMaterialsPage({ onLoginClick }: { onLoginClick: () => void })
       .filter((entry): entry is { item: PublicRawMaterial; quantity: number } => Boolean(entry.item)),
     [cart, items],
   );
+  const requestQuote = () => {
+    if (cartItems.length === 0) return;
+    const lines = cartItems.map(({ item, quantity }) => `- ${item.name} (${presentationText(item)}) x ${quantity}`);
+    openWhatsApp([
+      'Hola, quiero cotizar estas materias primas:',
+      ...lines,
+    ].join('\n'));
+  };
 
   return (
     <div className="min-h-screen bg-[#F7F5F1] text-stone-950">
       <NavigationBar variant="solid" onLoginClick={onLoginClick} />
       <main className="px-4 pb-12 pt-24 md:px-8 lg:px-14">
         <section className="mx-auto max-w-7xl">
-          <div className="mb-8 flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="mb-8 space-y-5">
             <div className="space-y-4">
               <button
                 type="button"
@@ -183,29 +190,11 @@ export function RawMaterialsPage({ onLoginClick }: { onLoginClick: () => void })
                 <span>Envios a toda Colombia</span>
               </div>
             </div>
-            <div className="flex w-full max-w-md items-center gap-5 rounded-xl border border-stone-200 bg-white px-4 py-3 shadow-sm lg:mt-2">
-              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-[#edf2ec] text-[#1f4b24]">
-                <ShoppingCart className="h-7 w-7" strokeWidth={1.7} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="font-serif text-xl font-semibold leading-tight text-[#17351f]">Tu compra</p>
-                <p className="text-sm text-stone-500">{cartCount} producto{cartCount === 1 ? '' : 's'}</p>
-              </div>
-              <div className="h-12 w-px bg-stone-100" />
-              <button
-                type="button"
-                onClick={() => setShowCart(true)}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#1f4b24] px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#17351f]"
-              >
-                Ver carrito
-                <span aria-hidden>{'->'}</span>
-              </button>
-            </div>
           </div>
 
           <div className="mb-8">
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[2fr_0.85fr_0.85fr_0.95fr_0.95fr_auto]">
-              <div className="relative">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-[minmax(260px,2fr)_repeat(4,minmax(150px,0.85fr))_auto]">
+              <div className="relative sm:col-span-2 lg:col-span-4 xl:col-span-1">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" strokeWidth={1.7} />
                 <input
                   value={search}
@@ -234,7 +223,7 @@ export function RawMaterialsPage({ onLoginClick }: { onLoginClick: () => void })
               <button
                 type="button"
                 onClick={clearFilters}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg px-3 text-xs font-semibold text-stone-600 transition-colors hover:bg-white"
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg px-3 text-xs font-semibold text-stone-600 transition-colors hover:bg-white sm:col-span-2 lg:col-span-4 xl:col-span-1"
               >
                 <X className="h-3.5 w-3.5" />
                 Limpiar filtros
@@ -244,7 +233,7 @@ export function RawMaterialsPage({ onLoginClick }: { onLoginClick: () => void })
               <p className="font-serif text-xl font-semibold text-[#17351f]">
                 {filteredItems.length} <span className="font-sans text-sm font-normal text-stone-600">materias primas</span>
               </p>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <span className="text-sm text-stone-500">Ordenar por:</span>
                 <select value={sortKey} onChange={(event) => setSortKey(event.target.value as SortKey)} className="h-10 rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-800 outline-none focus:border-stone-900">
                   <option value="name">Mas relevantes</option>
@@ -276,7 +265,7 @@ export function RawMaterialsPage({ onLoginClick }: { onLoginClick: () => void })
               <p className="text-sm font-semibold text-stone-900">No hay materias primas con esos filtros.</p>
             </div>
           ) : (
-            <div className="grid gap-4 xl:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
               {filteredItems.map((item) => (
                 <article
                   key={item.id}
@@ -289,11 +278,11 @@ export function RawMaterialsPage({ onLoginClick }: { onLoginClick: () => void })
                       setSelectedItem(item);
                     }
                   }}
-                  className="grid cursor-pointer grid-cols-[45%_1fr] gap-4 rounded-xl border border-stone-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#1f4b24]/20"
+                  className="grid cursor-pointer gap-4 rounded-xl border border-stone-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#1f4b24]/20 sm:grid-cols-[minmax(140px,38%)_minmax(0,1fr)] md:grid-cols-1 lg:grid-cols-[minmax(160px,40%)_minmax(0,1fr)] 2xl:grid-cols-1"
                 >
-                  <div className="flex min-h-[220px] items-center justify-center overflow-hidden rounded-lg bg-[#f5f4ef]">
+                  <div className="flex aspect-[4/3] min-h-[180px] items-center justify-center overflow-hidden rounded-lg bg-[#f5f4ef] sm:min-h-0">
                     {item.imageUrl ? (
-                      <img src={item.imageUrl} alt={item.name} className="h-full max-h-[220px] w-full object-contain p-2" />
+                      <img src={item.imageUrl} alt={item.name} className="h-full w-full object-contain p-2" />
                     ) : (
                       <div className="text-center text-[#1f4b24]/35">
                         <Beaker className="mx-auto mb-2 h-12 w-12" strokeWidth={1.4} />
@@ -303,7 +292,7 @@ export function RawMaterialsPage({ onLoginClick }: { onLoginClick: () => void })
                   </div>
                   <div className="flex min-w-0 flex-col">
                     <div className="min-w-0">
-                      <h2 className="font-serif text-xl font-semibold leading-tight text-[#17351f]">{item.name}</h2>
+                      <h2 className="font-serif text-xl font-semibold leading-tight text-[#17351f] line-clamp-2">{item.name}</h2>
                       <p className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-green-600">
                         <span className="h-2 w-2 rounded-full bg-green-500" />
                         Disponible
@@ -317,9 +306,9 @@ export function RawMaterialsPage({ onLoginClick }: { onLoginClick: () => void })
                         {presentationText(item)}
                       </span>
                     </div>
-                    <div className="mt-auto grid grid-cols-[136px_1fr] gap-3 pt-5">
+                    <div className="mt-auto grid gap-3 pt-5 sm:grid-cols-[132px_minmax(0,1fr)] md:grid-cols-1 lg:grid-cols-[132px_minmax(0,1fr)] 2xl:grid-cols-1">
                       <div
-                        className="grid h-12 grid-cols-3 overflow-hidden rounded-lg border border-stone-200 bg-white text-[#17351f]"
+                        className="grid h-11 min-w-[132px] grid-cols-3 overflow-hidden rounded-lg border border-stone-200 bg-white text-[#17351f]"
                         onClick={(event) => event.stopPropagation()}
                       >
                         <button type="button" onClick={() => setQuantity(item.id, getQuantity(item.id) - 1)} className="flex items-center justify-center hover:bg-stone-50">
@@ -336,10 +325,10 @@ export function RawMaterialsPage({ onLoginClick }: { onLoginClick: () => void })
                           event.stopPropagation();
                           addToCart(item);
                         }}
-                        className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-[#1f4b24] px-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#17351f]"
+                        className="inline-flex h-11 min-w-0 items-center justify-center gap-2 rounded-lg bg-[#1f4b24] px-3 text-sm font-semibold leading-tight text-white shadow-sm transition-colors hover:bg-[#17351f]"
                       >
                         <ShoppingCart className="h-4 w-4" strokeWidth={1.8} />
-                        Agregar al carrito
+                        <span>Agregar</span>
                       </button>
                     </div>
                   </div>
@@ -465,7 +454,7 @@ export function RawMaterialsPage({ onLoginClick }: { onLoginClick: () => void })
                   )}
                 </div>
                 <div className="border-t border-stone-100 p-5">
-                  <button type="button" className="h-12 w-full rounded-lg bg-[#1f4b24] text-sm font-semibold text-white hover:bg-[#17351f]">
+                  <button type="button" onClick={requestQuote} disabled={cartItems.length === 0} className="h-12 w-full rounded-lg bg-[#1f4b24] text-sm font-semibold text-white hover:bg-[#17351f] disabled:cursor-not-allowed disabled:bg-stone-300">
                     Solicitar cotizacion
                   </button>
                 </div>
@@ -474,6 +463,21 @@ export function RawMaterialsPage({ onLoginClick }: { onLoginClick: () => void })
           )}
         </section>
       </main>
+      {cartCount > 0 && (
+        <button
+          type="button"
+          onClick={() => setShowCart(true)}
+          className="fixed bottom-20 left-1/2 z-40 flex w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 items-center justify-between rounded-xl border border-[#1f4b24]/20 bg-white px-4 py-3 text-left shadow-xl shadow-stone-900/10 transition-transform hover:-translate-x-1/2 hover:-translate-y-0.5 sm:bottom-6 sm:left-auto sm:right-24 sm:w-80 sm:translate-x-0 sm:hover:translate-x-0"
+        >
+          <span>
+            <span className="block text-sm font-semibold text-[#17351f]">Cotizacion de materias primas</span>
+            <span className="block text-xs text-stone-500">{cartCount} producto{cartCount === 1 ? '' : 's'} agregado{cartCount === 1 ? '' : 's'}</span>
+          </span>
+          <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-[#1f4b24] text-white">
+            <ShoppingCart className="h-4 w-4" strokeWidth={1.8} />
+          </span>
+        </button>
+      )}
       <Footer />
       <WhatsAppButton />
     </div>

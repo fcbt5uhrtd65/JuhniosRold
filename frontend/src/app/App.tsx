@@ -28,7 +28,6 @@ import { WhatsAppButton } from './components/WhatsAppButton';
 import { FirstPurchasePopup } from './components/FirstPurchasePopup';
 import { LoginModal } from './components/LoginModal';
 import { GoogleOnboardingModal } from './components/GoogleOnboardingModal';
-import { ApiStatus } from './components/ApiStatus';
 import { ScrollToTop } from './components/ScrollToTop';
 import { PaymentResult } from './components/PaymentResult';
 import { CatalogPage } from './components/CatalogPage';
@@ -118,7 +117,6 @@ function PublicSite({ onLoginClick }: { onLoginClick: () => void }) {
       <ChatbotLauncher />
       <FirstPurchasePopup />
       <CookieConsentBar />
-      <ApiStatus />
     </div>
   );
 }
