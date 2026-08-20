@@ -159,6 +159,24 @@ class ChatbotApiTests(TestCase):
         self.assertEqual(response.data["intent"], "Comprar producto")
         self.assertEqual(response.data["sessionId"], "abc")
 
+    def test_city_alone_after_shipping_question_keeps_context(self):
+        first = self.client.post(
+            "/api/chatbot/message/",
+            {"message": "envio", "sessionId": "ctx-1"},
+            format="json",
+        )
+        self.assertEqual(first.data["intent"], "Consulta de envio")
+        self.assertIn("ciudad", first.data["fulfillmentText"])
+
+        second = self.client.post(
+            "/api/chatbot/message/",
+            {"message": "Barranquilla", "sessionId": "ctx-1"},
+            format="json",
+        )
+        self.assertEqual(second.data["intent"], "Consulta de envio")
+        self.assertIn("Barranquilla", second.data["fulfillmentText"])
+        self.assertIn("3-4 dias habiles", second.data["fulfillmentText"])
+
     def test_dialogflow_webhook_endpoint_uses_query_result(self):
         response = self.client.post(
             "/dialogflow/webhook/",

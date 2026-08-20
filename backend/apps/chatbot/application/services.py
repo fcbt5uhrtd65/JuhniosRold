@@ -43,11 +43,19 @@ class ChatbotResponse:
     intent: str
     payload: dict = field(default_factory=dict)
 
+    @property
+    def pending_intent(self) -> str | None:
+        """Intent que quedo esperando un dato puntual del cliente (ej. la
+        ciudad para una consulta de envio), usado para recordar el contexto
+        de la conversacion entre mensajes. No se expone en la API publica."""
+        return self.payload.get("_pending_intent")
+
     def as_api_payload(self) -> dict:
+        public_payload = {key: value for key, value in self.payload.items() if not key.startswith("_")}
         return {
             "fulfillmentText": self.fulfillment_text,
             "intent": self.intent,
-            "payload": self.payload,
+            "payload": public_payload,
         }
 
 
@@ -169,10 +177,20 @@ def first_string(parameters: dict, name: str) -> str:
 class ChatbotService:
     catalog_path = "/catalogo"
 
-    def respond_to_text(self, message: str) -> ChatbotResponse:
+    def respond_to_text(self, message: str, *, context: dict | None = None) -> ChatbotResponse:
         normalized = normalize_text(message)
         intent_name = self.detect_local_intent(normalized)
         parameters = self.extract_local_parameters(normalized)
+
+        # Si el mensaje por si solo no dice nada claro (Fallback) pero en el
+        # turno anterior quedamos esperando un dato puntual (ej. "dime tu
+        # ciudad"), reusamos ese intent pendiente en vez de perder el hilo de
+        # la conversacion — asi "envio" y luego "Barranquilla" se entienden
+        # como una sola pregunta, aunque vengan en mensajes separados.
+        pending_intent = (context or {}).get("pending_intent")
+        if intent_name == "Fallback" and pending_intent:
+            intent_name = pending_intent
+
         return self.respond_to_intent(intent_name, parameters=parameters, query_text=message)
 
     def respond_to_intent(
@@ -239,30 +257,35 @@ class ChatbotService:
 
         if not need:
             text = (
-                "Para recomendarte mejor, dime si buscas controlar frizz, brillo, suavidad, "
-                "nutricion o cuidado para cabello tinturado."
+                "Con gusto te recomiendo algo. ¿Me cuentas que le pasa a tu cabello? Por ejemplo "
+                "frizz, resequedad, falta de brillo, caida o si buscas alisar."
             )
         elif products:
             names = ", ".join(product.name for product in products)
             text = (
-                f"Para {need}, estas opciones pueden ayudarte desde el cuidado cosmetico: "
-                f"{names}. Mira el catalogo o te paso con un asesor para elegir el ideal."
+                f"Para {need} estas opciones te pueden ayudar bastante: {names}. "
+                "Si quieres te cuento mas detalles o te paso con un asesor para elegir el ideal."
             )
         else:
             return self.with_advisor(
-                "No tengo una recomendacion exacta para esa necesidad. Te conecto con un asesor para ayudarte sin inventar.",
+                "Uy, justo para esa necesidad no tengo una recomendacion exacta y prefiero no improvisar. "
+                "Un asesor te puede orientar mejor.",
                 "Recomendar producto",
                 need or query_text or "recomendacion personalizada",
             )
 
+        payload = {
+            "catalogUrl": self.catalog_path,
+            "whatsappUrl": self.advisor_link(f"recomendacion para {need or 'mi cabello'}"),
+            "products": [product.as_payload() for product in products],
+        }
+        if not need:
+            payload["_pending_intent"] = "Recomendar producto"
+
         return ChatbotResponse(
             fulfillment_text=text,
             intent="Recomendar producto",
-            payload={
-                "catalogUrl": self.catalog_path,
-                "whatsappUrl": self.advisor_link(f"recomendacion para {need or 'mi cabello'}"),
-                "products": [product.as_payload() for product in products],
-            },
+            payload=payload,
         )
 
     def buy_product(self, parameters: dict, *, query_text: str = "") -> ChatbotResponse:
@@ -271,7 +294,7 @@ class ChatbotService:
 
         if not product_name:
             return ChatbotResponse(
-                fulfillment_text="Claro. Puedes comprar desde el catalogo. Si quieres, dime el producto y te guio.",
+                fulfillment_text="Con gusto te ayudo a comprar. Dime que producto te interesa y te guio con precio y disponibilidad.",
                 intent="Comprar producto",
                 payload={
                     "catalogUrl": self.catalog_path,
@@ -281,15 +304,15 @@ class ChatbotService:
 
         if product is None:
             return self.with_advisor(
-                "No tengo informacion exacta de ese producto en este momento.",
+                "Ese producto no lo tengo ubicado en este momento y prefiero no darte informacion incierta.",
                 "Comprar producto",
                 f"comprar {product_name}",
             )
 
         return ChatbotResponse(
             fulfillment_text=(
-                f"{product.name} esta en nuestro catalogo. Para evitar datos desactualizados, "
-                "confirma precio y disponibilidad en la tienda o con un asesor."
+                f"Si, {product.name} esta en nuestro catalogo. Para que compres tranquilo, "
+                "confirma precio y disponibilidad en la tienda o con un asesor antes de pagar."
             ),
             intent="Comprar producto",
             payload={
@@ -307,7 +330,7 @@ class ChatbotService:
         if city and delivery:
             return ChatbotResponse(
                 fulfillment_text=(
-                    f"Si estas en {city}, la entrega estimada es {delivery}. "
+                    f"Perfecto. Si estas en {city}, la entrega estimada es de {delivery}. "
                     "El valor final se confirma en el checkout."
                 ),
                 intent="Consulta de envio",
@@ -316,24 +339,29 @@ class ChatbotService:
 
         if city:
             return self.with_advisor(
-                f"Hacemos envios a Colombia. Para {city}, confirmemos cobertura y tiempo exacto con un asesor.",
+                f"Hacemos envios a toda Colombia. Para {city} prefiero que un asesor te confirme "
+                "cobertura y tiempo exacto, para no darte un dato que no aplique.",
                 "Consulta de envio",
                 f"envio a {city}",
             )
 
         return ChatbotResponse(
             fulfillment_text=(
-                "Hacemos envios a Colombia. En ciudades principales la entrega estimada suele ser "
-                "de 2 a 5 dias habiles. Dime tu ciudad y te oriento mejor."
+                "Hacemos envios a toda Colombia. En ciudades principales la entrega estimada suele ser "
+                "de 2 a 5 dias habiles. ¿Me dices tu ciudad para orientarte mejor?"
             ),
             intent="Consulta de envio",
-            payload={"whatsappUrl": self.advisor_link("consulta de envio")},
+            payload={
+                "whatsappUrl": self.advisor_link("consulta de envio"),
+                "_pending_intent": "Consulta de envio",
+            },
         )
 
     def wholesale(self, parameters: dict, *, query_text: str = "") -> ChatbotResponse:
         settings_obj = WholesaleSettings.current()
         text = (
-            "Para compras mayoristas validamos cantidades, ciudad y productos con un asesor comercial. "
+            "Que bueno que quieras comprar al por mayor. Para compras mayoristas validamos cantidades, "
+            "ciudad y productos con un asesor comercial. "
             f"La configuracion actual inicia desde ${settings_obj.minimum_purchase:,.0f} COP "
             f"con {settings_obj.discount_percentage.normalize()}% de descuento, sujeto a validacion."
         )
@@ -341,7 +369,8 @@ class ChatbotService:
 
     def payment_methods(self, parameters: dict, *, query_text: str = "") -> ChatbotResponse:
         return self.with_advisor(
-            "Puedes pagar desde el checkout con los medios disponibles en la tienda. No confirmo medios especiales sin validarlo con un asesor.",
+            "Puedes pagar desde el checkout con los medios disponibles en la tienda. Para medios especiales "
+            "o dudas puntuales, mejor lo validamos con un asesor y asi no te doy datos que puedan cambiar.",
             "Formas de pago",
             "formas de pago",
         )
@@ -351,9 +380,11 @@ class ChatbotService:
 
         if not order_number:
             return self.with_advisor(
-                "Para revisar tu pedido necesito numero de orden o guia. Si no lo tienes, un asesor te ayuda por WhatsApp.",
+                "Con gusto reviso tu pedido. ¿Me compartes el numero de orden o de guia? Si no lo tienes a la mano, "
+                "un asesor te ayuda por WhatsApp.",
                 "Estado de pedido",
                 "estado de pedido",
+                pending_intent="Estado de pedido",
             )
 
         order = (
@@ -363,7 +394,7 @@ class ChatbotService:
         )
         if order is None:
             return self.with_advisor(
-                f"No encontre el pedido {order_number} con informacion publica suficiente.",
+                f"Busque el pedido {order_number} pero no encontre informacion publica suficiente sobre el.",
                 "Estado de pedido",
                 f"estado del pedido {order_number}",
             )
@@ -371,8 +402,8 @@ class ChatbotService:
         tracking = f" Guia: {order.tracking_number}." if order.tracking_number else ""
         return ChatbotResponse(
             fulfillment_text=(
-                f"El pedido {order.number} aparece como {order.get_status_display()}.{tracking} "
-                "Si necesitas mas detalle, te paso con un asesor."
+                f"Tu pedido {order.number} aparece como {order.get_status_display()}.{tracking} "
+                "Si necesitas mas detalle con gusto te paso con un asesor."
             ),
             intent="Estado de pedido",
             payload={"whatsappUrl": self.advisor_link(f"estado del pedido {order.number}")},
@@ -380,7 +411,8 @@ class ChatbotService:
 
     def promotions(self, parameters: dict, *, query_text: str = "") -> ChatbotResponse:
         return self.with_advisor(
-            "Las promociones cambian segun disponibilidad. Para no inventar descuentos, revisa el catalogo o habla con un asesor.",
+            "Las promociones cambian segun disponibilidad y prefiero no inventarte un descuento que ya no exista. "
+            "Revisa el catalogo o habla con un asesor para ver que hay vigente.",
             "Promociones",
             "promociones vigentes",
         )
@@ -388,8 +420,9 @@ class ChatbotService:
     def greeting(self, parameters: dict, *, query_text: str = "") -> ChatbotResponse:
         return ChatbotResponse(
             fulfillment_text=(
-                "Hola, que gusto saludarte. Soy el asistente de Juhnios Rold. "
-                "Puedo ayudarte con productos, recomendaciones, envios, pagos, catalogo o compras mayoristas."
+                "Hola, que gusto saludarte. Soy el asistente de Juhnios Rold y estoy para ayudarte. "
+                "Puedo contarte sobre productos, recomendaciones, envios, pagos, catalogo o compras mayoristas. "
+                "¿En que te ayudo hoy?"
             ),
             intent="Saludo",
             payload={
@@ -401,8 +434,8 @@ class ChatbotService:
     def catalog(self, parameters: dict, *, query_text: str = "") -> ChatbotResponse:
         return ChatbotResponse(
             fulfillment_text=(
-                "Claro. Puedes ver el catalogo completo y elegir tus productos favoritos. "
-                "Si quieres recomendacion, dime que necesita tu cabello."
+                "Claro que si. Puedes ver el catalogo completo y elegir tus favoritos con calma. "
+                "Si quieres, cuentame que necesita tu cabello y te doy una recomendacion."
             ),
             intent="Catalogo",
             payload={
@@ -413,7 +446,7 @@ class ChatbotService:
 
     def human_handoff(self, parameters: dict, *, query_text: str = "") -> ChatbotResponse:
         return self.with_advisor(
-            "Listo. Te conecto con un asesor por WhatsApp para ayudarte de forma personalizada.",
+            "Listo, con gusto te conecto con un asesor por WhatsApp para que te ayude de forma personalizada.",
             "Hablar con asesor",
             query_text or "asesoria personalizada",
         )
@@ -435,7 +468,7 @@ class ChatbotService:
             return self.build_products_found_response(products, query_text, intent="Buscar producto")
 
         return self.with_advisor(
-            "No tengo esa informacion exacta y prefiero no inventarla.",
+            "Uy, sobre eso no tengo esa informacion exacta y prefiero no inventarla para no confundirte.",
             "Fallback",
             query_text or "consulta no resuelta",
         )
@@ -454,7 +487,7 @@ class ChatbotService:
                 stock_label = "disponibilidad a confirmar"
             lines.append(f"- {product.name}: {price_label} ({stock_label})")
 
-        text = "Esto encontre en el catalogo:\n" + "\n".join(lines)
+        text = "Mira, esto encontre para ti en el catalogo:\n" + "\n".join(lines)
         return ChatbotResponse(
             fulfillment_text=text,
             intent=intent,
@@ -465,12 +498,17 @@ class ChatbotService:
             },
         )
 
-    def with_advisor(self, text: str, intent: str, reason: str) -> ChatbotResponse:
+    def with_advisor(
+        self, text: str, intent: str, reason: str, *, pending_intent: str | None = None,
+    ) -> ChatbotResponse:
         whatsapp_url = self.advisor_link(reason)
+        payload = {"whatsappUrl": whatsapp_url}
+        if pending_intent:
+            payload["_pending_intent"] = pending_intent
         return ChatbotResponse(
-            fulfillment_text=f"{text} Puedes escribirnos por WhatsApp desde el boton de abajo.",
+            fulfillment_text=f"{text} Si prefieres, tambien puedes escribirnos por WhatsApp desde el boton de abajo.",
             intent=intent,
-            payload={"whatsappUrl": whatsapp_url},
+            payload=payload,
         )
 
     def advisor_link(self, reason: str) -> str:
