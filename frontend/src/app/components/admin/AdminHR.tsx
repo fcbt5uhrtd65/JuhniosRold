@@ -1987,11 +1987,13 @@ export function TextareaInput({
   value,
   onChange,
   disabled = false,
+  placeholder = '',
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
+  placeholder?: string;
 }) {
   return (
     <label className="block">
@@ -2002,6 +2004,7 @@ export function TextareaInput({
         rows={3}
         className={`${inputCls} resize-none`}
         disabled={disabled}
+        placeholder={placeholder}
       />
     </label>
   );
@@ -2847,6 +2850,10 @@ export function AdminHR() {
       }
       resetPayslipForm();
       await loadPayslips();
+      const openEmployeeId = editingEmployee?.id ?? viewingEmployee?.id;
+      if (openEmployeeId && openEmployeeId === payslipForm.employee) {
+        await loadEmployeeExtras(openEmployeeId);
+      }
     } catch (error) {
       console.error(error);
       toast.error('No se pudo guardar el volante de pago');
@@ -2875,6 +2882,10 @@ export function AdminHR() {
       toast.info('Volante eliminado');
       if (editingPayslipId === payslip.id) resetPayslipForm();
       await loadPayslips();
+      const openEmployeeId = editingEmployee?.id ?? viewingEmployee?.id;
+      if (openEmployeeId && openEmployeeId === payslip.employee) {
+        await loadEmployeeExtras(openEmployeeId);
+      }
     } catch (error) {
       console.error(error);
       toast.error('No se pudo eliminar el volante de pago');
