@@ -21,7 +21,6 @@ import {
   Trash2,
   Users,
   UserRound,
-  Wallet,
   X,
   XCircle,
 } from 'lucide-react';
@@ -34,18 +33,15 @@ import {
   createMyOvertimeRequest,
   createMyVacationRequest,
   deleteVacationRequest,
-  getMyPayslipDocuments,
   getMyVacationRequests,
   getTeamVacationRequests,
   openLaborCertificateRequestPdf,
-  openPayslipDocumentPdf,
   openVacationRequestPdf,
   rejectVacationRequest,
   type EmployeeWorkScheduleDayInput,
   type HRRequestSubtype,
   type LoanFrequency,
   type OvertimeShiftInput,
-  type PayslipDocument,
   type VacationRequest,
   type VacationRequestStatus,
   type VacationRequestType,
@@ -406,7 +402,6 @@ export function AdminEmployeePortal() {
   const [saving, setSaving] = useState(false);
   const [employeeProfile, setEmployeeProfile] = useState<Employee | null>(null);
   const [requests, setRequests] = useState<VacationRequest[]>([]);
-  const [payslips, setPayslips] = useState<PayslipDocument[]>([]);
   const [form, setForm] = useState<VacationFormState>(EMPTY_FORM);
   const [loanSignatureFile, setLoanSignatureFile] = useState<File | null>(null);
   const [deletingRequestId, setDeletingRequestId] = useState<string | null>(null);
@@ -417,7 +412,6 @@ export function AdminEmployeePortal() {
   const [requestsPageSize, setRequestsPageSize] = useState(5);
   const [expandedRequestId, setExpandedRequestId] = useState<string | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<VacationRequest | null>(null);
-  const [downloadingPayslipId, setDownloadingPayslipId] = useState<string | null>(null);
   const [downloadingCertificateRequestId, setDownloadingCertificateRequestId] = useState<string | null>(null);
   const [downloadingRequestPdfId, setDownloadingRequestPdfId] = useState<string | null>(null);
   const [uploadingMedicalConstancyRequestId, setUploadingMedicalConstancyRequestId] = useState<string | null>(null);
@@ -434,10 +428,9 @@ export function AdminEmployeePortal() {
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [employeesRes, requestsRes, payslipsRes, teamRequestsRes] = await Promise.allSettled([
+      const [employeesRes, requestsRes, teamRequestsRes] = await Promise.allSettled([
         getEmployees({ limit: 200 }),
         getMyVacationRequests({ limit: 200 }),
-        getMyPayslipDocuments({ limit: 24 }),
         getTeamVacationRequests({ page: teamRequestsPage, limit: teamRequestsPageSize }),
       ]);
 
@@ -449,10 +442,6 @@ export function AdminEmployeePortal() {
 
       if (requestsRes.status === 'fulfilled') {
         setRequests(requestsRes.value.data);
-      }
-
-      if (payslipsRes.status === 'fulfilled') {
-        setPayslips(payslipsRes.value.data);
       }
 
       if (teamRequestsRes.status === 'fulfilled') {
@@ -898,19 +887,6 @@ export function AdminEmployeePortal() {
       toast.error(error instanceof Error ? error.message : 'No se pudo descargar tu certificado laboral');
     } finally {
       setDownloadingCertificateRequestId(null);
-    }
-  };
-
-  const handleDownloadPayslip = async (payslip: PayslipDocument) => {
-    setDownloadingPayslipId(payslip.id);
-    try {
-      await openPayslipDocumentPdf(payslip.id, payslip.file_name || `${payslip.title}.pdf`);
-      toast.success('Volante de pago descargado');
-    } catch (error) {
-      console.error(error);
-      toast.error(error instanceof Error ? error.message : 'No se pudo descargar el volante de pago');
-    } finally {
-      setDownloadingPayslipId(null);
     }
   };
 
@@ -1740,45 +1716,6 @@ export function AdminEmployeePortal() {
                 </div>
               )}
             </dl>
-          </Card>
-
-          <Card className="p-6">
-            <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
-              <div className="flex items-center gap-2">
-                <Wallet size={15} className="text-gray-400" />
-                <h3 className="text-sm font-semibold text-gray-900">Volante de pago</h3>
-              </div>
-              {payslips.length > 0 && <Badge label={`${payslips.length} disponible${payslips.length === 1 ? '' : 's'}`} color="green" />}
-            </div>
-
-            {payslips.length === 0 ? (
-              <EmptyState title="Aún no tienes volantes de pago publicados." />
-            ) : (
-              <div className="space-y-3">
-                {payslips.map((payslip) => (
-                  <div key={payslip.id} className="rounded-xl border border-gray-100 p-3">
-                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-gray-900 truncate">{payslip.title}</p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          {formatDate(payslip.period_start)} - {formatDate(payslip.period_end)}
-                        </p>
-                        <p className="text-xs text-gray-400">Pago: {payslip.payment_date ? formatDate(payslip.payment_date) : 'Sin fecha registrada'}</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => void handleDownloadPayslip(payslip)}
-                        disabled={downloadingPayslipId === payslip.id}
-                        className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-[#2a4038] text-white text-xs font-semibold hover:bg-[#3d5c4e] transition-colors disabled:opacity-50"
-                      >
-                        <Download size={14} />
-                        {downloadingPayslipId === payslip.id ? 'Descargando...' : 'Descargar'}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </Card>
 
           <Card className="p-6">

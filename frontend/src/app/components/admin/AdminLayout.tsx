@@ -27,6 +27,7 @@ import {
   Settings,
   ScrollText,
   Ticket,
+  Wallet,
 } from 'lucide-react';
 
 interface AdminLayoutProps {
@@ -101,6 +102,7 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
     { id: 'hr', label: 'RRHH', icon: Briefcase, roles: ['ADMIN', 'RRHH'] },
     { id: 'payroll', label: 'Nómina', icon: Banknote, roles: ['ADMIN', 'RRHH', 'CONTABILIDAD', 'TESORERIA'] },
     { id: 'employee-portal', label: 'Mis solicitudes', icon: CalendarClock, roles: ['ADMIN', 'SELLER', 'DISTRIBUTOR', 'RRHH', 'EMPLEADO', 'PEDIDOS'] },
+    { id: 'employee-payslips', label: 'Volante de pago', icon: Wallet, roles: employeeAccessRoles },
     { id: 'company-documents', label: 'Reglamento interno', icon: ScrollText, roles: employeeAccessRoles },
     { id: 'employee-settings', label: 'Configuración', icon: Settings, roles: employeeAccessRoles },
     { id: 'loans', label: 'Préstamos', icon: HandCoins, roles: ['ADMIN', 'RRHH', 'CONTABILIDAD', 'TESORERIA'] },
