@@ -40,7 +40,7 @@ const TABS: Array<{ id: ProfileTab; label: string }> = [
   { id: 'banking', label: 'Datos Bancarios' },
   { id: 'emergency', label: 'Emergencia' },
   { id: 'documents', label: 'Documentos' },
-  { id: 'payslips', label: 'Volantes de pago' },
+  { id: 'payslips', label: 'Volante de pago' },
   { id: 'access', label: 'Acceso' },
   { id: 'history', label: 'Historial' },
 ];

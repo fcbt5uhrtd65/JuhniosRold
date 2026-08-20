@@ -233,6 +233,7 @@ type EmployeeModalTab =
   | 'payroll'
   | 'emergency'
   | 'documents'
+  | 'payslips'
   | 'access'
   | 'history';
 
@@ -545,6 +546,7 @@ const MODAL_TABS: Array<{ id: EmployeeModalTab; label: string; icon: typeof User
   { id: 'payroll', label: 'Nómina', icon: Wallet },
   { id: 'emergency', label: 'Emergencia', icon: HeartPulse },
   { id: 'documents', label: 'Documentos', icon: FileText },
+  { id: 'payslips', label: 'Volante de pago', icon: Wallet },
   { id: 'access', label: 'Acceso', icon: KeyRound },
   { id: 'history', label: 'Historial', icon: History },
 ];
@@ -2187,6 +2189,7 @@ export function AdminHR() {
   const [vacationRequests, setVacationRequests] = useState<VacationRequest[]>([]);
   const [notifications, setNotifications] = useState<HRNotification[]>([]);
   const [employeeDocuments, setEmployeeDocuments] = useState<EmployeeDocument[]>([]);
+  const [employeePayslips, setEmployeePayslips] = useState<PayslipDocument[]>([]);
   const [changeLogs, setChangeLogs] = useState<EmployeeChangeLog[]>([]);
   const [salaryHistory, setSalaryHistory] = useState<EmployeeSalaryHistory[]>([]);
   const [positionHistory, setPositionHistory] = useState<EmployeePositionHistory[]>([]);
@@ -2578,13 +2581,15 @@ export function AdminHR() {
   };
 
   const loadEmployeeExtras = async (employeeId: string) => {
-    const [documentsRes, changesRes, salariesRes, positionsRes] = await Promise.allSettled([
+    const [documentsRes, payslipsRes, changesRes, salariesRes, positionsRes] = await Promise.allSettled([
       getEmployeeDocuments({ employee: employeeId, limit: 200 }),
+      getPayslipDocuments({ employee: employeeId, limit: 200, ordering: '-period_end' }),
       getEmployeeChangeLogs(employeeId),
       getEmployeeSalaryHistory(employeeId),
       getEmployeePositionHistory(employeeId),
     ]);
     setEmployeeDocuments(documentsRes.status === 'fulfilled' ? documentsRes.value.data : []);
+    setEmployeePayslips(payslipsRes.status === 'fulfilled' ? payslipsRes.value.data : []);
     setChangeLogs(changesRes.status === 'fulfilled' ? changesRes.value.data : []);
     setSalaryHistory(salariesRes.status === 'fulfilled' ? salariesRes.value.data : []);
     setPositionHistory(positionsRes.status === 'fulfilled' ? positionsRes.value.data : []);
@@ -2596,6 +2601,7 @@ export function AdminHR() {
     setEmployeeLocation(EMPTY_LOCATION);
     setDocumentForm(EMPTY_DOCUMENT_FORM);
     setEmployeeDocuments([]);
+    setEmployeePayslips([]);
     setChangeLogs([]);
     setSalaryHistory([]);
     setPositionHistory([]);
@@ -4550,6 +4556,34 @@ export function AdminHR() {
     </div>
   );
 
+  const renderEmployeePayslipsTab = () => (
+    <div className="space-y-3">
+      {employeePayslips.map((payslip) => (
+        <div key={payslip.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border border-gray-100 rounded-xl p-4 bg-gray-50/60">
+          <div className="min-w-0">
+            <div className="font-semibold text-gray-900 truncate">{payslip.title}</div>
+            <div className="text-xs text-gray-500 mt-1">
+              {parseDate(payslip.period_start)} - {parseDate(payslip.period_end)} · Pago: {parseDate(payslip.payment_date)}
+            </div>
+            <div className="mt-2">
+              <Badge label={payslipStatusLabel(payslip.status)} color={payslipStatusBadge(payslip.status)} />
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => void handlePayslipDownload(payslip)}
+            disabled={downloadingPayslipId === payslip.id}
+            className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          >
+            {downloadingPayslipId === payslip.id ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+            Descargar
+          </button>
+        </div>
+      ))}
+      {employeePayslips.length === 0 && <EmptyState title="Este empleado aún no tiene volantes de pago adjuntos." />}
+    </div>
+  );
+
   const renderModalTab = () => {
     switch (employeeModalTab) {
       case 'personal': return renderPersonalTab();
@@ -4560,6 +4594,7 @@ export function AdminHR() {
       case 'payroll': return renderPayrollTab();
       case 'emergency': return renderEmergencyTab();
       case 'documents': return renderDocumentsTab();
+      case 'payslips': return renderEmployeePayslipsTab();
       case 'access': return renderAccessTab();
       case 'history': return renderHistoryTab();
       default: return null;
@@ -4672,6 +4707,9 @@ export function AdminHR() {
           {employeeDocuments.length === 0 && <EmptyState title="Sin documentos cargados." />}
         </div>
       );
+    }
+    if (employeeModalTab === 'payslips') {
+      return renderEmployeePayslipsTab();
     }
     if (employeeModalTab === 'history') {
       return (
