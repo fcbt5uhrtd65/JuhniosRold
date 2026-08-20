@@ -181,10 +181,14 @@ function formatTime(value: string | null | undefined): string {
 }
 
 function minutesBetween(start: string, end: string): number {
-  if (!start || !end || end <= start) return 0;
+  if (!start || !end) return 0;
   const [startHour, startMinute] = start.split(':').map(Number);
   const [endHour, endMinute] = end.split(':').map(Number);
-  return Math.max((endHour * 60 + endMinute) - (startHour * 60 + startMinute), 0);
+  const startTotal = startHour * 60 + startMinute;
+  const endTotal = endHour * 60 + endMinute;
+  // Hora fin <= hora inicio significa que el turno cruza la medianoche
+  // (ej. 20:00 a 04:00), no un dato inválido: hay sedes con turno nocturno.
+  return endTotal > startTotal ? endTotal - startTotal : (24 * 60 - startTotal) + endTotal;
 }
 
 function scheduleDraftWeeklyHours(days: ScheduleDayDraft[]): number {
@@ -645,8 +649,8 @@ export function AdminEmployeePortal() {
       toast.error('Selecciona al menos un día laboral');
       return;
     }
-    if (requestedScheduleDays.some((day) => !day.expected_start_time || !day.expected_end_time || day.expected_end_time <= day.expected_start_time)) {
-      toast.error('Cada día seleccionado debe tener una hora final posterior a la hora de inicio');
+    if (requestedScheduleDays.some((day) => !day.expected_start_time || !day.expected_end_time || day.expected_end_time === day.expected_start_time)) {
+      toast.error('Cada día seleccionado debe tener una hora de inicio y una hora final distintas');
       return;
     }
     if (requestedScheduleDays.some((day) => minutesBetween(day.expected_start_time, day.expected_end_time) <= SCHEDULE_CHANGE_DAILY_LUNCH_MINUTES)) {

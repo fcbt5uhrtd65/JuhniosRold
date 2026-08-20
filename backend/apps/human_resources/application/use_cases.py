@@ -197,7 +197,11 @@ def _schedule_weekly_minutes(parsed_days) -> int:
             continue
         start = day["expected_start_time"]
         end = day["expected_end_time"]
-        gross_minutes = max((end.hour * 60 + end.minute) - (start.hour * 60 + start.minute), 0)
+        start_minutes = start.hour * 60 + start.minute
+        end_minutes = end.hour * 60 + end.minute
+        # Un turno donde la hora de fin es <= a la de inicio cruza la medianoche
+        # (ej. 20:00 a 04:00): se cuenta como terminando al día siguiente.
+        gross_minutes = end_minutes - start_minutes if end_minutes > start_minutes else (24 * 60 - start_minutes) + end_minutes
         if gross_minutes <= SCHEDULE_CHANGE_DAILY_LUNCH_MINUTES:
             raise BusinessRuleViolation("Cada día laboral debe durar más de 1 hora para descontar el almuerzo.")
         total += gross_minutes - SCHEDULE_CHANGE_DAILY_LUNCH_MINUTES
@@ -209,7 +213,7 @@ def _time_to_minutes(value) -> int:
 
 
 def _minutes_to_time(value: int):
-    value = max(0, min(value, 23 * 60 + 59))
+    value = value % (24 * 60)
     return datetime.strptime(f"{value // 60:02d}:{value % 60:02d}", "%H:%M").time()
 
 
@@ -232,6 +236,12 @@ def schedule_change_days_with_lunch_break(parsed_days) -> list[dict]:
 
         start_minutes = _time_to_minutes(day["expected_start_time"])
         end_minutes = _time_to_minutes(day["expected_end_time"])
+        # Turno que cruza medianoche (ej. 20:00 a 04:00): se trabaja en un
+        # espacio de minutos "extendido" (end > 1440) para que la ventana de
+        # almuerzo se calcule igual que en un turno diurno, y _minutes_to_time
+        # se encarga de volver a envolver el resultado a un HH:MM válido.
+        if end_minutes <= start_minutes:
+            end_minutes += 24 * 60
         if end_minutes - start_minutes <= SCHEDULE_CHANGE_DAILY_LUNCH_MINUTES:
             raise BusinessRuleViolation("Cada día laboral debe durar más de 1 hora para descontar el almuerzo.")
 
@@ -817,8 +827,8 @@ def _parse_schedule_days(days_data) -> list[dict]:
                 end_time = datetime.strptime(end_time[:5], "%H:%M").time()
         except (TypeError, ValueError) as exc:
             raise BusinessRuleViolation("Cada franja debe tener horas HH:MM válidas.") from exc
-        if end_time <= start_time:
-            raise BusinessRuleViolation("La hora de fin debe ser posterior a la hora de inicio en cada franja.")
+        if end_time == start_time:
+            raise BusinessRuleViolation("La hora de fin debe ser distinta a la hora de inicio en cada franja.")
         is_working_day = entry.get("is_working_day", True)
         if isinstance(is_working_day, str):
             is_working_day = is_working_day.strip().lower() not in ("false", "0", "no")
