@@ -35,6 +35,26 @@ class ChatbotBusinessTests(TestCase):
             valid_from=timezone.now(),
             is_active=True,
         )
+        self.cream_product = Product.objects.create(
+            category=self.category,
+            name="Crema de Peinar Nutritiva",
+            slug="crema-de-peinar-nutritiva",
+            description="Crema para peinar y controlar el frizz sin apelmazar.",
+            is_active=True,
+        )
+        self.cream_variant = ProductVariant.objects.create(
+            product=self.cream_product,
+            sku="CREMA-PEINAR-001",
+            name="Crema de Peinar unidad",
+            is_active=True,
+        )
+        Price.objects.create(
+            variant=self.cream_variant,
+            amount=Decimal("28000"),
+            currency="COP",
+            valid_from=timezone.now(),
+            is_active=True,
+        )
         self.service = ChatbotService()
 
     def test_recommends_catalog_products_for_hair_need(self):
@@ -59,6 +79,20 @@ class ChatbotBusinessTests(TestCase):
         self.assertEqual(response.intent, "Fallback")
         self.assertIn("prefiero no inventarla", response.fulfillment_text)
         self.assertIn("whatsappUrl", response.payload)
+
+    def test_free_text_search_finds_real_product_with_price(self):
+        response = self.service.respond_to_text("necesito crema de peinar")
+
+        self.assertEqual(response.intent, "Buscar producto")
+        self.assertIn("Crema de Peinar Nutritiva", response.fulfillment_text)
+        self.assertIn("28,000", response.fulfillment_text)
+        self.assertEqual(response.payload["products"][0]["priceFrom"], "28000.00")
+
+    def test_fallback_still_searches_catalog_before_giving_up(self):
+        response = self.service.respond_to_text("tienen shampoo?")
+
+        self.assertEqual(response.intent, "Fallback")
+        self.assertIn("prefiero no inventarla", response.fulfillment_text)
 
     def test_greetings_return_welcome_response(self):
         for message in ("hola", "cómo estás?", "qué onda", "hi", "hello", "holis"):

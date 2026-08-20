@@ -41,6 +41,7 @@ interface Product {
   description?: string;
   benefits?: string[];
   ingredients?: string[];
+  howToUse?: string;
   stock?: number;
 }
 
@@ -81,6 +82,18 @@ function pickVariantList(product: CatalogProduct, keys: string[]): string[] {
     }
   }
   return [];
+}
+
+function pickVariantText(product: CatalogProduct, keys: string[]): string {
+  const wanted = keys.map(key => key.toLowerCase());
+  for (const variant of product.variants) {
+    for (const [key, value] of Object.entries(variant.attributes ?? {})) {
+      if (wanted.includes(key.toLowerCase()) && typeof value === 'string' && value.trim()) {
+        return value.trim();
+      }
+    }
+  }
+  return '';
 }
 
 function buildShortDescription(description: string): string {
@@ -176,6 +189,7 @@ function mapCatalogProduct(product: CatalogProduct): Product {
     description: product.description,
     benefits: pickVariantList(product, ['benefits', 'beneficios', 'beneficio']),
     ingredients: pickVariantList(product, ['ingredients', 'ingredientes', 'ingrediente']),
+    howToUse: pickVariantText(product, ['how_to_use', 'modo_de_uso', 'modoDeUso', 'modo_uso']),
   };
 }
 
@@ -537,11 +551,16 @@ function ProductPage({
             {/* Acordeones */}
             <div>
               <Accordion label="Descripción">{product.description ?? product.shortDesc}</Accordion>
+              {product.benefits && product.benefits.length > 0 && (
+                <Accordion label="Beneficios">
+                  {product.benefits.join(', ')}
+                </Accordion>
+              )}
               <Accordion label="Ingredientes">
-                {product.ingredients ? product.ingredients.join(', ') : 'Fórmula con ingredientes de origen botánico seleccionados por su eficacia.'}
+                {product.ingredients && product.ingredients.length > 0 ? product.ingredients.join(', ') : 'Fórmula con ingredientes de origen botánico seleccionados por su eficacia.'}
               </Accordion>
               <Accordion label="Modo de uso">
-                Aplicar sobre la zona a tratar, húmeda o seca, y masajear suavemente hasta su completa absorción.
+                {product.howToUse || 'Aplicar sobre la zona a tratar, húmeda o seca, y masajear suavemente hasta su completa absorción.'}
               </Accordion>
               <Accordion label="Envíos y devoluciones">
                 Envío estándar 3–5 días hábiles. Express 24–48 h. Devoluciones gratuitas en los primeros 30 días si el producto no ha sido abierto.

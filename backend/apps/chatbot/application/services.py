@@ -130,7 +130,25 @@ INTENT_KEYWORDS = (
     ("Promociones", ("promo", "descuento", "oferta")),
     ("Catalogo", ("catalogo", "catálogo", "productos")),
     ("Hablar con asesor", ("asesor", "whatsapp", "humano", "persona")),
+    (
+        "Buscar producto",
+        (
+            "precio", "cuanto cuesta", "cuánto cuesta", "cuanto vale", "cuánto vale",
+            "vale", "cuesta", "tienen", "tienes", "hay", "necesito", "busco", "quiero",
+            "dame", "muestrame", "muéstrame", "existe", "manejan", "venden",
+        ),
+    ),
 )
+
+# Palabras genéricas que no aportan nada como término de búsqueda de producto
+# (verbos/pronombres frecuentes en frases como "necesito una crema para...").
+SEARCH_STOPWORDS = {
+    "el", "la", "los", "las", "un", "una", "unos", "unas", "de", "del", "para",
+    "por", "con", "sin", "que", "y", "o", "a", "en", "mi", "me", "tu",
+    "necesito", "busco", "quiero", "tienen", "tienes", "hay", "dame", "vale",
+    "cuesta", "cuanto", "cuánto", "precio", "existe", "manejan", "venden",
+    "muestrame", "muéstrame", "comprar", "compra", "algo", "producto", "productos",
+}
 
 
 def normalize_text(value: str | None) -> str:
@@ -177,6 +195,7 @@ class ChatbotService:
             "Catalogo": self.catalog,
             "Promociones": self.promotions,
             "Hablar con asesor": self.human_handoff,
+            "Buscar producto": self.search_product,
             "Fallback": self.fallback,
         }
         handler = handlers.get(intent_name, self.fallback)
@@ -399,11 +418,51 @@ class ChatbotService:
             query_text or "asesoria personalizada",
         )
 
+    def search_product(self, parameters: dict, *, query_text: str = "") -> ChatbotResponse:
+        products = self.search_products_by_text(query_text)
+        if not products:
+            return self.fallback(parameters, query_text=query_text)
+
+        return self.build_products_found_response(products, query_text, intent="Buscar producto")
+
     def fallback(self, parameters: dict | None = None, *, query_text: str = "") -> ChatbotResponse:
+        # Antes de rendirse, intenta encontrar productos reales que coincidan
+        # con el mensaje libre del cliente (ej. "necesito crema de peinar"),
+        # asi no todo lo que no calza con una palabra clave fija termina en
+        # "no tengo informacion" cuando el producto si existe en el catalogo.
+        products = self.search_products_by_text(query_text)
+        if products:
+            return self.build_products_found_response(products, query_text, intent="Buscar producto")
+
         return self.with_advisor(
             "No tengo esa informacion exacta y prefiero no inventarla.",
             "Fallback",
             query_text or "consulta no resuelta",
+        )
+
+    def build_products_found_response(
+        self, products: list[ChatbotProduct], query_text: str, *, intent: str,
+    ) -> ChatbotResponse:
+        lines = []
+        for product in products:
+            price_label = f"${product.price_from:,.0f}" if product.price_from is not None else "precio a confirmar"
+            if product.available_quantity is not None and product.available_quantity > 0:
+                stock_label = "disponible"
+            elif product.available_quantity is not None:
+                stock_label = "agotado por ahora"
+            else:
+                stock_label = "disponibilidad a confirmar"
+            lines.append(f"- {product.name}: {price_label} ({stock_label})")
+
+        text = "Esto encontre en el catalogo:\n" + "\n".join(lines)
+        return ChatbotResponse(
+            fulfillment_text=text,
+            intent=intent,
+            payload={
+                "catalogUrl": self.catalog_path,
+                "whatsappUrl": self.advisor_link(query_text or "consulta de producto"),
+                "products": [product.as_payload() for product in products],
+            },
         )
 
     def with_advisor(self, text: str, intent: str, reason: str) -> ChatbotResponse:
@@ -472,6 +531,41 @@ class ChatbotService:
         if not products:
             return None
         return self.to_chatbot_product(products[0])
+
+    def search_products_by_text(self, text: str, limit: int = 3) -> list[ChatbotProduct]:
+        """Busca productos reales por texto libre (nombre, descripcion, categoria),
+        sin depender de una lista fija de necesidades/keywords: primero prueba la
+        frase completa, y si no hay match prueba palabra por palabra (ignorando
+        conectores) para cubrir frases naturales como 'necesito crema de peinar'."""
+        normalized = normalize_text(text)
+        if not normalized:
+            return []
+
+        products_qs = self.product_queryset()
+
+        exact_matches = list(
+            products_qs.filter(
+                Q(name__icontains=normalized)
+                | Q(description__icontains=normalized)
+                | Q(category__name__icontains=normalized)
+            )[:limit]
+        )
+        if exact_matches:
+            return [self.to_chatbot_product(product) for product in exact_matches]
+
+        words = [
+            word for word in normalized.split()
+            if len(word) >= 4 and word not in SEARCH_STOPWORDS
+        ]
+        if not words:
+            return []
+
+        word_query = Q()
+        for word in words:
+            word_query |= Q(name__icontains=word) | Q(description__icontains=word) | Q(category__name__icontains=word)
+
+        word_matches = list(products_qs.filter(word_query)[:limit])
+        return [self.to_chatbot_product(product) for product in word_matches]
 
     def find_products_for_need(self, need: str) -> list[ChatbotProduct]:
         if not need:

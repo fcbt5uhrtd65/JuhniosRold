@@ -470,6 +470,10 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
   const selectEditVariant = (variant: ProductVariant) => {
     setEditingVariantId(variant.id);
     setEditVariantImages(variantImageList(variant));
+    const attrs = variant.attributes ?? {};
+    const beneficios = attrs.benefits ?? attrs.beneficios;
+    const modoDeUso = attrs.how_to_use ?? attrs.modoDeUso;
+    const ingredientes = attrs.ingredients ?? attrs.ingredientes;
     set({
       presentacion: variant.presentation,
       presentacionNumero: variant.presentation_number ?? undefined,
@@ -477,6 +481,9 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
       precio: variant.current_price ?? 0,
       precioCosto: variant.cost || undefined,
       codigo: variant.sku,
+      beneficios: typeof beneficios === 'string' ? beneficios : '',
+      modoDeUso: typeof modoDeUso === 'string' ? modoDeUso : '',
+      ingredientes: typeof ingredientes === 'string' ? ingredientes : '',
     });
   };
 

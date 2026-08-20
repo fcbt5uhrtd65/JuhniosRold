@@ -12,7 +12,7 @@ import { useSearch } from '../contexts/SearchContext';
 import { useUser } from '../contexts/UserContext';
 import { useNotifications } from '../contexts/NotificationsContext';
 import type { NotificationType } from '../services/notifications.service';
-import { getCategories, type ProductCategory } from '../services/products.service';
+import { getCategories, getProducts, type Product, type ProductCategory } from '../services/products.service';
 import { navigateTo } from '../services/navigate';
 import { forceBodyScrollUnlock, useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import logoImg from '../../assets/logo.png';
@@ -88,6 +88,7 @@ export function NavigationBar({ onLoginClick, variant = 'solid', mobileStatic = 
   const [menuOpen, setMenuOpen]                   = useState(false);
   const [productsMenuOpen, setProductsMenuOpen]   = useState(false);
   const [productCategories, setProductCategories] = useState<ProductCategory[]>([]);
+  const [categoryPreviewProducts, setCategoryPreviewProducts] = useState<Map<string, Product[]>>(new Map());
   const [showNotifications, setShowNotifications] = useState(false);
   const [activeLink, setActiveLink]               = useState('#');
   const [notifAnchor, setNotifAnchor] = useState<{ top: number; right: number } | null>(null);
@@ -128,24 +129,31 @@ export function NavigationBar({ onLoginClick, variant = 'solid', mobileStatic = 
   }, []);
 
   const productMenuGroups = useMemo(() => {
-    const byParent = new Map<string, ProductCategory[]>();
-    productCategories.forEach(category => {
-      if (!category.parent) return;
-      byParent.set(category.parent, [...(byParent.get(category.parent) ?? []), category]);
-    });
-
     const roots = productCategories.filter(category => !category.parent);
     const base = roots.length > 0 ? roots : productCategories;
 
     return base
-      .map(category => ({
-        category,
-        children: (byParent.get(category.id) ?? [])
-          .sort((left, right) => left.name.localeCompare(right.name, 'es', { sensitivity: 'base' })),
-      }))
+      .map(category => ({ category }))
       .sort((left, right) => left.category.name.localeCompare(right.category.name, 'es', { sensitivity: 'base' }))
       .slice(0, 6);
   }, [productCategories]);
+
+  useEffect(() => {
+    if (!productsMenuOpen || productMenuGroups.length === 0 || categoryPreviewProducts.size > 0) return;
+    let mounted = true;
+    Promise.all(
+      productMenuGroups.map(group =>
+        getProducts({ category: group.category.id, limit: 3, active: true })
+          .then(res => [group.category.id, res.data] as const)
+          .catch(() => [group.category.id, []] as const),
+      ),
+    ).then(results => {
+      if (mounted) setCategoryPreviewProducts(new Map(results));
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [productsMenuOpen, productMenuGroups, categoryPreviewProducts.size]);
 
   const handleNavClick = (href: string, e: React.MouseEvent) => {
     onNavigateClick?.(href);
@@ -429,34 +437,55 @@ export function NavigationBar({ onLoginClick, variant = 'solid', mobileStatic = 
                   </div>
                 ) : (
                   <div className="grid gap-0 px-7 py-7" style={{ gridTemplateColumns: `repeat(${Math.min(productMenuGroups.length, 6)}, minmax(0, 1fr))` }}>
-                    {productMenuGroups.map(group => (
-                      <div key={group.category.id} className="px-4">
-                        <a
-                          href="#catalogo"
-                          onClick={e => handleCategoryClick(group.category, e)}
-                          className="inline-flex text-[12px] font-bold uppercase tracking-[0.2em] text-stone-900 underline-offset-4 hover:underline"
-                        >
-                          {group.category.name}
-                        </a>
-                        <div className="mt-5">
-                          {group.children.map((child, index) => (
-                            <a
-                              key={child.id}
-                              href="#catalogo"
-                              onClick={e => handleCategoryClick(child, e)}
-                              className="group/item relative flex min-h-8 items-start gap-3 py-1.5 text-[14px] leading-snug tracking-[0.08em] text-stone-600 transition-colors hover:text-stone-950"
-                            >
-                              <span className="relative mt-2 h-px w-5 shrink-0 bg-stone-200 transition-colors group-hover/item:bg-[#2D3A1F]">
-                                {index < group.children.length - 1 && (
-                                  <span className="absolute left-0 top-0 h-8 w-px bg-stone-200" />
-                                )}
-                              </span>
-                              <span>{child.name}</span>
-                            </a>
-                          ))}
-                          {group.children.length === 0 && (
-                            <p className="py-1.5 text-[12px] leading-relaxed text-stone-400">Sin subcategorias.</p>
-                          )}
+                    {productMenuGroups.map(group => {
+                      const previewProducts = categoryPreviewProducts.get(group.category.id);
+                      const isLoadingPreview = productsMenuOpen && previewProducts === undefined;
+                      return (
+                        <div key={group.category.id} className="px-4">
+                          <a
+                            href="#catalogo"
+                            onClick={e => handleCategoryClick(group.category, e)}
+                            className="inline-flex text-[12px] font-bold uppercase tracking-[0.2em] text-stone-900 underline-offset-4 hover:underline"
+                          >
+                            {group.category.name}
+                          </a>
+                          <div className="mt-5 space-y-1">
+                            {isLoadingPreview && (
+                              <div className="space-y-2.5 py-1">
+                                {[0, 1, 2].map(i => (
+                                  <div key={i} className="flex items-center gap-3">
+                                    <div className="h-9 w-9 shrink-0 animate-pulse rounded-lg bg-stone-100" />
+                                    <div className="h-3 w-24 animate-pulse rounded bg-stone-100" />
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {!isLoadingPreview && previewProducts?.map(product => (
+                              <a
+                                key={product.id}
+                                href="#catalogo"
+                                onClick={e => handleCategoryClick(group.category, e)}
+                                className="group/item flex items-center gap-3 rounded-lg py-1.5 pr-2 transition-colors hover:bg-stone-50"
+                              >
+                                <span className="h-9 w-9 shrink-0 overflow-hidden rounded-lg bg-stone-100">
+                                  {product.primary_image && (
+                                    <img
+                                      src={product.primary_image}
+                                      alt=""
+                                      className="h-full w-full object-cover"
+                                      loading="lazy"
+                                    />
+                                  )}
+                                </span>
+                                <span className="truncate text-[13px] leading-snug tracking-[0.02em] text-stone-600 transition-colors group-hover/item:text-stone-950">
+                                  {product.name}
+                                </span>
+                              </a>
+                            ))}
+                            {!isLoadingPreview && previewProducts?.length === 0 && (
+                              <p className="py-1.5 text-[12px] leading-relaxed text-stone-400">Aún sin productos.</p>
+                            )}
+                          </div>
                           <a
                             href="#catalogo"
                             onClick={e => handleCategoryClick(group.category, e)}
@@ -465,8 +494,8 @@ export function NavigationBar({ onLoginClick, variant = 'solid', mobileStatic = 
                             Ver todo
                           </a>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
