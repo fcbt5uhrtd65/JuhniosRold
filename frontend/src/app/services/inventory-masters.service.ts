@@ -379,11 +379,16 @@ async function getPublicPage<T>(path: string): Promise<T[]> {
 
 export interface PublicRawMaterial {
   id: UUID;
+  variantId: UUID | null;
   code: string;
   name: string;
   description: string;
   imageUrl: string;
   cost: number;
+  price: number;
+  currency: string;
+  presentation: string;
+  availableQuantity: number | null;
   minimumQuantity: number;
   maximumQuantity: number;
   tracksBatches: boolean;
@@ -398,11 +403,16 @@ export interface PublicRawMaterial {
 
 interface BackendPublicRawMaterial {
   id: UUID;
+  variant_id: UUID | null;
   code: string;
   name: string;
   description: string;
   image_url: string;
   cost: string;
+  price: string | number;
+  currency: string;
+  presentation: string;
+  available_quantity: string | number | null;
   minimum_quantity: string;
   maximum_quantity: string;
   tracks_batches: boolean;
@@ -418,11 +428,16 @@ interface BackendPublicRawMaterial {
 function mapPublicRawMaterial(item: BackendPublicRawMaterial): PublicRawMaterial {
   return {
     id: item.id,
+    variantId: item.variant_id,
     code: item.code,
     name: item.name,
     description: item.description,
     imageUrl: item.image_url,
     cost: toNumber(item.cost),
+    price: toNumber(String(item.price)),
+    currency: item.currency || 'COP',
+    presentation: item.presentation,
+    availableQuantity: item.available_quantity === null ? null : toNumber(String(item.available_quantity)),
     minimumQuantity: toNumber(item.minimum_quantity),
     maximumQuantity: toNumber(item.maximum_quantity),
     tracksBatches: item.tracks_batches,

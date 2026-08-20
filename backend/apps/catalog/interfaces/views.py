@@ -1,5 +1,5 @@
 from celery.result import AsyncResult
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q
 from rest_framework import generics, permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -53,13 +53,28 @@ class ProductViewSet(SoftDeleteModelViewSet):
         if self.action not in ("list", "retrieve") or self.request.user.is_authenticated:
             return queryset.prefetch_related("variants__prices", "images")
 
+        raw_material_link_filter = (
+            Q(variants__inventory_items__item_type__name__icontains="materia prima")
+            | Q(variants__inventory_items__item_type__name__icontains="fragancia")
+            | Q(variants__inventory_items__item_type__name__icontains="colorante")
+            | Q(variants__inventory_items__item_type__name__icontains="extracto")
+            | Q(variants__inventory_items__item_group__name__icontains="materia prima")
+            | Q(variants__inventory_items__item_group__name__icontains="fragancia")
+            | Q(variants__inventory_items__item_group__name__icontains="colorante")
+            | Q(variants__inventory_items__item_group__name__icontains="extracto")
+        )
         active_variants = ProductVariant.objects.filter(is_active=True).prefetch_related(
             Prefetch("prices", queryset=Price.objects.filter(is_active=True)),
             Prefetch("stocks", queryset=Stock.objects.all(), to_attr="_prefetched_stocks"),
         )
-        return queryset.filter(is_active=True, category__is_active=True).prefetch_related(
-            Prefetch("variants", queryset=active_variants),
-            "images",
+        return (
+            queryset.filter(is_active=True, category__is_active=True)
+            .exclude(raw_material_link_filter)
+            .distinct()
+            .prefetch_related(
+                Prefetch("variants", queryset=active_variants),
+                "images",
+            )
         )
 
 
@@ -142,7 +157,7 @@ class CategoryViewSet(SoftDeleteModelViewSet):
     def get_queryset(self):
         queryset = super().get_queryset()
         if self.action in ("list", "retrieve") and not self.request.user.is_authenticated:
-            return queryset.filter(is_active=True)
+            return queryset.filter(is_active=True).exclude(slug="materias-primas")
         return queryset
 
 

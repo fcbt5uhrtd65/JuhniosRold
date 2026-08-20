@@ -16,6 +16,7 @@ from .views import (
     PayrollLegalParameterViewSet,
     PayrollPeriodViewSet,
     PayrollViewSet,
+    PayslipDocumentViewSet,
     PerformanceReviewViewSet,
     PublicHolidayViewSet,
     VacationRequestAttachmentViewSet,
@@ -30,6 +31,7 @@ router.register("vacations", VacationRequestViewSet)
 router.register("requests", VacationRequestViewSet, basename="hr-request")
 router.register("request-attachments", VacationRequestAttachmentViewSet)
 router.register("payroll", PayrollViewSet)
+router.register("payslips", PayslipDocumentViewSet)
 router.register("performance-reviews", PerformanceReviewViewSet)
 router.register("documents", EmployeeDocumentViewSet)
 router.register("company-documents", CompanyDocumentViewSet)

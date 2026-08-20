@@ -5,6 +5,7 @@ from .models import (
     EmployeeDocument,
     Payroll,
     PayrollItem,
+    PayslipDocument,
     PerformanceReview,
     VacationRequestApprovalStep,
     VacationRequestAttachment,
@@ -86,6 +87,15 @@ class PayrollItemAdmin(admin.ModelAdmin):
     list_filter = ("item_type",)
     search_fields = ("concept", "payroll__employee__employee_code")
     list_select_related = ("payroll", "payroll__employee")
+
+
+@admin.register(PayslipDocument)
+class PayslipDocumentAdmin(admin.ModelAdmin):
+    list_display = ("title", "employee", "period_start", "period_end", "payment_date", "status", "uploaded_by", "published_at")
+    list_filter = ("status", "period_end", "payment_date")
+    search_fields = ("title", "employee__employee_code", "employee__first_name", "employee__last_name", "notes")
+    list_select_related = ("employee", "uploaded_by")
+    date_hierarchy = "period_end"
 
 
 @admin.register(PerformanceReview)

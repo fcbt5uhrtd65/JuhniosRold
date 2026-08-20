@@ -11,6 +11,7 @@ const REQUESTS_PATH = `${HR_PATH}/requests/`;
 const VACATIONS_PATH = `${HR_PATH}/vacations/`;
 const REQUEST_ATTACHMENTS_PATH = `${HR_PATH}/request-attachments/`;
 const PAYROLL_PATH = `${HR_PATH}/payroll/`;
+const PAYSLIPS_PATH = `${HR_PATH}/payslips/`;
 const PAYROLL_PERIODS_PATH = `${HR_PATH}/payroll-periods/`;
 const PAYROLL_LEGAL_PARAMETERS_PATH = `${HR_PATH}/payroll-legal-parameters/`;
 const HOLIDAYS_PATH = `${HR_PATH}/holidays/`;
@@ -90,6 +91,16 @@ function buildEmployeeDocumentBody(payload: Partial<EmployeeDocumentPayload>): F
   return formData;
 }
 
+function buildPayslipDocumentBody(payload: Partial<PayslipDocumentPayload>): FormData {
+  const formData = new FormData();
+  Object.entries(payload).forEach(([key, value]) => {
+    if (value === null || value === undefined || value === '') return;
+    if (value instanceof File) formData.append(key, value);
+    else formData.append(key, String(value));
+  });
+  return formData;
+}
+
 function buildCompanyDocumentVersionBody(payload: Partial<CompanyDocumentVersionPayload>): FormData {
   const formData = new FormData();
   Object.entries(payload).forEach(([key, value]) => {
@@ -141,6 +152,7 @@ export type HRRequestSubtype =
   | '';
 export type PayrollStatus = 'DRAFT' | 'APPROVED' | 'PAID';
 export type PayrollPeriodStatus = 'OPEN' | 'CALCULATED' | 'APPROVED' | 'PAID' | 'CLOSED';
+export type PayslipDocumentStatus = 'DRAFT' | 'PUBLISHED';
 export type PayrollItemSource = 'MANUAL' | 'ATTENDANCE' | 'VACATION_REQUEST' | 'LOAN_INSTALLMENT' | 'SYSTEM';
 export type RequestRemunerationFilter = 'REMUNERATED' | 'NOT_REMUNERATED' | 'PENDING';
 export type BiometricImportStatus = 'PROCESSING' | 'COMPLETED' | 'FAILED';
@@ -378,6 +390,25 @@ export interface PayrollPeriod {
   paid_by: string | null;
   notes: string;
   payrolls: Payroll[];
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface PayslipDocument {
+  id: string;
+  employee: string;
+  employee_name?: string;
+  title: string;
+  period_start: string;
+  period_end: string;
+  payment_date: string | null;
+  file: string;
+  file_name?: string;
+  status: PayslipDocumentStatus;
+  notes: string;
+  uploaded_by: string | null;
+  published_at: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -650,6 +681,17 @@ export interface PayrollPayload {
   status?: PayrollStatus;
 }
 
+export interface PayslipDocumentPayload {
+  employee: string;
+  title: string;
+  period_start: string;
+  period_end: string;
+  payment_date?: string | null;
+  file?: File | null;
+  status?: PayslipDocumentStatus;
+  notes?: string;
+}
+
 export interface PerformanceReviewPayload {
   employee: string;
   reviewer: string;
@@ -709,6 +751,18 @@ export interface ListPayrollParams {
   limit?: number;
   employee?: string;
   status?: PayrollStatus;
+}
+
+export interface ListPayslipDocumentParams {
+  page?: number;
+  limit?: number;
+  employee?: string;
+  status?: PayslipDocumentStatus;
+  payment_date?: string;
+  period_from?: string;
+  period_to?: string;
+  search?: string;
+  ordering?: string;
 }
 
 export interface ListPerformanceReviewParams {
@@ -1201,6 +1255,78 @@ export async function addPayrollItem(
   const res = await api.post<Payroll>(`${PAYROLL_PATH}${payrollId}/add-item/`, payload);
   if (res.data) return res.data;
   throw new Error(res.message);
+}
+
+// ---- Payslip documents ----
+export async function getPayslipDocuments(params?: ListPayslipDocumentParams): Promise<{
+  data: PayslipDocument[];
+  total: number;
+  next: string | null;
+  previous: string | null;
+}> {
+  const query = buildQuery({
+    page: params?.page,
+    page_size: params?.limit,
+    employee: params?.employee,
+    status: params?.status,
+    payment_date: params?.payment_date,
+    period_from: params?.period_from,
+    period_to: params?.period_to,
+    search: params?.search,
+    ordering: params?.ordering,
+  });
+  const res = await api.get<PayslipDocument[] | PaginatedResponse<PayslipDocument>>(`${PAYSLIPS_PATH}${query}`);
+  return normalizeListResponse(res.data);
+}
+
+export async function createPayslipDocument(payload: PayslipDocumentPayload): Promise<PayslipDocument> {
+  const res = await api.post<PayslipDocument>(PAYSLIPS_PATH, buildPayslipDocumentBody(payload));
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
+export async function updatePayslipDocument(id: string, payload: Partial<PayslipDocumentPayload>): Promise<PayslipDocument> {
+  const res = await api.patch<PayslipDocument>(`${PAYSLIPS_PATH}${id}/`, buildPayslipDocumentBody(payload));
+  if (res.data) return res.data;
+  throw new Error(res.message);
+}
+
+export async function deletePayslipDocument(id: string): Promise<void> {
+  await api.delete(`${PAYSLIPS_PATH}${id}/`);
+}
+
+export async function getMyPayslipDocuments(params?: { page?: number; limit?: number }): Promise<{
+  data: PayslipDocument[];
+  total: number;
+  next: string | null;
+  previous: string | null;
+}> {
+  const query = buildQuery({ page: params?.page, page_size: params?.limit });
+  const res = await api.get<PayslipDocument[] | PaginatedResponse<PayslipDocument>>(`${PAYSLIPS_PATH}me/${query}`);
+  return normalizeListResponse(res.data);
+}
+
+export async function openPayslipDocumentPdf(id: string, filename?: string): Promise<void> {
+  const token = getAccessToken();
+  if (!token) {
+    throw new Error('Tu sesión expiró. Inicia sesión de nuevo.');
+  }
+  const response = await fetch(`${API_BASE_URL}${PAYSLIPS_PATH}${id}/download/`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null);
+    throw new Error(detail?.detail || 'No se pudo descargar el volante de pago.');
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename || `volante-pago-${new Date().toISOString().slice(0, 10)}.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 // ---- Payroll periods ----

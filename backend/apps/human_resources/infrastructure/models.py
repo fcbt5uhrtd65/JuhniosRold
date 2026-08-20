@@ -452,6 +452,52 @@ class PayrollItem(BaseModel):
     concept_code = models.CharField(max_length=40, blank=True)
 
 
+class PayslipDocument(BaseModel):
+    class Status(models.TextChoices):
+        DRAFT = "DRAFT", "Borrador"
+        PUBLISHED = "PUBLISHED", "Publicado"
+
+    employee = models.ForeignKey("employees.Employee", on_delete=models.CASCADE, related_name="payslip_documents")
+    title = models.CharField(max_length=180)
+    period_start = models.DateField()
+    period_end = models.DateField()
+    payment_date = models.DateField(null=True, blank=True)
+    file = models.FileField(
+        upload_to="hr/payslips/",
+        validators=[FileExtensionValidator(allowed_extensions=("pdf",))],
+    )
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PUBLISHED)
+    notes = models.TextField(blank=True)
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="uploaded_payslip_documents",
+    )
+    published_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta(BaseModel.Meta):
+        ordering = ("-period_end", "-payment_date", "-created_at")
+        indexes = [
+            models.Index(fields=("employee", "period_end")),
+            models.Index(fields=("status", "period_end")),
+        ]
+
+    def save(self, *args, **kwargs):
+        update_fields = kwargs.get("update_fields")
+        if self.status == self.Status.PUBLISHED and not self.published_at:
+            self.published_at = timezone.now()
+            if update_fields is not None:
+                update_fields = set(update_fields)
+                update_fields.add("published_at")
+                kwargs["update_fields"] = tuple(update_fields)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.title} - {self.employee}"
+
+
 class PerformanceReview(BaseModel):
     employee = models.ForeignKey("employees.Employee", on_delete=models.CASCADE, related_name="performance_reviews")
     reviewer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)

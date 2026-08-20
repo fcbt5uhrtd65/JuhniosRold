@@ -197,8 +197,9 @@ class PublicRawMaterialViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         return (
-            Item.objects.select_related("item_type", "item_group", "unit", "supplier")
-            .filter(is_active=True, product_variant__isnull=True)
+            Item.objects.select_related("item_type", "item_group", "unit", "supplier", "product_variant")
+            .prefetch_related("product_variant__prices", "product_variant__stocks")
+            .filter(is_active=True)
             .filter(RAW_MATERIAL_NAME_FILTER)
             .order_by("name")
         )

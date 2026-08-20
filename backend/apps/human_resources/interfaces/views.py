@@ -58,6 +58,7 @@ from ..infrastructure.models import (
     Payroll,
     PayrollLegalParameter,
     PayrollPeriod,
+    PayslipDocument,
     PerformanceReview,
     PublicHoliday,
     RawBiometricPunch,
@@ -87,6 +88,7 @@ from ..infrastructure.serializers import (
     PayrollLegalParameterSerializer,
     PayrollPeriodSerializer,
     PayrollSerializer,
+    PayslipDocumentSerializer,
     PerformanceReviewSerializer,
     PublicHolidaySerializer,
     RawBiometricPunchSerializer,
@@ -1197,6 +1199,101 @@ class PayrollViewSet(SoftDeleteModelViewSet):
         payroll.refresh_from_db()
         self._audit("add_item", payroll)
         return Response(self.get_serializer(payroll).data)
+
+
+class PayslipDocumentViewSet(SoftDeleteModelViewSet):
+    queryset = PayslipDocument.objects.select_related("employee", "uploaded_by")
+    serializer_class = PayslipDocumentSerializer
+    permission_classes = (HasComponentAccess,)
+    required_component = "human_resources.payroll"
+    filterset_fields = ("employee", "status", "payment_date")
+    search_fields = ("title", "employee__employee_code", "employee__first_name", "employee__last_name", "notes")
+    ordering_fields = ("period_start", "period_end", "payment_date", "created_at")
+
+    def get_permissions(self):
+        if self.action in {"me", "download"}:
+            return (IsAuthenticated(),)
+        self.required_component_action = "view" if self.action in {"list", "retrieve"} else "edit"
+        return super().get_permissions()
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        period_from = self.request.query_params.get("period_from")
+        period_to = self.request.query_params.get("period_to")
+        if period_from:
+            queryset = queryset.filter(period_end__gte=period_from)
+        if period_to:
+            queryset = queryset.filter(period_start__lte=period_to)
+        return queryset
+
+    def _user_can_manage_payslips(self, user):
+        return bool(
+            getattr(user, "has_full_access", False)
+            or user.has_component_access("human_resources.payroll", "view")
+            or user.has_component_access("human_resources.management", "view")
+        )
+
+    def _ensure_download_allowed(self, document):
+        employee = getattr(self.request.user, "employee_profile", None)
+        if employee and document.employee_id == employee.id and document.status == PayslipDocument.Status.PUBLISHED:
+            return
+        if self._user_can_manage_payslips(self.request.user):
+            return
+        raise PermissionDenied("No tienes permiso para descargar este volante de pago.")
+
+    @action(detail=False, methods=("get",), url_path="me")
+    def me(self, request):
+        employee = getattr(request.user, "employee_profile", None)
+        if not employee:
+            raise NotFound("Tu usuario no tiene un perfil de empleado asociado.")
+        documents = self.get_queryset().filter(employee=employee, status=PayslipDocument.Status.PUBLISHED)
+        page = self.paginate_queryset(documents)
+        serializer = self.get_serializer(page if page is not None else documents, many=True)
+        if page is not None:
+            return self.get_paginated_response(serializer.data)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=("get",), url_path="download")
+    def download(self, request, pk=None):
+        document = self.get_object()
+        self._ensure_download_allowed(document)
+        if not document.file:
+            raise NotFound("Este volante de pago no tiene PDF adjunto.")
+        filename = document.file.name.rsplit("/", 1)[-1]
+        return FileResponse(document.file.open("rb"), as_attachment=True, filename=filename)
+
+    def perform_create(self, serializer):
+        document = serializer.save(uploaded_by=self.request.user)
+        AuditService.record(
+            actor=self.request.user,
+            module="human_resources",
+            action="create_payslip",
+            ip_address=self.request.META.get("REMOTE_ADDR"),
+            resource_type=document.__class__.__name__,
+            resource_id=document.pk,
+        )
+
+    def perform_update(self, serializer):
+        document = serializer.save()
+        AuditService.record(
+            actor=self.request.user,
+            module="human_resources",
+            action="update_payslip",
+            ip_address=self.request.META.get("REMOTE_ADDR"),
+            resource_type=document.__class__.__name__,
+            resource_id=document.pk,
+        )
+
+    def perform_destroy(self, instance):
+        super().perform_destroy(instance)
+        AuditService.record(
+            actor=self.request.user,
+            module="human_resources",
+            action="delete_payslip",
+            ip_address=self.request.META.get("REMOTE_ADDR"),
+            resource_type=instance.__class__.__name__,
+            resource_id=instance.pk,
+        )
 
 
 class PerformanceReviewViewSet(SoftDeleteModelViewSet):

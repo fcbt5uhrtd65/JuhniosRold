@@ -108,9 +108,13 @@ import type { UserRole } from '../../services/auth.service';
 import {
   approveVacationRequest,
   correctVacationRequestSchedule,
+  createPayslipDocument,
   createEmployeeDocument,
+  deletePayslipDocument,
   updateEmployeeDocument,
+  updatePayslipDocument,
   deleteEmployeeDocument,
+  getPayslipDocuments,
   deleteVacationRequest,
   updateVacationRequest,
   exportRequestsXlsx,
@@ -120,12 +124,15 @@ import {
   getVacationRequestById,
   getVacationRequests,
   openVacationRequestPdf,
+  openPayslipDocumentPdf,
   rejectVacationRequest,
   setRequestRemuneration,
   type EmployeeDocument,
   type EmployeeDocumentStatus,
   type EmployeeDocumentType,
   type HRNotification,
+  type PayslipDocument,
+  type PayslipDocumentStatus,
   type RequestRemunerationFilter,
   type RequestsDashboard,
   type VacationRequest,
@@ -149,7 +156,7 @@ function toBranchDecimalString(value: number | string): string {
   return Number(value).toFixed(6);
 }
 
-type HRTab = 'employees' | 'branches' | 'catalog' | 'vacations' | 'calendar' | 'orgchart' | 'documents';
+type HRTab = 'employees' | 'branches' | 'catalog' | 'vacations' | 'calendar' | 'orgchart' | 'documents' | 'payments';
 type HRCalendarView = 'requests' | 'birthdays';
 type UniformField = 'uniform_sweater' | 'uniform_pants' | 'uniform_shoes' | 'uniform_other';
 type EmployeeDataQualityFilter =
@@ -296,6 +303,17 @@ interface EmployeeFormState {
   emergency_contact_mobile: string;
   emergency_contact_alternate_phone: string;
   emergency_contact_address: string;
+}
+
+interface PayslipFormState {
+  employee: string;
+  title: string;
+  period_start: string;
+  period_end: string;
+  payment_date: string;
+  status: PayslipDocumentStatus;
+  notes: string;
+  file: File | null;
 }
 
 interface DocumentFormState {
@@ -490,6 +508,11 @@ const DOCUMENT_TYPE_OPTIONS: Array<{ value: EmployeeDocumentType; label: string 
   { value: 'OTHER', label: 'Otros documentos' },
 ];
 
+const PAYSLIP_STATUS_OPTIONS: Array<{ value: PayslipDocumentStatus; label: string }> = [
+  { value: 'PUBLISHED', label: 'Publicado' },
+  { value: 'DRAFT', label: 'Borrador' },
+];
+
 const REQUIRED_DOCUMENT_TYPES = new Set<EmployeeDocumentType>([
   'ID_COPY',
   'RESUME',
@@ -501,6 +524,17 @@ const REQUIRED_DOCUMENT_TYPES = new Set<EmployeeDocumentType>([
   'ARL_CERTIFICATE',
   'COMPENSATION_CERTIFICATE',
 ]);
+
+const EMPTY_PAYSLIP_FORM: PayslipFormState = {
+  employee: '',
+  title: '',
+  period_start: '',
+  period_end: '',
+  payment_date: '',
+  status: 'PUBLISHED',
+  notes: '',
+  file: null,
+};
 
 const MODAL_TABS: Array<{ id: EmployeeModalTab; label: string; icon: typeof Users }> = [
   { id: 'personal', label: 'Información Personal', icon: Users },
@@ -1391,6 +1425,14 @@ function documentStatusLabel(status: EmployeeDocumentStatus): string {
   return labels[status];
 }
 
+function payslipStatusLabel(status: PayslipDocumentStatus): string {
+  return status === 'PUBLISHED' ? 'Publicado' : 'Borrador';
+}
+
+function payslipStatusBadge(status: PayslipDocumentStatus): BadgeColor {
+  return status === 'PUBLISHED' ? 'green' : 'yellow';
+}
+
 function getRequestTypeLabel(type: string, subtype?: string): string {
   if (type === 'LABOR_CERTIFICATE') return 'Certificado laboral';
   if (type === 'SCHEDULE_CHANGE' || subtype === 'SCHEDULE_CHANGE') return 'Cambio de horario empleado';
@@ -2048,6 +2090,20 @@ export function AdminHR() {
   const [vacationTotal, setVacationTotal] = useState(0);
   const [vacationLoading, setVacationLoading] = useState(false);
   const [deletingVacationId, setDeletingVacationId] = useState<string | null>(null);
+  const [payslips, setPayslips] = useState<PayslipDocument[]>([]);
+  const [payslipTotal, setPayslipTotal] = useState(0);
+  const [payslipPage, setPayslipPage] = useState(1);
+  const [payslipPageSize, setPayslipPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [payslipSearch, setPayslipSearch] = useState('');
+  const [payslipFilterEmployee, setPayslipFilterEmployee] = useState<string>('all');
+  const [payslipFilterStatus, setPayslipFilterStatus] = useState<'all' | PayslipDocumentStatus>('all');
+  const [payslipPeriodFrom, setPayslipPeriodFrom] = useState('');
+  const [payslipPeriodTo, setPayslipPeriodTo] = useState('');
+  const [payslipLoading, setPayslipLoading] = useState(false);
+  const [savingPayslip, setSavingPayslip] = useState(false);
+  const [editingPayslipId, setEditingPayslipId] = useState<string | null>(null);
+  const [deletingPayslipId, setDeletingPayslipId] = useState<string | null>(null);
+  const [downloadingPayslipId, setDownloadingPayslipId] = useState<string | null>(null);
   const [orgChartSearch, setOrgChartSearch] = useState('');
   const [employeeSort, setEmployeeSort] = useState<'name' | 'department' | 'status' | 'profile'>('name');
   const [isLoading, setIsLoading] = useState(true);
@@ -2138,6 +2194,7 @@ export function AdminHR() {
   const [employeeForm, setEmployeeForm] = useState<EmployeeFormState>(EMPTY_EMPLOYEE_FORM);
   const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null);
   const [documentForm, setDocumentForm] = useState<DocumentFormState>(EMPTY_DOCUMENT_FORM);
+  const [payslipForm, setPayslipForm] = useState<PayslipFormState>(EMPTY_PAYSLIP_FORM);
   const [editingDocumentId, setEditingDocumentId] = useState<string | null>(null);
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
   const [branchForm, setBranchForm] = useState<BranchFormState>(EMPTY_BRANCH_FORM);
@@ -2202,6 +2259,29 @@ export function AdminHR() {
     }
   }, [vacationSearch, vacationFilterDepartment, vacationFilterBranch, vacationFilterStatus, vacationFilterEmployee, vacationFilterType, vacationFilterRemuneration, vacationFilterStartFrom, vacationFilterStartTo]);
 
+  const loadPayslips = useCallback(async () => {
+    setPayslipLoading(true);
+    try {
+      const response = await getPayslipDocuments({
+        page: payslipPage,
+        limit: payslipPageSize,
+        employee: payslipFilterEmployee === 'all' ? undefined : payslipFilterEmployee,
+        status: payslipFilterStatus === 'all' ? undefined : payslipFilterStatus,
+        period_from: payslipPeriodFrom || undefined,
+        period_to: payslipPeriodTo || undefined,
+        search: payslipSearch.trim() || undefined,
+        ordering: '-period_end',
+      });
+      setPayslips(response.data);
+      setPayslipTotal(response.total);
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudieron cargar los volantes de pago');
+    } finally {
+      setPayslipLoading(false);
+    }
+  }, [payslipPage, payslipPageSize, payslipFilterEmployee, payslipFilterStatus, payslipPeriodFrom, payslipPeriodTo, payslipSearch, toast]);
+
   useEffect(() => {
     void loadData();
   }, [loadData]);
@@ -2213,8 +2293,18 @@ export function AdminHR() {
   }, [activeTab, loadRequestsDashboard, vacationSearch]);
 
   useEffect(() => {
+    if (activeTab !== 'payments') return;
+    const handle = setTimeout(() => { void loadPayslips(); }, payslipSearch ? 350 : 0);
+    return () => clearTimeout(handle);
+  }, [activeTab, loadPayslips, payslipSearch]);
+
+  useEffect(() => {
     setBranchPage(1);
   }, [searchQuery, filterStatus]);
+
+  useEffect(() => {
+    setPayslipPage(1);
+  }, [payslipSearch, payslipFilterEmployee, payslipFilterStatus, payslipPeriodFrom, payslipPeriodTo, payslipPageSize]);
 
   const departmentById = useMemo(() => new Map(departments.map((department) => [department.id, department])), [departments]);
   const positionById = useMemo(() => new Map(positions.map((position) => [position.id, position])), [positions]);
@@ -2689,6 +2779,102 @@ export function AdminHR() {
   const resetDocumentForm = () => {
     setDocumentForm(EMPTY_DOCUMENT_FORM);
     setEditingDocumentId(null);
+  };
+
+  const resetPayslipForm = () => {
+    setPayslipForm(EMPTY_PAYSLIP_FORM);
+    setEditingPayslipId(null);
+  };
+
+  const handleEditPayslip = (payslip: PayslipDocument) => {
+    setEditingPayslipId(payslip.id);
+    setPayslipForm({
+      employee: payslip.employee,
+      title: payslip.title,
+      period_start: payslip.period_start,
+      period_end: payslip.period_end,
+      payment_date: payslip.payment_date ?? '',
+      status: payslip.status,
+      notes: payslip.notes ?? '',
+      file: null,
+    });
+  };
+
+  const handlePayslipSubmit = async () => {
+    if (!payslipForm.employee) {
+      toast.error('Selecciona el empleado');
+      return;
+    }
+    if (!payslipForm.period_start || !payslipForm.period_end) {
+      toast.error('Indica el periodo del volante');
+      return;
+    }
+    if (payslipForm.period_end < payslipForm.period_start) {
+      toast.error('La fecha final del periodo no puede ser anterior a la inicial');
+      return;
+    }
+    if (!editingPayslipId && !payslipForm.file) {
+      toast.error('Adjunta el PDF del volante');
+      return;
+    }
+
+    setSavingPayslip(true);
+    try {
+      const employee = employeeById.get(payslipForm.employee);
+      const title = payslipForm.title.trim() || `Volante de pago ${parseDate(payslipForm.period_start)} - ${parseDate(payslipForm.period_end)}`;
+      const payload = {
+        employee: payslipForm.employee,
+        title,
+        period_start: payslipForm.period_start,
+        period_end: payslipForm.period_end,
+        payment_date: cleanNullable(payslipForm.payment_date),
+        status: payslipForm.status,
+        notes: payslipForm.notes.trim(),
+        file: payslipForm.file,
+      };
+      if (editingPayslipId) {
+        await updatePayslipDocument(editingPayslipId, payload);
+        toast.success(`Volante actualizado${employee ? ` para ${getEmployeeName(employee)}` : ''}`);
+      } else {
+        await createPayslipDocument(payload);
+        toast.success(`Volante adjuntado${employee ? ` a ${getEmployeeName(employee)}` : ''}`);
+      }
+      resetPayslipForm();
+      await loadPayslips();
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo guardar el volante de pago');
+    } finally {
+      setSavingPayslip(false);
+    }
+  };
+
+  const handlePayslipDownload = async (payslip: PayslipDocument) => {
+    setDownloadingPayslipId(payslip.id);
+    try {
+      await openPayslipDocumentPdf(payslip.id, payslip.file_name || `${payslip.title}.pdf`);
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo descargar el volante de pago');
+    } finally {
+      setDownloadingPayslipId(null);
+    }
+  };
+
+  const handleDeletePayslip = async (payslip: PayslipDocument) => {
+    if (!window.confirm(`¿Eliminar el volante "${payslip.title}"?`)) return;
+    setDeletingPayslipId(payslip.id);
+    try {
+      await deletePayslipDocument(payslip.id);
+      toast.info('Volante eliminado');
+      if (editingPayslipId === payslip.id) resetPayslipForm();
+      await loadPayslips();
+    } catch (error) {
+      console.error(error);
+      toast.error('No se pudo eliminar el volante de pago');
+    } finally {
+      setDeletingPayslipId(null);
+    }
   };
 
   const handleEditDocument = (document: EmployeeDocument) => {
@@ -3931,6 +4117,237 @@ export function AdminHR() {
     </div>
   );
 
+  const renderPaymentsTab = () => {
+    const publishedCount = payslips.filter((payslip) => payslip.status === 'PUBLISHED').length;
+    const draftCount = payslips.filter((payslip) => payslip.status === 'DRAFT').length;
+    const selectedEmployee = payslipFilterEmployee === 'all' ? null : employeeById.get(payslipFilterEmployee);
+    const totalPages = Math.ceil(payslipTotal / payslipPageSize);
+
+    const payslipActions = (payslip: PayslipDocument): Array<{
+      label: string;
+      icon: React.ComponentType<{ size?: number; className?: string }>;
+      onClick: () => void;
+      disabled?: boolean;
+      danger?: boolean;
+    }> => [
+      {
+        label: 'Descargar',
+        icon: Download,
+        onClick: () => void handlePayslipDownload(payslip),
+        disabled: downloadingPayslipId === payslip.id,
+      },
+      {
+        label: 'Editar',
+        icon: Edit2,
+        onClick: () => handleEditPayslip(payslip),
+      },
+      {
+        label: 'Eliminar',
+        icon: Trash2,
+        onClick: () => void handleDeletePayslip(payslip),
+        disabled: deletingPayslipId === payslip.id,
+        danger: true,
+      },
+    ];
+
+    return (
+      <div className="space-y-4">
+        <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3">
+          <Card className="p-4">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Volantes</div>
+            <div className="mt-1 text-2xl font-bold text-gray-900">{payslipTotal}</div>
+          </Card>
+          <Card className="p-4">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Publicados en vista</div>
+            <div className="mt-1 text-2xl font-bold text-emerald-700">{publishedCount}</div>
+          </Card>
+          <Card className="p-4">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Borradores en vista</div>
+            <div className="mt-1 text-2xl font-bold text-amber-700">{draftCount}</div>
+          </Card>
+          <Card className="p-4">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Filtro empleado</div>
+            <div className="mt-1 text-sm font-semibold text-gray-900 truncate">{selectedEmployee ? getEmployeeName(selectedEmployee) : 'Todos'}</div>
+          </Card>
+        </div>
+
+        <div className="grid xl:grid-cols-[minmax(320px,420px),1fr] gap-4 items-start">
+          <Card className="p-4 space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900">{editingPayslipId ? 'Editar volante' : 'Adjuntar volante de pago'}</h3>
+                <p className="text-xs text-gray-500 mt-0.5">PDF individual por empleado y periodo.</p>
+              </div>
+              {editingPayslipId && (
+                <button type="button" onClick={resetPayslipForm} className="p-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50" title="Cancelar edición">
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <label className="block">
+                <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Empleado</span>
+                <select value={payslipForm.employee} onChange={(event) => setPayslipForm((current) => ({ ...current, employee: event.target.value }))} className={selectCls}>
+                  <option value="">Selecciona empleado</option>
+                  {employees.map((employee) => (
+                    <option key={employee.id} value={employee.id}>{getEmployeeName(employee)} · {employee.employee_code}</option>
+                  ))}
+                </select>
+              </label>
+              <TextInput label="Nombre del volante" value={payslipForm.title} onChange={(value) => setPayslipForm((current) => ({ ...current, title: value }))} placeholder="Ej. Volante de pago primera quincena agosto" />
+              <div className="grid sm:grid-cols-2 gap-3">
+                <TextInput label="Periodo desde" type="date" value={payslipForm.period_start} onChange={(value) => setPayslipForm((current) => ({ ...current, period_start: value }))} />
+                <TextInput label="Periodo hasta" type="date" value={payslipForm.period_end} onChange={(value) => setPayslipForm((current) => ({ ...current, period_end: value }))} />
+              </div>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <TextInput label="Fecha de pago" type="date" value={payslipForm.payment_date} onChange={(value) => setPayslipForm((current) => ({ ...current, payment_date: value }))} />
+                <label className="block">
+                  <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Estado</span>
+                  <select value={payslipForm.status} onChange={(event) => setPayslipForm((current) => ({ ...current, status: event.target.value as PayslipDocumentStatus }))} className={selectCls}>
+                    {PAYSLIP_STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                </label>
+              </div>
+              <label className="block">
+                <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">PDF</span>
+                <input
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  onChange={(event) => setPayslipForm((current) => ({ ...current, file: event.target.files?.[0] ?? null }))}
+                  className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-white"
+                />
+                {editingPayslipId && <p className="mt-1 text-[11px] text-gray-400">Déjalo vacío para conservar el PDF actual.</p>}
+              </label>
+              <TextareaInput label="Notas internas" value={payslipForm.notes} onChange={(value) => setPayslipForm((current) => ({ ...current, notes: value }))} placeholder="Opcional" />
+            </div>
+
+            <button
+              type="button"
+              onClick={() => void handlePayslipSubmit()}
+              disabled={savingPayslip}
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white text-xs font-semibold rounded-xl hover:bg-[#3d5c4e] disabled:opacity-50"
+            >
+              {savingPayslip ? <Loader2 size={14} className="animate-spin" /> : <FileUp size={14} />}
+              {editingPayslipId ? 'Guardar volante' : 'Adjuntar PDF'}
+            </button>
+          </Card>
+
+          <div className="space-y-3 min-w-0">
+            <Card className="p-3 space-y-3">
+              <SearchBar value={payslipSearch} onChange={setPayslipSearch} placeholder="Buscar por empleado, código, título o nota..." className="w-full" />
+              <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-2.5">
+                <select value={payslipFilterEmployee} onChange={(event) => setPayslipFilterEmployee(event.target.value)} className={selectCls}>
+                  <option value="all">Todos los empleados</option>
+                  {employees.map((employee) => <option key={employee.id} value={employee.id}>{getEmployeeName(employee)}</option>)}
+                </select>
+                <select value={payslipFilterStatus} onChange={(event) => setPayslipFilterStatus(event.target.value as 'all' | PayslipDocumentStatus)} className={selectCls}>
+                  <option value="all">Todos los estados</option>
+                  {PAYSLIP_STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+                <input type="date" value={payslipPeriodFrom} onChange={(event) => setPayslipPeriodFrom(event.target.value)} className={inputCls} aria-label="Periodo desde" />
+                <input type="date" value={payslipPeriodTo} onChange={(event) => setPayslipPeriodTo(event.target.value)} className={inputCls} aria-label="Periodo hasta" />
+              </div>
+            </Card>
+
+            {payslipLoading ? (
+              <LoadingState label="Cargando volantes..." />
+            ) : payslips.length === 0 ? (
+              <EmptyState title="Sin volantes de pago con estos filtros." />
+            ) : (
+              <>
+                <div className="md:hidden space-y-2">
+                  {payslips.map((payslip) => {
+                    const employee = employeeById.get(payslip.employee);
+                    return (
+                      <Card key={payslip.id} className="p-4 space-y-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="font-semibold text-gray-900 truncate">{payslip.title}</div>
+                            <div className="text-xs text-gray-500">{employee ? getEmployeeName(employee) : payslip.employee_name}</div>
+                          </div>
+                          <Badge label={payslipStatusLabel(payslip.status)} color={payslipStatusBadge(payslip.status)} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div><span className="text-gray-400">Periodo</span><div className="font-medium text-gray-700">{parseDate(payslip.period_start)} - {parseDate(payslip.period_end)}</div></div>
+                          <div><span className="text-gray-400">Pago</span><div className="font-medium text-gray-700">{parseDate(payslip.payment_date)}</div></div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {payslipActions(payslip).map((action) => {
+                            const Icon = action.icon;
+                            return (
+                              <button key={action.label} type="button" onClick={action.onClick} disabled={action.disabled} className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-semibold disabled:opacity-50 ${action.danger ? 'border-red-100 text-red-600 hover:bg-red-50' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                                <Icon size={13} />
+                                {action.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </Card>
+                    );
+                  })}
+                </div>
+
+                <div className="hidden md:block">
+                  <Table>
+                    <thead>
+                      <tr>
+                        <Th>Empleado</Th>
+                        <Th>Volante</Th>
+                        <Th>Periodo</Th>
+                        <Th>Pago</Th>
+                        <Th>Estado</Th>
+                        <Th>Acciones</Th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {payslips.map((payslip) => {
+                        const employee = employeeById.get(payslip.employee);
+                        return (
+                          <tr key={payslip.id} className="hover:bg-gray-50/50">
+                            <Td>
+                              <div className="flex items-center gap-2 min-w-[180px]">
+                                <EmployeeAvatar employee={employee} name={employee ? getEmployeeName(employee) : payslip.employee_name || 'Empleado'} />
+                                <div className="min-w-0">
+                                  <div className="font-medium text-gray-900 truncate">{employee ? getEmployeeName(employee) : payslip.employee_name}</div>
+                                  <div className="text-[11px] text-gray-400">{employee?.employee_code ?? ''}</div>
+                                </div>
+                              </div>
+                            </Td>
+                            <Td>
+                              <div className="font-medium text-gray-900">{payslip.title}</div>
+                              <div className="text-[11px] text-gray-400 truncate max-w-xs">{payslip.file_name || 'PDF adjunto'}</div>
+                            </Td>
+                            <Td>{parseDate(payslip.period_start)} - {parseDate(payslip.period_end)}</Td>
+                            <Td>{parseDate(payslip.payment_date)}</Td>
+                            <Td><Badge label={payslipStatusLabel(payslip.status)} color={payslipStatusBadge(payslip.status)} /></Td>
+                            <Td className={actionsCellCls}>
+                              <ActionsMenu items={payslipActions(payslip)} />
+                            </Td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </Table>
+                </div>
+              </>
+            )}
+
+            <Pagination
+              currentPage={payslipPage}
+              totalPages={totalPages}
+              totalItems={payslipTotal}
+              itemsPerPage={payslipPageSize}
+              itemsPerPageOptions={PAGE_SIZE_OPTIONS}
+              onPageChange={setPayslipPage}
+              onItemsPerPageChange={setPayslipPageSize}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderAccessTab = () => {
     const visibleAccessPassword = employeeForm.user_password || editingEmployee?.access_password || '';
     const hasSavedCredentials = Boolean(editingEmployee?.user && editingEmployee?.access_password);
@@ -4398,6 +4815,7 @@ export function AdminHR() {
                 { id: 'calendar', label: 'Calendario', icon: CalendarDays, desc: 'Novedades y cumpleaños' },
                 { id: 'orgchart', label: 'Organigrama', icon: Network, desc: 'Jerarquía de la empresa' },
                 { id: 'documents', label: 'Normativa', icon: FileText, desc: 'Reglamento y políticas' },
+                { id: 'payments', label: 'Pagos', icon: Wallet, desc: 'Volantes de pago' },
               ] as const).map((item) => {
                 const Icon = item.icon;
                 const active = activeTab === item.id;
@@ -4423,10 +4841,11 @@ export function AdminHR() {
         </div>
 
         <div className="flex-1 min-w-0 space-y-4 px-4 sm:px-6 md:px-8 lg:px-0 pt-4 lg:pt-0">
-          {activeTab !== 'calendar' && activeTab !== 'vacations' && activeTab !== 'orgchart' && activeTab !== 'documents' && (
+          {activeTab !== 'calendar' && activeTab !== 'vacations' && activeTab !== 'orgchart' && activeTab !== 'documents' && activeTab !== 'payments' && (
             <SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Buscar por nombre, apellido, cédula, cargo, área, sede o correo..." className="w-full" />
           )}
           {activeTab === 'documents' && <AdminCompanyDocuments />}
+          {activeTab === 'payments' && renderPaymentsTab()}
           {activeTab === 'employees' ? (
             <div className="space-y-3 rounded-xl border border-gray-100 bg-white p-3 shadow-sm">
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5">
@@ -4620,15 +5039,13 @@ export function AdminHR() {
                 </label>
               </div>
             </div>
-          ) : (
+          ) : activeTab === 'branches' ? (
             <div className="flex flex-col sm:flex-row gap-3">
-              {activeTab === 'branches' && (
-                <select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)} className={selectCls}>
-                  {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                </select>
-              )}
+              <select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)} className={selectCls}>
+                {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
             </div>
-          )}
+          ) : null}
 
       {isLoading ? (
         <LoadingState label="Cargando información de RRHH..." />

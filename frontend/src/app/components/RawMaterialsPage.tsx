@@ -6,14 +6,19 @@ import {
   CheckCircle,
   FlaskConical,
   Loader2,
+  Minus,
+  Plus,
   Search,
+  ShoppingCart,
   SlidersHorizontal,
   X,
 } from 'lucide-react';
 
+import { useCart } from '../contexts/CartContext';
+import { useToast } from '../contexts/ToastContext';
+import { useUser } from '../contexts/UserContext';
 import { getPublicRawMaterials, type PublicRawMaterial } from '../services/inventory-masters.service';
 import { navigateBack } from '../services/navigate';
-import { openWhatsApp } from '../utils/whatsapp';
 import { Footer } from './Footer';
 import { NavigationBar } from './NavigationBar';
 import { WhatsAppButton } from './WhatsAppButton';
@@ -48,24 +53,20 @@ function groupLabel(material: PublicRawMaterial): string {
 
 function matchesPrice(material: PublicRawMaterial, filter: PriceFilter): boolean {
   if (filter === 'all') return true;
-  const price = material.cost;
+  const price = material.price;
   if (filter === 'low') return price > 0 && price < 25000;
   if (filter === 'mid') return price >= 25000 && price < 100000;
   return price >= 100000;
 }
 
-function contactForMaterial(material: PublicRawMaterial): void {
-  openWhatsApp(
-    [
-      'Hola, quiero comprar materia prima.',
-      `Producto: ${material.name}`,
-      `Codigo: ${material.code || 'sin codigo'}`,
-      `Unidad: ${unitLabel(material)}`,
-    ].join('\n'),
-  );
+function isOutOfStock(material: PublicRawMaterial): boolean {
+  return material.availableQuantity !== null && material.availableQuantity <= 0;
 }
 
 export function RawMaterialsPage({ onLoginClick }: { onLoginClick: () => void }) {
+  const toast = useToast();
+  const { currentUser } = useUser();
+  const { addItem } = useCart();
   const [materials, setMaterials] = useState<PublicRawMaterial[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -75,6 +76,7 @@ export function RawMaterialsPage({ onLoginClick }: { onLoginClick: () => void })
   const [priceFilter, setPriceFilter] = useState<PriceFilter>('all');
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [selectedMaterial, setSelectedMaterial] = useState<PublicRawMaterial | null>(null);
+  const [quantities, setQuantities] = useState<Record<string, number>>({});
 
   useEffect(() => {
     let mounted = true;
@@ -126,7 +128,7 @@ export function RawMaterialsPage({ onLoginClick }: { onLoginClick: () => void })
         return matchesSearch && matchesGroup && matchesUnit && matchesPrice(material, priceFilter);
       })
       .sort((left, right) => {
-        if (sortKey === 'price') return left.cost - right.cost;
+        if (sortKey === 'price') return left.price - right.price;
         if (sortKey === 'recent') return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
         return left.name.localeCompare(right.name, 'es', { numeric: true, sensitivity: 'base' });
       });
@@ -138,6 +140,42 @@ export function RawMaterialsPage({ onLoginClick }: { onLoginClick: () => void })
     setUnitFilter('all');
     setPriceFilter('all');
     setSortKey('name');
+  };
+
+  const getQuantity = (id: string) => quantities[id] ?? 1;
+  const setQuantity = (id: string, value: number) => {
+    setQuantities(current => ({ ...current, [id]: Math.max(1, value) }));
+  };
+
+  const handleAddToCart = async (material: PublicRawMaterial) => {
+    if (!currentUser) {
+      toast.info('Inicia sesion para agregar productos al carrito.');
+      onLoginClick();
+      return;
+    }
+    if (!material.variantId) {
+      toast.warning('Esta materia prima no esta disponible para compra en este momento.');
+      return;
+    }
+    if (!material.price || material.price <= 0) {
+      toast.warning('Esta materia prima aun no tiene precio disponible.');
+      return;
+    }
+    if (isOutOfStock(material)) {
+      toast.warning('Esta materia prima esta agotada.');
+      return;
+    }
+
+    const added = await addItem({
+      variantId: material.variantId,
+      name: material.name,
+      category: groupLabel(material),
+      size: material.presentation || unitLabel(material),
+      price: material.price,
+      image: material.imageUrl,
+      quantity: getQuantity(material.id),
+    });
+    if (added) toast.success(`${material.name} agregado al carrito`);
   };
 
   const activeFilters = [search, groupFilter !== 'all', unitFilter !== 'all', priceFilter !== 'all'].filter(Boolean).length;
@@ -258,7 +296,7 @@ export function RawMaterialsPage({ onLoginClick }: { onLoginClick: () => void })
                       setSelectedMaterial(material);
                     }
                   }}
-                  className="flex min-h-[430px] cursor-pointer flex-col overflow-hidden rounded-lg border border-stone-200 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#1f4b24]/30 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#1f4b24]/20"
+                  className="flex min-h-[460px] cursor-pointer flex-col overflow-hidden rounded-lg border border-stone-200 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#1f4b24]/30 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#1f4b24]/20"
                 >
                   <div className="flex aspect-[4/3] items-center justify-center bg-[#f3f1ec]">
                     {material.imageUrl ? (
@@ -277,9 +315,9 @@ export function RawMaterialsPage({ onLoginClick }: { onLoginClick: () => void })
                         <p className="truncate text-[11px] font-semibold uppercase tracking-wider text-stone-400">{groupLabel(material)}</p>
                         <h2 className="mt-1 min-h-[3.2rem] font-serif text-xl font-semibold leading-tight text-[#17351f] line-clamp-2">{material.name}</h2>
                       </div>
-                      <span className="mt-0.5 inline-flex shrink-0 items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+                      <span className={`mt-0.5 inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${isOutOfStock(material) ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>
                         <CheckCircle className="h-3 w-3" />
-                        Disponible
+                        {isOutOfStock(material) ? 'Agotado' : 'Disponible'}
                       </span>
                     </div>
 
@@ -288,11 +326,11 @@ export function RawMaterialsPage({ onLoginClick }: { onLoginClick: () => void })
                     <div className="grid gap-3">
                       <div>
                         <p className="text-xs text-stone-500">Precio por {unitLabel(material)}</p>
-                        <p className="mt-1 font-serif text-3xl font-semibold leading-none text-[#17351f]">{formatPrice(material.cost)}</p>
+                        <p className="mt-1 font-serif text-3xl font-semibold leading-none text-[#17351f]">{formatPrice(material.price)}</p>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <span className="rounded-full bg-[#eef4ee] px-3 py-1.5 text-xs font-semibold text-[#1f4b24]">
-                          Unidad: {unitLabel(material)}
+                          {material.presentation || `1 ${unitLabel(material)}`}
                         </span>
                         {material.tracksBatches && (
                           <span className="rounded-full bg-stone-100 px-3 py-1.5 text-xs font-semibold text-stone-600">
@@ -306,16 +344,32 @@ export function RawMaterialsPage({ onLoginClick }: { onLoginClick: () => void })
                       <p className="mt-4 line-clamp-2 text-sm leading-6 text-stone-500">{material.description}</p>
                     )}
 
-                    <button
-                      type="button"
-                      onClick={event => {
-                        event.stopPropagation();
-                        contactForMaterial(material);
-                      }}
-                      className="mt-auto inline-flex h-11 w-full items-center justify-center rounded-lg bg-[#1f4b24] px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#17351f]"
-                    >
-                      Solicitar informacion
-                    </button>
+                    <div className="mt-auto grid gap-2 pt-4 sm:grid-cols-[116px_minmax(0,1fr)]">
+                      <div
+                        className="grid h-10 min-w-[116px] grid-cols-3 overflow-hidden rounded-lg border border-stone-200 bg-white text-[#17351f]"
+                        onClick={event => event.stopPropagation()}
+                      >
+                        <button type="button" onClick={() => setQuantity(material.id, getQuantity(material.id) - 1)} className="flex items-center justify-center hover:bg-stone-50" aria-label="Disminuir cantidad">
+                          <Minus className="h-3.5 w-3.5" />
+                        </button>
+                        <div className="flex items-center justify-center border-x border-stone-200 font-serif text-base font-semibold">{getQuantity(material.id)}</div>
+                        <button type="button" onClick={() => setQuantity(material.id, getQuantity(material.id) + 1)} className="flex items-center justify-center hover:bg-stone-50" aria-label="Aumentar cantidad">
+                          <Plus className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={event => {
+                          event.stopPropagation();
+                          void handleAddToCart(material);
+                        }}
+                        disabled={!material.variantId || !material.price || isOutOfStock(material)}
+                        className="inline-flex h-10 min-w-0 items-center justify-center gap-2 rounded-lg bg-[#1f4b24] px-3 text-sm font-semibold leading-tight text-white shadow-sm transition-colors hover:bg-[#17351f] disabled:cursor-not-allowed disabled:bg-stone-300"
+                      >
+                        <ShoppingCart className="h-4 w-4" strokeWidth={1.8} />
+                        <span>Agregar</span>
+                      </button>
+                    </div>
                   </div>
                 </article>
               ))}
@@ -354,11 +408,11 @@ export function RawMaterialsPage({ onLoginClick }: { onLoginClick: () => void })
                   </p>
                   <div className="my-5 h-px bg-stone-100" />
                   <p className="text-sm text-stone-500">Precio por {unitLabel(selectedMaterial)}</p>
-                  <p className="mt-1 font-serif text-4xl font-semibold text-[#17351f]">{formatPrice(selectedMaterial.cost)}</p>
+                  <p className="mt-1 font-serif text-4xl font-semibold text-[#17351f]">{formatPrice(selectedMaterial.price)}</p>
                   <div className="mt-5 grid gap-3 sm:grid-cols-2">
                     <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-wider text-stone-400">Unidad</p>
-                      <p className="mt-1 text-sm font-semibold text-stone-800">{unitLabel(selectedMaterial)}</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-stone-400">Presentacion</p>
+                      <p className="mt-1 text-sm font-semibold text-stone-800">{selectedMaterial.presentation || unitLabel(selectedMaterial)}</p>
                     </div>
                     <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-3">
                       <p className="text-[11px] font-semibold uppercase tracking-wider text-stone-400">Codigo</p>
@@ -370,10 +424,15 @@ export function RawMaterialsPage({ onLoginClick }: { onLoginClick: () => void })
                   )}
                   <button
                     type="button"
-                    onClick={() => contactForMaterial(selectedMaterial)}
-                    className="mt-6 inline-flex h-12 w-full items-center justify-center rounded-lg bg-[#1f4b24] px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#17351f]"
+                    onClick={() => {
+                      void handleAddToCart(selectedMaterial);
+                      setSelectedMaterial(null);
+                    }}
+                    disabled={!selectedMaterial.variantId || !selectedMaterial.price || isOutOfStock(selectedMaterial)}
+                    className="mt-6 inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-[#1f4b24] px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#17351f] disabled:cursor-not-allowed disabled:bg-stone-300"
                   >
-                    Solicitar informacion
+                    <ShoppingCart className="h-4 w-4" />
+                    Agregar al carrito
                   </button>
                 </div>
               </div>

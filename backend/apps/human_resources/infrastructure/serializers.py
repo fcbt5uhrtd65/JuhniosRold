@@ -26,6 +26,7 @@ from .models import (
     PayrollItem,
     PayrollLegalParameter,
     PayrollPeriod,
+    PayslipDocument,
     PerformanceReview,
     PublicHoliday,
     RawBiometricPunch,
@@ -338,6 +339,45 @@ class PayrollPeriodSerializer(serializers.ModelSerializer):
             "status", "calculated_at", "calculated_by", "approved_at",
             "approved_by", "paid_at", "paid_by",
         )
+
+
+class PayslipDocumentSerializer(serializers.ModelSerializer):
+    employee_name = serializers.SerializerMethodField()
+    file_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PayslipDocument
+        fields = "__all__"
+        read_only_fields = ("uploaded_by", "published_at", "employee_name", "file_name")
+
+    def get_employee_name(self, obj):
+        employee = obj.employee
+        return f"{employee.first_name} {employee.last_name}".strip() or employee.employee_code
+
+    def get_file_name(self, obj):
+        return Path(obj.file.name).name if obj.file else ""
+
+    def validate_file(self, file):
+        if not file:
+            return file
+        extension = Path(file.name).suffix.lower().lstrip(".")
+        if extension != "pdf":
+            raise serializers.ValidationError("El volante de pago debe ser un archivo PDF.")
+        content_type = getattr(file, "content_type", None)
+        if content_type and content_type.lower() != "application/pdf":
+            raise serializers.ValidationError("El volante de pago debe ser un archivo PDF.")
+        return file
+
+    def validate(self, attrs):
+        period_start = attrs.get("period_start", getattr(self.instance, "period_start", None))
+        period_end = attrs.get("period_end", getattr(self.instance, "period_end", None))
+        if period_start and period_end and period_end < period_start:
+            raise serializers.ValidationError({"period_end": "La fecha final debe ser posterior o igual a la fecha inicial."})
+        if not self.instance and not attrs.get("file"):
+            raise serializers.ValidationError({"file": "Debes adjuntar el PDF del volante de pago."})
+        if not str(attrs.get("title", getattr(self.instance, "title", "")) or "").strip():
+            raise serializers.ValidationError({"title": "Indica un nombre para el volante de pago."})
+        return attrs
 
 
 class PerformanceReviewSerializer(serializers.ModelSerializer):
