@@ -1701,6 +1701,7 @@ export function TextInput({
   required = false,
   placeholder = '',
   disabled = false,
+  autoComplete,
   error,
 }: {
   label: string;
@@ -1710,6 +1711,7 @@ export function TextInput({
   required?: boolean;
   placeholder?: string;
   disabled?: boolean;
+  autoComplete?: string;
   error?: string;
 }) {
   return (
@@ -1723,6 +1725,7 @@ export function TextInput({
         className={error ? `${inputCls} border-red-400 focus:border-red-500 focus:ring-red-200` : inputCls}
         placeholder={placeholder}
         disabled={disabled}
+        autoComplete={autoComplete}
       />
       {error && <span className="block text-[11px] text-red-500 mt-1">{error}</span>}
     </label>
@@ -3141,8 +3144,7 @@ export function AdminHR() {
 
   const handleGenerateAccessCredentials = () => {
     if (!canManageAccessCredentials) return;
-    const email = employeeForm.user_email.trim()
-      || generateAccessEmail(employeeForm.first_name, employeeForm.last_name, employees, editingEmployee?.id);
+    const email = generateAccessEmail(employeeForm.first_name, employeeForm.last_name, employees, editingEmployee?.id);
     const password = generateAccessPassword();
     setEmployeeForm((current) => ({
       ...current,
@@ -4432,6 +4434,7 @@ export function AdminHR() {
             label="Usuario / correo"
             type="email"
             value={employeeForm.user_email}
+            autoComplete="off"
             error={employeeForm.user_email && !isValidEmailFormat(employeeForm.user_email) ? 'Ingresa un correo válido (ej. nombre@dominio.com)' : undefined}
             onChange={(value) => {
               const email = value.trim().toLowerCase();
@@ -4452,6 +4455,7 @@ export function AdminHR() {
                 className={inputCls}
                 placeholder={editingEmployee?.user ? 'Conserva la clave actual si queda vacía' : 'Genera una clave segura'}
                 disabled={!canManageAccessCredentials}
+                autoComplete="new-password"
               />
               <button
                 type="button"
