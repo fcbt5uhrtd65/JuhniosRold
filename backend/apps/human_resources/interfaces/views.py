@@ -1370,7 +1370,7 @@ class CompanyDocumentViewSet(SoftDeleteModelViewSet):
     consultar y descargar, pero solo RRHH/Admin puede crear, editar o
     eliminar — incluyendo publicar nuevas versiones."""
 
-    queryset = CompanyDocument.objects.prefetch_related("versions", "versions__uploaded_by")
+    queryset = CompanyDocument.objects.prefetch_related("branches", "versions", "versions__uploaded_by")
     serializer_class = CompanyDocumentSerializer
     permission_classes = (HasComponentAccess,)
     required_component = "human_resources.company_documents"
@@ -1400,12 +1400,16 @@ class CompanyDocumentViewSet(SoftDeleteModelViewSet):
         queryset = super().get_queryset()
         if self.action in {"list", "retrieve"} and not self._is_manager():
             today = timezone.localdate()
+            employee = getattr(self.request.user, "employee_profile", None)
+            branch_id = getattr(employee, "branch_id", None)
             queryset = queryset.filter(
                 versions__deleted_at__isnull=True,
             ).filter(
                 Q(versions__visible_from__isnull=True) | Q(versions__visible_from__lte=today),
             ).filter(
                 Q(versions__visible_until__isnull=True) | Q(versions__visible_until__gte=today),
+            ).filter(
+                Q(branches__isnull=True) | Q(branches__id=branch_id),
             ).distinct()
         return queryset
 

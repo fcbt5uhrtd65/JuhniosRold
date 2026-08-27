@@ -465,6 +465,7 @@ class CompanyDocumentSerializer(serializers.ModelSerializer):
 
     current_version = serializers.SerializerMethodField()
     versions_count = serializers.IntegerField(source="versions.count", read_only=True)
+    branch_names = serializers.SerializerMethodField()
 
     class Meta:
         model = CompanyDocument
@@ -476,6 +477,9 @@ class CompanyDocumentSerializer(serializers.ModelSerializer):
         else:
             version = obj.current_version
         return CompanyDocumentVersionSerializer(version).data if version else None
+
+    def get_branch_names(self, obj):
+        return [branch.name for branch in obj.branches.all()]
 
     def validate_name(self, value):
         if not value.strip():

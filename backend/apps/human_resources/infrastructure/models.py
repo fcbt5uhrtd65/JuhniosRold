@@ -577,6 +577,12 @@ class CompanyDocument(BaseModel):
     category = models.CharField(max_length=20, choices=Category.choices, default=Category.REGULATION)
     name = models.CharField(max_length=180)
     description = models.TextField(blank=True)
+    branches = models.ManyToManyField(
+        "employees.Branch",
+        blank=True,
+        related_name="company_documents",
+        help_text="Sedes a las que aplica. Si se deja vacio, el documento aplica a todos los colaboradores.",
+    )
 
     class Meta(BaseModel.Meta):
         ordering = ("category", "name")

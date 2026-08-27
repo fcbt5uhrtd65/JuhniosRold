@@ -25,6 +25,7 @@ import {
   type CompanyDocumentCategory,
   type CompanyDocumentVersion,
 } from '../../services/human-resources.service';
+import { getBranches, type Branch } from '../../services/employees.service';
 import { Badge, type BadgeColor, Modal, EmptyState, LoadingState, inputCls } from './AdminUI';
 import { SearchBar } from './SearchBar';
 
@@ -69,6 +70,7 @@ export function AdminCompanyDocuments() {
   const toast = useToast();
   const [category, setCategory] = useState<CompanyDocumentCategory>('REGULATION');
   const [documents, setDocuments] = useState<CompanyDocument[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
@@ -80,6 +82,7 @@ export function AdminCompanyDocuments() {
   const [showNewDocumentModal, setShowNewDocumentModal] = useState(false);
   const [newDocumentName, setNewDocumentName] = useState('');
   const [newDocumentDescription, setNewDocumentDescription] = useState('');
+  const [newDocumentBranches, setNewDocumentBranches] = useState<string[]>([]);
   const [newDocumentFile, setNewDocumentFile] = useState<File | null>(null);
   const [newDocumentVisibleFrom, setNewDocumentVisibleFrom] = useState('');
   const [newDocumentVisibleUntil, setNewDocumentVisibleUntil] = useState('');
@@ -115,6 +118,21 @@ export function AdminCompanyDocuments() {
     void loadDocuments();
   }, [loadDocuments]);
 
+  useEffect(() => {
+    let mounted = true;
+    getBranches({ limit: 300, status: 'ACTIVE' })
+      .then((res) => {
+        if (mounted) setBranches(res.data);
+      })
+      .catch((error) => {
+        console.error(error);
+        toast.error('No se pudieron cargar las sedes');
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [toast]);
+
   const filteredDocuments = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
     if (!query) return documents;
@@ -148,9 +166,25 @@ export function AdminCompanyDocuments() {
     setShowNewDocumentModal(false);
     setNewDocumentName('');
     setNewDocumentDescription('');
+    setNewDocumentBranches([]);
     setNewDocumentFile(null);
     setNewDocumentVisibleFrom('');
     setNewDocumentVisibleUntil('');
+  };
+
+  const toggleNewDocumentBranch = (branchId: string) => {
+    setNewDocumentBranches((current) => (
+      current.includes(branchId)
+        ? current.filter((id) => id !== branchId)
+        : [...current, branchId]
+    ));
+  };
+
+  const getDocumentScopeLabel = (document: CompanyDocument) => {
+    const names = document.branch_names ?? [];
+    if (names.length === 0) return 'Todos los colaboradores';
+    if (names.length <= 2) return names.join(', ');
+    return `${names.slice(0, 2).join(', ')} +${names.length - 2}`;
   };
 
   const handleCreateDocument = async () => {
@@ -172,6 +206,7 @@ export function AdminCompanyDocuments() {
         category,
         name: newDocumentName.trim(),
         description: newDocumentDescription.trim(),
+        branches: newDocumentBranches,
       });
       await createCompanyDocumentVersion(document.id, {
         file: newDocumentFile,
@@ -330,6 +365,7 @@ export function AdminCompanyDocuments() {
                     {selectedDocument.description && (
                       <p className="text-sm text-gray-600 mt-2">{selectedDocument.description}</p>
                     )}
+                    <p className="text-xs text-gray-400 mt-2">Aplica a: {getDocumentScopeLabel(selectedDocument)}</p>
                   </div>
                 </div>
 

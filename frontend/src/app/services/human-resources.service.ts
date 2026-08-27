@@ -611,6 +611,8 @@ export interface CompanyDocument {
   category: CompanyDocumentCategory;
   name: string;
   description: string;
+  branches: string[];
+  branch_names: string[];
   current_version: CompanyDocumentVersion | null;
   versions_count: number;
   created_at: string;
@@ -715,6 +717,7 @@ export interface CompanyDocumentPayload {
   category: CompanyDocumentCategory;
   name: string;
   description?: string;
+  branches?: string[];
 }
 
 export interface CompanyDocumentVersionPayload {
