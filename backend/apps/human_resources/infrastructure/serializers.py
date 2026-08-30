@@ -1,4 +1,5 @@
-from datetime import timedelta
+import json
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from django.db import DatabaseError
@@ -193,6 +194,23 @@ class VacationRequestSerializer(serializers.ModelSerializer):
             loan_amount = attrs.get("loan_amount", getattr(instance, "loan_amount", None))
             if loan_amount is not None and loan_amount <= 0:
                 errors["loan_amount"] = ["El monto debe ser mayor a cero."]
+            schedule = attrs.get("loan_deduction_schedule", getattr(instance, "loan_deduction_schedule", []))
+            if isinstance(schedule, str):
+                try:
+                    schedule = json.loads(schedule)
+                    attrs["loan_deduction_schedule"] = schedule
+                except ValueError:
+                    errors["loan_deduction_schedule"] = ["Los cortes de descuento deben enviarse como una lista JSON valida."]
+            if not errors.get("loan_deduction_schedule"):
+                normalized_schedule, schedule_errors = self._validate_loan_deduction_schedule(
+                    schedule,
+                    attrs.get("loan_installments_count", getattr(instance, "loan_installments_count", None)),
+                    loan_amount,
+                )
+                if schedule_errors:
+                    errors["loan_deduction_schedule"] = schedule_errors
+                else:
+                    attrs["loan_deduction_schedule"] = normalized_schedule
         elif is_schedule_change:
             if not str(attrs.get("reason", getattr(instance, "reason", "")) or "").strip():
                 errors["reason"] = ["Indica el motivo del cambio de horario."]
@@ -225,6 +243,48 @@ class VacationRequestSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(errors)
 
         return attrs
+
+    def _validate_loan_deduction_schedule(self, schedule, installments_count, loan_amount=None):
+        if not isinstance(schedule, list) or not schedule:
+            return [], ["Indica los cortes de nomina autorizados para descontar el prestamo."]
+
+        normalized = []
+        previous_date = None
+        for index, item in enumerate(schedule, start=1):
+            if not isinstance(item, dict):
+                return [], [f"El corte {index} debe ser un objeto con fecha y valor."]
+
+            raw_date = item.get("date") or item.get("cutoff_date")
+            raw_amount = item.get("amount")
+            try:
+                parsed_date = raw_date if isinstance(raw_date, date) else datetime.strptime(str(raw_date), "%Y-%m-%d").date()
+            except (TypeError, ValueError):
+                return [], [f"El corte {index} debe tener una fecha valida YYYY-MM-DD."]
+
+            try:
+                parsed_amount = float(raw_amount)
+            except (TypeError, ValueError):
+                return [], [f"El corte {index} debe tener un valor numerico."]
+            if parsed_amount <= 0:
+                return [], [f"El valor del corte {index} debe ser mayor a cero."]
+            if previous_date and parsed_date <= previous_date:
+                return [], ["Los cortes de descuento deben estar en orden cronologico."]
+
+            normalized.append({
+                "installment": int(item.get("installment") or index),
+                "date": parsed_date.isoformat(),
+                "amount": round(parsed_amount, 2),
+            })
+            previous_date = parsed_date
+
+        if installments_count and len(normalized) != int(installments_count):
+            return [], ["La cantidad de cortes debe coincidir con el numero de cuotas."]
+        if loan_amount is not None:
+            scheduled_cents = sum(round(float(cut["amount"]) * 100) for cut in normalized)
+            loan_cents = round(float(loan_amount) * 100)
+            if scheduled_cents != loan_cents:
+                return [], ["La suma de los cortes autorizados debe coincidir con el monto solicitado."]
+        return normalized, []
 
     def _serialize_related(self, obj, related_name, serializer_class):
         if self.context.get("include_request_related") is False:

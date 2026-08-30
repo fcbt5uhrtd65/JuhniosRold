@@ -1,4 +1,5 @@
 import io
+import json
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -243,6 +244,12 @@ class VacationRequestPortalTests(TestCase):
                 "loan_concept": "Calamidad domestica",
                 "loan_frequency": "BIWEEKLY",
                 "loan_installments_count": "4",
+                "loan_deduction_schedule": json.dumps([
+                    {"installment": 1, "date": "2026-08-15", "amount": 125000},
+                    {"installment": 2, "date": "2026-08-30", "amount": 125000},
+                    {"installment": 3, "date": "2026-09-15", "amount": 125000},
+                    {"installment": 4, "date": "2026-09-30", "amount": 125000},
+                ]),
                 "loan_requester_signature": loan_signature,
             },
             format="multipart",

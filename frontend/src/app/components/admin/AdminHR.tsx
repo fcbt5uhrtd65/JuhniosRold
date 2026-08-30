@@ -5921,6 +5921,28 @@ export function AdminHR() {
                     </div>
                   ))}
                 </div>
+                {viewingRequest.loan_deduction_schedule?.length > 0 && (
+                  <div className="mt-4 overflow-x-auto rounded-xl border border-gray-100">
+                    <table className="w-full text-xs">
+                      <thead className="bg-gray-50 text-[10px] uppercase text-gray-400">
+                        <tr>
+                          <th className="px-3 py-2 text-left">Cuota</th>
+                          <th className="px-3 py-2 text-left">Corte de nómina</th>
+                          <th className="px-3 py-2 text-right">Valor autorizado</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {viewingRequest.loan_deduction_schedule.map((cut) => (
+                          <tr key={`${cut.installment}-${cut.date}`}>
+                            <td className="px-3 py-2 text-gray-500">{cut.installment}</td>
+                            <td className="px-3 py-2 text-gray-700">{parseDate(cut.date)}</td>
+                            <td className="px-3 py-2 text-right font-semibold text-gray-900">${Number(cut.amount).toLocaleString('es-CO')}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </Card>
             )}
             {viewingRequest.request_type === 'OVERTIME' && (

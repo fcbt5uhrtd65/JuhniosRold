@@ -256,6 +256,12 @@ export interface OvertimeShiftInput {
   notes?: string;
 }
 
+export interface LoanDeductionCut {
+  installment: number;
+  date: string;
+  amount: number;
+}
+
 export interface VacationRequest {
   id: string;
   employee: string;
@@ -284,6 +290,7 @@ export interface VacationRequest {
   loan_frequency: LoanFrequency | '';
   loan_installments_count: number | null;
   loan_expense_number: string;
+  loan_deduction_schedule: LoanDeductionCut[];
   loan_requester_signature: string | null;
   requested_work_schedule_template: string | null;
   requested_work_schedule_days: EmployeeWorkScheduleDayInput[];
@@ -667,6 +674,7 @@ export interface VacationRequestPayload {
   loan_concept?: string;
   loan_frequency?: LoanFrequency | '';
   loan_installments_count?: number | null;
+  loan_deduction_schedule?: LoanDeductionCut[];
   loan_requester_signature?: File | null;
   requested_work_schedule_template?: string | null;
   requested_work_schedule_days?: EmployeeWorkScheduleDayInput[];

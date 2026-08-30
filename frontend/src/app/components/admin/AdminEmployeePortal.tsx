@@ -40,6 +40,7 @@ import {
   rejectVacationRequest,
   type EmployeeWorkScheduleDayInput,
   type HRRequestSubtype,
+  type LoanDeductionCut,
   type LoanFrequency,
   type OvertimeShiftInput,
   type VacationRequest,
@@ -111,6 +112,8 @@ interface VacationFormState {
   loan_concept: string;
   loan_frequency: LoanFrequency | '';
   loan_installments_count: string;
+  loan_deduction_start_date: string;
+  loan_deduction_schedule: LoanDeductionCut[];
   requested_work_schedule_days: ScheduleDayDraft[];
   schedule_change_start_date: string;
 }
@@ -135,6 +138,8 @@ const EMPTY_FORM: VacationFormState = {
   loan_concept: '',
   loan_frequency: '',
   loan_installments_count: '',
+  loan_deduction_start_date: '',
+  loan_deduction_schedule: [],
   requested_work_schedule_days: DEFAULT_SCHEDULE_CHANGE_DAYS,
   schedule_change_start_date: '',
 };
@@ -166,6 +171,57 @@ function getDayCount(startDate: string, endDate: string): number {
   const end = new Date(endDate);
   const diff = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
   return Math.max(1, diff + 1);
+}
+
+function toDateInputValue(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function monthLastDay(year: number, monthIndex: number): number {
+  return new Date(year, monthIndex + 1, 0).getDate();
+}
+
+function nextPayrollCutDate(fromValue: string, frequency: LoanFrequency, offset: number): string {
+  const [year, month, day] = fromValue.split('-').map(Number);
+  const base = new Date(year, month - 1, day || 1);
+  if (frequency === 'MONTHLY') {
+    const target = new Date(base.getFullYear(), base.getMonth() + offset, 1);
+    target.setDate(monthLastDay(target.getFullYear(), target.getMonth()));
+    return toDateInputValue(target);
+  }
+
+  let candidate = new Date(base.getFullYear(), base.getMonth(), day <= 15 ? 15 : monthLastDay(base.getFullYear(), base.getMonth()));
+  for (let i = 0; i < offset; i += 1) {
+    const currentDay = candidate.getDate();
+    if (currentDay <= 15) {
+      candidate = new Date(candidate.getFullYear(), candidate.getMonth(), monthLastDay(candidate.getFullYear(), candidate.getMonth()));
+    } else {
+      candidate = new Date(candidate.getFullYear(), candidate.getMonth() + 1, 15);
+    }
+  }
+  return toDateInputValue(candidate);
+}
+
+function buildLoanDeductionSchedule(amountValue: string, installmentsValue: string, frequency: LoanFrequency | '', startDate: string): LoanDeductionCut[] {
+  const amount = Number(amountValue);
+  const installments = Number(installmentsValue);
+  if (!amount || Number.isNaN(amount) || !installments || Number.isNaN(installments) || installments <= 0 || !frequency || !startDate) {
+    return [];
+  }
+  const baseCents = Math.floor((amount * 100) / installments);
+  let remainingCents = Math.round(amount * 100);
+  return Array.from({ length: installments }, (_, index) => {
+    const amountCents = index === installments - 1 ? remainingCents : baseCents;
+    remainingCents -= amountCents;
+    return {
+      installment: index + 1,
+      date: nextPayrollCutDate(startDate, frequency, index),
+      amount: amountCents / 100,
+    };
+  });
 }
 
 function formatTime(value: string | null | undefined): string {
@@ -604,6 +660,19 @@ export function AdminEmployeePortal() {
       toast.error('Indica si el pago es quincenal o mensual y el número de cuotas');
       return;
     }
+    if (form.loan_deduction_schedule.length !== Number(form.loan_installments_count)) {
+      toast.error('Genera o ajusta los cortes de descuento para que coincidan con las cuotas');
+      return;
+    }
+    if (form.loan_deduction_schedule.some((cut) => !cut.date || !cut.amount || cut.amount <= 0)) {
+      toast.error('Cada corte de descuento debe tener fecha y valor mayor a cero');
+      return;
+    }
+    const scheduledAmount = form.loan_deduction_schedule.reduce((total, cut) => total + Number(cut.amount || 0), 0);
+    if (Math.round(scheduledAmount * 100) !== Math.round(amount * 100)) {
+      toast.error('La suma de los cortes debe coincidir con el monto solicitado');
+      return;
+    }
     if (!loanSignatureFile) {
       toast.error('Firma la solicitud de préstamo (dibuja o sube tu firma)');
       return;
@@ -625,6 +694,7 @@ export function AdminEmployeePortal() {
         loan_concept: form.loan_concept.trim(),
         loan_frequency: form.loan_frequency,
         loan_installments_count: Number(form.loan_installments_count),
+        loan_deduction_schedule: form.loan_deduction_schedule,
         loan_requester_signature: loanSignatureFile,
       });
       toast.success('Solicitud de préstamo enviada a Tesorería');
@@ -1355,6 +1425,90 @@ export function AdminEmployeePortal() {
                   </div>
                 </div>
 
+                <div className="rounded-xl border border-gray-100 bg-gray-50/60 p-4">
+                  <div className="grid sm:grid-cols-[1fr_auto] gap-3 items-end">
+                    <div>
+                      <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Primer corte de descuento</label>
+                      <input
+                        type="date"
+                        value={form.loan_deduction_start_date}
+                        onChange={(event) => setForm({ ...form, loan_deduction_start_date: event.target.value })}
+                        className={inputCls}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const schedule = buildLoanDeductionSchedule(
+                          form.loan_amount,
+                          form.loan_installments_count,
+                          form.loan_frequency,
+                          form.loan_deduction_start_date,
+                        );
+                        if (schedule.length === 0) {
+                          toast.error('Indica monto, forma de pago, numero de cuotas y primer corte');
+                          return;
+                        }
+                        setForm({ ...form, loan_deduction_schedule: schedule });
+                      }}
+                      className="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-[#2a4038] text-white rounded-xl text-xs font-semibold hover:bg-[#3d5c4e] transition-colors"
+                    >
+                      <CalendarClock size={14} />
+                      Generar cortes
+                    </button>
+                  </div>
+
+                  {form.loan_deduction_schedule.length > 0 && (
+                    <div className="mt-3 overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="text-left text-[10px] uppercase text-gray-400 border-b border-gray-200">
+                            <th className="py-2 pr-3">Cuota</th>
+                            <th className="py-2 pr-3">Corte de nomina</th>
+                            <th className="py-2 pr-3">Valor autorizado</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {form.loan_deduction_schedule.map((cut, index) => (
+                            <tr key={cut.installment} className="border-b border-gray-100 last:border-0">
+                              <td className="py-2 pr-3 text-gray-500">{cut.installment}</td>
+                              <td className="py-2 pr-3">
+                                <input
+                                  type="date"
+                                  value={cut.date}
+                                  onChange={(event) => {
+                                    const schedule = form.loan_deduction_schedule.map((item, itemIndex) =>
+                                      itemIndex === index ? { ...item, date: event.target.value } : item,
+                                    );
+                                    setForm({ ...form, loan_deduction_schedule: schedule });
+                                  }}
+                                  className={inputCls}
+                                />
+                              </td>
+                              <td className="py-2 pr-3">
+                                <input
+                                  type="number"
+                                  min="1"
+                                  step="0.01"
+                                  value={cut.amount}
+                                  onChange={(event) => {
+                                    const schedule = form.loan_deduction_schedule.map((item, itemIndex) =>
+                                      itemIndex === index ? { ...item, amount: Number(event.target.value) } : item,
+                                    );
+                                    setForm({ ...form, loan_deduction_schedule: schedule });
+                                  }}
+                                  className={inputCls}
+                                />
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  <p className="text-[11px] text-gray-400 mt-2">Estos cortes quedan firmados por el trabajador como autorizacion expresa de descuento.</p>
+                </div>
+
                 <div className="p-4 border border-amber-200 bg-amber-50 rounded-xl text-xs text-amber-800 leading-relaxed">
                   Autorización de descuento: recibí de la empresa <strong>PRODUCTOS JUHNIOS ROLD SAS</strong>, identificada en el
                   encabezado de este documento, la suma arriba mencionada en calidad de préstamo. Autorizo expresamente para
@@ -1931,6 +2085,28 @@ export function AdminEmployeePortal() {
                       </div>
                     ))}
                   </dl>
+                  {selectedRequest.loan_deduction_schedule?.length > 0 && (
+                    <div className="mt-3 rounded-xl border border-gray-100 overflow-hidden">
+                      <table className="w-full text-xs">
+                        <thead className="bg-gray-50 text-[10px] uppercase text-gray-400">
+                          <tr>
+                            <th className="px-3 py-2 text-left">Cuota</th>
+                            <th className="px-3 py-2 text-left">Corte</th>
+                            <th className="px-3 py-2 text-right">Valor</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {selectedRequest.loan_deduction_schedule.map((cut) => (
+                            <tr key={`${cut.installment}-${cut.date}`}>
+                              <td className="px-3 py-2 text-gray-500">{cut.installment}</td>
+                              <td className="px-3 py-2 text-gray-700">{formatDate(cut.date)}</td>
+                              <td className="px-3 py-2 text-right font-semibold text-gray-900">${Number(cut.amount).toLocaleString('es-CO')}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               )}
 

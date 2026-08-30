@@ -169,6 +169,38 @@ def _loan_frequency_label(vacation):
     return _safe(vacation.get_loan_frequency_display()) if vacation.loan_frequency else "-"
 
 
+def _remuneration_label(vacation):
+    if _is_loan(vacation):
+        return "No aplica"
+    if _is_overtime(vacation):
+        return "Remunerado por horas extra"
+    if vacation.is_remunerated is None:
+        return "Pendiente por definir"
+    return "Remunerado" if vacation.is_remunerated else "No remunerado"
+
+
+def _non_remunerated_action_label(vacation):
+    if _is_loan(vacation) or _is_overtime(vacation):
+        return "-"
+    if vacation.is_remunerated is not False:
+        return "-"
+    if vacation.hours_count not in (None, ""):
+        return f"Descontar {float(vacation.hours_count):g} h de tiempo, no de salario."
+    if vacation.days_count not in (None, ""):
+        return f"Descontar {float(vacation.days_count):g} dia(s) de tiempo, no de salario."
+    return "Descontar el tiempo correspondiente, no de salario."
+
+
+def _period_mode_label(vacation):
+    if vacation.is_full_day:
+        return "Jornada completa"
+    if vacation.start_time and vacation.end_time:
+        return "Rango horario"
+    if vacation.start_time:
+        return "Desde una hora hasta fin de jornada"
+    return "-"
+
+
 def _status_color(status):
     status = _safe(status, "").upper()
     if "APROB" in status or status in {"APPROVED", "FINALIZED"}:
@@ -394,6 +426,35 @@ def _draw_body(c, x0, x1, y, vacation, employee, compact=False):
     y = _draw_rich_paragraph(c, x0, y, period_parts, w, size=10, leading=15)
     y -= 14
 
+    detail_rows = [
+        ("Tipo de solicitud", _request_type_label(vacation)),
+        ("Subtipo", vacation.get_subtype_display() if vacation.subtype else "-"),
+        ("Fecha de solicitud", _datetime_label(vacation.created_at)),
+        ("Sede", hire_branch),
+        ("Modalidad", _period_mode_label(vacation)),
+        ("Periodo", f"{_date_label(vacation.start_date)} a {_date_label(vacation.end_date)}"),
+        ("Hora inicio", _time_label(vacation.start_time) if vacation.start_time else "-"),
+        ("Hora fin", _time_label(vacation.end_time) if vacation.end_time else "-"),
+        ("Total dias", f"{float(vacation.days_count):g}" if vacation.days_count not in (None, "") else "-"),
+        ("Total horas", _calculate_hours_label(vacation)),
+        ("Remuneracion", _remuneration_label(vacation)),
+        ("Accion si no es remunerado", _non_remunerated_action_label(vacation)),
+    ]
+    if _is_overtime(vacation):
+        detail_rows[10] = ("Remuneracion", "Horas extra remuneradas")
+        detail_rows[11] = ("Turnos registrados", str(vacation.overtime_shifts.count()))
+
+    _text(c, x0, y, "Detalle claro de la solicitud", size=10.5, bold=True, color=TEXT)
+    y -= 18
+    col_w = w / 2
+    for row_start in range(0, len(detail_rows), 2):
+        row_height = 0
+        for col, (label, value) in enumerate(detail_rows[row_start:row_start + 2]):
+            col_x = x0 + col * col_w
+            row_height = max(row_height, _draw_key_value_cell(c, col_x, y, label, value, col_w, label_width=118, compact=compact))
+        y -= row_height + 5
+    y -= 10
+
     reason = vacation.reason or vacation.description or "No se registró un motivo adicional."
     reason_parts = [("Motivo o descripción registrada por el(la) solicitante: ", True), (f"“{reason}”", False)]
     y = _draw_rich_paragraph(c, x0, y, reason_parts, w, size=10, leading=15, align="left")
@@ -434,6 +495,30 @@ def _draw_loan_details(c, x0, x1, y, vacation, employee, compact=False):
             row_height = max(row_height, _draw_key_value_cell(c, col_x, y, label, value, col_w, label_width=94 if compact else 118, compact=compact))
         y -= row_height + (3 if compact else 5)
     y -= 8 if compact else 15
+
+    deduction_schedule = getattr(vacation, "loan_deduction_schedule", None) or []
+    if deduction_schedule:
+        _text(c, x0, y, "Cortes de nomina autorizados", size=9.2 if compact else 10.5, bold=True, color=TEXT)
+        y -= 12 if compact else 16
+        header_size = 7.2 if compact else 8
+        row_size = 7 if compact else 8
+        _text(c, x0, y, "Cuota", size=header_size, bold=True, color=MUTED)
+        _text(c, x0 + 82, y, "Fecha de corte", size=header_size, bold=True, color=MUTED)
+        _text(c, x1, y, "Valor autorizado", size=header_size, bold=True, color=MUTED, align="right")
+        y -= 9 if compact else 12
+        for index, cut in enumerate(deduction_schedule, start=1):
+            installment = cut.get("installment") or index
+            cut_date = cut.get("date") or cut.get("cutoff_date") or "-"
+            amount = _money_label(cut.get("amount"))
+            try:
+                cut_date = _date_label(datetime.strptime(str(cut_date), "%Y-%m-%d").date())
+            except (TypeError, ValueError):
+                cut_date = _safe(cut_date)
+            _text(c, x0, y, str(installment), size=row_size, color=TEXT)
+            _text(c, x0 + 82, y, cut_date, size=row_size, color=TEXT)
+            _text(c, x1, y, amount, size=row_size, color=TEXT, align="right")
+            y -= 9 if compact else 11
+        y -= 5 if compact else 10
 
     frequency_label = _loan_frequency_label(vacation).lower()
     installments = vacation.loan_installments_count or "-"

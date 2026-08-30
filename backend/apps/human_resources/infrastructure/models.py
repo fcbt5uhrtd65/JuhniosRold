@@ -126,6 +126,11 @@ class VacationRequest(BaseModel):
     loan_frequency = models.CharField(max_length=20, choices=LoanFrequency.choices, blank=True)
     loan_installments_count = models.PositiveIntegerField(null=True, blank=True)
     loan_expense_number = models.CharField(max_length=30, blank=True)
+    loan_deduction_schedule = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Cortes de nomina autorizados por el trabajador para descontar el prestamo.",
+    )
     # Monto realmente aprobado por Administrador/Tesorería. Puede ser menor al
     # solicitado (loan_amount) si deciden autorizar solo una parte — se guarda
     # aparte para no perder el monto original pedido por el empleado. Si la
