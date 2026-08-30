@@ -7,6 +7,7 @@ import {
   Eye,
   FileText,
   History,
+  MapPin,
   Megaphone,
   Plus,
   ScrollText,
@@ -522,7 +523,7 @@ export function AdminCompanyDocuments() {
                 </div>
                 <div>
                   <p className="text-[11px] text-gray-400">Aplica a</p>
-                  <p className="text-gray-800 font-medium">Todos los colaboradores</p>
+                  <p className="text-gray-800 font-medium">{getDocumentScopeLabel(selectedDocument)}</p>
                 </div>
               </div>
             ) : (
@@ -553,6 +554,42 @@ export function AdminCompanyDocuments() {
               rows={3}
               placeholder="Documento oficial que establece las normas, lineamientos y disposiciones que rigen la empresa."
             />
+          </div>
+          <div>
+            <div className="flex items-center justify-between gap-3 mb-2">
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 block">Sedes donde aplica</label>
+              {newDocumentBranches.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setNewDocumentBranches([])}
+                  className="text-[11px] font-semibold text-[#2a4038] hover:underline"
+                >
+                  Todas
+                </button>
+              )}
+            </div>
+            {branches.length === 0 ? (
+              <p className="text-xs text-gray-400 border border-gray-100 rounded-xl px-3 py-2">No hay sedes activas configuradas.</p>
+            ) : (
+              <div className="max-h-40 overflow-y-auto rounded-xl border border-gray-100 divide-y divide-gray-50">
+                {branches.map((branch) => {
+                  const checked = newDocumentBranches.includes(branch.id);
+                  return (
+                    <label key={branch.id} className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-gray-50">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleNewDocumentBranch(branch.id)}
+                        className="h-4 w-4 rounded border-gray-300 text-[#2a4038] focus:ring-[#2a4038]"
+                      />
+                      <MapPin size={13} className={checked ? 'text-[#2a4038]' : 'text-gray-400'} />
+                      <span className="min-w-0 flex-1 text-sm text-gray-700 truncate">{branch.name}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+            <p className="text-[11px] text-gray-400 mt-1.5">Si no marcas sedes, aplica para todos. Si marcas una o varias, solo lo veran empleados vinculados a esas sedes.</p>
           </div>
           <div>
             <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5 block">Archivo (versión 1.0)</label>
