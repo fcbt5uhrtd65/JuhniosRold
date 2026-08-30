@@ -164,6 +164,21 @@ class VacationRequestSerializer(serializers.ModelSerializer):
         if start_date and end_date and end_date < start_date:
             errors["end_date"] = ["La fecha final no puede ser anterior a la fecha inicial."]
 
+        if request_type == VacationRequest.RequestType.PERMISSION:
+            schedule = attrs.get("permission_deduction_schedule", getattr(instance, "permission_deduction_schedule", []))
+            if isinstance(schedule, str):
+                try:
+                    schedule = json.loads(schedule)
+                    attrs["permission_deduction_schedule"] = schedule
+                except ValueError:
+                    errors["permission_deduction_schedule"] = ["Los cortes de descuento deben enviarse como una lista JSON valida."]
+            if not errors.get("permission_deduction_schedule"):
+                normalized_schedule, schedule_errors = self._validate_permission_deduction_schedule(schedule)
+                if schedule_errors:
+                    errors["permission_deduction_schedule"] = schedule_errors
+                else:
+                    attrs["permission_deduction_schedule"] = normalized_schedule
+
         if request_type == VacationRequest.RequestType.LABOR_CERTIFICATE:
             if not str(attrs.get("reason", getattr(instance, "reason", "")) or "").strip():
                 errors["reason"] = ["Indica el motivo del certificado laboral."]
@@ -243,6 +258,26 @@ class VacationRequestSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(errors)
 
         return attrs
+
+    def _validate_permission_deduction_schedule(self, schedule):
+        if schedule in (None, ""):
+            return [], []
+        if not isinstance(schedule, list):
+            return [], ["Los cortes de descuento deben enviarse como una lista."]
+
+        normalized = []
+        previous_date = None
+        for index, item in enumerate(schedule, start=1):
+            raw_date = item.get("date") if isinstance(item, dict) else item
+            try:
+                parsed_date = raw_date if isinstance(raw_date, date) else datetime.strptime(str(raw_date), "%Y-%m-%d").date()
+            except (TypeError, ValueError):
+                return [], [f"El corte {index} debe tener una fecha valida YYYY-MM-DD."]
+            if previous_date and parsed_date <= previous_date:
+                return [], ["Los cortes de descuento deben estar en orden cronologico."]
+            normalized.append({"date": parsed_date.isoformat()})
+            previous_date = parsed_date
+        return normalized, []
 
     def _validate_loan_deduction_schedule(self, schedule, installments_count, loan_amount=None):
         if not isinstance(schedule, list) or not schedule:

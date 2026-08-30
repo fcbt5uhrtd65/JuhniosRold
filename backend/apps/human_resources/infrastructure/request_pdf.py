@@ -444,8 +444,6 @@ def _draw_body(c, x0, x1, y, vacation, employee, compact=False):
         detail_rows[10] = ("Remuneracion", "Horas extra remuneradas")
         detail_rows[11] = ("Turnos registrados", str(vacation.overtime_shifts.count()))
 
-    _text(c, x0, y, "Detalle claro de la solicitud", size=10.5, bold=True, color=TEXT)
-    y -= 18
     col_w = w / 2
     for row_start in range(0, len(detail_rows), 2):
         row_height = 0
@@ -454,6 +452,24 @@ def _draw_body(c, x0, x1, y, vacation, employee, compact=False):
             row_height = max(row_height, _draw_key_value_cell(c, col_x, y, label, value, col_w, label_width=118, compact=compact))
         y -= row_height + 5
     y -= 10
+
+    permission_schedule = getattr(vacation, "permission_deduction_schedule", None) or []
+    if vacation.request_type == vacation.RequestType.PERMISSION and permission_schedule:
+        _text(c, x0, y, "Autorizacion expresa de cortes de nomina", size=10.5, bold=True, color=TEXT)
+        y -= 16
+        date_labels = []
+        for cut in permission_schedule:
+            cut_date = cut.get("date") if isinstance(cut, dict) else cut
+            try:
+                date_labels.append(_date_label(datetime.strptime(str(cut_date), "%Y-%m-%d").date()))
+            except (TypeError, ValueError):
+                date_labels.append(_safe(cut_date))
+        authorization_parts = [
+            ("El(la) trabajador(a) autoriza expresamente que, si este permiso es definido como no remunerado, el descuento del tiempo correspondiente se aplique en los siguientes cortes de nomina:", False),
+            (f" {', '.join(date_labels)}.", True),
+        ]
+        y = _draw_rich_paragraph(c, x0, y, authorization_parts, w, size=9.4, leading=13, align="justify")
+        y -= 12
 
     reason = vacation.reason or vacation.description or "No se registró un motivo adicional."
     reason_parts = [("Motivo o descripción registrada por el(la) solicitante: ", True), (f"“{reason}”", False)]
@@ -591,62 +607,92 @@ def _approval_steps_data(vacation):
     return result
 
 
+def _approval_step_kind(status):
+    normalized = _safe(status, "").lower()
+    if "aprob" in normalized or normalized in {"approved", "finalized"}:
+        return "approved"
+    if "rechaz" in normalized or "cancel" in normalized or normalized in {"rejected", "cancelled"}:
+        return "rejected"
+    if "no aplica" in normalized:
+        return "neutral"
+    return "pending"
+
+
+def _approval_step_palette(kind):
+    if kind == "approved":
+        return {"main": HexColor("#2f9e44"), "soft": HexColor("#e5f4e7"), "text": HexColor("#248232"), "line": HexColor("#2f9e44")}
+    if kind == "rejected":
+        return {"main": DANGER, "soft": HexColor("#fde8e8"), "text": DANGER, "line": DANGER}
+    if kind == "neutral":
+        return {"main": NEUTRAL, "soft": HexColor("#edf1f5"), "text": NEUTRAL, "line": HexColor("#cfd6dd")}
+    return {"main": HexColor("#ed7d00"), "soft": HexColor("#fff0dc"), "text": HexColor("#d96f00"), "line": HexColor("#ed7d00")}
+
+
+def _draw_status_pill(c, cx, y, label, palette, compact=False):
+    size = 7.4 if compact else 8.2
+    label = _safe(label, "Pendiente")
+    pill_w = min(max(stringWidth(label, FONT_BOLD, size) + 18, 58), 92)
+    pill_h = 17 if compact else 19
+    c.setFillColor(palette["soft"])
+    c.roundRect(cx - pill_w / 2, y - pill_h + 4, pill_w, pill_h, 8, stroke=0, fill=1)
+    _text(c, cx, y - 8, label, size=size, bold=True, color=palette["text"], align="center")
+
+
 def _draw_approval_narrative(c, x0, x1, y, vacation, compact=False):
-    """Flujo de aprobación narrado como texto corrido, sin cuadros ni marcadores graficos.
-    Cada paso queda claramente separado del siguiente, con su etiqueta de estado en la
-    primera línea y los datos de trazabilidad (responsable, fecha, detalle) en líneas
-    propias con sangría, para una lectura ordenada de arriba hacia abajo.
-
-    ``compact`` reduce tamaños/espaciados cuando hay varios pasos, para garantizar
-    que la constancia siempre quepa en una sola página."""
+    """Flujo de aprobacion como linea visual de pasos."""
     w = x1 - x0
-    _text(c, x0, y, "Trazabilidad del proceso de aprobación", size=10.5, bold=True, color=TEXT)
-    y -= 20 if compact else 22
-
-    loan_compact = compact and _is_loan(vacation)
     steps = _approval_steps_data(vacation)
     if not steps:
-        _text(c, x0, y, "Aún no se han registrado pasos de aprobación para esta solicitud.", size=9, color=MUTED)
+        _text(c, x0, y, "Aun no se han registrado pasos de aprobacion para esta solicitud.", size=9, color=MUTED)
         return y - 14
 
-    if loan_compact:
-        line_size = 7.6
-        line_leading = 9
-        for index, step in enumerate(steps, start=1):
-            summary = (
-                f"{index}. {step['label']}: {step['status']} - "
-                f"{step['actor']} - {step['date'] or 'sin fecha'}"
-            )
-            y = _draw_wrapped_text(c, x0, y, summary, w, size=line_size, leading=line_leading, color=MUTED)
-            if step["detail"] and "registrada" not in step["detail"].lower():
-                y = _draw_wrapped_text(c, x0 + 10, y - 1, step["detail"], w - 10, size=7.2, leading=8.2, color=MUTED)
-            y -= 4
-        return y - 2
+    count = len(steps)
+    side_inset = min(72, w * 0.16)
+    track_left = x0 + side_inset
+    track_right = x1 - side_inset
+    track_w = max(track_right - track_left, 1)
+    xs = [(x0 + x1) / 2] if count == 1 else [track_left + (track_w * index / (count - 1)) for index in range(count)]
+    circle_y = y - (22 if compact else 28)
+    radius = 15 if compact else 18
 
-    label_size = 9 if compact else 9.5
-    detail_size = 8.2 if compact else 8.6
-    row_gap = 13 if compact else 15
-    detail_leading = 10.5 if compact else 11.5
-    block_gap = 12 if compact else 20
-    indent = 12
+    c.setLineWidth(3 if compact else 4)
+    for index in range(count - 1):
+        palette = _approval_step_palette(_approval_step_kind(steps[index]["status"]))
+        c.setStrokeColor(palette["line"])
+        c.line(xs[index] + radius, circle_y, xs[index + 1] - radius, circle_y)
+    c.setStrokeColor(HexColor("#dfe4ea"))
+    c.setLineWidth(2)
+    c.line(xs[-1] + radius, circle_y, min(x1, xs[-1] + radius + 24), circle_y)
+
+    label_size = 8.2 if compact else 9.6
+    detail_size = 6.8 if compact else 7.6
+    col_w = min(126 if compact else 145, w / max(count, 1) + 28)
+    lowest_y = y
 
     for index, step in enumerate(steps, start=1):
-        status_color = _status_color(step["status"])
-        # Etapa + estado en una linea (estado con color de estado, resto en texto normal)
-        c.setFont(FONT_BOLD, label_size)
-        c.setFillColor(TEXT)
-        c.drawString(x0, y, f"{index}. {step['label']}:")
-        label_w = stringWidth(f"{index}. {step['label']}: ", FONT_BOLD, label_size)
-        c.setFont(FONT_BOLD, label_size)
-        c.setFillColor(status_color)
-        c.drawString(x0 + label_w, y, step["status"])
-        y -= row_gap
+        cx = xs[index - 1]
+        palette = _approval_step_palette(_approval_step_kind(step["status"]))
 
-        detail_text = f"Responsable: {step['actor']}  ·  Fecha: {step['date'] or 'sin fecha'}  ·  {step['detail']}"
-        y = _draw_wrapped_text(c, x0 + indent, y, detail_text, w - indent, size=detail_size, leading=detail_leading, color=MUTED)
-        y -= block_gap
+        c.setFillColor(palette["soft"])
+        c.circle(cx, circle_y, radius + 6, stroke=0, fill=1)
+        c.setFillColor(palette["main"])
+        c.circle(cx, circle_y, radius, stroke=0, fill=1)
+        _text(c, cx, circle_y - 5, str(index), size=15 if compact else 18, bold=True, color=HexColor("#ffffff"), align="center")
 
-    return y - 4
+        text_y = circle_y - radius - 18
+        _text(c, cx, text_y, step["label"], size=label_size, bold=True, color=TEXT, align="center")
+        _draw_status_pill(c, cx, text_y - 20, step["status"], palette, compact=compact)
+
+        info_y = text_y - (39 if compact else 44)
+        for value in (_safe(step["actor"], "Pendiente de gestion"), _safe(step["date"], ""), _safe(step["detail"], "")):
+            if not value:
+                continue
+            for line in _wrap_lines(value, col_w, FONT, detail_size)[:2]:
+                _text(c, cx, info_y, line, size=detail_size, color=MUTED, align="center")
+                info_y -= 9 if compact else 10
+        lowest_y = min(lowest_y, info_y)
+
+    return lowest_y - (4 if compact else 8)
 
 
 def _signing_steps(vacation):
@@ -692,8 +738,8 @@ def _signature_columns(vacation):
 # de nombre/rol por debajo + margen de seguridad. Antes esta constante (130,
 # luego reducida a 120 por error) subestimaba el alto real (~88-90px solo
 # hasta el texto de rol) y dejaba que la firma invadiera el pie de página.
-SIGNATURES_SECTION_HEIGHT = 60 + 28 + 40
-LOAN_COMPACT_SIGNATURES_SECTION_HEIGHT = 92
+SIGNATURES_SECTION_HEIGHT = 155
+LOAN_COMPACT_SIGNATURES_SECTION_HEIGHT = 118
 
 
 def _signatures_section_height(vacation, compact=False):

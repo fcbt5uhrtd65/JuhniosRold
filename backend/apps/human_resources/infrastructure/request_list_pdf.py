@@ -228,7 +228,7 @@ def render_request_list_pdf(requests, filters_applied=None):
         _text(c, x0, y, "No hay solicitudes que coincidan con los filtros aplicados.", size=9.5, color=MUTED)
         c.setFillColor(MUTED)
         c.setFont(FONT, 7.2)
-        c.drawCentredString(page_w / 2, bottom_limit - 12, f"Documento oficial · {COMPANY_NAME} · Trazabilidad de solicitudes de RRHH.")
+        c.drawCentredString(page_w / 2, bottom_limit - 12, f"Documento oficial · {COMPANY_NAME} · Solicitudes de RRHH.")
         c.save()
         buffer.seek(0)
         return buffer
@@ -239,7 +239,7 @@ def render_request_list_pdf(requests, filters_applied=None):
         if y - 22 < bottom_limit:
             c.setFillColor(MUTED)
             c.setFont(FONT, 7.2)
-            c.drawCentredString(page_w / 2, bottom_limit - 12, f"Documento oficial · {COMPANY_NAME} · Trazabilidad de solicitudes de RRHH.")
+            c.drawCentredString(page_w / 2, bottom_limit - 12, f"Documento oficial · {COMPANY_NAME} · Solicitudes de RRHH.")
             c.showPage()
             footer_h = draw_letterhead_footer(c, page_w, x0, x1)
             bottom_limit = footer_h + 26
@@ -249,7 +249,7 @@ def render_request_list_pdf(requests, filters_applied=None):
 
     c.setFillColor(MUTED)
     c.setFont(FONT, 7.2)
-    c.drawCentredString(page_w / 2, bottom_limit - 12, f"Documento oficial · {COMPANY_NAME} · Trazabilidad de solicitudes de RRHH.")
+    c.drawCentredString(page_w / 2, bottom_limit - 12, f"Documento oficial · {COMPANY_NAME} · Solicitudes de RRHH.")
 
     c.save()
     buffer.seek(0)

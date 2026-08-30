@@ -262,6 +262,10 @@ export interface LoanDeductionCut {
   amount: number;
 }
 
+export interface PermissionDeductionCut {
+  date: string;
+}
+
 export interface VacationRequest {
   id: string;
   employee: string;
@@ -280,6 +284,7 @@ export interface VacationRequest {
   observations: string;
   due_date: string | null;
   support_document: string | null;
+  permission_deduction_schedule: PermissionDeductionCut[];
   loan_amount: string | null;
   loan_approved_amount: string | null;
   loan_requester_name: string;
@@ -666,6 +671,7 @@ export interface VacationRequestPayload {
   observations?: string;
   due_date?: string | null;
   support_document?: File | null;
+  permission_deduction_schedule?: PermissionDeductionCut[];
   loan_amount?: string | number | null;
   loan_requester_name?: string;
   loan_requester_document?: string;

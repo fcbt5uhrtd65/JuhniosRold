@@ -43,6 +43,7 @@ import {
   type LoanDeductionCut,
   type LoanFrequency,
   type OvertimeShiftInput,
+  type PermissionDeductionCut,
   type VacationRequest,
   type VacationRequestStatus,
   type VacationRequestType,
@@ -104,6 +105,8 @@ interface VacationFormState {
   end_time: string;
   reason: string;
   support_document: File | null;
+  permission_deduction_date: string;
+  permission_deduction_schedule: PermissionDeductionCut[];
   loan_amount: string;
   loan_requester_name: string;
   loan_requester_document: string;
@@ -130,6 +133,8 @@ const EMPTY_FORM: VacationFormState = {
   end_time: '',
   reason: '',
   support_document: null,
+  permission_deduction_date: '',
+  permission_deduction_schedule: [],
   loan_amount: '',
   loan_requester_name: '',
   loan_requester_document: '',
@@ -844,6 +849,11 @@ export function AdminEmployeePortal() {
       return;
     }
 
+    if (form.request_type === 'PERMISSION' && form.permission_deduction_schedule.length === 0) {
+      toast.error('Agrega al menos un corte de nomina autorizado para el permiso');
+      return;
+    }
+
     if (form.support_document && !isAllowedSupportDocument(form.support_document)) {
       toast.error('El soporte debe ser PDF o una imagen PNG/JPG');
       return;
@@ -861,6 +871,7 @@ export function AdminEmployeePortal() {
       await createMyVacationRequest({
         request_type: form.request_type,
         ...(form.request_type === 'PERMISSION' ? { subtype: form.subtype || 'PERSONAL' } : {}),
+        ...(form.request_type === 'PERMISSION' ? { permission_deduction_schedule: form.permission_deduction_schedule } : {}),
         start_date,
         end_date,
         is_full_day,
@@ -1714,6 +1725,61 @@ export function AdminEmployeePortal() {
               </>
             )}
 
+            {form.request_type === 'PERMISSION' && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-amber-700 mb-1.5 block">Cortes de nomina autorizados</label>
+                <div className="grid sm:grid-cols-[1fr_auto] gap-3 items-end">
+                  <input
+                    type="date"
+                    value={form.permission_deduction_date}
+                    onChange={(event) => setForm({ ...form, permission_deduction_date: event.target.value })}
+                    className={inputCls}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!form.permission_deduction_date) {
+                        toast.error('Selecciona el corte de nomina');
+                        return;
+                      }
+                      if (form.permission_deduction_schedule.some((cut) => cut.date === form.permission_deduction_date)) {
+                        toast.error('Ese corte ya fue agregado');
+                        return;
+                      }
+                      const schedule = [...form.permission_deduction_schedule, { date: form.permission_deduction_date }]
+                        .sort((a, b) => a.date.localeCompare(b.date));
+                      setForm({ ...form, permission_deduction_schedule: schedule, permission_deduction_date: '' });
+                    }}
+                    className="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-[#2a4038] text-white rounded-xl text-xs font-semibold hover:bg-[#3d5c4e] transition-colors"
+                  >
+                    <Plus size={14} />
+                    Agregar corte
+                  </button>
+                </div>
+                {form.permission_deduction_schedule.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {form.permission_deduction_schedule.map((cut) => (
+                      <div key={cut.date} className="flex items-center justify-between gap-3 rounded-lg bg-white border border-amber-100 px-3 py-2 text-xs">
+                        <span className="font-medium text-gray-800">{formatDate(cut.date)}</span>
+                        <button
+                          type="button"
+                          onClick={() => setForm({
+                            ...form,
+                            permission_deduction_schedule: form.permission_deduction_schedule.filter((item) => item.date !== cut.date),
+                          })}
+                          className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+                          aria-label="Quitar corte"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <p className="text-[11px] text-amber-800/80 mt-2">El trabajador autoriza expresamente que el permiso sea descontado en los cortes indicados si la empresa lo marca como no remunerado.</p>
+              </div>
+            )}
+
             {form.request_type !== 'LOAN' && (
               <>
                 <div>
@@ -2063,6 +2129,20 @@ export function AdminEmployeePortal() {
                   <dd className="text-gray-900 font-medium text-right">{formatDate(selectedRequest.created_at)}</dd>
                 </div>
               </dl>
+
+              {selectedRequest.request_type === 'PERMISSION' && selectedRequest.permission_deduction_schedule?.length > 0 && (
+                <div className="pt-2 border-t border-gray-100">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Cortes de nomina autorizados</p>
+                  <div className="space-y-1.5">
+                    {selectedRequest.permission_deduction_schedule.map((cut) => (
+                      <div key={cut.date} className="flex items-center justify-between gap-3 text-xs">
+                        <span className="text-gray-700">Corte de descuento</span>
+                        <span className="font-semibold text-gray-900">{formatDate(cut.date)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {selectedRequest.request_type === 'LOAN' && (
                 <div className="pt-2 border-t border-gray-100">

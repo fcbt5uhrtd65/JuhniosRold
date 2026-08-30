@@ -115,6 +115,11 @@ class VacationRequest(BaseModel):
         blank=True,
         validators=[FileExtensionValidator(allowed_extensions=("pdf", "png", "jpg", "jpeg"))],
     )
+    permission_deduction_schedule = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Cortes de nomina indicados por el trabajador para descontar un permiso si aplica.",
+    )
 
     # ── Datos exclusivos de solicitudes de tipo PRÉSTAMO ────────────────────────
     loan_amount = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
