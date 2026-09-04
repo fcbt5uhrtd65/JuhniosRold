@@ -421,6 +421,7 @@ export interface PayslipDocument {
   notes: string;
   uploaded_by: string | null;
   published_at: string | null;
+  viewed_at: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;

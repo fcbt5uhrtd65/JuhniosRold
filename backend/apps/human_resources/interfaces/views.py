@@ -1259,6 +1259,10 @@ class PayslipDocumentViewSet(SoftDeleteModelViewSet):
         self._ensure_download_allowed(document)
         if not document.file:
             raise NotFound("Este volante de pago no tiene PDF adjunto.")
+        employee = getattr(request.user, "employee_profile", None)
+        if employee and document.employee_id == employee.id and not document.viewed_at:
+            document.viewed_at = timezone.now()
+            document.save(update_fields=("viewed_at", "updated_at"))
         filename = document.file.name.rsplit("/", 1)[-1]
         return FileResponse(document.file.open("rb"), as_attachment=True, filename=filename)
 

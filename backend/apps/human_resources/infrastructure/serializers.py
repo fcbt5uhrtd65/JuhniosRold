@@ -443,7 +443,7 @@ class PayslipDocumentSerializer(serializers.ModelSerializer):
     class Meta:
         model = PayslipDocument
         fields = "__all__"
-        read_only_fields = ("uploaded_by", "published_at", "employee_name", "file_name")
+        read_only_fields = ("uploaded_by", "published_at", "viewed_at", "employee_name", "file_name")
 
     def get_employee_name(self, obj):
         employee = obj.employee

@@ -10,6 +10,7 @@ import {
   Cake,
   CalendarCog,
   Check,
+  CheckCheck,
   ChevronDown,
   ChevronUp,
   Clock3,
@@ -1433,6 +1434,24 @@ function payslipStatusLabel(status: PayslipDocumentStatus): string {
 
 function payslipStatusBadge(status: PayslipDocumentStatus): BadgeColor {
   return status === 'PUBLISHED' ? 'green' : 'yellow';
+}
+
+function PayslipViewedIndicator({ viewedAt }: { viewedAt: string | null }) {
+  if (viewedAt) {
+    const label = `Visto el ${new Date(viewedAt).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' })}`;
+    return (
+      <span className="inline-flex items-center gap-1 text-blue-500" title={label}>
+        <CheckCheck size={15} />
+        <span className="text-[11px] font-medium">Visto</span>
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-gray-400" title="El empleado aún no ha visto este volante">
+      <Check size={15} />
+      <span className="text-[11px] font-medium">No visto</span>
+    </span>
+  );
 }
 
 function getRequestTypeLabel(type: string, subtype?: string): string {
@@ -4290,6 +4309,7 @@ export function AdminHR() {
                         <div className="grid grid-cols-2 gap-2 text-xs">
                           <div><span className="text-gray-400">Periodo</span><div className="font-medium text-gray-700">{parseDate(payslip.period_start)} - {parseDate(payslip.period_end)}</div></div>
                           <div><span className="text-gray-400">Pago</span><div className="font-medium text-gray-700">{parseDate(payslip.payment_date)}</div></div>
+                          <div><span className="text-gray-400">Visto</span><div className="mt-0.5"><PayslipViewedIndicator viewedAt={payslip.viewed_at} /></div></div>
                         </div>
                         <div className="flex flex-wrap gap-2">
                           {payslipActions(payslip).map((action) => {
@@ -4316,6 +4336,7 @@ export function AdminHR() {
                         <Th>Periodo</Th>
                         <Th>Pago</Th>
                         <Th>Estado</Th>
+                        <Th>Visto</Th>
                         <Th>Acciones</Th>
                       </tr>
                     </thead>
@@ -4340,6 +4361,7 @@ export function AdminHR() {
                             <Td>{parseDate(payslip.period_start)} - {parseDate(payslip.period_end)}</Td>
                             <Td>{parseDate(payslip.payment_date)}</Td>
                             <Td><Badge label={payslipStatusLabel(payslip.status)} color={payslipStatusBadge(payslip.status)} /></Td>
+                            <Td><PayslipViewedIndicator viewedAt={payslip.viewed_at} /></Td>
                             <Td className={actionsCellCls}>
                               <ActionsMenu items={payslipActions(payslip)} />
                             </Td>
@@ -4580,8 +4602,9 @@ export function AdminHR() {
             <div className="text-xs text-gray-500 mt-1">
               {parseDate(payslip.period_start)} - {parseDate(payslip.period_end)} · Pago: {parseDate(payslip.payment_date)}
             </div>
-            <div className="mt-2">
+            <div className="mt-2 flex flex-wrap items-center gap-2">
               <Badge label={payslipStatusLabel(payslip.status)} color={payslipStatusBadge(payslip.status)} />
+              <PayslipViewedIndicator viewedAt={payslip.viewed_at} />
             </div>
           </div>
           <button

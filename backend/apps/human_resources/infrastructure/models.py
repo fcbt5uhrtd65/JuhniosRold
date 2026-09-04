@@ -486,6 +486,7 @@ class PayslipDocument(BaseModel):
         related_name="uploaded_payslip_documents",
     )
     published_at = models.DateTimeField(null=True, blank=True)
+    viewed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta(BaseModel.Meta):
         ordering = ("-period_end", "-payment_date", "-created_at")
