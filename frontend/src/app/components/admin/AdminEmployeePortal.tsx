@@ -1776,7 +1776,6 @@ export function AdminEmployeePortal() {
                     ))}
                   </div>
                 )}
-                <p className="text-[11px] text-amber-800/80 mt-2">El trabajador autoriza expresamente que el permiso sea descontado en los cortes indicados si la empresa lo marca como no remunerado.</p>
               </div>
             )}
 

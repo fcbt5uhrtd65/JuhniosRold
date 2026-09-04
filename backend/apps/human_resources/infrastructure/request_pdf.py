@@ -453,24 +453,6 @@ def _draw_body(c, x0, x1, y, vacation, employee, compact=False):
         y -= row_height + 5
     y -= 10
 
-    permission_schedule = getattr(vacation, "permission_deduction_schedule", None) or []
-    if vacation.request_type == vacation.RequestType.PERMISSION and permission_schedule:
-        _text(c, x0, y, "Autorizacion expresa de cortes de nomina", size=10.5, bold=True, color=TEXT)
-        y -= 16
-        date_labels = []
-        for cut in permission_schedule:
-            cut_date = cut.get("date") if isinstance(cut, dict) else cut
-            try:
-                date_labels.append(_date_label(datetime.strptime(str(cut_date), "%Y-%m-%d").date()))
-            except (TypeError, ValueError):
-                date_labels.append(_safe(cut_date))
-        authorization_parts = [
-            ("El(la) trabajador(a) autoriza expresamente que, si este permiso es definido como no remunerado, el descuento del tiempo correspondiente se aplique en los siguientes cortes de nomina:", False),
-            (f" {', '.join(date_labels)}.", True),
-        ]
-        y = _draw_rich_paragraph(c, x0, y, authorization_parts, w, size=9.4, leading=13, align="justify")
-        y -= 12
-
     reason = vacation.reason or vacation.description or "No se registró un motivo adicional."
     reason_parts = [("Motivo o descripción registrada por el(la) solicitante: ", True), (f"“{reason}”", False)]
     y = _draw_rich_paragraph(c, x0, y, reason_parts, w, size=10, leading=15, align="left")
