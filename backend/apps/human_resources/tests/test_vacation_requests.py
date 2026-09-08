@@ -223,30 +223,6 @@ class VacationRequestPortalTests(TestCase):
 
         self.assertGreaterEqual(len(reader.pages), 2)
 
-    def test_permission_request_pdf_includes_authorized_payroll_cut_dates(self):
-        vacation = VacationRequest.objects.create(
-            employee=self.employee,
-            request_type=VacationRequest.RequestType.PERMISSION,
-            subtype=VacationRequest.RequestSubtype.UNPAID,
-            start_date="2026-08-12",
-            end_date="2026-08-12",
-            is_full_day=True,
-            reason="Permiso no remunerado",
-            permission_deduction_schedule=[
-                {"date": "2026-08-15"},
-                {"date": "2026-08-30"},
-                {"date": "2026-09-15"},
-            ],
-        )
-
-        pdf_buffer = render_request_pdf(vacation)
-        text = "\n".join(page.extract_text() or "" for page in PdfReader(pdf_buffer).pages)
-
-        self.assertIn("Autorizacion expresa de cortes de nomina", text)
-        self.assertIn("15/08/2026", text)
-        self.assertIn("30/08/2026", text)
-        self.assertIn("15/09/2026", text)
-
     def test_treasury_approval_finalizes_loan_without_admin_step(self):
         loan_signature = SimpleUploadedFile(
             "solicitante.png",

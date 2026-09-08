@@ -5922,19 +5922,6 @@ export function AdminHR() {
                 </div>
               );
             })()}
-            {viewingRequest.request_type === 'PERMISSION' && viewingRequest.permission_deduction_schedule?.length > 0 && (
-              <Card className="p-4">
-                <div className="text-sm font-semibold text-gray-900 mb-3">Cortes de nómina autorizados</div>
-                <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                  {viewingRequest.permission_deduction_schedule.map((cut) => (
-                    <div key={cut.date} className="rounded-xl border border-gray-100 bg-gray-50/60 p-3">
-                      <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Corte</div>
-                      <div className="font-semibold text-gray-900">{parseDate(cut.date)}</div>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            )}
             {viewingRequest.request_type === 'LOAN' && (
               <Card className="p-4">
                 <div className="text-sm font-semibold text-gray-900 mb-3">Datos del préstamo</div>
