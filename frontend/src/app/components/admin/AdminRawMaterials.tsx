@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  AlertTriangle,
   Edit2,
   Filter,
   FlaskConical,
@@ -144,6 +145,8 @@ export function AdminRawMaterials() {
   const [saving, setSaving] = useState(false);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [deletingItem, setDeletingItem] = useState<Item | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [groupFilter, setGroupFilter] = useState('all');
@@ -313,14 +316,18 @@ export function AdminRawMaterials() {
     }
   };
 
-  const removeMaterial = async (item: Item) => {
-    if (!window.confirm(`Eliminar ${item.name}?`)) return;
+  const confirmRemoveMaterial = async () => {
+    if (!deletingItem) return;
+    setDeleting(true);
     try {
-      await deleteItem(item.id);
+      await deleteItem(deletingItem.id);
       toast.info('Materia prima eliminada');
+      setDeletingItem(null);
       await loadData();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'No se pudo eliminar la materia prima');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -489,7 +496,7 @@ export function AdminRawMaterials() {
                     items={[
                       { label: 'Editar', icon: Edit2, onClick: () => openEdit(item) },
                       { label: item.isActive ? 'Desactivar' : 'Activar', icon: FlaskConical, onClick: () => void toggleStatus(item) },
-                      { label: 'Eliminar', icon: Trash2, onClick: () => void removeMaterial(item), danger: true },
+                      { label: 'Eliminar', icon: Trash2, onClick: () => setDeletingItem(item), danger: true },
                     ]}
                   />
                 </Td>
@@ -609,6 +616,26 @@ export function AdminRawMaterials() {
             <button type="button" onClick={() => void saveMaterial()} disabled={saving} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#2a4038] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#3d5c4e] disabled:opacity-50">
               {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
               Guardar
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal title="Eliminar materia prima" open={Boolean(deletingItem)} onClose={() => setDeletingItem(null)} disableOverlayClose={deleting}>
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 rounded-xl border border-red-100 bg-red-50 p-4 text-sm text-red-800">
+            <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+            <p>
+              ¿Eliminar <span className="font-semibold">{deletingItem?.name}</span>? Esta acción no se puede deshacer.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <button type="button" onClick={() => setDeletingItem(null)} disabled={deleting} className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50">
+              Cancelar
+            </button>
+            <button type="button" onClick={() => void confirmRemoveMaterial()} disabled={deleting} className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50">
+              {deleting ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
+              Eliminar
             </button>
           </div>
         </div>
