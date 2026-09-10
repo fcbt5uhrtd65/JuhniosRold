@@ -42,11 +42,12 @@ class ProductViewSet(SoftDeleteModelViewSet):
     filterset_class = ProductFilter
     search_fields = ("name", "description", "variants__sku")
     ordering_fields = ("name", "created_at")
+    required_component = "catalog.management"
 
     def get_permissions(self):
         if self.action in ("list", "retrieve"):
             return (permissions.AllowAny(),)
-        return (permissions.IsAdminUser(),)
+        return (HasComponentAccess(),)
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -88,7 +89,8 @@ class ProductCompleteCreateView(generics.GenericAPIView):
     """
 
     serializer_class = CompleteProductSerializer
-    permission_classes = (permissions.IsAdminUser,)
+    permission_classes = (HasComponentAccess,)
+    required_component = "catalog.management"
 
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
@@ -103,7 +105,8 @@ class VariantCompleteCreateView(generics.GenericAPIView):
     (ej. 50 ML, 120 ML) sobre un producto que ya tiene al menos una variante."""
 
     serializer_class = CompleteVariantSerializer
-    permission_classes = (permissions.IsAdminUser,)
+    permission_classes = (HasComponentAccess,)
+    required_component = "catalog.management"
 
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
@@ -148,11 +151,12 @@ class CategoryViewSet(SoftDeleteModelViewSet):
     queryset = Category.objects.select_related("parent")
     serializer_class = CategorySerializer
     search_fields = ("name",)
+    required_component = "catalog.management"
 
     def get_permissions(self):
         if self.action in ("list", "retrieve"):
             return (permissions.AllowAny(),)
-        return (permissions.IsAdminUser(),)
+        return (HasComponentAccess(),)
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -183,7 +187,8 @@ class FlipbookCatalogViewSet(SoftDeleteModelViewSet):
 class ProductVariantViewSet(SoftDeleteModelViewSet):
     queryset = ProductVariant.objects.select_related("product").prefetch_related("prices", "images")
     serializer_class = ProductVariantSerializer
-    permission_classes = (permissions.IsAdminUser,)
+    permission_classes = (HasComponentAccess,)
+    required_component = "catalog.management"
     filterset_fields = ("product", "is_active")
     search_fields = ("sku", "name", "product__name")
 
@@ -191,21 +196,24 @@ class ProductVariantViewSet(SoftDeleteModelViewSet):
 class PriceViewSet(SoftDeleteModelViewSet):
     queryset = Price.objects.select_related("variant")
     serializer_class = PriceSerializer
-    permission_classes = (permissions.IsAdminUser,)
+    permission_classes = (HasComponentAccess,)
+    required_component = "catalog.management"
     filterset_fields = ("variant", "currency", "is_active")
 
 
 class ProductImageViewSet(SoftDeleteModelViewSet):
     queryset = ProductImage.objects.select_related("product")
     serializer_class = ProductImageSerializer
-    permission_classes = (permissions.IsAdminUser,)
+    permission_classes = (HasComponentAccess,)
+    required_component = "catalog.management"
     filterset_fields = ("product", "is_primary")
 
 
 class ProductVariantImageViewSet(SoftDeleteModelViewSet):
     queryset = ProductVariantImage.objects.select_related("variant")
     serializer_class = ProductVariantImageSerializer
-    permission_classes = (permissions.IsAdminUser,)
+    permission_classes = (HasComponentAccess,)
+    required_component = "catalog.management"
     filterset_fields = ("variant", "is_primary")
 
 

@@ -680,13 +680,20 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       });
       const variant = created.variants.find(item => item.is_active) ?? created.variants[0];
       if (variant) {
-        const stock = await createInitialStock(variant.id, product.stockMinimo ?? 10);
-        if (stock && product.stockInicial && product.stockInicial > 0) {
-          await setInventoryQuantity(
-            { variantId: variant.id, locationId: stock.locationId, quantity: 0 },
-            product.stockInicial,
-            'Stock inicial al crear el producto',
-          );
+        try {
+          const stock = await createInitialStock(variant.id, product.stockMinimo ?? 10);
+          if (stock && product.stockInicial && product.stockInicial > 0) {
+            await setInventoryQuantity(
+              { variantId: variant.id, locationId: stock.locationId, quantity: 0 },
+              product.stockInicial,
+              'Stock inicial al crear el producto',
+            );
+          }
+        } catch {
+          // Quien crea el producto puede no tener permiso de edición de
+          // Inventario (p.ej. un Vendedor, que solo tiene lectura ahí): el
+          // producto ya quedó creado, solo se omite el stock inicial, que
+          // alguien con acceso a Inventario puede completar después.
         }
       }
       // Inserta el producto recién creado de inmediato en el estado local: no
@@ -745,25 +752,31 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         is_active: updates.estado !== undefined ? updates.estado === 'activo' : undefined,
       });
       if (updates.stockMinimo !== undefined) {
-        const stock = inventory.find(item => item.productoId === id);
-        if (stock) {
-          await updateStockMinimum(stock.id, updates.stockMinimo);
-        } else {
-          const apiProducts = await getAllProductsForAdmin();
-          const apiProduct = apiProducts.find(item => item.id === id);
-          const variant = apiProduct?.variants.find(item => item.is_active) ?? apiProduct?.variants[0];
-          if (variant) {
-            // El estado local `inventory` puede estar desactualizado y no
-            // reflejar un Stock que ya existe en el backend; se confirma
-            // directamente contra el backend antes de crear uno nuevo, ya
-            // que (variant, location) es único y un POST duplicado falla.
-            const existingStock = await findStockByVariant(variant.id);
-            if (existingStock) {
-              await updateStockMinimum(existingStock.id, updates.stockMinimo);
-            } else {
-              await createInitialStock(variant.id, updates.stockMinimo);
+        try {
+          const stock = inventory.find(item => item.productoId === id);
+          if (stock) {
+            await updateStockMinimum(stock.id, updates.stockMinimo);
+          } else {
+            const apiProducts = await getAllProductsForAdmin();
+            const apiProduct = apiProducts.find(item => item.id === id);
+            const variant = apiProduct?.variants.find(item => item.is_active) ?? apiProduct?.variants[0];
+            if (variant) {
+              // El estado local `inventory` puede estar desactualizado y no
+              // reflejar un Stock que ya existe en el backend; se confirma
+              // directamente contra el backend antes de crear uno nuevo, ya
+              // que (variant, location) es único y un POST duplicado falla.
+              const existingStock = await findStockByVariant(variant.id);
+              if (existingStock) {
+                await updateStockMinimum(existingStock.id, updates.stockMinimo);
+              } else {
+                await createInitialStock(variant.id, updates.stockMinimo);
+              }
             }
           }
+        } catch {
+          // Igual que en addProduct: sin permiso de edición de Inventario
+          // (p.ej. un Vendedor), el producto sí se actualiza, solo se omite
+          // el ajuste de stock mínimo.
         }
       }
       // Igual que en addProduct: refleja el cambio de inmediato para evitar

@@ -66,7 +66,9 @@ type MaterialForm = {
 
 type SortKey = 'name' | 'code' | 'cost' | 'status';
 
-const RAW_KEYWORDS = ['materia prima', 'materia', 'fragancia', 'colorante', 'extracto'];
+// 'materia' suelto (sin "prima") no debe ir aquí: es subcadena de "material" y
+// haría que "Material de empaque" se confundiera con materias primas.
+const RAW_KEYWORDS = ['materia prima', 'fragancia', 'colorante', 'extracto'];
 
 function normalize(value: string | null | undefined): string {
   return String(value ?? '')
