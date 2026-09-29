@@ -41,6 +41,7 @@ import {
   RefreshCcw,
   Trash2,
   UserPlus,
+  UserMinus,
   Users,
   Wallet,
   X,
@@ -71,7 +72,7 @@ import {
 } from '../../utils/socialSecurityCatalog';
 import {
   assignEmployeeManagers,
-  deleteEmployee,
+  terminateEmployee,
   createBranch,
   deleteBranch,
   exportEmployeeAccessPdf,
@@ -184,7 +185,7 @@ const EMPLOYEE_STATUS_OPTIONS: Array<{ value: EmployeeStatus; label: string }> =
   { value: 'INACTIVE', label: 'Inactivos' },
   { value: 'LEAVE', label: 'En licencia' },
   { value: 'SUSPENDED', label: 'Suspendidos' },
-  { value: 'TERMINATED', label: 'Retirados' },
+  { value: 'TERMINATED', label: 'Fuera de la empresa' },
 ];
 const EMPLOYEE_PROFILE_STATUS_OPTIONS: Array<{ value: EmployeeProfileStatus; label: string }> = [
   { value: 'DRAFT', label: 'Borrador' },
@@ -1357,7 +1358,7 @@ function statusLabel(status: EmployeeStatus): string {
     INACTIVE: 'Inactivo',
     LEAVE: 'En licencia',
     SUSPENDED: 'Suspendido',
-    TERMINATED: 'Retirado',
+    TERMINATED: 'Fuera de la empresa',
   };
   return labels[status];
 }
@@ -2141,7 +2142,7 @@ export function AdminHR() {
   const [exportingEmployeesPdf, setExportingEmployeesPdf] = useState(false);
   const [exportingUniformExcel, setExportingUniformExcel] = useState(false);
   const [exportingBranchesPdf, setExportingBranchesPdf] = useState(false);
-  const [deletingEmployeeId, setDeletingEmployeeId] = useState<string | null>(null);
+  const [terminatingEmployeeId, setTerminatingEmployeeId] = useState<string | null>(null);
   const [exportingProfileId, setExportingProfileId] = useState<string | null>(null);
   const [exportingCertificateId, setExportingCertificateId] = useState<string | null>(null);
   const [exportingAccessId, setExportingAccessId] = useState<string | null>(null);
@@ -3063,18 +3064,18 @@ export function AdminHR() {
     void saveEmployeeNow();
   };
 
-  const handleDeleteEmployee = async (employee: Employee) => {
+  const handleTerminateEmployee = async (employee: Employee) => {
     if (!window.confirm(`¿Eliminar a ${getEmployeeName(employee)}?`)) return;
-    setDeletingEmployeeId(employee.id);
+    setTerminatingEmployeeId(employee.id);
     try {
-      await deleteEmployee(employee.id);
-      toast.info('Empleado eliminado');
+      await terminateEmployee(employee.id);
+      toast.info('Empleado dado de baja. Sus datos se conservan.');
       await loadData();
     } catch (error) {
       console.error(error);
-      toast.error('No se pudo eliminar el empleado');
+      toast.error('No se pudo dar de baja al empleado');
     } finally {
-      setDeletingEmployeeId(null);
+      setTerminatingEmployeeId(null);
     }
   };
 
@@ -3901,7 +3902,7 @@ export function AdminHR() {
           { value: 'ACTIVE', label: 'Activo' },
           { value: 'INACTIVE', label: 'Inactivo' },
           { value: 'SUSPENDED', label: 'Suspendido' },
-          { value: 'TERMINATED', label: 'Retirado' },
+          { value: 'TERMINATED', label: 'Fuera de la empresa' },
         ]} emptyLabel="Estado" />
         <SelectInput label="Sede o sucursal" value={employeeForm.branch} onChange={(value) => setFormField('branch', value)} options={branches.map((branch) => ({ value: branch.id, label: `${branch.name} · ${branch.city || 'Sin ciudad'}` }))} />
         <div className="lg:col-span-2">
@@ -5240,10 +5241,10 @@ export function AdminHR() {
                                   disabled: exportingAccessId === employee.id || !employee.user || !employee.access_password,
                                 }] : []),
                                 {
-                                  label: 'Eliminar empleado',
-                                  icon: Trash2,
-                                  onClick: () => handleDeleteEmployee(employee),
-                                  disabled: deletingEmployeeId === employee.id,
+                                  label: employee.status === 'TERMINATED' ? 'Fuera de la empresa' : 'Dar de baja',
+                                  icon: UserMinus,
+                                  onClick: () => handleTerminateEmployee(employee),
+                                  disabled: terminatingEmployeeId === employee.id || employee.status === 'TERMINATED',
                                   danger: true,
                                 },
                               ]}

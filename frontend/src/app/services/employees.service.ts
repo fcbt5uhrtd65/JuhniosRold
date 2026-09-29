@@ -719,8 +719,10 @@ export async function regenerateEmployeeAccessPassword(id: string): Promise<Empl
   throw new Error(res.message);
 }
 
-export async function deleteEmployee(id: string): Promise<void> {
-  await api.delete(`${EMPLOYEES_PATH}${id}/`);
+export async function terminateEmployee(id: string): Promise<Employee> {
+  const res = await api.post<Employee>(`${EMPLOYEES_PATH}${id}/terminate/`, {});
+  if (res.data) return res.data;
+  throw new Error(res.message);
 }
 
 export async function getMyEmployeeProfile(): Promise<Employee> {

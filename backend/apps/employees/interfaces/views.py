@@ -149,6 +149,9 @@ class HRFieldConfigurationViewSet(SoftDeleteModelViewSet):
 
 
 class EmployeeViewSet(SoftDeleteModelViewSet):
+    # Employee records must remain available after employment ends.
+    http_method_names = ["get", "post", "put", "patch", "head", "options"]
+
     queryset = (
         Employee.objects.select_related(
             "department",
@@ -192,6 +195,18 @@ class EmployeeViewSet(SoftDeleteModelViewSet):
 
     def perform_update(self, serializer):
         serializer.save(updated_by=self.request.user)
+
+    @action(detail=True, methods=("post",), url_path="terminate")
+    def terminate(self, request, pk=None):
+        employee = self.get_object()
+        if employee.status != Employee.Status.TERMINATED:
+            serializer = self.get_serializer(employee, data={
+                "status": Employee.Status.TERMINATED,
+                "termination_date": employee.termination_date or timezone.localdate(),
+            }, partial=True)
+            serializer.is_valid(raise_exception=True)
+            self.perform_update(serializer)
+        return Response(self.get_serializer(employee).data)
 
     @action(detail=False, methods=("get", "patch"), url_path="me")
     def me(self, request):
