@@ -676,6 +676,19 @@ export async function getEmployees(params?: ListEmployeesParams): Promise<Pagina
   return normalizeListResponse(res.data);
 }
 
+// HR filters and paginates locally, so it needs every server page.
+export async function getAllEmployees(): Promise<PaginatedEmployees> {
+  const employees = new Map<string, Employee>();
+  let page = 1;
+  let response: PaginatedEmployees;
+  do {
+    response = await getEmployees({ page, limit: 100 });
+    response.data.forEach((employee) => employees.set(employee.id, employee));
+    page += 1;
+  } while (response.next);
+  return { data: [...employees.values()], total: employees.size, next: null, previous: null };
+}
+
 export async function getEmployeeById(id: string): Promise<Employee> {
   const res = await api.get<Employee>(`${EMPLOYEES_PATH}${id}/`);
   if (res.data) return res.data;

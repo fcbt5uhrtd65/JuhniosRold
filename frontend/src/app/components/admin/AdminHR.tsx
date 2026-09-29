@@ -83,7 +83,7 @@ import {
   getEmployeeChangeLogs,
   getEmployeePositionHistory,
   getEmployeeSalaryHistory,
-  getEmployees,
+  getAllEmployees,
   getPositions,
   getWorkDays,
   createEmployee,
@@ -2248,7 +2248,7 @@ export function AdminHR() {
         getPositions({ limit: 300 }),
         getBranches({ limit: 200 }),
         getWorkDays({ limit: 20 }),
-        getEmployees({ limit: 200 }),
+        getAllEmployees(),
         getVacationRequests({ limit: 500 }),
         getHRNotifications({ limit: 200, status: 'UNREAD' }),
       ]);
@@ -2258,6 +2258,7 @@ export function AdminHR() {
       if (branchesRes.status === 'fulfilled') setBranches(branchesRes.value.data);
       if (workDaysRes.status === 'fulfilled') setWorkDays(workDaysRes.value.data);
       if (employeesRes.status === 'fulfilled') setEmployees(employeesRes.value.data);
+      else toast.error('No se pudo cargar la lista completa de empleados. Intenta actualizar de nuevo.');
       if (vacationsRes.status === 'fulfilled') setVacationRequests(vacationsRes.value.data);
       if (notificationsRes.status === 'fulfilled') setNotifications(notificationsRes.value.data);
     } catch (error) {
