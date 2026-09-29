@@ -16,6 +16,16 @@ def _quantize(value: Decimal) -> Decimal:
     return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
+def round_ordinary_minutes(minutes: int) -> int:
+    """Daily ordinary hours: whole hours plus 30 minutes from minute 25.
+
+    Equivalent to MAX(0, INT(hours) + IF(MOD(hours, 1) >= 25/60, .5, 0)).
+    Input already excludes breaks and applies the ordinary schedule limit.
+    """
+    hours, remainder = divmod(max(0, minutes), 60)
+    return hours * 60 + (30 if remainder >= 25 else 0)
+
+
 def resolve_base_salary(employee, reference_date) -> Decimal:
     """Salario base vigente para un empleado en una fecha dada: si hay
     EmployeeSalaryHistory aplicable a esa fecha, se usa esa cifra (permite

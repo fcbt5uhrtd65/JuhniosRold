@@ -35,6 +35,7 @@ from ..infrastructure.models import (
 )
 from ..infrastructure.overtime_pay import SurchargeRates, classify_shift
 from ..infrastructure.payroll_engine import (
+    round_ordinary_minutes,
     daily_rate_for,
     health_deduction_for,
     hourly_rate_for,
@@ -1885,14 +1886,19 @@ class CalculateEmployeePayrollForPeriod:
                     cursor += timedelta(days=1)
                     continue
                 worked_days += 1
+                daily_ordinary_minutes = 0
                 for seg_start, seg_end in segments:
                     seg_minutes = max(int((seg_end - seg_start).total_seconds() // 60), 0)
                     if remaining_ordinary is None:
-                        ordinary_minutes += seg_minutes
+                        daily_ordinary_minutes += seg_minutes
                         continue
                     ordinary_in_segment = min(max(remaining_ordinary, 0), seg_minutes)
-                    ordinary_minutes += ordinary_in_segment
+                    daily_ordinary_minutes += ordinary_in_segment
                     remaining_ordinary -= ordinary_in_segment
+                rounded_minutes = round_ordinary_minutes(daily_ordinary_minutes)
+                if expected_minutes is not None:
+                    rounded_minutes = min(rounded_minutes, max(0, expected_minutes))
+                ordinary_minutes += rounded_minutes
             cursor += timedelta(days=1)
         return worked_days, ordinary_minutes
 

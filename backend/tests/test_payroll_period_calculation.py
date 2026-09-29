@@ -24,6 +24,26 @@ from shared.domain.exceptions import BusinessRuleViolation
 
 
 class PayrollPeriodCalculationTests(TestCase):
+    def test_ordinary_hours_round_daily_after_combining_work_segments(self):
+        employee = Employee.objects.create(
+            employee_code="EMP-ROUND-25", base_salary=Decimal("1750905"),
+        )
+        period = PayrollPeriod.objects.create(
+            period_start="2026-04-20", period_end="2026-04-21",
+        )
+        period.refresh_from_db()
+        for day in (20, 21):
+            Attendance.objects.create(
+                employee=employee, date=f"2026-04-{day}",
+                check_in=timezone.make_aware(datetime(2026, 4, day, 7, 0)),
+                break_start=timezone.make_aware(datetime(2026, 4, day, 12, 0)),
+                break_end=timezone.make_aware(datetime(2026, 4, day, 13, 0)),
+                check_out=timezone.make_aware(datetime(2026, 4, day, 16, 25)),
+            )
+        days, minutes = CalculateEmployeePayrollForPeriod()._count_worked_days(employee, period)
+        self.assertEqual(days, 2)
+        self.assertEqual(minutes, 17 * 60)
+
     def test_quincenal_payroll_prorates_base_salary_and_legal_deductions(self):
         employee = Employee.objects.create(
             employee_code="EMP-LEGACY-204",

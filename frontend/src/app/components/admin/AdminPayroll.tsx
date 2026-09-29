@@ -33,6 +33,7 @@ import {
   selectCls,
 } from './AdminUI';
 import { Pagination } from './Pagination';
+import { ordinaryHoursFromMinutes } from '../../utils/payrollHours';
 import {
   applyWorkScheduleTemplate,
   approvePayrollPeriod,
@@ -1509,7 +1510,7 @@ function biometricPayrollBreakdown(row: BiometricPreviewRow | undefined, holiday
 
   return {
     rawHours: Math.floor(rawMinutes / 60),
-    ordinaryHours: minutesToHours(ordinarySplit.day),
+    ordinaryHours: ordinaryHoursFromMinutes(ordinarySplit.day),
     lunchHours: minutesToHours(lunchMinutes),
     extraDayHours: minutesToHours(extraSplit.day),
     extraNightHours: minutesToHours(extraSplit.night),
