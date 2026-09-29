@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import { useAdmin } from '../../contexts/AdminContext';
 import { useToast } from '../../contexts/ToastContext';
-import { getEmployees, type Employee } from '../../services/employees.service';
+import { getAllEmployees, getMyEmployeeProfile, type Employee } from '../../services/employees.service';
 import {
   approveVacationRequest,
   createVacationRequestAttachment,
@@ -493,17 +493,17 @@ export function AdminEmployeePortal() {
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [employeesRes, requestsRes, teamRequestsRes] = await Promise.allSettled([
-        getEmployees({ limit: 200 }),
+      const [employeesRes, requestsRes, teamRequestsRes, profileRes] = await Promise.allSettled([
+        getAllEmployees(),
         getMyVacationRequests({ limit: 200 }),
         getTeamVacationRequests({ page: teamRequestsPage, limit: teamRequestsPageSize }),
+        getMyEmployeeProfile(),
       ]);
 
       if (employeesRes.status === 'fulfilled') {
         setAllEmployees(employeesRes.value.data);
-        const found = employeesRes.value.data.find((employee) => employee.user === currentUser?.id) ?? null;
-        setEmployeeProfile(found);
       }
+      if (profileRes.status === 'fulfilled') setEmployeeProfile(profileRes.value);
 
       if (requestsRes.status === 'fulfilled') {
         setRequests(requestsRes.value.data);
