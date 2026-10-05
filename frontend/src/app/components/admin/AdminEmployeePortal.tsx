@@ -32,7 +32,6 @@ import {
   createVacationRequestAttachment,
   createMyOvertimeRequest,
   createMyVacationRequest,
-  deleteVacationRequest,
   getMyVacationRequests,
   getTeamVacationRequests,
   openLaborCertificateRequestPdf,
@@ -469,7 +468,6 @@ export function AdminEmployeePortal() {
   const [requests, setRequests] = useState<VacationRequest[]>([]);
   const [form, setForm] = useState<VacationFormState>(EMPTY_FORM);
   const [loanSignatureFile, setLoanSignatureFile] = useState<File | null>(null);
-  const [deletingRequestId, setDeletingRequestId] = useState<string | null>(null);
   const [overtimeShifts, setOvertimeShifts] = useState<Array<OvertimeShiftInput & { localId: string }>>([]);
   const [shiftDraft, setShiftDraft] = useState({ date: '', start_time: '', end_time: '' });
   const [requestsQuery, setRequestsQuery] = useState('');
@@ -881,26 +879,6 @@ export function AdminEmployeePortal() {
       toast.error('No se pudo crear la solicitud');
     } finally {
       setSaving(false);
-    }
-  };
-
-  const isRequestDeletableByOwner = (request: VacationRequest) =>
-    request.status === 'PENDING' || request.status === 'IN_REVIEW';
-
-  const handleDeleteOwnRequest = async (request: VacationRequest) => {
-    if (!isRequestDeletableByOwner(request)) return;
-    if (!window.confirm('¿Eliminar esta solicitud? Esta acción no se puede deshacer.')) return;
-    setDeletingRequestId(request.id);
-    try {
-      await deleteVacationRequest(request.id);
-      toast.success('Solicitud eliminada');
-      if (selectedRequest?.id === request.id) setSelectedRequest(null);
-      await loadData();
-    } catch (error) {
-      console.error(error);
-      toast.error(error instanceof Error ? error.message : 'No se pudo eliminar la solicitud');
-    } finally {
-      setDeletingRequestId(null);
     }
   };
 
@@ -1904,7 +1882,6 @@ export function AdminEmployeePortal() {
               const isLongReason = (request.reason ?? '').length > REASON_TRUNCATE_LENGTH;
               const isExpanded = expandedRequestId === request.id;
               const reasonText = request.reason || 'Sin motivo';
-              const canDelete = isRequestDeletableByOwner(request);
               return (
                 <div
                   key={request.id}
@@ -1943,21 +1920,6 @@ export function AdminEmployeePortal() {
                         aria-label="Descargar certificado laboral"
                       >
                         <Download size={14} />
-                      </button>
-                    )}
-                    {canDelete && (
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void handleDeleteOwnRequest(request);
-                        }}
-                        disabled={deletingRequestId === request.id}
-                        className="p-2 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors disabled:opacity-40 flex-shrink-0"
-                        title="Eliminar solicitud"
-                        aria-label="Eliminar solicitud"
-                      >
-                        <Trash2 size={14} />
                       </button>
                     )}
                     <ChevronRight size={16} className="text-gray-300 flex-shrink-0 hidden sm:block" />
@@ -2222,19 +2184,6 @@ export function AdminEmployeePortal() {
                 )}
               </div>
             </div>
-            {isRequestDeletableByOwner(selectedRequest) && (
-              <div className="px-6 py-4 border-t border-gray-100 flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => void handleDeleteOwnRequest(selectedRequest)}
-                  disabled={deletingRequestId === selectedRequest.id}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold text-red-600 border border-red-200 hover:bg-red-50 transition-colors disabled:opacity-40"
-                >
-                  <Trash2 size={13} />
-                  {deletingRequestId === selectedRequest.id ? 'Eliminando...' : 'Eliminar solicitud'}
-                </button>
-              </div>
-            )}
           </div>
         </div>
       )}

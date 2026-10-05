@@ -253,8 +253,6 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
     search_fields = ("request_number", "reason", "description", "employee__employee_code", "employee__first_name", "employee__last_name")
     ordering_fields = ("created_at", "start_date", "end_date", "status", "request_type")
 
-    OWNER_DELETABLE_STATUSES = (VacationRequest.Status.PENDING, VacationRequest.Status.IN_REVIEW)
-
     def _apply_request_query_filters(self, queryset):
         start_from = self.request.query_params.get("start_date_from")
         start_to = self.request.query_params.get("start_date_to")
@@ -369,30 +367,16 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
         ).prefetch_related("employee__immediate_managers__user")
 
     def destroy(self, request, *args, **kwargs):
-        # El Administrador y RRHH pueden eliminar cualquier solicitud (borrado
-        # administrativo general), incluidas las de préstamo — ese permiso de
-        # eliminación es independiente del circuito de aprobación de préstamos, que
-        # sigue siendo exclusivo de Tesorería/Admin (ver update() y _resolver_role()
-        # más abajo, que no cambian). Además, el propio empleado dueño de la solicitud
-        # puede eliminarla (no editarla) mientras nadie la haya resuelto todavía — una
-        # vez que Jefe/RRHH/Admin ya actuaron sobre ella, se conserva por trazabilidad.
+        # El borrado de solicitudes es exclusivamente administrativo para preservar
+        # el historial y evitar que un empleado libere cupos de envío eliminando
+        # solicitudes rechazadas.
         if getattr(request.user, "has_full_access", False) or getattr(request.user, "role_code", None) == "RRHH":
             return super().destroy(request, *args, **kwargs)
 
-        vacation = self.get_object()
-        requester_employee = getattr(request.user, "employee_profile", None)
-        is_owner = requester_employee is not None and vacation.employee_id == requester_employee.id
-        if not is_owner:
-            return Response(
-                {"detail": "Solo un Administrador puede eliminar solicitudes de otros empleados."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        if vacation.status not in self.OWNER_DELETABLE_STATUSES:
-            return Response(
-                {"detail": "Ya no puedes eliminar esta solicitud porque ya fue gestionada. Contacta a RRHH o al Administrador."},
-                status=status.HTTP_409_CONFLICT,
-            )
-        return super().destroy(request, *args, **kwargs)
+        return Response(
+            {"detail": "Solo un Administrador o RRHH puede eliminar solicitudes."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
     def _ensure_approval_flow(self, vacation, requester=None):
         if vacation.request_type == VacationRequest.RequestType.LOAN:
