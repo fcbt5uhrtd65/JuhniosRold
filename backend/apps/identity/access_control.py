@@ -225,6 +225,11 @@ COMPONENT_DEFINITIONS = (
         "description": "Transacciones financieras y facturación.",
     },
     {
+        "code": "finance.payment_accounts",
+        "name": "Cuentas de cobro",
+        "description": "Creación, consulta y eliminación de cuentas de cobro de contratistas.",
+    },
+    {
         "code": "analytics.management",
         "name": "Analíticas",
         "description": "Paneles, métricas y exportación de reportes.",
@@ -355,6 +360,7 @@ def build_default_role_permissions():
     permissions["CONTABILIDAD"] = {
         "human_resources.loans": {"can_view": True, "can_edit": False},
         "human_resources.payroll": {"can_view": True, "can_edit": False},
+        "finance.payment_accounts": {"can_view": True, "can_edit": True},
     }
     permissions["TESORERIA"] = {
         "human_resources.loans": {"can_view": True, "can_edit": True},

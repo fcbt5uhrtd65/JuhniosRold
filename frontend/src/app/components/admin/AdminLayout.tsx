@@ -23,6 +23,7 @@ import {
   Truck,
   FlaskConical,
   HandCoins,
+  ReceiptText,
   Banknote,
   Settings,
   ScrollText,
@@ -106,6 +107,7 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
     { id: 'company-documents', label: 'Reglamento interno', icon: ScrollText, roles: employeeAccessRoles },
     { id: 'employee-settings', label: 'Configuración', icon: Settings, roles: employeeAccessRoles },
     { id: 'loans', label: 'Préstamos', icon: HandCoins, roles: ['ADMIN', 'RRHH', 'CONTABILIDAD', 'TESORERIA'] },
+    { id: 'payment-accounts', label: 'Cuenta de cobro', icon: ReceiptText, roles: ['ADMIN', 'CONTABILIDAD'] },
     { id: 'roles', label: 'Roles', icon: Shield, roles: ['ADMIN'] },
     { id: 'components', label: 'Permisos', icon: Puzzle, roles: ['ADMIN'] },
   ] as const;
