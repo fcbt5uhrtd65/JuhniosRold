@@ -1575,6 +1575,22 @@ export async function getEmployeeBiometricIds(params?: { employee?: string; page
   return normalizeListResponse(res.data).data;
 }
 
+// The biometric preview and Excel exports need mappings from every server page.
+export async function getAllEmployeeBiometricIds(): Promise<EmployeeBiometricId[]> {
+  const mappings = new Map<string, EmployeeBiometricId>();
+  let page = 1;
+  let next: string | null;
+  do {
+    const query = buildQuery({ page, page_size: 100 });
+    const res = await api.get<EmployeeBiometricId[] | PaginatedResponse<EmployeeBiometricId>>(`${BIOMETRIC_IDS_PATH}${query}`);
+    const response = normalizeListResponse(res.data);
+    response.data.forEach((mapping) => mappings.set(mapping.id, mapping));
+    next = response.next;
+    page += 1;
+  } while (next);
+  return [...mappings.values()];
+}
+
 export async function createEmployeeBiometricId(payload: {
   employee: string;
   biometric_code: string;

@@ -47,8 +47,8 @@ import {
   deleteEmployeeBiometricId,
   generateYearHolidays,
   getAttendanceIntelligenceSettings,
+  getAllEmployeeBiometricIds,
   getBiometricDevices,
-  getEmployeeBiometricIds,
   getEmployeeWorkSchedules,
   getPayrollLegalParameters,
   getPayrollPeriods,
@@ -74,7 +74,7 @@ import {
   type VacationRequest,
   type WorkScheduleTemplate,
 } from '../../services/human-resources.service';
-import { getEmployees, type Employee } from '../../services/employees.service';
+import { getAllEmployees, type Employee } from '../../services/employees.service';
 import { isAbortError } from '../../services/api';
 
 type PayrollSection = 'periods' | 'schedules' | 'biometric' | 'holidays';
@@ -624,7 +624,7 @@ function useEmployeeDirectory() {
   useEffect(() => {
     void (async () => {
       try {
-        const res = await getEmployees({ limit: 500 });
+        const res = await getAllEmployees();
         setEmployees(res.data);
       } finally {
         setLoading(false);
@@ -3063,7 +3063,7 @@ function BiometricSection({ employees, employeeById }: { employees: Employee[]; 
     try {
       const [devicesRes, mappingsRes, pendingRes, intelligenceRes, parametersRes] = await Promise.allSettled([
         getBiometricDevices(),
-        getEmployeeBiometricIds({ limit: 1000 }),
+        getAllEmployeeBiometricIds(),
         getPendingCorrectionAttendance(),
         getAttendanceIntelligenceSettings(),
         getPayrollLegalParameters(),
