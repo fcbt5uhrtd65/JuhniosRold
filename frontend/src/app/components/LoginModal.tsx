@@ -288,6 +288,7 @@ export function LoginModal({ isOpen, onClose, onAdminAccess, onGoogleNewUser }: 
       }
       /* registro paso 2 (dirección) */
       if (screen === 'reg2') {
+        if (!telefono.trim()) { setError('Ingresa tu teléfono.'); return; }
         if (!delLoc.confirmed || !delLoc.address.trim()) {
           setError('Confirma tu dirección de entrega.'); return;
         }
@@ -596,7 +597,7 @@ export function LoginModal({ isOpen, onClose, onAdminAccess, onGoogleNewUser }: 
                     {/* email + teléfono */}
                     <div className="flex gap-2.5">
                       <Field label="Email *" type="email" value={email} onChange={setEmail} placeholder="tu@email.com" icon={Mail} required />
-                      <Field label="Teléfono" type="tel" value={telefono} onChange={setTelefono} placeholder="3001234567" icon={Phone} />
+                      <Field label="Teléfono *" type="tel" value={telefono} onChange={setTelefono} placeholder="3001234567" icon={Phone} required />
                     </div>
                     {/* contraseñas */}
                     <div className="flex gap-2.5">

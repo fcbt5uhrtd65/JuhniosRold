@@ -199,7 +199,14 @@ class RegisterSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True, min_length=8)
     first_name = serializers.CharField(required=True, allow_blank=False)
     last_name = serializers.CharField(required=True, allow_blank=False)
-    phone = serializers.CharField(required=False, allow_blank=True)
+    phone = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        error_messages={
+            "required": "El teléfono es obligatorio.",
+            "blank": "El teléfono es obligatorio.",
+        },
+    )
     document_type = serializers.CharField(required=False, allow_blank=True)
     document_number = serializers.CharField(required=False, allow_blank=True)
     address = serializers.CharField(required=False, allow_blank=True)

@@ -306,6 +306,7 @@ def build_default_role_permissions():
     }
     permissions["PEDIDOS"] = {
         "commerce.orders": {"can_view": True, "can_edit": True},
+        "customers.management": {"can_view": True, "can_edit": False},
         "inventory.management": {"can_view": True, "can_edit": False},
         "envios.management": {"can_view": True, "can_edit": True},
         "envios.manual_guides": {"can_view": True, "can_edit": True},
