@@ -165,7 +165,9 @@ function CustomerOrdersModal({ customer, orders, onClose }: {
 }
 
 export function AdminCustomers() {
-  const { customers, orders, addCustomer, updateCustomer, deleteCustomer } = useAdmin();
+  const { customers, orders, addCustomer, updateCustomer, deleteCustomer, currentUser } = useAdmin();
+  // PEDIDOS solo consulta clientes (customers.management sin can_edit).
+  const canEditCustomers = currentUser?.rol !== 'PEDIDOS';
   const toast = useToast();
   const [showModal, setShowModal] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
@@ -400,12 +402,14 @@ export function AdminCustomers() {
           >
             <FileDown size={14} /> Exportar
           </button>
-          <button
-            onClick={() => setShowModal(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white text-xs font-semibold rounded-xl hover:bg-[#3d5c4e] transition-colors whitespace-nowrap"
-          >
-            <Plus size={14} /> Nuevo Cliente
-          </button>
+          {canEditCustomers && (
+            <button
+              onClick={() => setShowModal(true)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white text-xs font-semibold rounded-xl hover:bg-[#3d5c4e] transition-colors whitespace-nowrap"
+            >
+              <Plus size={14} /> Nuevo Cliente
+            </button>
+          )}
         </div>
       </div>
 
@@ -573,22 +577,26 @@ export function AdminCustomers() {
                       {customerOrders.length} pedido{customerOrders.length !== 1 ? 's' : ''}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => openEditCustomer(customer)}
-                    className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-3 text-[11px] font-semibold text-gray-700 transition-colors hover:bg-gray-50"
-                  >
-                    <Pencil size={13} />
-                    Editar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDeleteCandidate(customer)}
-                    className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-red-100 px-3 text-[11px] font-semibold text-red-600 transition-colors hover:bg-red-50"
-                  >
-                    <Trash2 size={13} />
-                    Eliminar
-                  </button>
+                  {canEditCustomers && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => openEditCustomer(customer)}
+                        className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-3 text-[11px] font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+                      >
+                        <Pencil size={13} />
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteCandidate(customer)}
+                        className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-red-100 px-3 text-[11px] font-semibold text-red-600 transition-colors hover:bg-red-50"
+                      >
+                        <Trash2 size={13} />
+                        Eliminar
+                      </button>
+                    </>
+                  )}
                   <button
                     type="button"
                     onClick={() => setExpandedCustomerId(cur => cur === customer.id ? null : customer.id)}

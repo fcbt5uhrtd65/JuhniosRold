@@ -524,7 +524,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       const canViewProducts = role === 'ADMIN' || role === 'SELLER';
       const canViewInventory = role === 'ADMIN' || role === 'SELLER';
       const canViewOrders = role === 'ADMIN' || role === 'SELLER' || role === 'DISTRIBUTOR' || role === 'PEDIDOS';
-      const canViewCustomers = role === 'ADMIN' || role === 'SELLER';
+      const canViewCustomers = role === 'ADMIN' || role === 'SELLER' || role === 'PEDIDOS';
 
       if (canViewProducts) {
         try {
