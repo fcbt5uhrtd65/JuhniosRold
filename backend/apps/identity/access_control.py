@@ -230,6 +230,11 @@ COMPONENT_DEFINITIONS = (
         "description": "Creación, consulta y eliminación de cuentas de cobro de contratistas.",
     },
     {
+        "code": "costs.management",
+        "name": "Costos",
+        "description": "Módulo de costos.",
+    },
+    {
         "code": "analytics.management",
         "name": "Analíticas",
         "description": "Paneles, métricas y exportación de reportes.",

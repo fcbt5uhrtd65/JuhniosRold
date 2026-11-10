@@ -21,6 +21,7 @@ import { AdminEmployeeCompanyDocuments } from './AdminEmployeeCompanyDocuments';
 import { AdminEmployeeSettings } from './AdminEmployeeSettings';
 import { AdminLoans } from './AdminLoans';
 import { AdminPaymentAccounts } from './AdminPaymentAccounts';
+import { AdminCosts } from './AdminCosts';
 import { AdminRoles } from './AdminRoles';
 import { AdminComponents } from './AdminComponents';
 import { AdminReferrals } from './AdminReferrals';
@@ -121,6 +122,8 @@ export function Admin() {
         return <AdminLoans />;
       case 'payment-accounts':
         return <AdminPaymentAccounts />;
+      case 'costs':
+        return <AdminCosts />;
       case 'roles':
         return <AdminRoles />;
       case 'components':
