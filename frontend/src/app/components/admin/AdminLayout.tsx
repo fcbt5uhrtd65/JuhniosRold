@@ -98,7 +98,7 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
     { id: 'customers', label: 'Clientes', icon: Users, roles: ['ADMIN', 'PEDIDOS'] },
     { id: 'referrals', label: 'Referidos', icon: Gift, roles: ['ADMIN'] },
     { id: 'shipping', label: 'Configuración de Envíos', icon: Truck, roles: ['ADMIN', 'PEDIDOS'] },
-    { id: 'payments', label: 'Pagos', icon: CreditCard, roles: ['ADMIN'] },
+    { id: 'payments', label: 'Pagos', icon: CreditCard, roles: ['ADMIN', 'PEDIDOS'] },
     { id: 'reports', label: 'Reportes', icon: BarChart3, roles: ['ADMIN'] },
     { id: 'hr', label: 'RRHH', icon: Briefcase, roles: ['ADMIN', 'RRHH'] },
     { id: 'payroll', label: 'Nómina', icon: Banknote, roles: ['ADMIN', 'RRHH', 'CONTABILIDAD', 'TESORERIA'] },
