@@ -421,27 +421,17 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
                 )
             return
 
-        manager_users = get_employee_immediate_manager_users(vacation.employee)
-        manager_user = next((user for user in manager_users if not getattr(user, "has_full_access", False)), None)
-        if manager_user is None and manager_users:
-            manager_user = manager_users[0]
-
-        # Si el jefe inmediato es también el Administrador, su firma como jefe y
-        # como Admin serían la misma persona firmando dos veces por lo mismo: el
-        # paso "Jefe inmediato" no aplica en ese caso (queda registrado como tal,
-        # no como pendiente eterno) y el flujo real se reduce a RRHH + ese Admin.
-        manager_is_admin = bool(manager_users and all(getattr(user, "has_full_access", False) for user in manager_users))
-
-        if manager_is_admin:
-            manager_status = VacationRequest.Status.CANCELLED
-            manager_comment = "No aplica: el jefe inmediato es el Administrador, su firma queda registrada en el paso de Aprobación final."
-        else:
-            manager_status = VacationRequest.Status.PENDING
-            manager_comment = ""
+        # El jefe inmediato ya no participa en la aprobación: las solicitudes
+        # nuevas solo pasan por RRHH y Gerencia (Administrador). El paso
+        # "Jefe inmediato" se conserva como "No aplica" (sin firma pendiente) para
+        # no alterar el formato del PDF ni las solicitudes anteriores, que
+        # mantienen la decisión que su jefe ya haya registrado.
+        manager_status = VacationRequest.Status.CANCELLED
+        manager_comment = "No aplica: la aprobación la realizan Recursos Humanos y Gerencia."
 
         flow = (
             (VacationRequestApprovalStep.Step.REQUESTER, 1, requester or vacation.employee.user, VacationRequest.Status.APPROVED, "Solicitud creada"),
-            (VacationRequestApprovalStep.Step.MANAGER, 2, manager_user, manager_status, manager_comment),
+            (VacationRequestApprovalStep.Step.MANAGER, 2, None, manager_status, manager_comment),
             (VacationRequestApprovalStep.Step.HR, 3, None, VacationRequest.Status.PENDING, ""),
             (VacationRequestApprovalStep.Step.FINAL, 4, None, VacationRequest.Status.PENDING, ""),
         )
@@ -453,7 +443,7 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
                     "sequence": sequence,
                     "user": user,
                     "status": step_status,
-                    "acted_at": timezone.now() if step in (VacationRequestApprovalStep.Step.REQUESTER, VacationRequestApprovalStep.Step.MANAGER) and step_status != VacationRequest.Status.PENDING else None,
+                    "acted_at": timezone.now() if step == VacationRequestApprovalStep.Step.REQUESTER else None,
                     "comment": comment,
                 },
             )
@@ -546,14 +536,10 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        queryset = (
-            self._self_service_queryset()
-            .filter(Q(employee__manager=employee) | Q(employee__immediate_managers=employee))
-            .distinct()
-            .order_by("-created_at")
-        )
-        if not getattr(request.user, "can_view_loans", False):
-            queryset = queryset.exclude(request_type=VacationRequest.RequestType.LOAN)
+        # Los jefes inmediatos ya no ven ni aprueban solicitudes de su equipo:
+        # solo RRHH y Gerencia. Se devuelve vacío (el portal oculta la sección
+        # "Mi equipo a cargo" cuando no hay resultados) sin tocar los datos.
+        queryset = self._self_service_queryset().none()
         page = self.paginate_queryset(queryset)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
@@ -655,10 +641,7 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
             )
         ):
             return None
-        if vacation is not None:
-            requester_employee = vacation.employee
-            if any(getattr(manager_user, "id", None) == user.id for manager_user in get_employee_immediate_manager_users(requester_employee)):
-                return "MANAGER"
+        # Los jefes inmediatos ya no aprueban ni firman: solo RRHH y Gerencia.
         return None
 
     def _resolve(self, request, decision):
