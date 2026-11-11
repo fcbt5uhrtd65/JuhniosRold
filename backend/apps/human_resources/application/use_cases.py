@@ -582,13 +582,14 @@ class ResolveVacationRequestByRole:
         if already_decided_by_role:
             raise BusinessRuleViolation("Ya registraste tu decisión sobre esta solicitud.")
 
-        # Caso especial permitido: Admin ya aprobó por override unilateral (status=APPROVED)
-        # pero RRHH todavía no había dejado registrada su propia decisión. Se le permite
-        # completar la trazabilidad sin reabrir ni cambiar el resultado final ya aprobado.
+        # Caso especial permitido: el Administrador ya decidió (aprobó o rechazó) por
+        # override unilateral, pero RRHH todavía no había dejado registrada su propia
+        # decisión. Se le permite firmar para completar la trazabilidad sin reabrir
+        # ni cambiar el resultado final que ya fijó el Administrador.
         is_late_hr_trace_on_admin_approval = (
             role == "HR"
-            and vacation.status == VacationRequest.Status.APPROVED
-            and vacation.admin_decision == VacationRequest.Status.APPROVED
+            and vacation.admin_decision in (VacationRequest.Status.APPROVED, VacationRequest.Status.REJECTED)
+            and vacation.status == vacation.admin_decision
             and not vacation.hr_decision
         )
         if vacation.status in self.TERMINAL_STATUSES and not is_late_hr_trace_on_admin_approval:
@@ -651,7 +652,7 @@ class ResolveVacationRequestByRole:
                 user=reviewer,
                 old_status=vacation.status,
                 new_status=vacation.status,
-                comment=f"[{display_role}] Traza registrada tras aprobación previa del Administrador: {comment}".strip(),
+                comment=f"[{display_role}] Traza registrada tras decisión previa del Administrador: {comment}".strip(),
             )
             return vacation
 
