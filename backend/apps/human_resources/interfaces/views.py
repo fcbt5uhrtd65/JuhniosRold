@@ -271,6 +271,14 @@ class VacationRequestViewSet(SoftDeleteModelViewSet):
         return queryset
 
     def get_queryset(self):
+        queryset = self._base_queryset()
+        # Seguridad y salud consulta las solicitudes de RRHH en solo lectura, pero
+        # los préstamos son información sensible que no debe ver.
+        if getattr(self.request.user, "role_code", None) == "SEGURIDAD_SALUD":
+            queryset = queryset.exclude(request_type=VacationRequest.RequestType.LOAN)
+        return queryset
+
+    def _base_queryset(self):
         queryset = super().get_queryset()
         if self.action == "dashboard":
             queryset = VacationRequest.objects.select_related(

@@ -347,7 +347,7 @@ interface BranchFormState {
   is_active: boolean;
 }
 
-const INTERNAL_EMPLOYEE_ROLES: UserRole[] = ['ADMIN', 'RRHH', 'EMPLEADO', 'PEDIDOS', 'SELLER', 'DISTRIBUTOR'];
+const INTERNAL_EMPLOYEE_ROLES: UserRole[] = ['ADMIN', 'RRHH', 'EMPLEADO', 'PEDIDOS', 'SELLER', 'DISTRIBUTOR', 'SEGURIDAD_SALUD'];
 // Roles que se pueden sumar como acceso EXTRA sobre el rol principal (ej. un
 // Empleado que además debe ver Préstamos), sin reemplazarlo. Se excluye ADMIN a
 // propósito: el acceso total no debe otorgarse como "extra" sobre otro rol.
@@ -2076,7 +2076,9 @@ export function AdminHR() {
   // No amplía nada más de isAdmin (aprobar/rechazar/decidir remuneración siguen igual).
   const canDeleteRequest = isAdmin || currentUser?.rol === 'RRHH';
   const canManageLoans = Boolean(currentUser?.canManageLoans);
-  const [activeTab, setActiveTab] = useState<HRTab>('employees');
+  // Seguridad y salud solo consulta el módulo de Solicitudes de RRHH, sin ninguna acción.
+  const isSafetyViewer = currentUser?.rol === 'SEGURIDAD_SALUD';
+  const [activeTab, setActiveTab] = useState<HRTab>(isSafetyViewer ? 'vacations' : 'employees');
   const [employeeModalTab, setEmployeeModalTab] = useState<EmployeeModalTab>('personal');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterDepartment, setFilterDepartment] = useState<string>('all');
@@ -4850,17 +4852,19 @@ export function AdminHR() {
               {exportingBranchesPdf ? 'Generando PDF...' : 'Exportar PDF'}
             </button>
           )}
-          <button
-            onClick={activeTab === 'branches' ? openCreateBranchModal : openCreateModal}
-            className="flex items-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white text-xs font-semibold rounded-xl hover:bg-[#3d5c4e] transition-colors"
-          >
-            {activeTab === 'branches' ? <Plus size={14} /> : <UserPlus size={14} />}
-            {activeTab === 'branches' ? 'Nueva sede' : 'Nuevo empleado'}
-          </button>
+          {!isSafetyViewer && (
+            <button
+              onClick={activeTab === 'branches' ? openCreateBranchModal : openCreateModal}
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#2a4038] text-white text-xs font-semibold rounded-xl hover:bg-[#3d5c4e] transition-colors"
+            >
+              {activeTab === 'branches' ? <Plus size={14} /> : <UserPlus size={14} />}
+              {activeTab === 'branches' ? 'Nueva sede' : 'Nuevo empleado'}
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className={`grid grid-cols-2 lg:grid-cols-4 gap-4 ${isSafetyViewer ? 'hidden' : ''}`}>
         {[
           { label: 'Perfil completado', value: `${stats.profileCompletion}%`, icon: BadgeCheck },
           { label: 'Pendientes', value: stats.pending, icon: Clock3 },
@@ -4894,7 +4898,7 @@ export function AdminHR() {
                 { id: 'orgchart', label: 'Organigrama', icon: Network, desc: 'Jerarquía de la empresa' },
                 { id: 'documents', label: 'Normativa', icon: FileText, desc: 'Reglamento y políticas' },
                 { id: 'payments', label: 'Pagos', icon: Wallet, desc: 'Volantes de pago' },
-              ] as const).map((item) => {
+              ] as const).filter((item) => !isSafetyViewer || item.id === 'vacations').map((item) => {
                 const Icon = item.icon;
                 const active = activeTab === item.id;
                 return (
@@ -5503,9 +5507,17 @@ export function AdminHR() {
                     {paginatedVacationRequests.map((request) => {
                       const employee = employeeById.get(request.employee);
                       const canManageThisRequest = request.request_type !== 'LOAN' || canManageLoans;
+                      // Aunque el Administrador ya haya decidido, RRHH (o Tesorería en
+                      // préstamos) todavía puede firmar si no ha registrado su decisión;
+                      // el resultado final sigue siendo el del Administrador.
+                      const canSignAfterAdmin =
+                        !isAdmin &&
+                        !request.hr_decision &&
+                        ['APPROVED', 'REJECTED'].includes(request.status) &&
+                        request.admin_decision === request.status;
                       const canResolveThisRequest =
                         canManageThisRequest &&
-                        ['PENDING', 'IN_REVIEW', 'PENDING_HR', 'PENDING_ADMIN'].includes(request.status);
+                        (['PENDING', 'IN_REVIEW', 'PENDING_HR', 'PENDING_ADMIN'].includes(request.status) || canSignAfterAdmin);
                       const employeeDisplayName = employee ? getEmployeeName(employee) : request.employee;
                       const RequestTypeIcon = REQUEST_TYPE_ICONS[request.request_type];
                       return (
@@ -5590,7 +5602,7 @@ export function AdminHR() {
                                   icon: Wallet,
                                   onClick: () => openRemunerationModal(request),
                                 }] : []),
-                                ...(canManageThisRequest ? [{
+                                ...(canManageThisRequest && !isSafetyViewer ? [{
                                   label: 'Aprobar',
                                   icon: Check,
                                   onClick: () => handleVacationAction(request, 'approve'),

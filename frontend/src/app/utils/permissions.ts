@@ -19,7 +19,8 @@ type Role =
   | 'DIRECTOR_TECNICO'
   | 'AUDITOR'
   | 'CONTABILIDAD'
-  | 'TESORERIA';
+  | 'TESORERIA'
+  | 'SEGURIDAD_SALUD';
 
 interface Permission {
   canCreateProducts: boolean;
@@ -183,6 +184,26 @@ export const rolePermissions: Record<Role, Permission> = {
     canAccessSettings: false,
     canManageUsers: false,
   },
+  SEGURIDAD_SALUD: {
+    canCreateProducts: false,
+    canEditProducts: false,
+    canDeleteProducts: false,
+    canViewProducts: false,
+    canManageInventory: false,
+    canViewInventory: false,
+    canViewAllOrders: false,
+    canUpdateOrderStatus: false,
+    canCancelOrders: false,
+    canViewCustomers: false,
+    canEditCustomers: false,
+    canDeleteCustomers: false,
+    canViewPayments: false,
+    canProcessRefunds: false,
+    canViewReports: false,
+    canExportData: false,
+    canAccessSettings: false,
+    canManageUsers: false,
+  },
   PEDIDOS: {
     canCreateProducts: false,
     canEditProducts: false,
@@ -274,6 +295,8 @@ export function getRoleLabel(role: Role): string {
       return 'Contabilidad';
     case 'TESORERIA':
       return 'Tesorería';
+    case 'SEGURIDAD_SALUD':
+      return 'Seguridad y salud';
     default:
       return role;
   }

@@ -150,6 +150,13 @@ ROLE_DEFINITIONS = (
         "is_superuser": False,
         "is_default": False,
     },
+    {
+        "code": "SEGURIDAD_SALUD",
+        "name": "Seguridad y salud",
+        "description": "Empleado con autoservicio normal que además consulta (solo lectura) las solicitudes de RRHH.",
+        "is_superuser": False,
+        "is_default": False,
+    },
 )
 
 
@@ -371,5 +378,13 @@ def build_default_role_permissions():
     permissions["TESORERIA"] = {
         "human_resources.loans": {"can_view": True, "can_edit": True},
         "human_resources.payroll": {"can_view": True, "can_edit": False},
+    }
+    # Seguridad y salud: mismo autoservicio que un empleado, más consulta (sin
+    # editar) del módulo de RRHH para ver las solicitudes. Los préstamos quedan
+    # fuera de su vista (ver VacationRequestViewSet.get_queryset).
+    permissions["SEGURIDAD_SALUD"] = {
+        "identity.users": {"can_view": True, "can_edit": False},
+        "employees.management": {"can_view": True, "can_edit": False},
+        "human_resources.management": {"can_view": True, "can_edit": False},
     }
     return permissions
