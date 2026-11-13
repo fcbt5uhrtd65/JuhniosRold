@@ -104,12 +104,15 @@ class PaymentAccountViewSet(
         serializer.is_valid(raise_exception=True)
         # El consecutivo es único: ante una carrera entre dos creaciones se
         # reintenta con el siguiente número disponible.
+        document = serializer.validated_data["contractor_document"]
         for _ in range(5):
             try:
                 with transaction.atomic():
                     instance = serializer.save(
                         created_by=request.user,
                         number=PaymentAccount.next_number(),
+                        contractor_document_key=PaymentAccount.document_key(document),
+                        contractor_number=PaymentAccount.next_contractor_number(document),
                     )
                 break
             except IntegrityError:
@@ -126,4 +129,8 @@ class PaymentAccountViewSet(
 
     @action(detail=False, methods=["get"], url_path="next-number")
     def next_number(self, request):
-        return Response({"next_number": PaymentAccount.next_number()})
+        data = {"next_number": PaymentAccount.next_number()}
+        document = request.query_params.get("document", "")
+        if PaymentAccount.document_key(document):
+            data["next_contractor_number"] = PaymentAccount.next_contractor_number(document)
+        return Response(data)

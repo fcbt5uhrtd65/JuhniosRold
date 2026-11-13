@@ -112,6 +112,11 @@ class PaymentAccount(BaseModel):
     """
 
     number = models.PositiveIntegerField(unique=True, editable=False)
+    # Consecutivo propio de cada prestador (por cédula): 1, 2, 3...
+    contractor_number = models.PositiveIntegerField(default=1, editable=False)
+    contractor_document_key = models.CharField(
+        max_length=30, blank=True, default="", db_index=True, editable=False
+    )
     issue_date = models.DateField()
     service_title = models.CharField(max_length=200)
 
@@ -176,4 +181,18 @@ class PaymentAccount(BaseModel):
         """Siguiente consecutivo: máximo de todos los registros (eliminados
         incluidos) + 1."""
         current = cls.all_objects.aggregate(top=models.Max("number"))["top"]
+        return (current or 0) + 1
+
+    @staticmethod
+    def document_key(document: str) -> str:
+        """Cédula normalizada (solo dígitos) para agrupar cuentas por prestador."""
+        return "".join(ch for ch in (document or "") if ch.isdigit())
+
+    @classmethod
+    def next_contractor_number(cls, document: str) -> int:
+        """Siguiente consecutivo del prestador con esa cédula (eliminadas incluidas)."""
+        key = cls.document_key(document)
+        current = cls.all_objects.filter(contractor_document_key=key).aggregate(
+            top=models.Max("contractor_number")
+        )["top"]
         return (current or 0) + 1

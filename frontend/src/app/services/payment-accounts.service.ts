@@ -29,8 +29,9 @@ export interface PaymentAccountPage {
   total_pages: number;
 }
 
-type RawAccount = Omit<PaymentAccount, 'number' | 'amount' | 'monthly_value'> & {
+type RawAccount = Omit<PaymentAccount, 'number' | 'global_number' | 'amount' | 'monthly_value'> & {
   id_number: number;
+  contractor_number: number;
   amount: string | number;
   monthly_value: string | number | null;
 };
@@ -39,7 +40,8 @@ function normalize(raw: RawAccount): PaymentAccount {
   const text = (v: unknown) => (v == null ? '' : String(v));
   return {
     ...raw,
-    number: raw.id_number,
+    number: raw.contractor_number ?? raw.id_number,
+    global_number: raw.id_number,
     amount: Number(raw.amount),
     monthly_value: raw.monthly_value == null ? null : Number(raw.monthly_value),
     period_start: text(raw.period_start),
@@ -99,7 +101,10 @@ export async function deletePaymentAccount(id: string): Promise<void> {
   await api.delete(`${PATH}${id}/`);
 }
 
-export async function getNextPaymentAccountNumber(): Promise<number> {
-  const res = await api.get<{ next_number: number }>(`${PATH}next-number/`);
-  return res.data?.next_number ?? 1;
+/** Siguiente número del prestador con esa cédula (o el global si no hay cédula). */
+export async function getNextPaymentAccountNumber(document = ''): Promise<number> {
+  const res = await api.get<{ next_number: number; next_contractor_number?: number }>(
+    `${PATH}next-number/${buildQuery({ document: document.trim() })}`,
+  );
+  return res.data?.next_contractor_number ?? res.data?.next_number ?? 1;
 }

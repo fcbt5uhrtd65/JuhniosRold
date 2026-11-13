@@ -5,7 +5,7 @@ from ..infrastructure.models import PaymentAccount
 
 
 class PaymentAccountFilter(django_filters.FilterSet):
-    id_number = django_filters.NumberFilter(field_name="number", lookup_expr="exact")
+    id_number = django_filters.NumberFilter(method="filter_number")
     name = django_filters.CharFilter(method="filter_name")
     date_from = django_filters.DateFilter(field_name="issue_date", lookup_expr="gte")
     date_to = django_filters.DateFilter(field_name="issue_date", lookup_expr="lte")
@@ -13,6 +13,11 @@ class PaymentAccountFilter(django_filters.FilterSet):
     class Meta:
         model = PaymentAccount
         fields = ()
+
+    def filter_number(self, queryset, name, value):
+        if value is None:
+            return queryset
+        return queryset.filter(Q(contractor_number=value) | Q(number=value))
 
     def filter_name(self, queryset, name, value):
         value = (value or "").strip()

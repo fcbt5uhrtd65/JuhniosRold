@@ -187,9 +187,15 @@ export function AdminPaymentAccounts() {
                   <tbody className="divide-y divide-gray-50">
                     {data.results.map((a) => (
                       <tr key={a.id} className="hover:bg-gray-50/60">
-                        <td className="px-3 py-2 font-semibold text-gray-900">{formatNumber(a.number)}</td>
+                        <td className="px-3 py-2 font-semibold text-gray-900">
+                          {formatNumber(a.number)}
+                          <p className="text-[10px] font-normal text-gray-400" title="Consecutivo global de todas las cuentas">
+                            Global {formatNumber(a.global_number ?? null)}
+                          </p>
+                        </td>
                         <td className="max-w-[260px] px-3 py-2">
                           <p className="font-medium text-gray-900">{a.contractor_name}</p>
+                          <p className="text-gray-400">C.C. {a.contractor_document}</p>
                           <p className="truncate text-gray-500">{a.service_title}</p>
                         </td>
                         <td className="px-3 py-2 text-gray-700">{a.client_name}</td>

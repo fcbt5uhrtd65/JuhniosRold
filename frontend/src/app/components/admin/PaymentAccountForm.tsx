@@ -402,7 +402,7 @@ export function PaymentAccountForm({ previousAccounts, duplicate, onCreated }: P
   const openPreview = async () => {
     let next: number | null = null;
     try {
-      next = await getNextPaymentAccountNumber();
+      next = await getNextPaymentAccountNumber(form.contractor_document);
     } catch {
       // Sin consecutivo disponible: el borrador se muestra sin número.
     }

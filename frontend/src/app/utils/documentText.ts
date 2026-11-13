@@ -2,7 +2,10 @@
 import { RETENTION_LIMIT, UVT, UVT_RESOLUTION, UVT_YEAR } from './retention';
 
 export interface PaymentAccountDoc {
+  /** Consecutivo del prestador (por cédula): 001, 002, 003... */
   number: number | null;
+  /** Consecutivo global de todas las cuentas de cobro. */
+  global_number?: number | null;
   issue_date: string;
   service_title: string;
   contractor_name: string;

@@ -72,6 +72,7 @@ class PaymentAccountSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "id_number",
+            "contractor_number",
             "issue_date",
             "service_title",
             "contractor_name",
@@ -109,7 +110,7 @@ class PaymentAccountSerializer(serializers.ModelSerializer):
             "created_by",
             "created_at",
         )
-        read_only_fields = ("id", "id_number", "created_by", "created_at")
+        read_only_fields = ("id", "id_number", "contractor_number", "created_by", "created_at")
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
