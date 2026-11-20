@@ -4178,18 +4178,21 @@ export function AdminHR() {
         onClick: () => void handlePayslipDownload(payslip),
         disabled: downloadingPayslipId === payslip.id,
       },
-      {
-        label: 'Editar',
-        icon: Edit2,
-        onClick: () => handleEditPayslip(payslip),
-      },
-      {
-        label: 'Eliminar',
-        icon: Trash2,
-        onClick: () => void handleDeletePayslip(payslip),
-        disabled: deletingPayslipId === payslip.id,
-        danger: true,
-      },
+      // Seguridad y salud solo sube y descarga: sin editar ni eliminar.
+      ...(isSafetyViewer ? [] : [
+        {
+          label: 'Editar',
+          icon: Edit2,
+          onClick: () => handleEditPayslip(payslip),
+        },
+        {
+          label: 'Eliminar',
+          icon: Trash2,
+          onClick: () => void handleDeletePayslip(payslip),
+          disabled: deletingPayslipId === payslip.id,
+          danger: true,
+        },
+      ]),
     ];
 
     return (
@@ -4341,6 +4344,7 @@ export function AdminHR() {
                         <Th>Pago</Th>
                         <Th>Estado</Th>
                         <Th>Visto</Th>
+                        <Th>Cargado por</Th>
                         <Th>Acciones</Th>
                       </tr>
                     </thead>
@@ -4366,6 +4370,10 @@ export function AdminHR() {
                             <Td>{parseDate(payslip.payment_date)}</Td>
                             <Td><Badge label={payslipStatusLabel(payslip.status)} color={payslipStatusBadge(payslip.status)} /></Td>
                             <Td><PayslipViewedIndicator viewedAt={payslip.viewed_at} /></Td>
+                            <Td>
+                              <div className="text-xs text-gray-700">{payslip.uploaded_by_name || '—'}</div>
+                              <div className="text-[11px] text-gray-400">{payslip.created_at ? new Date(payslip.created_at).toLocaleString('es-CO') : ''}</div>
+                            </Td>
                             <Td className={actionsCellCls}>
                               <ActionsMenu items={payslipActions(payslip)} />
                             </Td>
@@ -4898,7 +4906,7 @@ export function AdminHR() {
                 { id: 'orgchart', label: 'Organigrama', icon: Network, desc: 'Jerarquía de la empresa' },
                 { id: 'documents', label: 'Normativa', icon: FileText, desc: 'Reglamento y políticas' },
                 { id: 'payments', label: 'Pagos', icon: Wallet, desc: 'Volantes de pago' },
-              ] as const).filter((item) => !isSafetyViewer || item.id === 'vacations').map((item) => {
+              ] as const).filter((item) => !isSafetyViewer || item.id === 'vacations' || item.id === 'payments').map((item) => {
                 const Icon = item.icon;
                 const active = activeTab === item.id;
                 return (

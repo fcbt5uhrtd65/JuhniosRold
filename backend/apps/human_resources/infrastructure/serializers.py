@@ -439,11 +439,19 @@ class PayrollPeriodSerializer(serializers.ModelSerializer):
 class PayslipDocumentSerializer(serializers.ModelSerializer):
     employee_name = serializers.SerializerMethodField()
     file_name = serializers.SerializerMethodField()
+    uploaded_by_name = serializers.SerializerMethodField()
 
     class Meta:
         model = PayslipDocument
         fields = "__all__"
-        read_only_fields = ("uploaded_by", "published_at", "viewed_at", "employee_name", "file_name")
+        read_only_fields = ("uploaded_by", "published_at", "viewed_at", "employee_name", "file_name", "uploaded_by_name")
+
+    def get_uploaded_by_name(self, obj):
+        user = obj.uploaded_by
+        if not user:
+            return ""
+        full_name = f"{getattr(user, 'first_name', '')} {getattr(user, 'last_name', '')}".strip()
+        return full_name or getattr(user, "email", "") or str(user)
 
     def get_employee_name(self, obj):
         employee = obj.employee

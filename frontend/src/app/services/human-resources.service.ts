@@ -420,6 +420,7 @@ export interface PayslipDocument {
   status: PayslipDocumentStatus;
   notes: string;
   uploaded_by: string | null;
+  uploaded_by_name?: string;
   published_at: string | null;
   viewed_at: string | null;
   created_at: string;

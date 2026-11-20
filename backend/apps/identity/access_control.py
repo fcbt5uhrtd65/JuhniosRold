@@ -217,6 +217,11 @@ COMPONENT_DEFINITIONS = (
         "description": "Cálculo, aprobación y pago de nómina quincenal, horarios y festivos.",
     },
     {
+        "code": "human_resources.payslip_upload",
+        "name": "Carga de volantes de pago",
+        "description": "Solo subir y consultar el historial propio de volantes de pago; sin editar ni eliminar.",
+    },
+    {
         "code": "human_resources.biometric_import",
         "name": "Importación de marcaciones biométricas",
         "description": "Carga de archivos del reloj biométrico, mapeo de empleados y corrección de asistencia.",
@@ -386,5 +391,7 @@ def build_default_role_permissions():
         "identity.users": {"can_view": True, "can_edit": False},
         "employees.management": {"can_view": True, "can_edit": False},
         "human_resources.management": {"can_view": True, "can_edit": False},
+        # "edit" aquí significa únicamente SUBIR; editar/eliminar exige Nómina.
+        "human_resources.payslip_upload": {"can_view": True, "can_edit": True},
     }
     return permissions

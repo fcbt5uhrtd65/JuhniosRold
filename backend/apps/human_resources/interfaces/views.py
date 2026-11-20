@@ -1176,6 +1176,20 @@ class PayrollViewSet(SoftDeleteModelViewSet):
         return Response(self.get_serializer(payroll).data)
 
 
+class PayslipAccessPermission(HasComponentAccess):
+    """Nómina (``human_resources.payroll``) o carga de volantes
+    (``human_resources.payslip_upload``): basta con uno de los dos."""
+
+    def has_permission(self, request, view):
+        if super().has_permission(request, view):
+            return True
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        action = getattr(view, "required_component_action", "view")
+        return bool(user.has_component_access("human_resources.payslip_upload", action))
+
+
 class PayslipDocumentViewSet(SoftDeleteModelViewSet):
     queryset = PayslipDocument.objects.select_related("employee", "uploaded_by")
     serializer_class = PayslipDocumentSerializer
@@ -1185,14 +1199,32 @@ class PayslipDocumentViewSet(SoftDeleteModelViewSet):
     search_fields = ("title", "employee__employee_code", "employee__first_name", "employee__last_name", "notes")
     ordering_fields = ("period_start", "period_end", "payment_date", "created_at")
 
+    PAYSLIP_UPLOAD_COMPONENT = "human_resources.payslip_upload"
+
     def get_permissions(self):
         if self.action in {"me", "download"}:
             return (IsAuthenticated(),)
-        self.required_component_action = "view" if self.action in {"list", "retrieve"} else "edit"
+        if self.action in {"list", "retrieve", "create"}:
+            # Además de Nómina, Seguridad y salud puede listar y SUBIR volantes
+            # (componente de solo carga). Editar y eliminar siguen exigiendo Nómina.
+            self.required_component_action = "view" if self.action != "create" else "edit"
+            return (PayslipAccessPermission(),)
+        self.required_component_action = "edit"
         return super().get_permissions()
+
+    def _is_upload_only_user(self, user):
+        """Usuario con carga de volantes pero sin acceso de lectura a Nómina."""
+        return bool(
+            not getattr(user, "has_full_access", False)
+            and not user.has_component_access("human_resources.payroll", "view")
+            and user.has_component_access(self.PAYSLIP_UPLOAD_COMPONENT, "view")
+        )
 
     def get_queryset(self):
         queryset = super().get_queryset()
+        if self.action != "me" and self._is_upload_only_user(self.request.user):
+            # Quien solo carga ve únicamente el historial de lo que él mismo subió.
+            queryset = queryset.filter(uploaded_by=self.request.user)
         period_from = self.request.query_params.get("period_from")
         period_to = self.request.query_params.get("period_to")
         if period_from:
@@ -1209,6 +1241,8 @@ class PayslipDocumentViewSet(SoftDeleteModelViewSet):
         )
 
     def _ensure_download_allowed(self, document):
+        if self._is_upload_only_user(self.request.user) and document.uploaded_by_id == self.request.user.pk:
+            return
         employee = getattr(self.request.user, "employee_profile", None)
         if employee and document.employee_id == employee.id and document.status == PayslipDocument.Status.PUBLISHED:
             return
@@ -1250,6 +1284,14 @@ class PayslipDocumentViewSet(SoftDeleteModelViewSet):
             ip_address=self.request.META.get("REMOTE_ADDR"),
             resource_type=document.__class__.__name__,
             resource_id=document.pk,
+            metadata={
+                "employee": str(document.employee_id),
+                "title": document.title,
+                "period_start": str(document.period_start),
+                "period_end": str(document.period_end),
+                "status": document.status,
+                "role": getattr(getattr(self.request.user, "role", None), "code", ""),
+            },
         )
 
     def perform_update(self, serializer):
