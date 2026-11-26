@@ -312,7 +312,7 @@ function uniqueValues(values: string[]): string[] {
 }
 
 /** Genera un SKU corto tipo "JR-8K3P2Q": prefijo de 2 letras + 5-6 caracteres alfanuméricos. */
-function generateShortSku(): string {
+export function generateShortSku(): string {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sin caracteres ambiguos (0/O, 1/I/L)
   const length = 5 + Math.round(Math.random());
   let suffix = '';
@@ -946,7 +946,7 @@ export async function createProductVariant(productId: string, payload: CreateVar
   if (!res.data) {
     throw new Error('No se pudo crear la presentación.');
   }
-  return getProductById(productId);
+  return getProductByIdForAdmin(productId);
 }
 
 export interface UpdateVariantPayload {

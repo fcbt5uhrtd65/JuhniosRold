@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Modal, Field, inputCls, selectCls, ImageUploader, PrimaryButton, SecondaryButton } from './AdminUI';
 import { useToast } from '../../contexts/ToastContext';
-import { createProductVariant, getProductByIdForAdmin as getProductById, type Product } from '../../services/products.service';
+import { createProductVariant, generateShortSku, getProductByIdForAdmin as getProductById, type Product } from '../../services/products.service';
 import { createInitialStock, setInventoryQuantity } from '../../services/inventory.service';
 
 interface AddVariantModalProps {
@@ -14,7 +14,20 @@ interface AddVariantModalProps {
 
 const PRESENTATION_UNITS = ['ML', 'LT', 'GR', 'KG', 'UND'] as const;
 
+// Tipo de venta de la presentación. 'UNIDAD' es el comportamiento de siempre;
+// los demás son empaques que traen varias unidades (se guardan en attributes).
+const PACK_TYPES = [
+  { value: 'UNIDAD', label: 'Unidad individual' },
+  { value: 'DISPLAY', label: 'Display' },
+  { value: 'CAJA', label: 'Caja' },
+  { value: 'PAQUETE', label: 'Paquete' },
+] as const;
+
+type PackType = (typeof PACK_TYPES)[number]['value'];
+
 interface FormState {
+  tipoVenta: PackType;
+  unidadesPorEmpaque: string;
   presentacionNumero: string;
   presentacionUnidad: (typeof PRESENTATION_UNITS)[number];
   sku: string;
@@ -26,6 +39,8 @@ interface FormState {
 }
 
 const EMPTY_FORM: FormState = {
+  tipoVenta: 'UNIDAD',
+  unidadesPorEmpaque: '',
   presentacionNumero: '',
   presentacionUnidad: 'ML',
   sku: '',
@@ -48,6 +63,12 @@ export function AddVariantModal({ open, onClose, productId, productName, onCreat
     onClose();
   };
 
+  const packName = PACK_TYPES.find(t => t.value === form.tipoVenta)?.label ?? 'Display';
+  const contenido = form.presentacionNumero ? `${form.presentacionNumero} ${form.presentacionUnidad}` : '';
+  const packLabel = form.tipoVenta === 'UNIDAD'
+    ? contenido
+    : `${packName} x${form.unidadesPorEmpaque || '?'}${contenido ? ` · ${contenido}` : ''}`;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const presentacionNumero = form.presentacionNumero ? Number(form.presentacionNumero) : undefined;
@@ -60,19 +81,31 @@ export function AddVariantModal({ open, onClose, productId, productName, onCreat
       toast.error('Ingresa un precio de venta válido.');
       return;
     }
+    const isPack = form.tipoVenta !== 'UNIDAD';
+    const unidadesPorEmpaque = Number(form.unidadesPorEmpaque);
+    if (isPack && (!Number.isInteger(unidadesPorEmpaque) || unidadesPorEmpaque < 2)) {
+      toast.error('Indica cuántas unidades trae el empaque (mínimo 2).');
+      return;
+    }
+    // El SKU se fija aquí para poder ubicar con certeza la presentación creada
+    // (un display puede tener el mismo contenido, p.ej. 50 ML, que la unidad).
+    const sku = form.sku.trim() || generateShortSku();
 
     setIsSubmitting(true);
     try {
       await createProductVariant(productId, {
-        sku: form.sku || undefined,
+        sku,
+        ...(isPack ? { variant_name: packLabel } : {}),
         presentation_number: presentacionNumero,
         presentation_unit: form.presentacionUnidad,
+        ...(isPack ? { variant_attributes: { pack_type: form.tipoVenta, pack_units: unidadesPorEmpaque } } : {}),
         price: precio,
         cost: form.precioCosto ? Number(form.precioCosto) : undefined,
         variant_images: form.imagen ? [form.imagen] : [],
       });
       const full = await getProductById(productId);
-      const created = full.variants.find(v => v.presentation_number === presentacionNumero && v.presentation_unit === form.presentacionUnidad)
+      const created = full.variants.find(v => v.sku === sku)
+        ?? full.variants.find(v => v.presentation_number === presentacionNumero && v.presentation_unit === form.presentacionUnidad)
         ?? full.variants[full.variants.length - 1];
       if (created) {
         const stockMinimo = form.stockMinimo ? Number(form.stockMinimo) : 10;
@@ -99,7 +132,35 @@ export function AddVariantModal({ open, onClose, productId, productName, onCreat
     <Modal title={`Nueva presentación · ${productName}`} open={open} onClose={handleClose}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Número de presentación" required>
+          <Field label="Tipo de venta" required>
+            <select
+              value={form.tipoVenta}
+              onChange={e => set({ tipoVenta: e.target.value as PackType })}
+              className={selectCls}
+            >
+              {PACK_TYPES.map(type => (
+                <option key={type.value} value={type.value}>{type.label}</option>
+              ))}
+            </select>
+          </Field>
+          {form.tipoVenta !== 'UNIDAD' && (
+            <Field label="Unidades que trae" required>
+              <input
+                type="number"
+                min="2"
+                step="1"
+                value={form.unidadesPorEmpaque}
+                onChange={e => set({ unidadesPorEmpaque: e.target.value })}
+                className={inputCls}
+                placeholder="12, 24..."
+                required
+              />
+            </Field>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <Field label={form.tipoVenta === 'UNIDAD' ? 'Número de presentación' : 'Contenido de cada unidad'} required>
             <input
               type="number"
               min="0"
@@ -123,6 +184,13 @@ export function AddVariantModal({ open, onClose, productId, productName, onCreat
             </select>
           </Field>
         </div>
+
+        {form.tipoVenta !== 'UNIDAD' && (
+          <p className="-mt-2 rounded-xl bg-gray-50 px-3 py-2 text-xs text-gray-500">
+            Se mostrará como <span className="font-semibold text-gray-800">{packLabel}</span>.
+            El precio y el stock son por {packName.toLowerCase()} completo.
+          </p>
+        )}
 
         <Field label="Código / SKU (opcional, se genera uno si lo dejas vacío)">
           <input

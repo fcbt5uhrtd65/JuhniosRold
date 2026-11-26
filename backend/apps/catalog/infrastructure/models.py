@@ -75,14 +75,34 @@ class ProductVariant(BaseModel):
     class Meta:
         ordering = ["presentation_number", "sku"]
 
+    # Empaques multi-unidad (display, caja, paquete). Se guardan en `attributes`
+    # como {"pack_type": "DISPLAY", "pack_units": 12}; las presentaciones sin
+    # esas claves se muestran exactamente igual que antes.
+    PACK_TYPE_LABELS = {"DISPLAY": "Display", "CAJA": "Caja", "PAQUETE": "Paquete"}
+
+    @property
+    def pack_units(self):
+        try:
+            units = int((self.attributes or {}).get("pack_units") or 0)
+        except (TypeError, ValueError):
+            return None
+        return units if units > 1 else None
+
     @property
     def presentation_label(self):
         if self.presentation_number is not None and self.presentation_unit:
             number = f"{self.presentation_number:f}"
             if "." in number:
                 number = number.rstrip("0").rstrip(".")
-            return f"{number} {self.presentation_unit}"
-        return self.name
+            base = f"{number} {self.presentation_unit}"
+        else:
+            base = self.name
+        units = self.pack_units
+        if units:
+            pack_type = str((self.attributes or {}).get("pack_type") or "").upper()
+            pack_name = self.PACK_TYPE_LABELS.get(pack_type, "Display")
+            return f"{pack_name} x{units} · {base}"
+        return base
 
     def __str__(self):
         return f"{self.product.name} - {self.presentation_label}"
