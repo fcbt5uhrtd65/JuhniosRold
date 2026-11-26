@@ -23,6 +23,9 @@ const stats = [
 ];
 
 export function WholesaleBuyers() {
+  const ref    = useRef<HTMLDivElement>(null);
+  const inView = useInView(ref, { once: true, margin: '-60px' });
+
   return (
     <section id="mayorista" className="py-12 px-4 md:px-8 lg:px-14" style={{ backgroundColor: '#F7F5F1' }}>
       <motion.div
