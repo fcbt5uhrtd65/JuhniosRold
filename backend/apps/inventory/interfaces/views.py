@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.db.models import F, Q
 from rest_framework.permissions import AllowAny
 from rest_framework import viewsets
@@ -32,6 +33,7 @@ from ..infrastructure.serializers import (
     ProductionOrderSerializer,
     PurchaseOrderSerializer,
     PublicRawMaterialSerializer,
+    remove_raw_material_product,
     StockConversionSerializer,
     StockSerializer,
     SupplierSerializer,
@@ -187,6 +189,11 @@ class ItemViewSet(SoftDeleteModelViewSet):
     def get_permissions(self):
         self.required_component_action = "view" if self.action in {"list", "retrieve"} else "edit"
         return super().get_permissions()
+
+    @transaction.atomic
+    def perform_destroy(self, instance):
+        remove_raw_material_product(instance)
+        super().perform_destroy(instance)
 
 
 class PublicRawMaterialViewSet(viewsets.ReadOnlyModelViewSet):

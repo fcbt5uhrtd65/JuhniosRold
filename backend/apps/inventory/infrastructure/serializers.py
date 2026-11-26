@@ -130,7 +130,8 @@ def _unique_slug(base):
     seed = slugify(base)[:44] or "materia-prima"
     slug = seed
     suffix = 2
-    while Product.objects.filter(slug=slug).exists():
+    # all_objects: los productos eliminados (soft delete) siguen ocupando el slug en BD.
+    while Product.all_objects.filter(slug=slug).exists():
         slug = f"{seed[:44 - len(str(suffix)) - 1]}-{suffix}"
         suffix += 1
     return slug
@@ -140,7 +141,8 @@ def _unique_sku(item, variant=None):
     base = f"MP-{item.code}".upper()[:72]
     sku = base
     suffix = 2
-    queryset = ProductVariant.objects.all()
+    # all_objects: las variantes eliminadas (soft delete) siguen ocupando el SKU en BD.
+    queryset = ProductVariant.all_objects.all()
     if variant is not None:
         queryset = queryset.exclude(pk=variant.pk)
     while queryset.filter(sku=sku).exists():
@@ -148,6 +150,53 @@ def _unique_sku(item, variant=None):
         sku = f"{base[:80 - len(suffix_text)]}{suffix_text}"
         suffix += 1
     return sku
+
+
+def _linked_raw_material_variant(item):
+    variant = item.product_variant
+    if variant is None:
+        return None
+    if (variant.attributes or {}).get(RAW_MATERIAL_ATTR_KEY) != RAW_MATERIAL_ATTR_VALUE:
+        # Enlace a un producto comercial real: no se toca.
+        return None
+    return variant
+
+
+def _deactivate_raw_material_product(item):
+    variant = _linked_raw_material_variant(item)
+    if variant is None:
+        return
+    if variant.is_active:
+        variant.is_active = False
+        variant.save(update_fields=("is_active", "updated_at"))
+    product = variant.product
+    if product is not None and product.is_active:
+        product.is_active = False
+        product.save(update_fields=("is_active", "updated_at"))
+
+
+@transaction.atomic
+def remove_raw_material_product(item):
+    """Al eliminar una materia prima, retira también su producto/variante puente
+    para que no quede activo ni vendible en el catálogo."""
+    variant = _linked_raw_material_variant(item)
+    if variant is None:
+        return
+    _deactivate_raw_material_product(item)
+    product = variant.product
+    variant.soft_delete()
+    if product is not None and not product.variants.exists():
+        product.soft_delete()
+
+
+@transaction.atomic
+def release_deleted_item_code(code):
+    """El código es único en BD, pero los artículos eliminados (soft delete)
+    lo siguen ocupando. Se renombra el eliminado para poder reutilizarlo."""
+    for deleted in Item.all_objects.filter(code=code, deleted_at__isnull=False):
+        suffix = f"~{deleted.id.hex[:8]}"
+        deleted.code = f"{code[:30 - len(suffix)]}{suffix}"
+        deleted.save(update_fields=("code", "updated_at"))
 
 
 @transaction.atomic
@@ -161,6 +210,8 @@ def sync_raw_material_product(item):
     """
     item = Item.objects.select_related("item_type", "item_group", "unit").get(pk=item.pk)
     if not _is_raw_material(item):
+        # Si dejó de ser materia prima, su producto puente no debe seguir vendible.
+        _deactivate_raw_material_product(item)
         return item
 
     category, _ = Category.objects.get_or_create(
@@ -255,11 +306,14 @@ class ItemSerializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def create(self, validated_data):
+        release_deleted_item_code(validated_data.get("code"))
         item = super().create(validated_data)
         return sync_raw_material_product(item)
 
     @transaction.atomic
     def update(self, instance, validated_data):
+        if "code" in validated_data and validated_data["code"] != instance.code:
+            release_deleted_item_code(validated_data["code"])
         item = super().update(instance, validated_data)
         return sync_raw_material_product(item)
 

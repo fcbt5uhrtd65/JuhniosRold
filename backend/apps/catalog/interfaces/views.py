@@ -63,6 +63,9 @@ class ProductViewSet(SoftDeleteModelViewSet):
             | Q(variants__inventory_items__item_group__name__icontains="fragancia")
             | Q(variants__inventory_items__item_group__name__icontains="colorante")
             | Q(variants__inventory_items__item_group__name__icontains="extracto")
+            # Productos puente de materias primas: tienen su propia página.
+            | Q(category__slug="materias-primas")
+            | Q(variants__attributes__inventory_item_type="raw_material")
         )
         active_variants = ProductVariant.objects.filter(is_active=True).prefetch_related(
             Prefetch("prices", queryset=Price.objects.filter(is_active=True)),

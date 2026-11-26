@@ -530,7 +530,14 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       if (canViewProducts) {
         try {
           const apiProducts = await getAllProductsForAdmin();
-          const mappedProducts = apiProducts.map(mapApiProduct);
+          // Las materias primas tienen su propio módulo; su producto puente
+          // (categoría "materias-primas") no debe aparecer en Productos.
+          const mappedProducts = apiProducts
+            .filter(product => (
+              product.category_slug !== 'materias-primas'
+              && !product.variants.some(variant => variant.attributes?.inventory_item_type === 'raw_material')
+            ))
+            .map(mapApiProduct);
           if (isStale()) return;
           setProducts(mappedProducts);
           safeSetItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(mappedProducts));

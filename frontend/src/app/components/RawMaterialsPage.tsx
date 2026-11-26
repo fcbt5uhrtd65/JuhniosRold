@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import {
-  AlertCircle,
   ArrowLeft,
   Beaker,
-  CheckCircle,
-  FlaskConical,
-  Loader2,
+  Eye,
+  Grid,
+  List,
   Minus,
   Plus,
   Search,
-  ShoppingCart,
+  ShoppingBag,
   SlidersHorizontal,
   X,
 } from 'lucide-react';
@@ -25,11 +25,15 @@ import { WhatsAppButton } from './WhatsAppButton';
 
 type PriceFilter = 'all' | 'low' | 'mid' | 'high';
 type SortKey = 'name' | 'price' | 'recent';
+type ViewMode = 'grid' | 'list';
+
+// Mismo color y lenguaje visual que el catálogo de productos (ProductCatalog).
+const OLIVE = '#2D3A1F';
 
 function normalize(value: string | null | undefined): string {
   return String(value ?? '')
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
     .trim();
 }
@@ -63,6 +67,42 @@ function isOutOfStock(material: PublicRawMaterial): boolean {
   return material.availableQuantity !== null && material.availableQuantity <= 0;
 }
 
+function pillCls(active: boolean): string {
+  return `px-3.5 py-1.5 text-[11px] border rounded-lg transition-all ${
+    active ? 'text-white border-transparent' : 'border-stone-200 text-stone-500 hover:border-stone-400'
+  }`;
+}
+
+function MaterialImage({ material, className }: { material: PublicRawMaterial; className: string }) {
+  if (!material.imageUrl) {
+    return (
+      <div className="flex h-full w-full items-center justify-center text-stone-300">
+        <Beaker className="h-10 w-10" strokeWidth={1.2} />
+      </div>
+    );
+  }
+  return (
+    <motion.img
+      whileHover={{ scale: 1.06 }}
+      transition={{ duration: 0.55 }}
+      src={material.imageUrl}
+      alt={material.name}
+      className={className}
+      loading="lazy"
+      decoding="async"
+    />
+  );
+}
+
+function MaterialPrice({ material, className }: { material: PublicRawMaterial; className: string }) {
+  return (
+    <span className={`font-semibold text-stone-900 ${className}`}>
+      {formatPrice(material.price)}
+      <span className="ml-1 text-[10px] font-normal text-stone-400">/ {unitLabel(material)}</span>
+    </span>
+  );
+}
+
 export function RawMaterialsPage({ onLoginClick }: { onLoginClick: () => void }) {
   const toast = useToast();
   const { currentUser } = useUser();
@@ -75,6 +115,8 @@ export function RawMaterialsPage({ onLoginClick }: { onLoginClick: () => void })
   const [unitFilter, setUnitFilter] = useState('all');
   const [priceFilter, setPriceFilter] = useState<PriceFilter>('all');
   const [sortKey, setSortKey] = useState<SortKey>('name');
+  const [showFilters, setShowFilters] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [selectedMaterial, setSelectedMaterial] = useState<PublicRawMaterial | null>(null);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
 
@@ -103,6 +145,15 @@ export function RawMaterialsPage({ onLoginClick }: { onLoginClick: () => void })
     [...new Set(materials.map(groupLabel).filter(Boolean))]
       .sort((left, right) => left.localeCompare(right, 'es', { sensitivity: 'base' }))
   ), [materials]);
+
+  const categoryTabs = useMemo(() => [
+    { id: 'all', label: 'Todas', count: materials.length },
+    ...groupOptions.map(group => ({
+      id: group,
+      label: group,
+      count: materials.filter(material => groupLabel(material) === group).length,
+    })),
+  ], [groupOptions, materials]);
 
   const unitOptions = useMemo(() => (
     [...new Set(materials.map(unitLabel).filter(Boolean))]
@@ -181,263 +232,488 @@ export function RawMaterialsPage({ onLoginClick }: { onLoginClick: () => void })
   const activeFilters = [search, groupFilter !== 'all', unitFilter !== 'all', priceFilter !== 'all'].filter(Boolean).length;
 
   return (
-    <div className="min-h-screen bg-[#F7F5F1] text-stone-950">
+    <div className="min-h-screen bg-white text-stone-950">
       <NavigationBar variant="solid" onLoginClick={onLoginClick} />
-      <main className="px-4 pb-12 pt-24 md:px-8 lg:px-14">
-        <section className="mx-auto max-w-7xl">
-          <div className="mb-8 space-y-5">
-            <button
-              type="button"
-              onClick={() => navigateBack('/')}
-              className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-stone-500 transition-colors hover:text-stone-950"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" />
-              Inicio
-            </button>
+      <main className="pb-20 pt-24">
+        <section className="max-w-[1400px] mx-auto px-6 md:px-10 lg:px-14">
+          <button
+            type="button"
+            onClick={() => navigateBack('/')}
+            className="mb-8 inline-flex items-center gap-2 text-[11px] tracking-[0.12em] uppercase text-stone-400 transition-colors hover:text-stone-900"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.5} />
+            Inicio
+          </button>
 
-            <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+          {/* ── HEADER editorial ── */}
+          <motion.div
+            initial={{ opacity: 0, y: 28 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.65 }}
+            className="mb-12"
+          >
+            <div className="grid lg:grid-cols-[1fr_auto] gap-8 items-end mb-10">
               <div>
-                <h1 className="font-serif text-4xl font-semibold leading-tight text-[#17351f] md:text-5xl">Materias primas</h1>
-                <p className="mt-2 max-w-2xl text-base text-stone-600">
-                  Insumos profesionales para fabricacion cosmetica, cuidado personal y desarrollo de formulas.
+                <p className="text-[9px] tracking-[0.4em] uppercase text-stone-400 mb-4">
+                  Para fabricantes · B2B
                 </p>
+                <h1
+                  className="text-[56px] md:text-[72px] lg:text-[84px] font-light text-stone-900 leading-[0.92] tracking-tight"
+                  style={{ fontFamily: "'Playfair Display', serif" }}
+                >
+                  Materias<br />
+                  <em style={{ fontStyle: 'italic', color: OLIVE }}>primas</em>
+                </h1>
               </div>
-              <div className="inline-flex w-fit flex-wrap items-center gap-2 rounded-full bg-[#1f4b24] px-4 py-2 text-sm font-medium text-white shadow-sm">
-                <FlaskConical className="h-4 w-4" strokeWidth={1.7} />
-                <span>Venta por unidad o volumen</span>
-                <span className="hidden h-1 w-1 rounded-full bg-white/70 sm:block" />
-                <span>Envios a toda Colombia</span>
-              </div>
+              <p className="text-sm text-stone-400 leading-relaxed max-w-[240px] lg:mb-2">
+                Insumos profesionales para fabricación cosmética, cuidado personal y desarrollo de fórmulas.
+              </p>
             </div>
-          </div>
 
-          <div className="mb-8">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(260px,2fr)_repeat(3,minmax(150px,1fr))_auto]">
-              <div className="relative sm:col-span-2 lg:col-span-1">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" strokeWidth={1.7} />
+            {/* Barra búsqueda + controles */}
+            <div className="flex flex-col sm:flex-row gap-3 mb-7">
+              <div className="flex-1 relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-300" strokeWidth={1.3} />
                 <input
+                  type="search"
                   value={search}
                   onChange={event => setSearch(event.target.value)}
-                  placeholder="Buscar materia prima..."
-                  className="h-11 w-full rounded-lg border border-stone-200 bg-white pl-9 pr-3 text-sm text-stone-900 outline-none transition-colors placeholder:text-stone-400 focus:border-stone-900 focus:ring-2 focus:ring-stone-900/10"
+                  placeholder="Buscar materias primas..."
+                  className="w-full pl-11 pr-4 py-3 bg-white border border-stone-200 rounded-xl text-base sm:text-[13px] text-stone-700 placeholder:text-stone-300 focus:outline-none focus:border-stone-400 transition-colors"
                 />
               </div>
-              <select value={groupFilter} onChange={event => setGroupFilter(event.target.value)} className="h-11 rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-800 outline-none focus:border-stone-900">
-                <option value="all">Categoria</option>
-                {groupOptions.map(group => <option key={group} value={group}>{group}</option>)}
-              </select>
-              <select value={unitFilter} onChange={event => setUnitFilter(event.target.value)} className="h-11 rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-800 outline-none focus:border-stone-900">
-                <option value="all">Unidad</option>
-                {unitOptions.map(unit => <option key={unit} value={unit}>{unit}</option>)}
-              </select>
-              <select value={priceFilter} onChange={event => setPriceFilter(event.target.value as PriceFilter)} className="h-11 rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-800 outline-none focus:border-stone-900">
-                <option value="all">Precio</option>
-                <option value="low">Menos de $25k</option>
-                <option value="mid">$25k a $100k</option>
-                <option value="high">Mas de $100k</option>
-              </select>
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg px-3 text-xs font-semibold text-stone-600 transition-colors hover:bg-white sm:col-span-2 lg:col-span-1"
-              >
-                <X className="h-3.5 w-3.5" />
-                Limpiar filtros
-              </button>
-            </div>
-
-            <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="font-serif text-xl font-semibold text-[#17351f]">
-                {filteredMaterials.length} <span className="font-sans text-sm font-normal text-stone-600">materias primas</span>
-              </p>
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="text-sm text-stone-500">Ordenar por:</span>
-                <select value={sortKey} onChange={event => setSortKey(event.target.value as SortKey)} className="h-10 rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-800 outline-none focus:border-stone-900">
-                  <option value="name">Mas relevantes</option>
-                  <option value="price">Menor precio</option>
-                  <option value="recent">Recientes</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          {loading ? (
-            <div className="flex min-h-[360px] items-center justify-center rounded-lg border border-stone-200 bg-white shadow-sm">
-              <div className="flex items-center gap-2 text-sm font-semibold text-stone-500">
-                <Loader2 className="h-5 w-5 animate-spin" strokeWidth={1.8} />
-                Cargando materias primas...
-              </div>
-            </div>
-          ) : errorMessage ? (
-            <div className="flex items-start gap-3 rounded-lg border border-red-100 bg-red-50 px-5 py-4 text-sm text-red-900">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.8} />
-              <div>
-                <p className="font-semibold">No pudimos cargar las materias primas.</p>
-                <p className="mt-1 text-red-800">{errorMessage}</p>
-              </div>
-            </div>
-          ) : filteredMaterials.length === 0 ? (
-            <div className="rounded-lg border border-stone-200 bg-white px-5 py-12 text-center shadow-sm">
-              <SlidersHorizontal className="mx-auto mb-3 h-8 w-8 text-stone-300" strokeWidth={1.6} />
-              <p className="text-sm font-semibold text-stone-900">No encontramos resultados con esos filtros.</p>
-              <p className="mt-2 text-sm text-stone-500">Prueba otra busqueda o limpia los filtros.</p>
-            </div>
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {filteredMaterials.map(material => (
-                <article
-                  key={material.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setSelectedMaterial(material)}
-                  onKeyDown={event => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault();
-                      setSelectedMaterial(material);
-                    }
-                  }}
-                  className="flex min-h-[460px] cursor-pointer flex-col overflow-hidden rounded-lg border border-stone-200 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#1f4b24]/30 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#1f4b24]/20"
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowFilters(!showFilters)}
+                  className={`flex items-center gap-2 px-4 py-3 text-[11px] tracking-[0.12em] uppercase font-medium border rounded-xl transition-all ${
+                    showFilters ? 'text-white border-transparent' : 'border-stone-200 text-stone-500 hover:border-stone-400 bg-white'
+                  }`}
+                  style={showFilters ? { backgroundColor: OLIVE } : {}}
                 >
-                  <div className="flex aspect-[4/3] items-center justify-center bg-[#f3f1ec]">
-                    {material.imageUrl ? (
-                      <img src={material.imageUrl} alt={material.name} className="h-full w-full object-cover" />
-                    ) : (
-                      <div className="text-center text-[#1f4b24]/35">
-                        <Beaker className="mx-auto mb-2 h-10 w-10" strokeWidth={1.4} />
-                        <p className="text-[10px] font-semibold uppercase tracking-wider">Materia prima</p>
+                  <SlidersHorizontal className="w-3.5 h-3.5" strokeWidth={1.5} />
+                  Filtros{activeFilters > 0 ? ` (${activeFilters})` : ''}
+                </button>
+                <div className="flex gap-1">
+                  {(['grid', 'list'] as ViewMode[]).map(mode => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setViewMode(mode)}
+                      className={`p-3 rounded-xl border transition-all ${
+                        viewMode === mode ? 'text-white border-transparent' : 'border-stone-200 text-stone-400 hover:border-stone-300 bg-white'
+                      }`}
+                      style={viewMode === mode ? { backgroundColor: OLIVE } : {}}
+                      aria-label={mode === 'grid' ? 'Vista en cuadrícula' : 'Vista en lista'}
+                    >
+                      {mode === 'grid' ? <Grid className="w-4 h-4" strokeWidth={1.5} /> : <List className="w-4 h-4" strokeWidth={1.5} />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Panel filtros desplegable */}
+            <AnimatePresence>
+              {showFilters && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="overflow-hidden mb-5"
+                >
+                  <div className="grid sm:grid-cols-3 gap-6 p-6 bg-white rounded-2xl border border-stone-200">
+                    <div>
+                      <p className="text-[9px] tracking-[0.24em] uppercase text-stone-400 mb-3">Precio</p>
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          { value: 'all', label: 'Todos' },
+                          { value: 'low', label: '< $25k' },
+                          { value: 'mid', label: '$25k – $100k' },
+                          { value: 'high', label: '> $100k' },
+                        ].map(option => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => setPriceFilter(option.value as PriceFilter)}
+                            className={pillCls(priceFilter === option.value)}
+                            style={priceFilter === option.value ? { backgroundColor: OLIVE } : {}}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
                       </div>
+                    </div>
+                    <div>
+                      <p className="text-[9px] tracking-[0.24em] uppercase text-stone-400 mb-3">Unidad</p>
+                      <div className="flex flex-wrap gap-2">
+                        {['all', ...unitOptions].map(unit => (
+                          <button
+                            key={unit}
+                            type="button"
+                            onClick={() => setUnitFilter(unit)}
+                            className={pillCls(unitFilter === unit)}
+                            style={unitFilter === unit ? { backgroundColor: OLIVE } : {}}
+                          >
+                            {unit === 'all' ? 'Todas' : unit}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-[9px] tracking-[0.24em] uppercase text-stone-400 mb-3">Ordenar</p>
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          { value: 'name', label: 'Nombre' },
+                          { value: 'price', label: 'Menor precio' },
+                          { value: 'recent', label: 'Novedades' },
+                        ].map(option => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => setSortKey(option.value as SortKey)}
+                            className={pillCls(sortKey === option.value)}
+                            style={sortKey === option.value ? { backgroundColor: OLIVE } : {}}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    {activeFilters > 0 && (
+                      <button
+                        type="button"
+                        onClick={clearFilters}
+                        className="inline-flex w-fit items-center gap-1.5 text-[11px] tracking-[0.12em] uppercase text-stone-400 hover:text-stone-800 sm:col-span-3"
+                      >
+                        <X className="h-3.5 w-3.5" strokeWidth={1.5} />
+                        Limpiar filtros
+                      </button>
                     )}
                   </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
-                  <div className="flex flex-1 flex-col p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-[11px] font-semibold uppercase tracking-wider text-stone-400">{groupLabel(material)}</p>
-                        <h2 className="mt-1 min-h-[3.2rem] font-serif text-xl font-semibold leading-tight text-[#17351f] line-clamp-2">{material.name}</h2>
-                      </div>
-                      <span className={`mt-0.5 inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${isOutOfStock(material) ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>
-                        <CheckCircle className="h-3 w-3" />
-                        {isOutOfStock(material) ? 'Agotado' : 'Disponible'}
-                      </span>
-                    </div>
-
-                    <div className="my-4 h-px bg-stone-100" />
-
-                    <div className="grid gap-3">
-                      <div>
-                        <p className="text-xs text-stone-500">Precio por {unitLabel(material)}</p>
-                        <p className="mt-1 font-serif text-3xl font-semibold leading-none text-[#17351f]">{formatPrice(material.price)}</p>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <span className="rounded-full bg-[#eef4ee] px-3 py-1.5 text-xs font-semibold text-[#1f4b24]">
-                          {material.presentation || `1 ${unitLabel(material)}`}
-                        </span>
-                        {material.tracksBatches && (
-                          <span className="rounded-full bg-stone-100 px-3 py-1.5 text-xs font-semibold text-stone-600">
-                            Por lote
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {material.description && (
-                      <p className="mt-4 line-clamp-2 text-sm leading-6 text-stone-500">{material.description}</p>
+            {/* Pestañas por categoría */}
+            <div className="flex items-center gap-0 border-b border-stone-200 overflow-x-auto">
+              {categoryTabs.map(tab => {
+                const active = groupFilter === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setGroupFilter(tab.id)}
+                    className="relative flex items-center gap-1.5 px-4 py-3 text-[11px] tracking-[0.12em] uppercase whitespace-nowrap transition-colors flex-shrink-0"
+                    style={{ color: active ? OLIVE : '#9ca3af' }}
+                  >
+                    {tab.label}
+                    <span className={`text-[9px] ${active ? 'text-stone-400' : 'text-stone-300'}`}>({tab.count})</span>
+                    {active && (
+                      <motion.div
+                        layoutId="rawMaterialsTab"
+                        className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full"
+                        style={{ backgroundColor: OLIVE }}
+                      />
                     )}
+                  </button>
+                );
+              })}
+            </div>
+          </motion.div>
 
-                    <div className="mt-auto grid gap-2 pt-4 sm:grid-cols-[116px_minmax(0,1fr)]">
-                      <div
-                        className="grid h-10 min-w-[116px] grid-cols-3 overflow-hidden rounded-lg border border-stone-200 bg-white text-[#17351f]"
-                        onClick={event => event.stopPropagation()}
+          {/* ── SKELETON loading ── */}
+          {loading && (
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              {Array.from({ length: 6 }).map((_, index) => (
+                <div key={index} className="bg-white rounded-2xl overflow-hidden border border-stone-100">
+                  <div className="aspect-[3/4] bg-stone-100 animate-pulse" />
+                  <div className="p-4 space-y-3">
+                    <div className="h-2 w-16 bg-stone-100 animate-pulse rounded" />
+                    <div className="h-4 w-3/4 bg-stone-100 animate-pulse rounded" />
+                    <div className="h-3 w-24 bg-stone-100 animate-pulse rounded" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ── ERROR ── */}
+          {!loading && errorMessage && (
+            <div className="text-center py-20">
+              <Beaker className="w-10 h-10 mx-auto mb-4 text-stone-300" strokeWidth={1} />
+              <p className="text-sm text-stone-400">No pudimos cargar las materias primas. {errorMessage}</p>
+            </div>
+          )}
+
+          {/* ── VACÍO ── */}
+          {!loading && !errorMessage && filteredMaterials.length === 0 && (
+            <div className="text-center py-20">
+              <SlidersHorizontal className="w-10 h-10 mx-auto mb-4 text-stone-300" strokeWidth={1} />
+              <p className="text-sm text-stone-400">No encontramos materias primas con esos filtros.</p>
+            </div>
+          )}
+
+          {!loading && !errorMessage && search && filteredMaterials.length > 0 && (
+            <p className="text-[11px] text-stone-400 mb-5">
+              {filteredMaterials.length} resultado{filteredMaterials.length !== 1 ? 's' : ''} para «{search}»
+            </p>
+          )}
+
+          {/* ── GRID / LIST ── */}
+          {!loading && !errorMessage && filteredMaterials.length > 0 && (
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={`${groupFilter}-${viewMode}`}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3 }}
+                className={viewMode === 'grid'
+                  ? 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3'
+                  : 'flex flex-col gap-3'}
+              >
+                {filteredMaterials.map((material, index) => {
+                  const outOfStock = isOutOfStock(material);
+                  const cannotBuy = !material.variantId || !material.price || outOfStock;
+                  const open = () => setSelectedMaterial(material);
+                  const onKeyDown = (event: React.KeyboardEvent) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      open();
+                    }
+                  };
+                  const presentation = material.presentation || `1 ${unitLabel(material)}`;
+
+                  if (viewMode === 'list') {
+                    return (
+                      <motion.div
+                        key={material.id}
+                        initial={{ opacity: 0, x: -8 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: index * 0.03 }}
+                        whileTap={{ scale: 0.99 }}
+                        onClick={open}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={onKeyDown}
+                        className="group flex gap-4 bg-white rounded-2xl p-4 shadow-[0_12px_34px_rgba(28,25,23,0.06)] hover:shadow-[0_18px_48px_rgba(28,25,23,0.09)] active:bg-stone-50/60 transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-200 touch-manipulation"
                       >
-                        <button type="button" onClick={() => setQuantity(material.id, getQuantity(material.id) - 1)} className="flex items-center justify-center hover:bg-stone-50" aria-label="Disminuir cantidad">
+                        <div className="w-24 h-24 rounded-xl overflow-hidden bg-white flex-shrink-0 relative">
+                          <MaterialImage material={material} className="w-full h-full object-contain p-3" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[9px] tracking-[0.22em] uppercase text-stone-400 mb-0.5">{groupLabel(material)}</p>
+                          <h3 className="text-sm font-medium text-stone-900 mb-2 leading-snug">{material.name}</h3>
+                          <div className="flex flex-wrap gap-1.5">
+                            <span className="px-2.5 py-0.5 text-[9px] rounded-full text-white" style={{ backgroundColor: OLIVE }}>
+                              {presentation}
+                            </span>
+                            {material.tracksBatches && (
+                              <span className="px-2.5 py-0.5 text-[9px] rounded-full bg-stone-100 text-stone-500">Por lote</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end justify-between gap-2 flex-shrink-0">
+                          <MaterialPrice material={material} className="text-base" />
+                          {outOfStock && <p className="text-[10px] font-semibold text-red-600">Agotado</p>}
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={event => { event.stopPropagation(); open(); }}
+                              className="p-2 rounded-xl bg-stone-100 text-stone-500 hover:bg-stone-200/70 hover:text-stone-700 transition-all"
+                              aria-label="Vista rápida"
+                            >
+                              <Eye className="w-3.5 h-3.5" strokeWidth={1.5} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={event => { event.stopPropagation(); void handleAddToCart(material); }}
+                              disabled={cannotBuy}
+                              className="flex items-center gap-1.5 px-4 py-2 text-white text-[10px] tracking-wide font-medium rounded-xl transition-opacity hover:opacity-85 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
+                              style={{ backgroundColor: OLIVE }}
+                            >
+                              <ShoppingBag className="w-3 h-3" strokeWidth={1.5} />
+                              {outOfStock ? 'Agotado' : 'Añadir'}
+                            </button>
+                          </div>
+                        </div>
+                      </motion.div>
+                    );
+                  }
+
+                  /* GRID CARD — misma tarjeta que los productos normales */
+                  return (
+                    <motion.div
+                      key={material.id}
+                      initial={{ opacity: 0, y: 28 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.04, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+                      whileTap={{ scale: 0.985 }}
+                      onClick={open}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={onKeyDown}
+                      className="group flex flex-col bg-white rounded-2xl overflow-hidden shadow-[0_12px_34px_rgba(28,25,23,0.06)] hover:shadow-[0_20px_54px_rgba(28,25,23,0.1)] active:bg-stone-50/60 transition-all duration-300 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-stone-200 touch-manipulation"
+                    >
+                      <div className="relative overflow-hidden bg-white aspect-[4/5]">
+                        <MaterialImage material={material} className="w-full h-full object-contain p-4" />
+                        <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/0 p-2 opacity-0 pointer-events-none transition-all duration-300 group-hover:bg-black/15 group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:bg-black/15 group-focus-within:opacity-100 group-focus-within:pointer-events-auto">
+                          <motion.button
+                            type="button"
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                            onClick={event => { event.stopPropagation(); open(); }}
+                            className="p-2 md:p-3 bg-white rounded-full text-stone-700 shadow-md hover:bg-stone-50 transition-colors"
+                            aria-label="Vista rápida"
+                          >
+                            <Eye className="w-3.5 h-3.5 md:w-4 md:h-4" strokeWidth={1.5} />
+                          </motion.button>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col flex-1 p-3">
+                        <p className="text-[9px] tracking-[0.2em] uppercase text-stone-400 mb-1">{groupLabel(material)}</p>
+                        <h3 className="text-[13.5px] font-medium text-stone-900 leading-snug mb-3">{material.name}</h3>
+
+                        <div className="flex flex-wrap gap-1.5 mb-3">
+                          <span className="px-2.5 py-0.5 text-[9.5px] rounded-full text-white" style={{ backgroundColor: OLIVE }}>
+                            {presentation}
+                          </span>
+                          {material.tracksBatches && (
+                            <span className="px-2.5 py-0.5 text-[9.5px] rounded-full bg-stone-100 text-stone-500">Por lote</span>
+                          )}
+                        </div>
+
+                        {outOfStock && <p className="text-[10px] font-semibold text-red-600 mb-2">Agotado</p>}
+
+                        <div className="flex flex-wrap items-center justify-between gap-2 mt-auto pt-3 border-t border-stone-100">
+                          <MaterialPrice material={material} className="text-lg" />
+                          <motion.button
+                            type="button"
+                            whileHover={{ scale: 1.04 }}
+                            whileTap={{ scale: 0.96 }}
+                            onClick={event => { event.stopPropagation(); void handleAddToCart(material); }}
+                            disabled={cannotBuy}
+                            className="flex items-center gap-1.5 px-3.5 py-2 text-white text-[10px] font-semibold rounded-xl opacity-0 pointer-events-none transition-opacity group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto hover:opacity-85 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+                            style={{ backgroundColor: OLIVE }}
+                          >
+                            {outOfStock ? 'Agotado' : 'Añadir al carrito'}
+                            {!outOfStock && (
+                              <span className="w-4 h-4 rounded-full bg-white/20 flex items-center justify-center text-[10px] font-bold leading-none flex-shrink-0">+</span>
+                            )}
+                          </motion.button>
+                        </div>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </motion.div>
+            </AnimatePresence>
+          )}
+
+          {/* ── Vista rápida ── */}
+          <AnimatePresence>
+            {selectedMaterial && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-50 flex items-center justify-center p-4"
+              >
+                <div className="absolute inset-0 bg-black/35 backdrop-blur-sm" onClick={() => setSelectedMaterial(null)} />
+                <motion.div
+                  initial={{ scale: 0.96, opacity: 0, y: 14 }}
+                  animate={{ scale: 1, opacity: 1, y: 0 }}
+                  exit={{ scale: 0.96, opacity: 0, y: 14 }}
+                  transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                  className="relative grid max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-3xl bg-white shadow-2xl md:grid-cols-[45%_1fr]"
+                >
+                  <div className="flex min-h-[320px] items-center justify-center bg-white p-6">
+                    {selectedMaterial.imageUrl ? (
+                      <img src={selectedMaterial.imageUrl} alt={selectedMaterial.name} className="max-h-[420px] w-full object-contain" />
+                    ) : (
+                      <Beaker className="h-24 w-24 text-stone-200" strokeWidth={1.2} />
+                    )}
+                  </div>
+                  <div className="overflow-y-auto border-l border-stone-100 p-7">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedMaterial(null)}
+                      className="absolute right-4 top-4 rounded-full p-2 transition-colors hover:bg-stone-100"
+                      aria-label="Cerrar"
+                    >
+                      <X className="h-4 w-4 text-stone-400" strokeWidth={1.5} />
+                    </button>
+                    <p className="mb-2 text-[9px] uppercase tracking-[0.24em] text-stone-400">{groupLabel(selectedMaterial)}</p>
+                    <h2
+                      className="text-3xl font-light leading-tight text-stone-900"
+                      style={{ fontFamily: "'Playfair Display', serif" }}
+                    >
+                      {selectedMaterial.name}
+                    </h2>
+                    {isOutOfStock(selectedMaterial) && (
+                      <p className="mt-2 text-[11px] font-semibold text-red-600">Agotado</p>
+                    )}
+                    <div className="my-5 h-px bg-stone-100" />
+                    <p className="text-2xl font-semibold text-stone-900">
+                      {formatPrice(selectedMaterial.price)}
+                      <span className="ml-1 text-xs font-normal text-stone-400">/ {unitLabel(selectedMaterial)}</span>
+                    </p>
+                    <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-xl border border-stone-200 px-3 py-3">
+                        <p className="text-[9px] uppercase tracking-[0.2em] text-stone-400">Presentación</p>
+                        <p className="mt-1 text-sm font-medium text-stone-800">{selectedMaterial.presentation || unitLabel(selectedMaterial)}</p>
+                      </div>
+                      <div className="rounded-xl border border-stone-200 px-3 py-3">
+                        <p className="text-[9px] uppercase tracking-[0.2em] text-stone-400">Código</p>
+                        <p className="mt-1 text-sm font-medium text-stone-800">{selectedMaterial.code || '—'}</p>
+                      </div>
+                    </div>
+                    {selectedMaterial.description && (
+                      <p className="mt-5 text-sm leading-7 text-stone-500">{selectedMaterial.description}</p>
+                    )}
+                    <div className="mt-6 flex items-center gap-3">
+                      <div className="grid h-11 w-[120px] grid-cols-3 overflow-hidden rounded-xl border border-stone-200 text-stone-800">
+                        <button
+                          type="button"
+                          onClick={() => setQuantity(selectedMaterial.id, getQuantity(selectedMaterial.id) - 1)}
+                          className="flex items-center justify-center hover:bg-stone-50"
+                          aria-label="Disminuir cantidad"
+                        >
                           <Minus className="h-3.5 w-3.5" />
                         </button>
-                        <div className="flex items-center justify-center border-x border-stone-200 font-serif text-base font-semibold">{getQuantity(material.id)}</div>
-                        <button type="button" onClick={() => setQuantity(material.id, getQuantity(material.id) + 1)} className="flex items-center justify-center hover:bg-stone-50" aria-label="Aumentar cantidad">
+                        <div className="flex items-center justify-center border-x border-stone-200 text-sm font-semibold">
+                          {getQuantity(selectedMaterial.id)}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setQuantity(selectedMaterial.id, getQuantity(selectedMaterial.id) + 1)}
+                          className="flex items-center justify-center hover:bg-stone-50"
+                          aria-label="Aumentar cantidad"
+                        >
                           <Plus className="h-3.5 w-3.5" />
                         </button>
                       </div>
                       <button
                         type="button"
-                        onClick={event => {
-                          event.stopPropagation();
-                          void handleAddToCart(material);
+                        onClick={() => {
+                          void handleAddToCart(selectedMaterial);
+                          setSelectedMaterial(null);
                         }}
-                        disabled={!material.variantId || !material.price || isOutOfStock(material)}
-                        className="inline-flex h-10 min-w-0 items-center justify-center gap-2 rounded-lg bg-[#1f4b24] px-3 text-sm font-semibold leading-tight text-white shadow-sm transition-colors hover:bg-[#17351f] disabled:cursor-not-allowed disabled:bg-stone-300"
+                        disabled={!selectedMaterial.variantId || !selectedMaterial.price || isOutOfStock(selectedMaterial)}
+                        className="flex h-11 flex-1 items-center justify-center gap-2 rounded-xl px-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-white transition-opacity hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-40"
+                        style={{ backgroundColor: OLIVE }}
                       >
-                        <ShoppingCart className="h-4 w-4" strokeWidth={1.8} />
-                        <span>Agregar</span>
+                        <ShoppingBag className="h-4 w-4" strokeWidth={1.5} />
+                        Añadir al carrito
                       </button>
                     </div>
                   </div>
-                </article>
-              ))}
-            </div>
-          )}
-
-          {activeFilters > 0 && (
-            <p className="mt-4 text-xs font-medium text-stone-500">{activeFilters} filtro(s) activo(s)</p>
-          )}
-
-          {selectedMaterial && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-              <div className="absolute inset-0 bg-black/35 backdrop-blur-sm" onClick={() => setSelectedMaterial(null)} />
-              <div className="relative grid max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-lg bg-white shadow-2xl md:grid-cols-[42%_1fr]">
-                <div className="flex min-h-[320px] items-center justify-center bg-[#f3f1ec] p-6">
-                  {selectedMaterial.imageUrl ? (
-                    <img src={selectedMaterial.imageUrl} alt={selectedMaterial.name} className="max-h-[420px] w-full object-contain" />
-                  ) : (
-                    <Beaker className="h-24 w-24 text-[#1f4b24]/25" strokeWidth={1.4} />
-                  )}
-                </div>
-                <div className="overflow-y-auto p-6">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedMaterial(null)}
-                    className="absolute right-4 top-4 rounded-full border border-stone-200 bg-white p-2 text-stone-500 shadow-sm hover:bg-stone-50"
-                    aria-label="Cerrar"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-stone-400">{groupLabel(selectedMaterial)}</p>
-                  <h2 className="font-serif text-3xl font-semibold leading-tight text-[#17351f]">{selectedMaterial.name}</h2>
-                  <p className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-green-600">
-                    <CheckCircle className="h-4 w-4" />
-                    Disponible
-                  </p>
-                  <div className="my-5 h-px bg-stone-100" />
-                  <p className="text-sm text-stone-500">Precio por {unitLabel(selectedMaterial)}</p>
-                  <p className="mt-1 font-serif text-4xl font-semibold text-[#17351f]">{formatPrice(selectedMaterial.price)}</p>
-                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-wider text-stone-400">Presentacion</p>
-                      <p className="mt-1 text-sm font-semibold text-stone-800">{selectedMaterial.presentation || unitLabel(selectedMaterial)}</p>
-                    </div>
-                    <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-wider text-stone-400">Codigo</p>
-                      <p className="mt-1 text-sm font-semibold text-stone-800">{selectedMaterial.code || 'Disponible'}</p>
-                    </div>
-                  </div>
-                  {selectedMaterial.description && (
-                    <p className="mt-5 text-sm leading-7 text-stone-600">{selectedMaterial.description}</p>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void handleAddToCart(selectedMaterial);
-                      setSelectedMaterial(null);
-                    }}
-                    disabled={!selectedMaterial.variantId || !selectedMaterial.price || isOutOfStock(selectedMaterial)}
-                    className="mt-6 inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-[#1f4b24] px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#17351f] disabled:cursor-not-allowed disabled:bg-stone-300"
-                  >
-                    <ShoppingCart className="h-4 w-4" />
-                    Agregar al carrito
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </section>
       </main>
       <Footer />
