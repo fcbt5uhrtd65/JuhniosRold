@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Modal, ImageUploader, SecondaryButton } from './AdminUI';
 import { useToast } from '../../contexts/ToastContext';
-import { getProductById, updateVariantImages, type ProductVariant } from '../../services/products.service';
+import { getProductByIdForAdmin as getProductById, updateVariantImages, type ProductVariant } from '../../services/products.service';
 
 interface AdminVariantImagesModalProps {
   open: boolean;

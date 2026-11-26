@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { PowerOff, Trash2 } from 'lucide-react';
 import { Modal, Field, inputCls, selectCls, Badge, PrimaryButton, SecondaryButton } from './AdminUI';
 import { useToast } from '../../contexts/ToastContext';
-import { getCategories, getProductById, type ProductVariant } from '../../services/products.service';
+import { getCategories, getProductByIdForAdmin as getProductById, type ProductVariant } from '../../services/products.service';
 import {
   getPromotionsForProduct,
   getPromotions,

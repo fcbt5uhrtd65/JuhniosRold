@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Modal, Field, inputCls, selectCls, ImageUploader, PrimaryButton, SecondaryButton } from './AdminUI';
 import { useToast } from '../../contexts/ToastContext';
-import { createProductVariant, getProductById, type Product } from '../../services/products.service';
+import { createProductVariant, getProductByIdForAdmin as getProductById, type Product } from '../../services/products.service';
 import { createInitialStock, setInventoryQuantity } from '../../services/inventory.service';
 
 interface AddVariantModalProps {

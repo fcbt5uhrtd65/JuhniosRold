@@ -741,6 +741,21 @@ export async function getProductById(id: string): Promise<Product> {
   return normalizeProduct(res.data, categoryMap);
 }
 
+// Igual que getProductById pero con la sesión del admin: el endpoint público
+// solo devuelve productos activos, así que un producto recién desactivado daba 404.
+export async function getProductByIdForAdmin(id: string): Promise<Product> {
+  const [res, categoryMap] = await Promise.all([
+    api.get<BackendProduct>(`${PRODUCTS_PATH}${id}/`),
+    getCategoryMap(true),
+  ]);
+
+  if (!res.data) {
+    throw new Error('No se pudo cargar el producto solicitado.');
+  }
+
+  return normalizeProduct(res.data, categoryMap);
+}
+
 export async function getProductBySlug(slug: string): Promise<Product> {
   const res = await getProducts({
     limit: 1,
@@ -978,6 +993,20 @@ export async function updateProductVariant(variantId: string, payload: UpdateVar
   }
 }
 
+// El producto ya quedó guardado en este punto; si la relectura falla no debe
+// mostrarse como error del guardado, se usa la respuesta del PATCH.
+async function rereadUpdatedProduct(
+  id: string,
+  fallback: BackendProduct,
+  categoryMap: Map<string, ProductCategory>,
+): Promise<Product> {
+  try {
+    return await getProductByIdForAdmin(id);
+  } catch {
+    return normalizeProduct(fallback, categoryMap);
+  }
+}
+
 export async function updateProduct(id: string, payload: UpdateProductPayload): Promise<Product> {
   const categoryId = payload.category
     ? await resolveCategoryId(payload.category)
@@ -1030,12 +1059,12 @@ export async function updateProduct(id: string, payload: UpdateProductPayload): 
       await api.patch<BackendPrice>(`${PRICES_PATH}${price.id}/`, {
         amount: String(payload.price),
       });
-      return getProductById(id);
+      return rereadUpdatedProduct(id, res.data, categoryMap);
     }
   }
 
   if (payload.images !== undefined) {
-    return getProductById(id);
+    return rereadUpdatedProduct(id, res.data, categoryMap);
   }
 
   return normalizeProduct(res.data, categoryMap);

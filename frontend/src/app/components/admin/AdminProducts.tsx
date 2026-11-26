@@ -16,7 +16,7 @@ import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent,
 } from '../ui/dropdown-menu';
-import { requestProductsExport, getCategories, getProductById, updateProductVariant, updateVariantImages, createProductVariant, deleteProductVariant, type ExportFormat, type PdfLayout, type ProductVariant } from '../../services/products.service';
+import { requestProductsExport, getCategories, getProductByIdForAdmin as getProductById, updateProductVariant, updateVariantImages, createProductVariant, deleteProductVariant, type ExportFormat, type PdfLayout, type ProductVariant } from '../../services/products.service';
 import { createInitialStock } from '../../services/inventory.service';
 import { getProductReviews, type ProductReview } from '../../services/reviews.service';
 import { getWholesaleSettingsApi, updateWholesaleSettingsApi } from '../../services/cart.service';
@@ -545,6 +545,22 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
       toast.error(finalStepError);
       return;
     }
+    await saveProduct();
+  };
+
+  // En edición se puede guardar desde cualquier paso (p.ej. para cambiar solo
+  // el estado) sin recorrer todo el asistente con "Siguiente".
+  const handleQuickSave = async () => {
+    if (isSubmitting) return;
+    const error = validateSection('general') ?? validateSection('precios');
+    if (error) {
+      toast.error(error);
+      return;
+    }
+    await saveProduct();
+  };
+
+  const saveProduct = async () => {
     const categoryExists = catalogCategories.some(
       c => c.toLowerCase() === formData.categoria.toLowerCase(),
     );
@@ -1813,6 +1829,18 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
                     )}
                 </button>
               ) : (
+                <>
+                {modalMode === 'edit' && (
+                  <button
+                    key="quick-save-button"
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={e => { e.currentTarget.blur(); void handleQuickSave(); }}
+                    className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 bg-emerald-600 text-white hover:bg-emerald-700"
+                  >
+                    {isSubmitting ? 'Guardando...' : (<><Check size={15} /> Guardar cambios</>)}
+                  </button>
+                )}
                 <button
                   key="next-button"
                   type="button"
@@ -1821,6 +1849,7 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
                 >
                   Siguiente <ChevronRight size={15} />
                 </button>
+                </>
               )}
             </div>
           </form>
