@@ -1529,10 +1529,10 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                       <div className="flex flex-col items-end justify-between gap-2 flex-shrink-0">
                         {hasSelectedDiscount ? (
                           <span className="flex flex-col items-end">
-                            <span className="text-[10px] text-red-500 line-through">
+                            <span className="text-[12px] font-semibold text-stone-400 line-through">
                               {formatPrice(originalPrice, product.currency ?? 'COP')}
                             </span>
-                            <span className="text-base font-semibold text-emerald-600">
+                            <span className="text-[19px] font-extrabold leading-tight text-[#0F6B3A]">
                               {formatPrice(displayedPrice, product.currency ?? 'COP')}
                             </span>
                           </span>
@@ -1598,8 +1598,9 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
 
                       {/* Badge: solo se muestra cuando el producto está en oferta */}
                       {badge === 'oferta' && (
-                        <div className="absolute top-3 left-3 z-10 flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-semibold bg-rose-600 text-white shadow-sm">
-                          {`-${getDiscountPercentage(product) ?? ''}% OFERTA`}
+                        <div className="absolute top-3 left-3 z-10 flex items-baseline gap-1 px-3 py-1.5 md:px-3.5 rounded-full bg-[#E0103F] text-white shadow-md leading-none">
+                          <span className="text-[16px] md:text-[19px] font-extrabold tracking-tight">{`-${getDiscountPercentage(product) ?? ''}%`}</span>
+                          <span className="text-[8px] md:text-[9px] font-bold tracking-wider">OFERTA</span>
                         </div>
                       )}
 
@@ -1672,10 +1673,10 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                       <div className="flex flex-wrap items-center justify-between gap-2 mt-auto pt-3 border-t border-stone-100">
                         {hasSelectedDiscount ? (
                           <span className="flex flex-col">
-                            <span className="text-[10px] text-red-500 line-through">
+                            <span className="text-[12px] md:text-[13px] font-semibold text-stone-400 line-through">
                               {formatPrice(originalPrice, product.currency ?? 'COP')}
                             </span>
-                            <span className="text-lg font-semibold text-emerald-600">
+                            <span className="text-[19px] md:text-[22px] font-extrabold leading-tight text-[#0F6B3A]">
                               {formatPrice(displayedPrice, product.currency ?? 'COP')}
                             </span>
                           </span>

@@ -9,8 +9,8 @@ import { useCart } from '../contexts/CartContext';
 import { useUser } from '../contexts/UserContext';
 import { useToast } from '../contexts/ToastContext';
 import {
+  getAllProducts,
   getFeaturedProducts,
-  getProducts,
   type Product as CatalogProduct,
 } from '../services/products.service';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
@@ -190,35 +190,6 @@ function mapCatalogProduct(product: CatalogProduct): Product {
     benefits: pickVariantList(product, ['benefits', 'beneficios', 'beneficio']),
     ingredients: pickVariantList(product, ['ingredients', 'ingredientes', 'ingrediente']),
     howToUse: pickVariantText(product, ['how_to_use', 'modo_de_uso', 'modoDeUso', 'modo_uso']),
-  };
-}
-
-/**
- * Descripciones creativas por presentación de la Loción Térmica de Cannabis
- * (loción corporal), usadas en el carrusel "Productos estrella". Se emparejan
- * por tamaño (ml) detectado en el nombre real del producto que trae el catálogo.
- */
-const STAR_PRODUCT_TAGLINES: Record<string, { tag: string; description: string }> = {
-  '60': {
-    tag: 'De bolsillo',
-    description: 'Tu dosis de calor y relajación para llevar a donde vayas. Cabe en cualquier bolso y refresca tu piel después de un día largo.',
-  },
-  '150': {
-    tag: 'El clásico',
-    description: 'El tamaño ideal para el hogar. Efecto térmico refrescante y relajante para masajear tu cuerpo después de la ducha, cuando lo necesites.',
-  },
-  '375': {
-    tag: 'Para toda la familia',
-    description: 'Rinde más, relaja más. Pensada para uso frecuente en casa, con la misma fórmula de cannabis que calma y refresca la piel de todo el cuerpo.',
-  },
-};
-
-function starProductTagline(name: string): { tag: string; description: string } {
-  const match = name.match(/(\d+)\s*ML/i);
-  const size = match?.[1];
-  return (size && STAR_PRODUCT_TAGLINES[size]) || {
-    tag: 'Producto estrella',
-    description: 'Loción corporal con extracto de cannabis que refresca, relaja y calma la piel del cuerpo.',
   };
 }
 
@@ -644,67 +615,65 @@ function ProductPage({
   );
 }
 
-interface StarVariantItem {
-  variantId: string;
-  presentation: string;
-  image: string;
-  price: number;
+/* Posición y escala de cada lugar visible del carrusel (centro = 0). */
+const OFFER_SLOTS: Record<number, { left: string; scale: number; opacity: number }> = {
+  [-2]: { left: '9%', scale: 0.42, opacity: 0.7 },
+  [-1]: { left: '27%', scale: 0.62, opacity: 0.9 },
+  0: { left: '50%', scale: 1, opacity: 1 },
+  1: { left: '73%', scale: 0.62, opacity: 0.9 },
+  2: { left: '91%', scale: 0.42, opacity: 0.7 },
+};
+
+const OFFER_SLOTS_MOBILE: Record<number, { left: string; scale: number; opacity: number }> = {
+  [-1]: { left: '14%', scale: 0.5, opacity: 0.85 },
+  0: { left: '50%', scale: 1, opacity: 1 },
+  1: { left: '86%', scale: 0.5, opacity: 0.85 },
+};
+
+function useIsMobile(): boolean {
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  return isMobile;
 }
 
-/* ── Carrusel 3D "Productos estrella": rota solo entre las presentaciones (variantes) de un mismo producto ── */
-function StarProductsCarousel({ product, onView, onAddToCart, onSelectSize }: {
-  product: Product;
+/* ── Carrusel de ofertas: fila de 5 fotos sin fondo, la del centro grande ── */
+function OffersCarousel({ products, onView }: {
+  products: Product[];
   onView: (p: Product) => void;
-  onAddToCart: (p: Product) => void;
-  onSelectSize: (productId: string, size: string) => void;
 }) {
   const [active, setActive] = useState(0);
+  const [paused, setPaused] = useState(false);
   const touchStartX = useRef<number | null>(null);
-
-  const variantItems: StarVariantItem[] = (product.variants ?? [])
-    .filter(v => v.is_active)
-    .map(v => ({
-      variantId: v.id,
-      presentation: v.presentation,
-      image: v.images?.[0]?.image || v.image_url || product.images[0],
-      price: v.discounted_price ?? v.current_price ?? product.priceValue,
-    }));
-
-  const items: StarVariantItem[] = variantItems.length > 0
-    ? variantItems
-    : [{ variantId: product.id, presentation: product.sizes?.[0] ?? '', image: product.images[0], price: product.priceValue }];
-
-  const total = items.length;
+  const isMobile = useIsMobile();
+  const total = products.length;
+  const slots = isMobile ? OFFER_SLOTS_MOBILE : OFFER_SLOTS;
+  const reach = isMobile ? 1 : 2;
 
   const goTo = useCallback((index: number) => {
     setActive(((index % total) + total) % total);
   }, [total]);
 
   useEffect(() => {
-    if (total <= 1) return;
-    const timer = setInterval(() => {
-      setActive(current => (current + 1) % total);
-    }, 4500);
+    if (total <= 1 || paused) return;
+    const timer = setInterval(() => setActive(current => (current + 1) % total), 3200);
     return () => clearInterval(timer);
-  }, [total]);
-
-  useEffect(() => {
-    warmImageCache([
-      items[active]?.image,
-      items[(active + 1) % total]?.image,
-      items[(active - 1 + total) % total]?.image,
-    ]);
-  }, [active, items, total]);
+  }, [total, paused]);
 
   useEffect(() => {
     if (active >= total) setActive(0);
   }, [active, total]);
 
   useEffect(() => {
-    const current = items[active];
-    if (current?.presentation) onSelectSize(product.id, current.presentation);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, product.id]);
+    warmImageCache([
+      products[(active + 1) % total]?.images[0],
+      products[(active + 2) % total]?.images[0],
+      products[(active + 3) % total]?.images[0],
+    ]);
+  }, [active, products, total]);
 
   const handleTouchStart = (event: React.TouchEvent) => {
     touchStartX.current = event.touches[0].clientX;
@@ -719,149 +688,122 @@ function StarProductsCarousel({ product, onView, onAddToCart, onSelectSize }: {
   };
 
   if (total === 0) return null;
-  const current = items[active];
-  const { tag, description } = starProductTagline(current.presentation || product.name);
+  const current = products[active];
 
   return (
-    <div className="grid lg:grid-cols-2 gap-10 lg:gap-16 items-center">
-      {/* Carrusel de imágenes: planas, sin efecto 3D */}
+    <div onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
       <div
-        className="relative flex items-center justify-center select-none"
-        style={{ height: 'min(92vw, 460px)', touchAction: 'pan-y' }}
+        className="relative select-none overflow-hidden"
+        style={{ height: isMobile ? 'min(88vw, 380px)' : 'min(44vw, 520px)', touchAction: 'pan-y' }}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
-        <button
-          onClick={() => goTo(active - 1)}
-          aria-label="Producto anterior"
-          className="hidden sm:flex absolute left-0 z-20 w-10 h-10 rounded-full bg-white shadow-md items-center justify-center hover:scale-105 transition-transform"
-          style={{ color: OLIVE }}
-        >
-          <ChevronLeft className="w-4 h-4" strokeWidth={2} />
-        </button>
+        {products.map((item, index) => {
+          const offset = total > 1 ? circularOffset(index, active, total) : 0;
+          const slot = Math.abs(offset) <= reach ? slots[offset] : undefined;
+          const isActive = offset === 0;
+          const hiddenSide = offset < 0 ? -1 : 1;
 
-        <div className="relative w-full h-full flex items-center justify-center">
-          {items.map((item, index) => {
-            const offset = circularOffset(index, active, total);
-            const isActive = offset === 0;
-            const visible = Math.abs(offset) <= 2;
-            if (!visible) return null;
+          return (
+            <motion.div
+              key={item.id}
+              className="absolute top-0 h-full flex items-center justify-center"
+              style={{
+                width: isMobile ? '70%' : '34%',
+                zIndex: 10 - Math.abs(offset),
+                pointerEvents: slot ? 'auto' : 'none',
+                cursor: 'pointer',
+              }}
+              initial={false}
+              animate={{
+                left: slot ? slot.left : hiddenSide < 0 ? '-20%' : '120%',
+                x: '-50%',
+                scale: slot ? slot.scale : 0.3,
+                opacity: slot ? slot.opacity : 0,
+              }}
+              transition={{ type: 'spring', stiffness: 170, damping: 26 }}
+              onClick={() => (isActive ? onView(item) : goTo(index))}
+            >
+              <div className="relative w-full h-full">
+                <motion.img
+                  src={item.images[0]}
+                  alt={item.name}
+                  className="absolute inset-0 w-full h-full object-contain p-4"
+                  draggable={false}
+                  loading={Math.abs(offset) <= reach ? 'eager' : 'lazy'}
+                  decoding="async"
+                  whileHover={isActive ? { y: -10, transition: { duration: 0.3 } } : undefined}
+                />
+                {item.discountPercent ? (
+                  <div className="absolute top-[6%] left-[4%] z-10 flex items-baseline gap-1 px-4 py-2 rounded-full bg-[#E0103F] text-white shadow-md leading-none">
+                    <span className="text-[26px] md:text-[34px] font-extrabold tracking-tight">-{item.discountPercent}%</span>
+                    <span className="text-[10px] md:text-[12px] font-bold tracking-wider">OFERTA</span>
+                  </div>
+                ) : null}
+              </div>
+            </motion.div>
+          );
+        })}
 
-            const baseSize = isActive ? 'min(74vw, 420px)' : 'min(42vw, 220px)';
-
-            return (
-              <motion.div
-                key={item.variantId}
-                className="absolute overflow-visible"
-                style={{ zIndex: 10 - Math.abs(offset) }}
-                animate={{
-                  x: `${offset * 130}%`,
-                  opacity: isActive ? 1 : 0.85,
-                }}
-                initial={false}
-                transition={{ type: 'spring', stiffness: 260, damping: 28 }}
-                onClick={() => (isActive ? onView(product) : goTo(index))}
-              >
-                <div
-                  className="relative"
-                  style={{ width: baseSize, height: baseSize, cursor: 'pointer' }}
-                >
-                  <motion.img
-                    src={item.image}
-                    alt={`${product.name} ${item.presentation}`}
-                    className="absolute inset-0 w-full h-full object-contain p-6"
-                    draggable={false}
-                    loading={isActive ? 'eager' : 'lazy'}
-                    decoding="async"
-                    fetchPriority={isActive ? 'high' : 'auto'}
-                    initial={{ y: 0, rotate: 0, scale: 1 }}
-                    whileHover={isActive ? {
-                      y: [-24, 0, -6, 0],
-                      rotate: [-4, 3, -1.5, 0],
-                      scale: [1.04, 0.97, 1.01, 1],
-                      transition: { duration: 0.7, ease: [0.34, 1.56, 0.64, 1] },
-                    } : undefined}
-                  />
-                </div>
-              </motion.div>
-            );
-          })}
-        </div>
-
-        <button
-          onClick={() => goTo(active + 1)}
-          aria-label="Siguiente producto"
-          className="hidden sm:flex absolute right-0 z-20 w-10 h-10 rounded-full bg-white shadow-md items-center justify-center hover:scale-105 transition-transform"
-          style={{ color: OLIVE }}
-        >
-          <ChevronRight className="w-4 h-4" strokeWidth={2} />
-        </button>
+        {total > 1 && (
+          <>
+            <button
+              onClick={() => goTo(active - 1)}
+              aria-label="Producto anterior"
+              className="absolute left-1 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-white shadow-md flex items-center justify-center hover:scale-105 transition-transform"
+              style={{ color: OLIVE }}
+            >
+              <ChevronLeft className="w-4 h-4" strokeWidth={2} />
+            </button>
+            <button
+              onClick={() => goTo(active + 1)}
+              aria-label="Siguiente producto"
+              className="absolute right-1 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-white shadow-md flex items-center justify-center hover:scale-105 transition-transform"
+              style={{ color: OLIVE }}
+            >
+              <ChevronRight className="w-4 h-4" strokeWidth={2} />
+            </button>
+          </>
+        )}
       </div>
 
-      {/* Descripción de la presentación activa */}
+      {/* Precio del producto del centro */}
       <AnimatePresence mode="wait">
         <motion.div
-          key={current.variantId}
-          initial={{ opacity: 0, y: 12 }}
+          key={current.id}
+          initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -12 }}
-          transition={{ duration: 0.3 }}
+          exit={{ opacity: 0, y: -8 }}
+          transition={{ duration: 0.25 }}
+          className="flex items-baseline justify-center gap-3 mt-2"
         >
-          <span
-            className="inline-block text-[10px] tracking-[0.28em] uppercase font-semibold px-3.5 py-1.5 rounded-full mb-5"
-            style={{ backgroundColor: `${OLIVE}12`, color: OLIVE }}
-          >
-            {tag}
+          {current.originalPriceValue ? (
+            <span className="text-[15px] md:text-[17px] font-semibold text-stone-400 line-through">
+              ${formatPrice(current.originalPriceValue)}
+            </span>
+          ) : null}
+          <span className="text-[28px] md:text-[36px] font-extrabold leading-none text-[#0F6B3A]">
+            ${current.price}
           </span>
-          <h3 className="text-3xl md:text-4xl lg:text-5xl font-light text-stone-900 leading-tight mb-2" style={{ fontFamily: "'Playfair Display', serif" }}>
-            {product.name}
-          </h3>
-          {current.presentation && (
-            <p className="text-sm tracking-[0.2em] uppercase text-stone-400 font-medium mb-4">
-              Presentación {current.presentation}
-            </p>
-          )}
-          <p className="text-base text-stone-500 leading-relaxed mb-7 max-w-lg">
-            {description}
-          </p>
-          <p className="text-3xl md:text-4xl font-semibold text-stone-900 mb-7">
-            ${formatPrice(current.price)} <span className="text-sm text-stone-400 font-normal">COP</span>
-          </p>
-          <div className="flex flex-wrap items-center gap-3">
-            <motion.button
-              whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-              onClick={() => onAddToCart(product)}
-              className="flex items-center gap-2.5 px-7 py-4 text-white text-[12px] tracking-[0.2em] uppercase font-semibold rounded-full"
-              style={{ backgroundColor: OLIVE }}
-            >
-              <ShoppingBag className="w-4 h-4" strokeWidth={1.5} />
-              Añadir al carrito
-            </motion.button>
-            <button
-              onClick={() => onView(product)}
-              className="flex items-center gap-2 px-6 py-4 border border-stone-300 text-stone-700 text-[12px] tracking-[0.18em] uppercase font-medium rounded-full hover:border-stone-700 transition-all"
-            >
-              Ver detalle
-            </button>
-          </div>
         </motion.div>
       </AnimatePresence>
 
-      {/* Indicadores */}
-      <div className="lg:col-span-2 flex items-center justify-center gap-2 -mt-2">
-        {items.map((item, index) => (
-          <button
-            key={item.variantId}
-            onClick={() => goTo(index)}
-            aria-label={`Ver presentación ${item.presentation}`}
-            className="h-1.5 rounded-full transition-all"
-            style={{
-              width: index === active ? 20 : 6,
-              backgroundColor: index === active ? OLIVE : '#D8D3C8',
-            }}
-          />
-        ))}
-      </div>
+      {total > 1 && (
+        <div className="flex items-center justify-center gap-2 mt-6">
+          {products.map((item, index) => (
+            <button
+              key={item.id}
+              onClick={() => goTo(index)}
+              aria-label={`Ver ${item.name}`}
+              className="h-1.5 rounded-full transition-all"
+              style={{
+                width: index === active ? 20 : 6,
+                backgroundColor: index === active ? OLIVE : '#D8D3C8',
+              }}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -892,7 +834,7 @@ export function PowerProducts({ onLoginRequired }: { onLoginRequired?: () => voi
   const toast = useToast();
   const [selectedSize, setSelectedSize] = useState<Record<string, string>>({});
   const [viewProduct, setViewProduct]   = useState<Product | null>(null);
-  const [starProduct, setStarProduct] = useState<Product | null>(null);
+  const [offerProducts, setOfferProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -904,24 +846,16 @@ export function PowerProducts({ onLoginRequired }: { onLoginRequired?: () => voi
         setIsLoading(true);
         setLoadError(null);
 
-        // "Productos estrella": UN producto (Loción Térmica de Cannabis) con sus
-        // presentaciones (60ML/150ML/375ML) como variantes, no productos separados.
-        const searchTerms = ['termica de cannabis', 'locion termica cannabis', 'cannabis'];
-        let match: CatalogProduct | undefined;
-        for (const term of searchTerms) {
-          const result = await getProducts({ search: term, active: true, limit: 20, ordering: 'name' });
-          match = result.data.find(item => /cannabis/i.test(`${item.name} ${item.description ?? ''}`));
-          if (match) break;
-        }
-
-        if (!match) {
-          // Fallback por si el catálogo aún no tiene ese producto sembrado.
-          const featured = await getFeaturedProducts(1);
-          match = featured[0];
+        // Todos los productos activos que tienen una promoción vigente.
+        const all = await getAllProducts();
+        let offers = all.filter(item => productBadge(item) === 'oferta');
+        if (offers.length === 0) {
+          // Si no hay ofertas activas, mostramos los destacados para no dejar la sección vacía.
+          offers = await getFeaturedProducts(10);
         }
 
         if (mounted) {
-          setStarProduct(match ? mapCatalogProduct(match) : null);
+          setOfferProducts(offers.map(mapCatalogProduct));
         }
       } catch (error) {
         if (mounted) {
@@ -985,18 +919,17 @@ export function PowerProducts({ onLoginRequired }: { onLoginRequired?: () => voi
         >
           <div>
             <p className="text-[9px] tracking-[0.38em] uppercase text-stone-400 font-medium mb-3">
-              Productos estrella
+              Black Friday · Ofertas
             </p>
             <h2
               className="text-4xl md:text-5xl font-light text-stone-900 leading-tight"
               style={{ fontFamily: "'Playfair Display', serif" }}
             >
-              Loción Térmica{' '}
-              <em style={{ fontStyle: 'italic', color: OLIVE }}>de Cannabis</em>
+              Se acerca{' '}
+              <span className="font-semibold text-stone-950">Black Friday</span>
+              <br className="hidden sm:block" />{' '}
+              <em style={{ fontStyle: 'italic', color: '#E0103F' }}>y Juhnios lo sabe</em>
             </h2>
-            <p className="text-sm text-stone-500 mt-3 max-w-md leading-relaxed">
-              La misma fórmula, en el tamaño perfecto para cada momento de tu rutina.
-            </p>
           </div>
           <motion.a
             href="#catalogo"
@@ -1011,13 +944,8 @@ export function PowerProducts({ onLoginRequired }: { onLoginRequired?: () => voi
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
             {Array.from({ length: 3 }, (_, i) => <ProductCardSkeleton key={i} index={i} />)}
           </div>
-        ) : starProduct ? (
-          <StarProductsCarousel
-            product={starProduct}
-            onView={setViewProduct}
-            onAddToCart={handleAddToCart}
-            onSelectSize={(id, size) => setSelectedSize(s => ({ ...s, [id]: size }))}
-          />
+        ) : offerProducts.length > 0 ? (
+          <OffersCarousel products={offerProducts} onView={setViewProduct} />
         ) : null}
 
         {!isLoading && loadError && (
@@ -1026,9 +954,9 @@ export function PowerProducts({ onLoginRequired }: { onLoginRequired?: () => voi
           </div>
         )}
 
-        {!isLoading && !loadError && !starProduct && (
+        {!isLoading && !loadError && offerProducts.length === 0 && (
           <div className="mt-8 rounded-xl border border-stone-100 bg-white px-5 py-4 text-sm text-stone-500">
-            Aún no hay productos destacados disponibles.
+            Aún no hay productos en oferta.
           </div>
         )}
       </div>
@@ -1038,7 +966,7 @@ export function PowerProducts({ onLoginRequired }: { onLoginRequired?: () => voi
         {viewProduct && (
           <ProductPage
             product={viewProduct}
-            allProducts={starProduct ? [starProduct] : []}
+            allProducts={offerProducts}
             selectedSizes={selectedSize}
             onSelectSize={(id, size) => setSelectedSize(s => ({ ...s, [id]: size }))}
             onAddToCart={handleAddToCart}
