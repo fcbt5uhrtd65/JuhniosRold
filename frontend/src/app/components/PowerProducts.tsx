@@ -126,9 +126,11 @@ function mapCatalogProduct(product: CatalogProduct): Product {
   const discountedPrice = promoVariant?.discounted_price ?? null;
   const displayPrice = discountedPrice ?? product.price ?? 0;
   const originalPriceValue = discountedPrice != null ? (promoVariant?.current_price ?? product.price ?? null) : null;
-  const discountPercent = discountedPrice != null && originalPriceValue
+  const rawPercent = discountedPrice != null && originalPriceValue
     ? Math.round(((originalPriceValue - discountedPrice) / originalPriceValue) * 100)
     : null;
+  // Solo porcentajes válidos (1–99); evita mostrar valores como --179%.
+  const discountPercent = rawPercent !== null && rawPercent > 0 && rawPercent < 100 ? rawPercent : null;
   const imageItems: Product['imageItems'] = [];
   const seen = new Set<string>();
   const addImage = (src: string | null | undefined, size: string | null, variantId?: string) => {
@@ -767,7 +769,7 @@ function OffersCarousel({ products, onView }: {
         )}
       </div>
 
-      {/* Precio del producto del centro */}
+      {/* Nombre y precio del producto del centro */}
       <AnimatePresence mode="wait">
         <motion.div
           key={current.id}
@@ -775,16 +777,21 @@ function OffersCarousel({ products, onView }: {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -8 }}
           transition={{ duration: 0.25 }}
-          className="flex items-baseline justify-center gap-3 mt-2"
+          className="mt-2 flex flex-col items-center text-center px-4"
         >
-          {current.originalPriceValue ? (
-            <span className="text-[15px] md:text-[17px] font-semibold text-stone-400 line-through">
-              ${formatPrice(current.originalPriceValue)}
+          <p className="mb-2 text-[15px] md:text-[18px] font-medium uppercase tracking-wide text-stone-900 leading-snug">
+            {current.name}
+          </p>
+          <div className="flex items-baseline justify-center gap-3">
+            {current.originalPriceValue ? (
+              <span className="text-[15px] md:text-[17px] font-semibold text-stone-400 line-through">
+                ${formatPrice(current.originalPriceValue)}
+              </span>
+            ) : null}
+            <span className="text-[28px] md:text-[36px] font-extrabold leading-none text-[#0F6B3A]">
+              ${current.price}
             </span>
-          ) : null}
-          <span className="text-[28px] md:text-[36px] font-extrabold leading-none text-[#0F6B3A]">
-            ${current.price}
-          </span>
+          </div>
         </motion.div>
       </AnimatePresence>
 

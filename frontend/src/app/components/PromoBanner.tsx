@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
-import { ArrowRight, Clock, Leaf, Tag } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { getProducts } from '../services/products.service';
-import type { DiscountType, PromotionSummary } from '../services/promotions.service';
+import type { PromotionSummary } from '../services/promotions.service';
 
 const OLIVE = '#2D3A1F';
 
@@ -22,15 +22,10 @@ function getPromotionEndTime(promotion: BannerPromotion | null): number | null {
   return Number.isFinite(endTime) ? endTime : null;
 }
 
-function formatDiscount(promotion: { discount_type: DiscountType; discount_value: number }): string {
-  if (promotion.discount_type === 'PERCENTAGE') return `${promotion.discount_value}% OFF`;
-  return `$${promotion.discount_value.toLocaleString('es-CO')} OFF`;
-}
-
 function formatScope(promotion: BannerPromotion): string {
   if (promotion.scope === 'CATEGORY') return 'en productos seleccionados';
   if (promotion.scope === 'PRODUCT') return 'en producto seleccionado';
-  return 'en una presentacion especial';
+  return 'en una presentación especial';
 }
 
 function formatRemaining(ms: number): string {
@@ -109,6 +104,11 @@ export function PromoBanner() {
     return null;
   }
 
+  const discountAmount = activePromotion.discount_type === 'PERCENTAGE'
+    ? `${activePromotion.discount_value}%`
+    : `$${activePromotion.discount_value.toLocaleString('es-CO')}`;
+  const scopeText = formatScope(activePromotion);
+
   return (
     <section className="py-4 px-6 md:px-10 lg:px-14">
       <div className="max-w-[1400px] mx-auto">
@@ -117,42 +117,28 @@ export function PromoBanner() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: '-60px' }}
           transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
-          className="relative overflow-hidden rounded-3xl border border-[#2D3A1F] bg-[#111510] bg-cover bg-center text-white"
-          style={{ backgroundImage: "url('/images/promo-banner-bg.png')" }}
+          className="relative overflow-hidden rounded-3xl bg-[#1A1C16] text-white shadow-[0_10px_30px_rgba(0,0,0,0.18)]"
         >
-          <div className="absolute inset-0 bg-black/45 pointer-events-none" />
-          <div className="absolute inset-0 bg-gradient-to-r from-black/50 via-black/25 to-black/45 pointer-events-none" />
-
-          <div className="relative grid gap-6 px-6 py-7 md:grid-cols-[1fr_auto] md:items-center md:px-10 lg:px-14">
+          <div className="relative flex flex-col gap-6 px-6 py-7 md:flex-row md:items-center md:justify-between md:px-10 lg:px-12">
             <div className="min-w-0">
-              <div className="mb-4 flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-[#C6A76B] bg-[#C6A76B] px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.22em] text-[#111510]">
-                  <Leaf className="w-2.5 h-2.5" strokeWidth={2} />
-                  Campana especial
-                </span>
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-white/80">
-                  <Tag className="w-2.5 h-2.5" strokeWidth={2} />
-                  {activePromotion.name}
-                </span>
-              </div>
-
-              <div className="flex flex-wrap items-end gap-x-4 gap-y-1">
-                <p className="text-4xl font-bold leading-none md:text-6xl" style={{ fontFamily: "'Playfair Display', serif" }}>
-                  {formatDiscount(activePromotion)}
-                </p>
-                <p className="pb-1 text-sm font-medium text-white/70 md:text-base">
-                  {formatScope(activePromotion)}
-                </p>
-              </div>
+              <p className="mb-2 text-[13px] md:text-[15px] font-bold uppercase tracking-[0.04em] text-[#C9A96A]">
+                Black Friday
+              </p>
+              <p className="text-[34px] md:text-[48px] font-bold leading-none tracking-tight">
+                <span className="text-[#C9A96A]">{discountAmount}</span>{' '}
+                <span className="text-white">de descuento</span>
+              </p>
+              <p className="mt-3 text-[14px] md:text-[17px] text-white/70">
+                {scopeText.charAt(0).toUpperCase() + scopeText.slice(1)}
+              </p>
             </div>
 
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center md:flex-col md:items-end">
-              <div className="rounded-2xl border border-white/15 bg-white/10 px-5 py-4 shadow-lg">
-                <div className="mb-1 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.22em] text-[#C6A76B]">
-                  <Clock className="h-3.5 w-3.5" strokeWidth={2} />
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-center md:gap-10">
+              <div>
+                <p className="text-[13px] md:text-[15px] font-semibold uppercase tracking-[0.02em] text-white/90">
                   Termina en
-                </div>
-                <p className="text-xl font-bold leading-tight text-white md:text-2xl">
+                </p>
+                <p className="text-[24px] md:text-[30px] font-bold leading-tight tabular-nums text-white">
                   {formatRemaining(remainingMs)}
                 </p>
               </div>
@@ -161,11 +147,11 @@ export function PromoBanner() {
                 href="#catalogo"
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
-                className="inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-[11px] font-bold uppercase tracking-[0.18em] text-white transition-opacity hover:opacity-90"
+                className="inline-flex items-center justify-center gap-3 rounded-2xl px-7 py-4 text-[15px] md:text-[17px] font-bold text-white transition-opacity hover:opacity-90"
                 style={{ backgroundColor: OLIVE }}
               >
                 Comprar ahora
-                <ArrowRight className="w-3.5 h-3.5" strokeWidth={2.5} />
+                <ArrowRight className="w-5 h-5" strokeWidth={2.25} />
               </motion.a>
             </div>
           </div>

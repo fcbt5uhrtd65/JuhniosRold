@@ -84,10 +84,15 @@ function getDiscountedPrice(product: CatalogProduct, variant?: ProductVariant | 
 }
 
 function getDiscountPercentage(product: CatalogProduct, variant?: ProductVariant | null): number | null {
-  const original = variant?.current_price ?? product.price;
+  // Sin presentación elegida se compara con el precio original de la MISMA
+  // presentación en oferta (no con el precio base del producto, que puede ser
+  // de otra presentación más barata y daba porcentajes negativos como -179%).
+  const source = variant !== undefined ? variant : product.variants.find(v => v.discounted_price != null);
+  const original = source?.current_price ?? (variant === undefined && !source ? product.price : null);
   const discounted = getDiscountedPrice(product, variant);
-  if (original === null || discounted === null || original <= 0) return null;
-  return Math.round(((original - discounted) / original) * 100);
+  if (original == null || discounted == null || original <= 0) return null;
+  const percent = Math.round(((original - discounted) / original) * 100);
+  return percent > 0 && percent < 100 ? percent : null;
 }
 
 /**
@@ -760,9 +765,11 @@ export function ProductPage({
                 <span className="text-[28px] font-semibold text-emerald-600">
                   {formatPrice(getDisplayedPrice(product, selVariant), product.currency ?? 'COP')}
                 </span>
-                <span className="px-2 py-0.5 text-[10px] font-bold text-white bg-red-600 border border-red-600 rounded-full">
-                  -{getDiscountPercentage(product, selVariant)}%
-                </span>
+                {getDiscountPercentage(product, selVariant) !== null && (
+                  <span className="px-2 py-0.5 text-[10px] font-bold text-white bg-red-600 border border-red-600 rounded-full">
+                    -{getDiscountPercentage(product, selVariant)}%
+                  </span>
+                )}
               </p>
             ) : (
               <p className="text-[28px] font-semibold text-stone-900 mb-6">
@@ -1599,7 +1606,9 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                       {/* Badge: solo se muestra cuando el producto está en oferta */}
                       {badge === 'oferta' && (
                         <div className="absolute top-3 left-3 z-10 flex items-baseline gap-1 px-3 py-1.5 md:px-3.5 rounded-full bg-[#E0103F] text-white shadow-md leading-none">
-                          <span className="text-[16px] md:text-[19px] font-extrabold tracking-tight">{`-${getDiscountPercentage(product) ?? ''}%`}</span>
+                          {getDiscountPercentage(product) !== null && (
+                            <span className="text-[16px] md:text-[19px] font-extrabold tracking-tight">{`-${getDiscountPercentage(product)}%`}</span>
+                          )}
                           <span className="text-[8px] md:text-[9px] font-bold tracking-wider">OFERTA</span>
                         </div>
                       )}
