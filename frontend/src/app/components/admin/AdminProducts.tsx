@@ -290,6 +290,8 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilters, setActiveFilters] = useState<Record<string, string[]>>({});
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  // Presentación elegida en cada card (solo visual, no guarda nada).
+  const [cardPresentation, setCardPresentation] = useState<Record<string, string>>({});
   const [sortField, setSortField] = useState<SortField>('nombre');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
 
@@ -1109,12 +1111,21 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
             const inv = inventory.find(i => i.productoId === product.id);
             const stockActual = inv?.stockActual;
             const stockMinimo = inv?.stockMinimo;
+            const presentaciones = product.presentaciones ?? [];
+            const selPres = presentaciones.find(p => p.id === cardPresentation[product.id]) ?? presentaciones[0];
+            const cardImagen = selPres?.imagen || product.imagen;
+            const cardPresentacion = selPres?.nombre ?? product.presentacion;
+            const cardCodigo = selPres ? (selPres.sku ?? product.codigo) : product.codigo;
+            const cardPrecio = selPres?.precio ?? product.precio;
+            const cardOferta = selPres?.precioOferta ?? null;
+            const cardCosto = selPres ? selPres.costo : product.precioCosto;
+            const precioParaMargen = cardOferta ?? cardPrecio;
 
             return (
               <Card key={product.id} className="overflow-hidden">
                 <div className="aspect-[4/3] bg-gray-50 overflow-hidden relative">
-                  {product.imagen ? (
-                    <img src={product.imagen} alt={product.nombre} className="w-full h-full object-contain p-2" />
+                  {cardImagen ? (
+                    <img src={cardImagen} alt={product.nombre} className="w-full h-full object-contain p-2" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
                       <Package size={32} className="text-gray-300" />
@@ -1130,11 +1141,33 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex-1 min-w-0">
                       <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">
-                        {product.categoria}{product.codigo ? ` · ${product.codigo}` : ''}
+                        {product.categoria}{cardCodigo ? ` · ${cardCodigo}` : ''}
                       </p>
                       <h3 className="text-[13px] font-semibold text-gray-900 mb-1 truncate">{product.nombre}</h3>
-                      <p className="text-[11px] text-gray-400">{product.tipo} · {product.presentacion}</p>
-                      {product.otrasPresentaciones && product.otrasPresentaciones.length > 0 && (
+                      <p className="text-[11px] text-gray-400">{product.tipo} · {cardPresentacion}</p>
+                      {presentaciones.length > 1 ? (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {presentaciones.map(pres => {
+                            const isSel = pres.id === selPres?.id;
+                            return (
+                              <button
+                                key={pres.id}
+                                type="button"
+                                onClick={() => setCardPresentation(prev => ({ ...prev, [product.id]: pres.id }))}
+                                title={pres.activa ? pres.nombre : `${pres.nombre} (inactiva)`}
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-colors ${
+                                  isSel
+                                    ? 'bg-[#2a4038] border-[#2a4038] text-white'
+                                    : 'bg-white border-gray-200 text-gray-500 hover:border-gray-400'
+                                } ${pres.activa ? '' : 'opacity-50 line-through'}`}
+                                aria-pressed={isSel}
+                              >
+                                {pres.nombre}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : product.otrasPresentaciones && product.otrasPresentaciones.length > 0 && (
                         <p className="text-[10px] text-gray-400 mt-0.5">
                           +{product.otrasPresentaciones.length} presentación(es): {product.otrasPresentaciones.join(', ')}
                         </p>
@@ -1156,13 +1189,20 @@ export function AdminProducts({ onViewInInventory }: AdminProductsProps = {}) {
 
                   <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                     <div>
-                      <p className="text-sm font-semibold text-gray-900">${product.precio.toLocaleString()}</p>
-                      {Boolean(product.precioCosto) && product.precioCosto! > 0 && (
+                      {cardOferta !== null ? (
+                        <p className="flex items-baseline gap-2">
+                          <span className="text-[11px] text-gray-400 line-through">${cardPrecio.toLocaleString()}</span>
+                          <span className="text-sm font-semibold text-emerald-700">${cardOferta.toLocaleString()}</span>
+                        </p>
+                      ) : (
+                        <p className="text-sm font-semibold text-gray-900">${cardPrecio.toLocaleString()}</p>
+                      )}
+                      {Boolean(cardCosto) && cardCosto! > 0 && (
                         <p className="text-[11px] text-gray-400">
-                          Costo: ${product.precioCosto!.toLocaleString()}
-                          {margenGanancia(product.precio, product.precioCosto) && (
+                          Costo: ${cardCosto!.toLocaleString()}
+                          {margenGanancia(precioParaMargen, cardCosto) && (
                             <span className="ml-1 text-emerald-600 font-medium">
-                              ({margenGanancia(product.precio, product.precioCosto)})
+                              ({margenGanancia(precioParaMargen, cardCosto)})
                             </span>
                           )}
                         </p>

@@ -254,6 +254,25 @@ function mapApiProduct(p: ApiProduct): Product {
   const otrasPresentaciones = variants
     .filter(variant => variant.id !== primaryVariant?.id && variant.presentation)
     .map(variant => variant.presentation);
+  const presentaciones = variants
+    .filter(variant => variant.presentation)
+    .map(variant => {
+      const primaryImage = [...(variant.images ?? [])].sort((a, b) =>
+        a.is_primary === b.is_primary ? a.position - b.position : a.is_primary ? -1 : 1,
+      )[0];
+      return {
+        id: variant.id,
+        nombre: variant.presentation,
+        sku: variant.sku || undefined,
+        precio: variant.current_price ?? null,
+        precioOferta: variant.discounted_price ?? null,
+        costo: variant.cost ?? undefined,
+        imagen: primaryImage?.image || variant.image_url || undefined,
+        activa: variant.is_active,
+      };
+    });
+  // La presentación principal va primero, para que la card arranque igual que antes.
+  presentaciones.sort((a, b) => (a.id === primaryVariant?.id ? -1 : b.id === primaryVariant?.id ? 1 : 0));
   const attrs = primaryVariant?.attributes ?? {};
   const productType = attrs.type;
   const marca = attrs.brand ?? attrs.marca;
@@ -271,6 +290,7 @@ function mapApiProduct(p: ApiProduct): Product {
     presentacionNumero: primaryVariant?.presentation_number ?? undefined,
     presentacionUnidad: primaryVariant?.presentation_unit || undefined,
     otrasPresentaciones: otrasPresentaciones.length > 0 ? otrasPresentaciones : undefined,
+    presentaciones: presentaciones.length > 0 ? presentaciones : undefined,
     precio: p.price ?? 0,
     precioCosto: primaryVariant?.cost ?? undefined,
     descripcion: p.description,

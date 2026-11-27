@@ -13,6 +13,17 @@ export interface User {
   allRoleCodes?: UserRole[];
 }
 
+export interface AdminProductPresentation {
+  id: string;
+  nombre: string;
+  sku?: string;
+  precio: number | null;
+  precioOferta: number | null;
+  costo?: number;
+  imagen?: string;
+  activa: boolean;
+}
+
 export interface Product {
   id: string;
   nombre: string;
@@ -23,6 +34,8 @@ export interface Product {
   presentacionUnidad?: 'ML' | 'LT' | 'GR' | 'KG' | 'UND';
   /** Otras presentaciones del mismo producto (ej. si esta fila muestra 8 ML, aquí van "50 ML", "120 ML", etc.). */
   otrasPresentaciones?: string[];
+  /** Todas las presentaciones con sus datos (solo para mostrar en la card del admin). */
+  presentaciones?: AdminProductPresentation[];
   precio: number;
   precioCosto?: number;
   descripcion: string;
