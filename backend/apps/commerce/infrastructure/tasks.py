@@ -91,3 +91,69 @@ def release_expired_wompi_reservations():
             released += 1
 
     return released
+
+
+# ── Recuperación de compras: correo 1 hora después de un pedido fallido ──
+RECOVERY_NOTIFICATION_TITLE = "¿Quieres terminar tu compra?"
+RECOVERY_DELAY = timedelta(hours=1)
+# Solo pedidos que fallaron en las últimas 48 h, para no escribir a clientes
+# con pedidos viejos la primera vez que se activa la función.
+RECOVERY_MAX_AGE = timedelta(hours=48)
+
+
+@shared_task(ignore_result=True)
+def send_failed_order_recovery_emails():
+    from apps.notifications.application.service import NotificationService
+    from apps.notifications.infrastructure.models import Notification
+
+    now = timezone.now()
+    failed_order_ids = (
+        OrderStatusHistory.objects.filter(
+            status=Order.Status.FAILED,
+            created_at__lte=now - RECOVERY_DELAY,
+            created_at__gte=now - RECOVERY_MAX_AGE,
+            order__status=Order.Status.FAILED,
+        )
+        .values_list("order_id", flat=True)
+        .distinct()
+    )
+
+    sent = 0
+    for order in Order.objects.filter(pk__in=list(failed_order_ids)).select_related("customer"):
+        if not order.customer or not getattr(order.customer, "email", ""):
+            continue
+        # Una sola vez por pedido.
+        if Notification.objects.filter(order=order, title=RECOVERY_NOTIFICATION_TITLE).exists():
+            continue
+        # Si el cliente ya compró después, no lo molestamos.
+        if Order.objects.filter(
+            customer=order.customer,
+            created_at__gt=order.created_at,
+            status__in=(
+                Order.Status.PAID,
+                Order.Status.PROCESSING,
+                Order.Status.PACKED,
+                Order.Status.SHIPPED,
+                Order.Status.DELIVERED,
+            ),
+        ).exists():
+            continue
+        try:
+            order_ref = order.number or str(order.id)[:8].upper()
+            NotificationService.send(
+                customer=order.customer,
+                type=Notification.Type.PROMO,
+                title=RECOVERY_NOTIFICATION_TITLE,
+                message=(
+                    f"Tu pedido #{order_ref} quedó sin completar. Tus productos te están "
+                    "esperando: entra a Mis pedidos y dale a «Terminar mi compra»."
+                ),
+                action_url="/perfil?s=pedidos",
+                send_email=True,
+                order=order,
+            )
+            sent += 1
+        except Exception:
+            logger.exception("No fue posible enviar el correo de recuperación del pedido %s.", order.id)
+
+    return sent

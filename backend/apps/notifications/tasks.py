@@ -8,6 +8,94 @@ from apps.notifications.infrastructure.models import Notification
 
 logger = logging.getLogger(__name__)
 
+# Debe coincidir con apps.commerce.infrastructure.tasks.RECOVERY_NOTIFICATION_TITLE
+RECOVERY_NOTIFICATION_TITLE = "¿Quieres terminar tu compra?"
+
+
+def _build_recovery_email(notif):
+    from html import escape
+
+    from django.conf import settings
+
+    order = notif.order
+    customer = notif.customer
+    customer_name = escape(str(getattr(customer, "first_name", "") or "").strip() or "Hola")
+    greeting = f"¡{customer_name}," if customer_name != "Hola" else "¡Hola,"
+    order_ref = escape(order.number or str(order.id)[:8].upper())
+    link = f"{settings.FRONTEND_URL.rstrip('/')}/perfil?s=pedidos"
+
+    rows = []
+    lines = []
+    for item in order.items.all():
+        qty = int(item.quantity) if item.quantity == int(item.quantity) else item.quantity
+        name = escape(item.product_name)
+        presentation = escape(item.presentation or "")
+        price = f"${item.subtotal:,.0f}".replace(",", ".")
+        lines.append(f"- {item.product_name} {item.presentation} x{qty}: {price}")
+        rows.append(
+            f"""
+            <tr>
+              <td style="padding:12px 0;border-bottom:1px solid #eee;font-size:14px;color:#222;">
+                <strong>{name}</strong>
+                <span style="color:#888;font-size:12px;">{(' · ' + presentation) if presentation else ''} · x{qty}</span>
+              </td>
+              <td style="padding:12px 0;border-bottom:1px solid #eee;font-size:14px;text-align:right;font-weight:bold;color:#0F6B3A;">{price}</td>
+            </tr>"""
+        )
+    total = f"${order.total:,.0f}".replace(",", ".")
+
+    plain = (
+        f"{greeting} tus productos te están esperando!\n\n"
+        f"Tu pedido #{order.number or str(order.id)[:8].upper()} no se completó, pero lo guardamos para ti:\n"
+        + "\n".join(lines)
+        + f"\n\nTotal: {total}\n\n"
+        f"Termina tu compra aquí: {link}\n"
+        "Entra a Mis pedidos y dale a «Terminar mi compra». Tus productos vuelven al carrito con un clic.\n\n"
+        "Juhnios Rold S.A.S."
+    )
+
+    html = f"""<!DOCTYPE html>
+<html lang="es"><head><meta charset="UTF-8"><title>Termina tu compra</title></head>
+<body style="margin:0;padding:0;background:#f4f1ea;font-family:Arial,Helvetica,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f1ea;padding:24px 0;">
+<tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;">
+  <tr><td style="background:#1A1C16;padding:36px 32px;text-align:center;">
+    <p style="margin:0 0 8px;color:#C9A96A;font-size:13px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;">Juhnios Rold</p>
+    <h1 style="margin:0;color:#ffffff;font-size:30px;line-height:1.2;">{greeting}<br>tus productos te están esperando 🛍️</h1>
+  </td></tr>
+  <tr><td style="background:#E0103F;padding:12px 32px;text-align:center;color:#ffffff;font-size:14px;font-weight:bold;">
+    Tu pedido #{order_ref} quedó a un paso de completarse
+  </td></tr>
+  <tr><td style="padding:28px 32px 8px;">
+    <p style="margin:0 0 18px;font-size:15px;line-height:1.6;color:#333;">
+      Notamos que tu compra no se pudo finalizar. ¡No te preocupes! Guardamos tus productos
+      para que la termines en un momento.
+    </p>
+    <table width="100%" cellpadding="0" cellspacing="0">{''.join(rows)}
+      <tr>
+        <td style="padding:14px 0 0;font-size:16px;font-weight:bold;color:#111;">Total</td>
+        <td style="padding:14px 0 0;font-size:22px;font-weight:bold;text-align:right;color:#0F6B3A;">{total}</td>
+      </tr>
+    </table>
+  </td></tr>
+  <tr><td style="padding:28px 32px;text-align:center;">
+    <a href="{escape(link)}" style="display:inline-block;background:#2D3A1F;color:#ffffff;text-decoration:none;font-size:16px;font-weight:bold;padding:16px 40px;border-radius:12px;">
+      Terminar mi compra →
+    </a>
+    <p style="margin:14px 0 0;font-size:12px;color:#888;">
+      Entra a <strong>Mis pedidos</strong> y dale a «Terminar mi compra»: tus productos vuelven al carrito con un clic.
+    </p>
+  </td></tr>
+  <tr><td style="background:#1A1C16;padding:18px 32px;text-align:center;">
+    <p style="margin:0;color:#ffffff;font-size:13px;">Juhnios Rold S.A.S.</p>
+    <p style="margin:6px 0 0;color:#C9A96A;font-size:12px;">Cosmética capilar y corporal para el cuidado diario</p>
+  </td></tr>
+</table>
+</td></tr></table>
+</body></html>"""
+    return plain, html
+
 
 @shared_task(ignore_result=True)
 def send_notification_email(notification_id: str):
@@ -30,6 +118,10 @@ def send_notification_email(notification_id: str):
         subject = f"Confirmación de compra #{order_ref} - Juhnios Rold S.A.S."
         plain_message = _build_order_confirmation_text(notif)
         html_message = _build_order_confirmation_html(notif)
+
+    elif notif.order_id and notif.title == RECOVERY_NOTIFICATION_TITLE:
+        subject = "🛍️ ¡Tus productos te están esperando! - Juhnios Rold"
+        plain_message, html_message = _build_recovery_email(notif)
 
     _send_email(
         subject=subject,

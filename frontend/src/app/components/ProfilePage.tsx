@@ -425,7 +425,7 @@ function MayoristaSection({
 /* ════════════════════════════════════════════════════════ */
 export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => void }) {
   const { currentUser, updateProfile, changePassword, orders, loadOrders, backendOnline, savedProducts, toggleSaveProduct } = useUser();
-  const { addItem } = useCart();
+  const { addItem, items: cartItems } = useCart();
   const { products } = useAdmin();
   const toast = useToast();
 
@@ -457,6 +457,45 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
   /* ── pedidos ── */
   const [payingId, setPayingId] = useState<string | null>(null);
   const [mockPay, setMockPay] = useState<{ orderId: string; paymentId: string } | null>(null);
+  const [reorderingId, setReorderingId] = useState<string | null>(null);
+
+  /* Vuelve a poner en el carrito los productos de un pedido rechazado/cancelado
+     y lleva al cliente a la tienda con el carrito abierto. Si un producto ya
+     está en el carrito (p.ej. Wompi lo devolvió al rechazar), solo completa la
+     cantidad que falta para no duplicarlo. */
+  const handleReorder = async (order: { id: string; productos: Array<{ productoId: string; nombre: string; cantidad: number; precio: number }> }) => {
+    setReorderingId(order.id);
+    let added = 0;
+    try {
+      for (const p of order.productos) {
+        if (!p.productoId) continue;
+        const enCarrito = cartItems.find(item => item.variantId === p.productoId)?.quantity ?? 0;
+        const faltan = p.cantidad - enCarrito;
+        if (faltan <= 0) { added += 1; continue; }
+        const ok = await addItem({
+          variantId: p.productoId,
+          name: p.nombre,
+          category: '',
+          size: '',
+          price: p.precio,
+          image: '',
+          quantity: faltan,
+        });
+        if (ok) added += 1;
+      }
+      if (added === 0) {
+        toast.warning('No fue posible volver a agregar los productos de este pedido.');
+        return;
+      }
+      toast.success(added === order.productos.length
+        ? '¡Listo! Tus productos están en el carrito.'
+        : 'Agregamos los productos disponibles a tu carrito.');
+      try { sessionStorage.setItem('juhnios:open-cart', '1'); } catch { /* sin almacenamiento */ }
+      navigateTo('/');
+    } finally {
+      setReorderingId(null);
+    }
+  };
   const [trackingId, setTrackingId] = useState<string | null>(null);
   const [loadingInvoiceId, setLoadingInvoiceId] = useState<string | null>(null);
   const [ordersPage, setOrdersPage] = useState(1);
@@ -1337,6 +1376,25 @@ export function ProfilePage({ onLoginClick: _onLogin }: { onLoginClick: () => vo
                               )}
                             </div>
                           </div>
+
+                          {/* ══ RECUPERAR COMPRA (pedido rechazado o cancelado) ══ */}
+                          {backendOnline && ['failed', 'cancelado', 'cancelled'].includes(order.estado) && order.productos.length > 0 && (
+                            <div className="border-t border-amber-100 bg-gradient-to-r from-amber-50 to-rose-50 px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                              <div>
+                                <p className="text-sm font-bold text-stone-900">¿Quieres terminar tu compra? 🛍️</p>
+                                <p className="text-xs text-stone-600 mt-0.5">Volvemos a poner estos productos en tu carrito con un clic.</p>
+                              </div>
+                              <button
+                                onClick={() => handleReorder(order)}
+                                disabled={reorderingId === order.id}
+                                className="flex items-center justify-center gap-2 rounded-xl bg-[#2D3A1F] px-5 py-2.5 text-xs font-bold uppercase tracking-wider text-white shadow-sm hover:opacity-90 disabled:opacity-50"
+                              >
+                                {reorderingId === order.id
+                                  ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Agregando…</>
+                                  : 'Terminar mi compra →'}
+                              </button>
+                            </div>
+                          )}
 
                           {/* ══ ACCIONES ══ */}
                           <div className="border-t border-stone-100 px-5 py-3 flex flex-wrap items-center gap-2">

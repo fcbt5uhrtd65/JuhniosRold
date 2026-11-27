@@ -298,6 +298,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.commerce.infrastructure.tasks.release_expired_wompi_reservations",
         "schedule": 300.0,
     },
+    "send-failed-order-recovery-emails": {
+        "task": "apps.commerce.infrastructure.tasks.send_failed_order_recovery_emails",
+        "schedule": 600.0,
+    },
     "update-external-shipping-tracking": {
         "task": "apps.envios.infrastructure.tasks.update_external_tracking",
         "schedule": SHIPPING_TRACKING_UPDATE_INTERVAL_MINUTES * 60.0,

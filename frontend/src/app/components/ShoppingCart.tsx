@@ -67,6 +67,19 @@ export function ShoppingCart({ onLoginRequired }: ShoppingCartProps = {}) {
     void reloadCart();
   };
 
+  // Abre el carrito cuando se llega desde "Terminar mi compra" en Mis pedidos.
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem('juhnios:open-cart')) {
+        sessionStorage.removeItem('juhnios:open-cart');
+        openCart();
+      }
+    } catch {
+      // sin almacenamiento disponible
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (!sellerDiscount) return;
     setSellerDiscount(null);
