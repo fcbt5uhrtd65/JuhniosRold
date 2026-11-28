@@ -16,6 +16,7 @@ import {
   getProductById,
   getProductBySlug,
   getProducts,
+  PUBLIC_PRODUCT_LIST_PARAMS,
   type Product as CatalogProduct,
   type ProductCategory,
   type ProductVariant,
@@ -1195,7 +1196,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
         }
         if (prods.total > prods.data.length) {
           window.setTimeout(() => {
-            getProducts({ limit: FULL_PRODUCTS_LIMIT, active: true, ordering: 'name' })
+            getProducts({ ...PUBLIC_PRODUCT_LIST_PARAMS, limit: FULL_PRODUCTS_LIMIT })
               .then(full => {
                 if (!isMounted) return;
                 setProducts(mergeProducts(full.data.filter(p => p.is_active), [linkedProduct]));

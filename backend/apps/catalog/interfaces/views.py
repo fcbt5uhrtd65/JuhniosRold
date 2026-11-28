@@ -52,7 +52,15 @@ class ProductViewSet(SoftDeleteModelViewSet):
     def get_queryset(self):
         queryset = super().get_queryset()
         if self.action not in ("list", "retrieve") or self.request.user.is_authenticated:
-            return queryset.prefetch_related("variants__prices", "images")
+            # Rendimiento: precarga fotos y stock de variantes y reseñas para no
+            # hacer una consulta por cada variante/producto al serializar.
+            return queryset.prefetch_related(
+                "variants__prices",
+                "variants__images",
+                "variants__stocks",
+                "images",
+                Prefetch("reviews", queryset=ProductReview.objects.only("id", "product_id", "rating")),
+            )
 
         raw_material_link_filter = (
             Q(variants__inventory_items__item_type__name__icontains="materia prima")
@@ -70,6 +78,7 @@ class ProductViewSet(SoftDeleteModelViewSet):
         active_variants = ProductVariant.objects.filter(is_active=True).prefetch_related(
             Prefetch("prices", queryset=Price.objects.filter(is_active=True)),
             Prefetch("stocks", queryset=Stock.objects.all(), to_attr="_prefetched_stocks"),
+            "images",
         )
         return (
             queryset.filter(is_active=True, category__is_active=True)
@@ -78,6 +87,7 @@ class ProductViewSet(SoftDeleteModelViewSet):
             .prefetch_related(
                 Prefetch("variants", queryset=active_variants),
                 "images",
+                Prefetch("reviews", queryset=ProductReview.objects.only("id", "product_id", "rating")),
             )
         )
 

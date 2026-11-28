@@ -50,6 +50,41 @@ def _get_current_price_amount(variant) -> Decimal | None:
     return active.amount
 
 
+def _attach_promotions(serializer, variant):
+    """Rendimiento: en vez de una consulta de promociones por variante, se leen
+    todas las promociones activas UNA vez por petición (se guardan en el
+    serializer raíz) y se filtran en memoria con el mismo criterio que
+    get_active_promotions_for_variant (variante, producto o categoría)."""
+    if getattr(variant, "_prefetched_promotions", None) is not None:
+        return
+    root = serializer.root
+    promotions = getattr(root, "_active_promotions_cache", None)
+    if promotions is None:
+        from apps.promotions.infrastructure.models import Promotion
+
+        promotions = list(Promotion.objects.filter(is_active=True, deleted_at__isnull=True))
+        root._active_promotions_cache = promotions
+    category_id = variant.product.category_id
+    variant._prefetched_promotions = [
+        promo
+        for promo in promotions
+        if promo.variant_id == variant.id
+        or promo.product_id == variant.product_id
+        or promo.category_id == category_id
+    ]
+
+
+def _resolve_variant_promotion(serializer, variant):
+    """Calcula la mejor promoción de la variante una sola vez y la reutiliza."""
+    cached = getattr(variant, "_promotion_resolution", "missing")
+    if cached != "missing":
+        return cached
+    _attach_promotions(serializer, variant)
+    resolution = resolve_best_promotion(variant, _get_current_price_amount(variant))
+    variant._promotion_resolution = resolution
+    return resolution
+
+
 MAX_IMAGES_PER_VARIANT = 3
 
 
@@ -97,8 +132,7 @@ class ProductVariantSerializer(serializers.ModelSerializer):
         return float(stock.minimum_quantity)
 
     def _resolve_promotion(self, obj):
-        amount = _get_current_price_amount(obj)
-        return resolve_best_promotion(obj, amount)
+        return _resolve_variant_promotion(self, obj)
 
     def get_active_promotion(self, obj):
         resolution = self._resolve_promotion(obj)
@@ -170,19 +204,29 @@ class ProductSerializer(serializers.ModelSerializer):
         model = Product
         fields = "__all__"
 
+    def _ratings(self, obj):
+        # Usa las reseñas precargadas (prefetch) si existen; si no, una sola consulta.
+        cached = getattr(obj, "_ratings_cache", None)
+        if cached is None:
+            cached = [review.rating for review in obj.reviews.all()]
+            obj._ratings_cache = cached
+        return cached
+
     def get_rating_average(self, obj):
-        result = obj.reviews.aggregate(avg=Avg("rating"))["avg"]
-        return round(result, 1) if result is not None else None
+        ratings = self._ratings(obj)
+        if not ratings:
+            return None
+        return round(sum(ratings) / len(ratings), 1)
 
     def get_rating_count(self, obj):
-        return obj.reviews.count()
+        return len(self._ratings(obj))
 
     def get_active_promotion(self, obj):
         """La mejor promoción activa entre las de sus variantes, usada para el
         badge de catálogo cuando aún no se ha seleccionado una variante."""
         best = None
         for variant in obj.variants.all():
-            resolution = resolve_best_promotion(variant, _get_current_price_amount(variant))
+            resolution = _resolve_variant_promotion(self, variant)
             if resolution is None:
                 continue
             if best is None or resolution.promotion.discount_value > best.promotion.discount_value:

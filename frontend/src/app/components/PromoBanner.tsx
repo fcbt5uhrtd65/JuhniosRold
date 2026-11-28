@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { ArrowRight } from 'lucide-react';
-import { getProducts } from '../services/products.service';
+import { getProducts, PUBLIC_PRODUCT_LIST_PARAMS } from '../services/products.service';
 import type { PromotionSummary } from '../services/promotions.service';
 
 const OLIVE = '#2D3A1F';
@@ -47,7 +47,8 @@ export function PromoBanner() {
 
   useEffect(() => {
     let mounted = true;
-    getProducts({ limit: 100, active: true })
+    // Misma consulta que el catálogo: se comparte la petición (caché del servicio).
+    getProducts(PUBLIC_PRODUCT_LIST_PARAMS)
       .then(({ data }) => {
         if (!mounted) return;
         const found = new Map<string, BannerPromotion>();

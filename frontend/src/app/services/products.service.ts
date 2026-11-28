@@ -593,19 +593,40 @@ export async function getCategories(useAuth = false, forceRefresh = false): Prom
     return cache;
   }
 
-  const client = useAuth ? api : publicApi;
-  const res = await client.get<PaginatedResponse<BackendCategory>>(
-    `${CATEGORIES_PATH}${buildCategoriesQuery()}`,
-  );
+  // Comparte la petición si ya hay una en curso (navbar, catálogo y cada
+  // lista de productos piden las categorías a la vez al cargar la página).
+  const inFlight = useAuth ? adminCategoriesInFlight : publicCategoriesInFlight;
+  if (!forceRefresh && inFlight) return inFlight;
 
-  const categories = (res.data?.results ?? []).map(normalizeCategory);
-  if (useAuth) {
-    adminCategoriesCache = categories;
-  } else {
-    publicCategoriesCache = categories;
+  const request = (async () => {
+    const client = useAuth ? api : publicApi;
+    const res = await client.get<PaginatedResponse<BackendCategory>>(
+      `${CATEGORIES_PATH}${buildCategoriesQuery()}`,
+    );
+
+    const categories = (res.data?.results ?? []).map(normalizeCategory);
+    if (useAuth) {
+      adminCategoriesCache = categories;
+    } else {
+      publicCategoriesCache = categories;
+    }
+    return categories;
+  })();
+
+  if (useAuth) adminCategoriesInFlight = request; else publicCategoriesInFlight = request;
+  try {
+    return await request;
+  } finally {
+    if (useAuth) {
+      if (adminCategoriesInFlight === request) adminCategoriesInFlight = null;
+    } else if (publicCategoriesInFlight === request) {
+      publicCategoriesInFlight = null;
+    }
   }
-  return categories;
 }
+
+let publicCategoriesInFlight: Promise<ProductCategory[]> | null = null;
+let adminCategoriesInFlight: Promise<ProductCategory[]> | null = null;
 
 export async function getFlipbookCatalogs(signal?: AbortSignal): Promise<FlipbookCatalog[]> {
   const res = await publicApi.get<PaginatedResponse<BackendFlipbookCatalog>>(
@@ -657,7 +678,31 @@ export async function deleteFlipbookCatalog(id: string): Promise<void> {
   await api.delete(`${FLIPBOOKS_PATH}${id}/`);
 }
 
+// Rendimiento (solo tienda pública): varias secciones de la página principal
+// piden la misma lista de productos casi al mismo tiempo. Se comparte la
+// petición en curso y se reutiliza el resultado durante unos segundos.
+// El panel admin (useAuth) nunca usa esta caché.
+const PUBLIC_PRODUCTS_TTL_MS = 30_000;
+const publicProductsCache = new Map<string, { at: number; promise: Promise<PaginatedProducts> }>();
+
 async function fetchProducts(
+  params: ProductsQueryParams | undefined,
+  useAuth: boolean,
+): Promise<PaginatedProducts> {
+  if (useAuth) return fetchProductsUncached(params, useAuth);
+  const key = buildProductsQuery(params);
+  const cached = publicProductsCache.get(key);
+  if (cached && Date.now() - cached.at < PUBLIC_PRODUCTS_TTL_MS) return cached.promise;
+  const promise = fetchProductsUncached(params, useAuth);
+  publicProductsCache.set(key, { at: Date.now(), promise });
+  // Si falla, no se guarda el error: el siguiente intento vuelve a pedirlo.
+  promise.catch(() => {
+    if (publicProductsCache.get(key)?.promise === promise) publicProductsCache.delete(key);
+  });
+  return promise;
+}
+
+async function fetchProductsUncached(
   params: ProductsQueryParams | undefined,
   useAuth: boolean,
 ): Promise<PaginatedProducts> {
@@ -687,15 +732,22 @@ export async function getProducts(params?: ProductsQueryParams): Promise<Paginat
   return fetchProducts(params, false);
 }
 
+/** Consulta pública compartida (catálogo, ofertas y barra de descuento usan la
+ *  misma URL para aprovechar la caché y no repetir la petición). */
+export const PUBLIC_PRODUCT_LIST_PARAMS: ProductsQueryParams = { limit: 100, active: true, ordering: 'name' };
+
 async function getAllProductsInternal(useAuth: boolean): Promise<Product[]> {
-  const firstPage = await fetchProducts({ page: 1, limit: 100 }, useAuth);
+  // La tienda pública solo recibe productos activos, así que pedir active=true
+  // no cambia el resultado; el admin sigue pidiendo todo como antes.
+  const baseParams: ProductsQueryParams = useAuth ? { limit: 100 } : PUBLIC_PRODUCT_LIST_PARAMS;
+  const firstPage = await fetchProducts(useAuth ? { page: 1, ...baseParams } : baseParams, useAuth);
   if (firstPage.totalPages <= 1) {
     return firstPage.data;
   }
 
   const remainingPages = await Promise.all(
     Array.from({ length: firstPage.totalPages - 1 }, (_, index) =>
-      fetchProducts({ page: index + 2, limit: 100 }, useAuth),
+      fetchProducts({ ...baseParams, page: index + 2 }, useAuth),
     ),
   );
 
