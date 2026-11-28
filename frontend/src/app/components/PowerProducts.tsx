@@ -281,6 +281,12 @@ function ProductPage({
   const selSize = selectedSizes[product.id] ?? sizes[0] ?? '';
   const selectedVariant = product.variants?.find(v => v.presentation === selSize) ?? product.variants?.[0];
   const selectedPrice = selectedVariant?.discounted_price ?? selectedVariant?.current_price ?? product.priceValue;
+  // Oferta de la presentación seleccionada: precio normal tachado + % de descuento.
+  const selectedOriginal = selectedVariant?.discounted_price != null ? selectedVariant.current_price : null;
+  const selectedDiscount = selectedOriginal && selectedOriginal > 0
+    ? Math.round(((selectedOriginal - selectedPrice) / selectedOriginal) * 100)
+    : null;
+  const hasSelectedOffer = selectedOriginal != null && selectedDiscount != null && selectedDiscount > 0 && selectedDiscount < 100;
 
   // Fotos de la variante/presentación seleccionada (carrusel principal): no mezcla
   // fotos de otras presentaciones, solo genéricas del producto + la propia de esa variante.
@@ -448,7 +454,26 @@ function ProductPage({
               <span className="text-[11.5px] text-stone-500">({product.reviews} reseñas)</span>
             </div>
 
-            <p className="text-[28px] font-semibold text-stone-900 mb-6">${formatPrice(selectedPrice)} <span className="text-xs text-stone-400 font-normal">COP</span></p>
+            {hasSelectedOffer ? (
+              <div className="mb-6">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="inline-flex items-baseline gap-1 rounded-full bg-[#E0103F] px-3 py-1 text-white leading-none shadow-sm">
+                    <span className="text-[16px] font-extrabold tracking-tight">-{selectedDiscount}%</span>
+                    <span className="text-[9px] font-bold tracking-wider">OFERTA</span>
+                  </span>
+                  <span className="rounded-full bg-rose-50 px-3 py-1 text-[11px] font-semibold text-[#E0103F]">
+                    Ahorras ${formatPrice(selectedOriginal! - selectedPrice)}
+                  </span>
+                </div>
+                <div className="flex items-baseline gap-3">
+                  <span className="text-[16px] font-semibold text-stone-400 line-through">${formatPrice(selectedOriginal)}</span>
+                  <span className="text-[32px] font-extrabold leading-none text-[#0F6B3A]">${formatPrice(selectedPrice)}</span>
+                  <span className="text-xs text-stone-400 font-normal">COP</span>
+                </div>
+              </div>
+            ) : (
+              <p className="text-[28px] font-semibold text-stone-900 mb-6">${formatPrice(selectedPrice)} <span className="text-xs text-stone-400 font-normal">COP</span></p>
+            )}
             <div className="w-full h-px bg-stone-100 mb-6" />
 
             {/* Tallas */}

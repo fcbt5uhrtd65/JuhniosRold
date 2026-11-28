@@ -758,19 +758,22 @@ export function ProductPage({
             </button>
 
             {getDiscountedPrice(product, selVariant) !== null ? (
-              <p className="flex items-center gap-3 mb-6">
-                <span className="text-[16px] text-red-500 line-through">
-                  {formatPrice(getProductOriginalPrice(product, selVariant), product.currency ?? 'COP')}
-                </span>
-                <span className="text-[28px] font-semibold text-emerald-600">
-                  {formatPrice(getDisplayedPrice(product, selVariant), product.currency ?? 'COP')}
-                </span>
+              <div className="mb-6">
                 {getDiscountPercentage(product, selVariant) !== null && (
-                  <span className="px-2 py-0.5 text-[10px] font-bold text-white bg-red-600 border border-red-600 rounded-full">
-                    -{getDiscountPercentage(product, selVariant)}%
+                  <span className="mb-2 inline-flex items-baseline gap-1 rounded-full bg-[#E0103F] px-3 py-1 text-white leading-none shadow-sm">
+                    <span className="text-[16px] font-extrabold tracking-tight">-{getDiscountPercentage(product, selVariant)}%</span>
+                    <span className="text-[9px] font-bold tracking-wider">OFERTA</span>
                   </span>
                 )}
-              </p>
+                <p className="flex items-baseline gap-3">
+                  <span className="text-[16px] font-semibold text-stone-400 line-through">
+                    {formatPrice(getProductOriginalPrice(product, selVariant), product.currency ?? 'COP')}
+                  </span>
+                  <span className="text-[32px] font-extrabold leading-none text-[#0F6B3A]">
+                    {formatPrice(getDisplayedPrice(product, selVariant), product.currency ?? 'COP')}
+                  </span>
+                </p>
+              </div>
             ) : (
               <p className="text-[28px] font-semibold text-stone-900 mb-6">
                 {formatPrice(getDisplayedPrice(product, selVariant), product.currency ?? 'COP')}
@@ -959,6 +962,146 @@ export function ProductPage({
 /* ── Props ── */
 interface ProductCatalogProps {
   onLoginRequired?: () => void;
+}
+
+/* ── Carrusel de categorías (solo diseño: usa el mismo filtro de siempre) ──
+   Se desliza con el dedo, con la rueda/trackpad, arrastrando con el mouse o con
+   las flechas. La categoría activa se centra sola. */
+function CategoryCarousel({ tabs, activeId, onSelect }: {
+  tabs: Array<{ id: string; label: string; count: number; image: string }>;
+  activeId: string;
+  onSelect: (id: string) => void;
+}) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const drag = useRef({ down: false, startX: 0, startScroll: 0, moved: false });
+  const [canLeft, setCanLeft] = useState(false);
+  const [canRight, setCanRight] = useState(false);
+
+  const updateArrows = useCallback(() => {
+    const el = trackRef.current;
+    if (!el) return;
+    setCanLeft(el.scrollLeft > 4);
+    setCanRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+  }, []);
+
+  useEffect(() => {
+    updateArrows();
+    window.addEventListener('resize', updateArrows);
+    return () => window.removeEventListener('resize', updateArrows);
+  }, [updateArrows, tabs.length]);
+
+  // Centra la categoría activa.
+  useEffect(() => {
+    const el = trackRef.current?.querySelector<HTMLElement>(`[data-cat="${activeId}"]`);
+    el?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  }, [activeId]);
+
+  const scrollByPage = (dir: 1 | -1) => {
+    const el = trackRef.current;
+    if (el) el.scrollBy({ left: dir * el.clientWidth * 0.8, behavior: 'smooth' });
+  };
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (e.pointerType !== 'mouse' || !trackRef.current) return;
+    drag.current = { down: true, startX: e.clientX, startScroll: trackRef.current.scrollLeft, moved: false };
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    const d = drag.current;
+    if (!d.down || !trackRef.current) return;
+    const dx = e.clientX - d.startX;
+    if (Math.abs(dx) > 5) d.moved = true;
+    trackRef.current.scrollLeft = d.startScroll - dx;
+  };
+  const endDrag = () => { drag.current.down = false; };
+
+  return (
+    <div className="relative -mx-1">
+      {/* Desvanecidos laterales */}
+      <div className={`pointer-events-none absolute left-0 top-0 bottom-0 z-10 w-12 bg-gradient-to-r from-white to-transparent transition-opacity ${canLeft ? 'opacity-100' : 'opacity-0'}`} />
+      <div className={`pointer-events-none absolute right-0 top-0 bottom-0 z-10 w-12 bg-gradient-to-l from-white to-transparent transition-opacity ${canRight ? 'opacity-100' : 'opacity-0'}`} />
+
+      {canLeft && (
+        <button
+          type="button"
+          onClick={() => scrollByPage(-1)}
+          aria-label="Categorías anteriores"
+          className="hidden md:flex absolute left-1 top-1/2 -translate-y-1/2 z-20 h-9 w-9 items-center justify-center rounded-full bg-white shadow-md hover:scale-105 transition-transform"
+          style={{ color: OLIVE }}
+        >
+          <ChevronLeft className="h-4 w-4" strokeWidth={2} />
+        </button>
+      )}
+      {canRight && (
+        <button
+          type="button"
+          onClick={() => scrollByPage(1)}
+          aria-label="Más categorías"
+          className="hidden md:flex absolute right-1 top-1/2 -translate-y-1/2 z-20 h-9 w-9 items-center justify-center rounded-full bg-white shadow-md hover:scale-105 transition-transform"
+          style={{ color: OLIVE }}
+        >
+          <ChevronRight className="h-4 w-4" strokeWidth={2} />
+        </button>
+      )}
+
+      <div
+        ref={trackRef}
+        onScroll={updateArrows}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={endDrag}
+        onPointerLeave={endDrag}
+        className="flex gap-3 overflow-x-auto px-1 py-2 snap-x snap-mandatory select-none cursor-grab active:cursor-grabbing [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {tabs.map(tab => {
+          const active = tab.id === activeId;
+          return (
+            <motion.button
+              key={tab.id}
+              data-cat={tab.id}
+              type="button"
+              onClick={() => {
+                // Si fue un arrastre con el mouse, no cuenta como clic.
+                if (drag.current.moved) { drag.current.moved = false; return; }
+                onSelect(tab.id);
+              }}
+              whileHover={{ y: -3 }}
+              whileTap={{ scale: 0.97 }}
+              className={`group relative flex-shrink-0 snap-start flex items-center gap-3 rounded-2xl pl-2 pr-5 py-2 text-left transition-all duration-300 ${
+                active
+                  ? 'text-white shadow-[0_10px_24px_rgba(45,58,31,0.28)]'
+                  : 'bg-white text-stone-700 shadow-[0_4px_14px_rgba(28,25,23,0.06)] hover:shadow-[0_10px_24px_rgba(28,25,23,0.1)]'
+              }`}
+              style={active ? { backgroundColor: OLIVE } : undefined}
+              aria-pressed={active}
+            >
+              <span className={`relative h-14 w-14 flex-shrink-0 overflow-hidden rounded-xl ${active ? 'bg-white/95' : 'bg-stone-50'}`}>
+                {tab.image ? (
+                  <img
+                    src={tab.image}
+                    alt=""
+                    draggable={false}
+                    loading="lazy"
+                    decoding="async"
+                    className="h-full w-full object-contain p-1.5 transition-transform duration-500 group-hover:scale-110"
+                  />
+                ) : (
+                  <span className="flex h-full w-full items-center justify-center">
+                    <Package className="h-5 w-5 text-stone-300" strokeWidth={1.5} />
+                  </span>
+                )}
+              </span>
+              <span className="flex flex-col">
+                <span className="text-[12px] font-semibold uppercase tracking-[0.1em] whitespace-nowrap">{tab.label}</span>
+                <span className={`text-[10.5px] ${active ? 'text-white/70' : 'text-stone-400'}`}>
+                  {tab.count} producto{tab.count !== 1 ? 's' : ''}
+                </span>
+              </span>
+            </motion.button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
@@ -1157,14 +1300,17 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
   }, [categories]);
 
   const categoryTabs = useMemo(() => [
-    { id: 'all', label: 'Todos', count: products.length },
+    { id: 'all', label: 'Todos', count: products.length, image: products[0] ? getProductImage(products[0]) : '' },
     ...categories
       .map(c => {
         const ids = categoryDescendantIds.get(c.id) ?? new Set([c.id]);
+        const inCategory = products.filter(p => ids.has(p.category_id));
         return {
           id: c.id,
           label: c.name,
-          count: products.filter(p => ids.has(p.category_id)).length,
+          count: inCategory.length,
+          // Solo para el diseño del carrusel: foto de un producto de la categoría.
+          image: c.image_url || (inCategory[0] ? getProductImage(inCategory[0]) : ''),
         };
       })
       .filter(tab => tab.count > 0),
@@ -1401,32 +1547,12 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
             )}
           </AnimatePresence>
 
-          {/* Category tabs */}
-          <div className="flex items-center gap-0 border-b border-stone-200 overflow-x-auto">
-            {categoryTabs.map(tab => {
-              const active = activeCategory === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveCategory(tab.id)}
-                  className="relative flex items-center gap-1.5 px-4 py-3 text-[11px] tracking-[0.12em] uppercase whitespace-nowrap transition-colors flex-shrink-0"
-                  style={{ color: active ? OLIVE : '#9ca3af' }}
-                >
-                  {tab.label}
-                  <span className={`text-[9px] ${active ? 'text-stone-400' : 'text-stone-300'}`}>
-                    ({tab.count})
-                  </span>
-                  {active && (
-                    <motion.div
-                      layoutId="catalogTab"
-                      className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full"
-                      style={{ backgroundColor: OLIVE }}
-                    />
-                  )}
-                </button>
-              );
-            })}
-          </div>
+          {/* Categorías: carrusel deslizable */}
+          <CategoryCarousel
+            tabs={categoryTabs}
+            activeId={activeCategory}
+            onSelect={setActiveCategory}
+          />
         </motion.div>
 
         {/* ── SKELETON loading ── */}
@@ -1522,7 +1648,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                           </span>
                         </div>
                         <div className="flex flex-wrap gap-1.5">
-                          {sizes.slice(0, 3).map(s => (
+                          {sizes.slice(0, 4).map(s => (
                             <button key={s}
                               onClick={e => { e.stopPropagation(); handleSelectSize(product.id, s); }}
                               className={`px-2.5 py-0.5 text-[9px] rounded-full transition-colors ${
@@ -1531,6 +1657,13 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                               style={selSize === s ? { backgroundColor: OLIVE } : {}}
                             >{s}</button>
                           ))}
+                          {sizes.length > 4 && (
+                            <button
+                              onClick={e => { e.stopPropagation(); openProduct(product, 'push', selVariant?.id); }}
+                              className="px-2.5 py-0.5 text-[9px] rounded-full bg-stone-100 text-stone-500 hover:bg-stone-200/70 transition-colors"
+                              title="Ver todas las presentaciones"
+                            >+{sizes.length - 4}</button>
+                          )}
                         </div>
                       </div>
                       <div className="flex flex-col items-end justify-between gap-2 flex-shrink-0">
@@ -1654,7 +1787,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
 
                       {/* Tallas pill */}
                       <div className="flex flex-wrap gap-1.5 mb-3">
-                        {sizes.slice(0, 3).map(s => (
+                        {sizes.slice(0, 4).map(s => (
                           <button
                             key={s}
                             onClick={e => { e.stopPropagation(); handleSelectSize(product.id, s); }}
@@ -1666,6 +1799,15 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                             {s}
                           </button>
                         ))}
+                        {sizes.length > 4 && (
+                          <button
+                            onClick={e => { e.stopPropagation(); openProduct(product, 'push', selVariant?.id); }}
+                            className="px-2.5 py-0.5 text-[9.5px] rounded-full bg-stone-100 text-stone-500 hover:bg-stone-200/70 transition-colors"
+                            title="Ver todas las presentaciones"
+                          >
+                            +{sizes.length - 4}
+                          </button>
+                        )}
                       </div>
 
                       {/* Indicador de stock */}
