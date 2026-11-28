@@ -965,141 +965,120 @@ interface ProductCatalogProps {
   onLoginRequired?: () => void;
 }
 
-/* ── Carrusel de categorías (solo diseño: usa el mismo filtro de siempre) ──
-   Se desliza con el dedo, con la rueda/trackpad, arrastrando con el mouse o con
-   las flechas. La categoría activa se centra sola. */
-function CategoryCarousel({ tabs, activeId, onSelect }: {
-  tabs: Array<{ id: string; label: string; count: number; image: string }>;
-  activeId: string;
-  onSelect: (id: string) => void;
-}) {
-  const trackRef = useRef<HTMLDivElement>(null);
-  const drag = useRef({ down: false, startX: 0, startScroll: 0, moved: false });
-  const [canLeft, setCanLeft] = useState(false);
-  const [canRight, setCanRight] = useState(false);
+/* ── Fila de productos que se desplaza sola (solo diseño) ──
+   Avanza despacio y en bucle; se pausa al pasar el mouse o tocarla, y se puede
+   mover con el dedo, el trackpad o las flechas. Si los productos caben en
+   pantalla, no se mueve. Respeta "reducir movimiento" del sistema. */
+const AUTO_SCROLL_SPEED = 0.45; // px por cuadro (~27 px/s)
 
-  const updateArrows = useCallback(() => {
-    const el = trackRef.current;
-    if (!el) return;
-    setCanLeft(el.scrollLeft > 4);
-    setCanRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+function AutoScrollRow({ children }: { children: React.ReactNode }) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const groupRef = useRef<HTMLDivElement>(null);
+  const posRef = useRef(0);
+  const pausedRef = useRef(false);
+  const resumeTimer = useRef<number | null>(null);
+  const [loop, setLoop] = useState(false);
+
+  // ¿Hace falta moverse? Solo si los productos no caben en el ancho visible.
+  useEffect(() => {
+    const track = trackRef.current;
+    const group = groupRef.current;
+    if (!track || !group) return;
+    const measure = () => setLoop(group.scrollWidth > track.clientWidth + 8);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(track);
+    observer.observe(group);
+    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
-    updateArrows();
-    window.addEventListener('resize', updateArrows);
-    return () => window.removeEventListener('resize', updateArrows);
-  }, [updateArrows, tabs.length]);
+    const track = trackRef.current;
+    if (!track || !loop) return;
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    let frame = 0;
+    posRef.current = track.scrollLeft;
+    const step = () => {
+      const group = groupRef.current;
+      if (group && !pausedRef.current && !document.hidden) {
+        // Si el usuario movió la fila a mano, continuamos desde ahí.
+        if (Math.abs(track.scrollLeft - posRef.current) > 2) posRef.current = track.scrollLeft;
+        posRef.current += AUTO_SCROLL_SPEED;
+        const half = group.offsetWidth; // ancho de un juego completo de cards
+        if (posRef.current >= half) posRef.current -= half;
+        track.scrollLeft = posRef.current;
+      }
+      frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+  }, [loop]);
 
-  // Centra la categoría activa.
-  useEffect(() => {
-    const el = trackRef.current?.querySelector<HTMLElement>(`[data-cat="${activeId}"]`);
-    el?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-  }, [activeId]);
+  useEffect(() => () => {
+    if (resumeTimer.current) window.clearTimeout(resumeTimer.current);
+  }, []);
 
-  const scrollByPage = (dir: 1 | -1) => {
-    const el = trackRef.current;
-    if (el) el.scrollBy({ left: dir * el.clientWidth * 0.8, behavior: 'smooth' });
+  const pause = () => {
+    pausedRef.current = true;
+    if (resumeTimer.current) window.clearTimeout(resumeTimer.current);
   };
-
-  const onPointerDown = (e: React.PointerEvent) => {
-    if (e.pointerType !== 'mouse' || !trackRef.current) return;
-    drag.current = { down: true, startX: e.clientX, startScroll: trackRef.current.scrollLeft, moved: false };
+  const resumeSoon = (ms = 2500) => {
+    if (resumeTimer.current) window.clearTimeout(resumeTimer.current);
+    resumeTimer.current = window.setTimeout(() => {
+      pausedRef.current = false;
+      if (trackRef.current) posRef.current = trackRef.current.scrollLeft;
+    }, ms);
   };
-  const onPointerMove = (e: React.PointerEvent) => {
-    const d = drag.current;
-    if (!d.down || !trackRef.current) return;
-    const dx = e.clientX - d.startX;
-    if (Math.abs(dx) > 5) d.moved = true;
-    trackRef.current.scrollLeft = d.startScroll - dx;
+  const nudge = (dir: 1 | -1) => {
+    const track = trackRef.current;
+    if (!track) return;
+    pause();
+    track.scrollBy({ left: dir * Math.min(track.clientWidth * 0.8, 560), behavior: 'smooth' });
+    resumeSoon(3500);
   };
-  const endDrag = () => { drag.current.down = false; };
 
   return (
-    <div className="relative -mx-1">
-      {/* Desvanecidos laterales */}
-      <div className={`pointer-events-none absolute left-0 top-0 bottom-0 z-10 w-12 bg-gradient-to-r from-white to-transparent transition-opacity ${canLeft ? 'opacity-100' : 'opacity-0'}`} />
-      <div className={`pointer-events-none absolute right-0 top-0 bottom-0 z-10 w-12 bg-gradient-to-l from-white to-transparent transition-opacity ${canRight ? 'opacity-100' : 'opacity-0'}`} />
+    <div className="relative group/row">
+      <div className="pointer-events-none absolute left-0 top-0 bottom-0 z-10 w-10 bg-gradient-to-r from-white to-transparent" />
+      <div className="pointer-events-none absolute right-0 top-0 bottom-0 z-10 w-10 bg-gradient-to-l from-white to-transparent" />
 
-      {canLeft && (
-        <button
-          type="button"
-          onClick={() => scrollByPage(-1)}
-          aria-label="Categorías anteriores"
-          className="hidden md:flex absolute left-1 top-1/2 -translate-y-1/2 z-20 h-9 w-9 items-center justify-center rounded-full bg-white shadow-md hover:scale-105 transition-transform"
-          style={{ color: OLIVE }}
-        >
-          <ChevronLeft className="h-4 w-4" strokeWidth={2} />
-        </button>
-      )}
-      {canRight && (
-        <button
-          type="button"
-          onClick={() => scrollByPage(1)}
-          aria-label="Más categorías"
-          className="hidden md:flex absolute right-1 top-1/2 -translate-y-1/2 z-20 h-9 w-9 items-center justify-center rounded-full bg-white shadow-md hover:scale-105 transition-transform"
-          style={{ color: OLIVE }}
-        >
-          <ChevronRight className="h-4 w-4" strokeWidth={2} />
-        </button>
+      {loop && (
+        <>
+          <button
+            type="button"
+            onClick={() => nudge(-1)}
+            aria-label="Anteriores"
+            className="hidden md:flex absolute left-1 top-1/2 -translate-y-1/2 z-20 h-10 w-10 items-center justify-center rounded-full bg-white shadow-md opacity-0 group-hover/row:opacity-100 transition-opacity hover:scale-105"
+            style={{ color: OLIVE }}
+          >
+            <ChevronLeft className="h-4 w-4" strokeWidth={2} />
+          </button>
+          <button
+            type="button"
+            onClick={() => nudge(1)}
+            aria-label="Siguientes"
+            className="hidden md:flex absolute right-1 top-1/2 -translate-y-1/2 z-20 h-10 w-10 items-center justify-center rounded-full bg-white shadow-md opacity-0 group-hover/row:opacity-100 transition-opacity hover:scale-105"
+            style={{ color: OLIVE }}
+          >
+            <ChevronRight className="h-4 w-4" strokeWidth={2} />
+          </button>
+        </>
       )}
 
       <div
         ref={trackRef}
-        onScroll={updateArrows}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={endDrag}
-        onPointerLeave={endDrag}
-        className="flex gap-3 overflow-x-auto px-1 py-2 snap-x snap-mandatory select-none cursor-grab active:cursor-grabbing [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        onMouseEnter={pause}
+        onMouseLeave={() => resumeSoon(400)}
+        onTouchStart={pause}
+        onTouchEnd={() => resumeSoon()}
+        onWheel={() => { pause(); resumeSoon(); }}
+        onFocusCapture={pause}
+        onBlurCapture={() => resumeSoon()}
+        className="flex overflow-x-auto py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
-        {tabs.map(tab => {
-          const active = tab.id === activeId;
-          return (
-            <motion.button
-              key={tab.id}
-              data-cat={tab.id}
-              type="button"
-              onClick={() => {
-                // Si fue un arrastre con el mouse, no cuenta como clic.
-                if (drag.current.moved) { drag.current.moved = false; return; }
-                onSelect(tab.id);
-              }}
-              whileHover={{ y: -3 }}
-              whileTap={{ scale: 0.97 }}
-              className={`group relative flex-shrink-0 snap-start flex items-center gap-3 rounded-2xl pl-2 pr-5 py-2 text-left transition-all duration-300 ${
-                active
-                  ? 'text-white shadow-[0_10px_24px_rgba(45,58,31,0.28)]'
-                  : 'bg-white text-stone-700 shadow-[0_4px_14px_rgba(28,25,23,0.06)] hover:shadow-[0_10px_24px_rgba(28,25,23,0.1)]'
-              }`}
-              style={active ? { backgroundColor: OLIVE } : undefined}
-              aria-pressed={active}
-            >
-              <span className={`relative h-14 w-14 flex-shrink-0 overflow-hidden rounded-xl ${active ? 'bg-white/95' : 'bg-stone-50'}`}>
-                {tab.image ? (
-                  <img
-                    src={tab.image}
-                    alt=""
-                    draggable={false}
-                    loading="lazy"
-                    decoding="async"
-                    className="h-full w-full object-contain p-1.5 transition-transform duration-500 group-hover:scale-110"
-                  />
-                ) : (
-                  <span className="flex h-full w-full items-center justify-center">
-                    <Package className="h-5 w-5 text-stone-300" strokeWidth={1.5} />
-                  </span>
-                )}
-              </span>
-              <span className="flex flex-col">
-                <span className="text-[12px] font-semibold uppercase tracking-[0.1em] whitespace-nowrap">{tab.label}</span>
-                <span className={`text-[10.5px] ${active ? 'text-white/70' : 'text-stone-400'}`}>
-                  {tab.count} producto{tab.count !== 1 ? 's' : ''}
-                </span>
-              </span>
-            </motion.button>
-          );
-        })}
+        <div ref={groupRef} className="flex gap-4 pr-4 flex-shrink-0">{children}</div>
+        {/* Copia para el bucle continuo (solo cuando la fila se mueve). */}
+        {loop && <div className="flex gap-4 pr-4 flex-shrink-0" aria-hidden="true">{children}</div>}
       </div>
     </div>
   );
@@ -1300,22 +1279,6 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
     return new Map(categories.map(category => [category.id, collect(category.id)]));
   }, [categories]);
 
-  const categoryTabs = useMemo(() => [
-    { id: 'all', label: 'Todos', count: products.length, image: products[0] ? getProductImage(products[0]) : '' },
-    ...categories
-      .map(c => {
-        const ids = categoryDescendantIds.get(c.id) ?? new Set([c.id]);
-        const inCategory = products.filter(p => ids.has(p.category_id));
-        return {
-          id: c.id,
-          label: c.name,
-          count: inCategory.length,
-          // Solo para el diseño del carrusel: foto de un producto de la categoría.
-          image: c.image_url || (inCategory[0] ? getProductImage(inCategory[0]) : ''),
-        };
-      })
-      .filter(tab => tab.count > 0),
-  ], [categories, categoryDescendantIds, products]);
 
   const currentProducts = useMemo(() => {
     return products.filter(product => {
@@ -1409,199 +1372,33 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
     writeProductUrl(quickViewProduct, 'replace', variant?.id);
   };
 
-  return (
-    <section id="catalogo" className="py-20 bg-white">
-      <div className="max-w-[1400px] mx-auto px-6 md:px-10 lg:px-14">
+  /* Filas por categoría: una por categoría principal, con los productos ya
+     filtrados por búsqueda/filtros. Los productos de subcategorías van en la
+     fila de su categoría principal. */
+  const categoryGroups = useMemo(() => {
+    const byId = new Map(categories.map(c => [c.id, c]));
+    const rootOf = (id: string): string => {
+      let current = byId.get(id);
+      const seen = new Set<string>();
+      while (current?.parent && byId.has(current.parent) && !seen.has(current.id)) {
+        seen.add(current.id);
+        current = byId.get(current.parent);
+      }
+      return current?.id ?? id;
+    };
+    const groups = new Map<string, { id: string; name: string; products: CatalogProduct[] }>();
+    for (const product of currentProducts) {
+      const rootId = rootOf(product.category_id);
+      const name = byId.get(rootId)?.name ?? product.category_name ?? 'Otros';
+      if (!groups.has(rootId)) groups.set(rootId, { id: rootId, name, products: [] });
+      groups.get(rootId)!.products.push(product);
+    }
+    return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }));
+  }, [categories, currentProducts]);
 
-        {/* ── HEADER editorial ── */}
-        <motion.div
-          initial={{ opacity: 0, y: 28 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.65 }}
-          className="mb-12"
-        >
-          {/* Hero title */}
-          <div className="grid lg:grid-cols-[1fr_auto] gap-8 items-end mb-10">
-            <div>
-              <p className="text-[9px] tracking-[0.4em] uppercase text-stone-400 mb-4">
-                Catálogo completo
-              </p>
-              <h2
-                className="text-[56px] md:text-[72px] lg:text-[84px] font-light text-stone-900 leading-[0.92] tracking-tight"
-                style={{ fontFamily: "'Playfair Display', serif" }}
-              >
-                Todos los<br />
-                <em style={{ fontStyle: 'italic', color: OLIVE }}>productos</em>
-              </h2>
-            </div>
-            <p className="text-sm text-stone-400 leading-relaxed max-w-[240px] lg:mb-2">
-              Descubre nuestra línea completa de cuidado capilar natural.
-              Fórmulas efectivas, ingredientes conscientes y resultados que se sienten.
-            </p>
-          </div>
-
-          {/* Barra búsqueda + controles */}
-          <div className="flex flex-col sm:flex-row gap-3 mb-7">
-            <div className="flex-1 relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-300" strokeWidth={1.3} />
-              <input
-                type="search"
-                value={localSearchQuery}
-                onChange={e => setLocalSearchQuery(e.target.value)}
-                placeholder="Buscar productos..."
-                className="w-full pl-11 pr-4 py-3 bg-white border border-stone-200 rounded-xl text-base sm:text-[13px] text-stone-700 placeholder:text-stone-300 focus:outline-none focus:border-stone-400 transition-colors"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowFilters(!showFilters)}
-                className={`flex items-center gap-2 px-4 py-3 text-[11px] tracking-[0.12em] uppercase font-medium border rounded-xl transition-all ${
-                  showFilters
-                    ? 'text-white border-transparent'
-                    : 'border-stone-200 text-stone-500 hover:border-stone-400 bg-white'
-                }`}
-                style={showFilters ? { backgroundColor: OLIVE } : {}}
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5" strokeWidth={1.5} />
-                Filtros
-              </button>
-              <div className="flex gap-1">
-                {(['grid', 'list'] as ViewMode[]).map(mode => (
-                  <button
-                    key={mode}
-                    onClick={() => setViewMode(mode)}
-                    className={`p-3 rounded-xl border transition-all ${
-                      viewMode === mode
-                        ? 'text-white border-transparent'
-                        : 'border-stone-200 text-stone-400 hover:border-stone-300 bg-white'
-                    }`}
-                    style={viewMode === mode ? { backgroundColor: OLIVE } : {}}
-                  >
-                    {mode === 'grid'
-                      ? <Grid className="w-4 h-4" strokeWidth={1.5} />
-                      : <List className="w-4 h-4" strokeWidth={1.5} />
-                    }
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Panel filtros desplegable */}
-          <AnimatePresence>
-            {showFilters && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                className="overflow-hidden mb-5"
-              >
-                <div className="grid sm:grid-cols-2 gap-6 p-6 bg-white rounded-2xl border border-stone-200">
-                  <div>
-                    <p className="text-[9px] tracking-[0.24em] uppercase text-stone-400 mb-3">Precio</p>
-                    <div className="flex flex-wrap gap-2">
-                      {[
-                        { value: 'all', label: 'Todos' },
-                        { value: 'low', label: '< $25k' },
-                        { value: 'mid', label: '$25k – $100k' },
-                        { value: 'high', label: '> $100k' },
-                      ].map(o => (
-                        <button key={o.value}
-                          onClick={() => setPriceRange(o.value as PriceRange)}
-                          className={`px-3.5 py-1.5 text-[11px] border rounded-lg transition-all ${
-                            priceRange === o.value
-                              ? 'text-white border-transparent'
-                              : 'border-stone-200 text-stone-500 hover:border-stone-400'
-                          }`}
-                          style={priceRange === o.value ? { backgroundColor: OLIVE } : {}}
-                        >
-                          {o.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-[9px] tracking-[0.24em] uppercase text-stone-400 mb-3">Colección</p>
-                    <div className="flex flex-wrap gap-2">
-                      {[
-                        { value: 'all', label: 'Todos' },
-                        { value: 'featured', label: 'Destacados' },
-                        { value: 'recent', label: 'Novedades' },
-                      ].map(o => (
-                        <button key={o.value}
-                          onClick={() => setCollectionFilter(o.value as CollectionFilter)}
-                          className={`px-3.5 py-1.5 text-[11px] border rounded-lg transition-all ${
-                            collectionFilter === o.value
-                              ? 'text-white border-transparent'
-                              : 'border-stone-200 text-stone-500 hover:border-stone-400'
-                          }`}
-                          style={collectionFilter === o.value ? { backgroundColor: OLIVE } : {}}
-                        >
-                          {o.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Categorías: carrusel deslizable */}
-          <CategoryCarousel
-            tabs={categoryTabs}
-            activeId={activeCategory}
-            onSelect={setActiveCategory}
-          />
-        </motion.div>
-
-        {/* ── SKELETON loading ── */}
-        {isLoading && (
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="bg-white rounded-2xl overflow-hidden border border-stone-100">
-                <div className="aspect-[3/4] bg-stone-100 animate-pulse" />
-                <div className="p-4 space-y-3">
-                  <div className="h-2 w-16 bg-stone-100 animate-pulse rounded" />
-                  <div className="h-4 w-3/4 bg-stone-100 animate-pulse rounded" />
-                  <div className="h-3 w-24 bg-stone-100 animate-pulse rounded" />
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* ── ERROR ── */}
-        {!isLoading && error && (
-          <div className="text-center py-20">
-            <Package className="w-10 h-10 mx-auto mb-4 text-stone-300" strokeWidth={1} />
-            <p className="text-sm text-stone-400">{error}</p>
-          </div>
-        )}
-
-        {/* ── Resultado búsqueda ── */}
-        {!isLoading && !error && localSearchQuery && (
-          <p className="text-[11px] text-stone-400 mb-5">
-            {currentProducts.length} resultado{currentProducts.length !== 1 ? 's' : ''} para «{localSearchQuery}»
-          </p>
-        )}
-
-        {/* ── GRID / LIST ── */}
-        {!isLoading && !error && (
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={`${activeCategory}-${viewMode}-${currentPage}`}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.3 }}
-              className={viewMode === 'grid'
-                ? 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3'
-                : 'flex flex-col gap-3'
-              }
-            >
-              {paginatedProducts.map((product, index) => {
+  /* Dibuja una card de producto (misma card de siempre) para la vista
+     cuadrícula, la vista lista o las filas por categoría. */
+  const renderProductCard = (product: CatalogProduct, index: number, mode: 'grid' | 'list') => {
                 const sizes  = getProductSizes(product);
                 const badge  = getProductBadge(product);
                 const saved  = isProductSaved(product.id);
@@ -1615,7 +1412,7 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                 const isLowStock = availableQty !== null && availableQty > 0 && availableQty <= minimumQty;
                 const isOutOfStock = availableQty !== null && availableQty <= 0;
 
-                if (viewMode === 'list') {
+                if (mode === 'list') {
                   return (
                     <motion.div
                       key={product.id}
@@ -1851,13 +1648,241 @@ export function ProductCatalog({ onLoginRequired }: ProductCatalogProps = {}) {
                     </div>
                   </motion.div>
                 );
-              })}
+  };
+
+  return (
+    <section id="catalogo" className="py-20 bg-white">
+      <div className="max-w-[1400px] mx-auto px-6 md:px-10 lg:px-14">
+
+        {/* ── HEADER editorial ── */}
+        <motion.div
+          initial={{ opacity: 0, y: 28 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.65 }}
+          className="mb-12"
+        >
+          {/* Hero title */}
+          <div className="grid lg:grid-cols-[1fr_auto] gap-8 items-end mb-10">
+            <div>
+              <p className="text-[9px] tracking-[0.4em] uppercase text-stone-400 mb-4">
+                Catálogo completo
+              </p>
+              <h2
+                className="text-[56px] md:text-[72px] lg:text-[84px] font-light text-stone-900 leading-[0.92] tracking-tight"
+                style={{ fontFamily: "'Playfair Display', serif" }}
+              >
+                Todos los<br />
+                <em style={{ fontStyle: 'italic', color: OLIVE }}>productos</em>
+              </h2>
+            </div>
+            <p className="text-sm text-stone-400 leading-relaxed max-w-[240px] lg:mb-2">
+              Descubre nuestra línea completa de cuidado capilar natural.
+              Fórmulas efectivas, ingredientes conscientes y resultados que se sienten.
+            </p>
+          </div>
+
+          {/* Barra búsqueda + controles */}
+          <div className="flex flex-col sm:flex-row gap-3 mb-7">
+            <div className="flex-1 relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-300" strokeWidth={1.3} />
+              <input
+                type="search"
+                value={localSearchQuery}
+                onChange={e => setLocalSearchQuery(e.target.value)}
+                placeholder="Buscar productos..."
+                className="w-full pl-11 pr-4 py-3 bg-white border border-stone-200 rounded-xl text-base sm:text-[13px] text-stone-700 placeholder:text-stone-300 focus:outline-none focus:border-stone-400 transition-colors"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className={`flex items-center gap-2 px-4 py-3 text-[11px] tracking-[0.12em] uppercase font-medium border rounded-xl transition-all ${
+                  showFilters
+                    ? 'text-white border-transparent'
+                    : 'border-stone-200 text-stone-500 hover:border-stone-400 bg-white'
+                }`}
+                style={showFilters ? { backgroundColor: OLIVE } : {}}
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" strokeWidth={1.5} />
+                Filtros
+              </button>
+              <div className="flex gap-1">
+                {(['grid', 'list'] as ViewMode[]).map(mode => (
+                  <button
+                    key={mode}
+                    onClick={() => setViewMode(mode)}
+                    className={`p-3 rounded-xl border transition-all ${
+                      viewMode === mode
+                        ? 'text-white border-transparent'
+                        : 'border-stone-200 text-stone-400 hover:border-stone-300 bg-white'
+                    }`}
+                    style={viewMode === mode ? { backgroundColor: OLIVE } : {}}
+                  >
+                    {mode === 'grid'
+                      ? <Grid className="w-4 h-4" strokeWidth={1.5} />
+                      : <List className="w-4 h-4" strokeWidth={1.5} />
+                    }
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Panel filtros desplegable */}
+          <AnimatePresence>
+            {showFilters && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden mb-5"
+              >
+                <div className="grid sm:grid-cols-2 gap-6 p-6 bg-white rounded-2xl border border-stone-200">
+                  <div>
+                    <p className="text-[9px] tracking-[0.24em] uppercase text-stone-400 mb-3">Precio</p>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { value: 'all', label: 'Todos' },
+                        { value: 'low', label: '< $25k' },
+                        { value: 'mid', label: '$25k – $100k' },
+                        { value: 'high', label: '> $100k' },
+                      ].map(o => (
+                        <button key={o.value}
+                          onClick={() => setPriceRange(o.value as PriceRange)}
+                          className={`px-3.5 py-1.5 text-[11px] border rounded-lg transition-all ${
+                            priceRange === o.value
+                              ? 'text-white border-transparent'
+                              : 'border-stone-200 text-stone-500 hover:border-stone-400'
+                          }`}
+                          style={priceRange === o.value ? { backgroundColor: OLIVE } : {}}
+                        >
+                          {o.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[9px] tracking-[0.24em] uppercase text-stone-400 mb-3">Colección</p>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { value: 'all', label: 'Todos' },
+                        { value: 'featured', label: 'Destacados' },
+                        { value: 'recent', label: 'Novedades' },
+                      ].map(o => (
+                        <button key={o.value}
+                          onClick={() => setCollectionFilter(o.value as CollectionFilter)}
+                          className={`px-3.5 py-1.5 text-[11px] border rounded-lg transition-all ${
+                            collectionFilter === o.value
+                              ? 'text-white border-transparent'
+                              : 'border-stone-200 text-stone-500 hover:border-stone-400'
+                          }`}
+                          style={collectionFilter === o.value ? { backgroundColor: OLIVE } : {}}
+                        >
+                          {o.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+        </motion.div>
+
+        {/* ── SKELETON loading ── */}
+        {isLoading && (
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="bg-white rounded-2xl overflow-hidden border border-stone-100">
+                <div className="aspect-[3/4] bg-stone-100 animate-pulse" />
+                <div className="p-4 space-y-3">
+                  <div className="h-2 w-16 bg-stone-100 animate-pulse rounded" />
+                  <div className="h-4 w-3/4 bg-stone-100 animate-pulse rounded" />
+                  <div className="h-3 w-24 bg-stone-100 animate-pulse rounded" />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── ERROR ── */}
+        {!isLoading && error && (
+          <div className="text-center py-20">
+            <Package className="w-10 h-10 mx-auto mb-4 text-stone-300" strokeWidth={1} />
+            <p className="text-sm text-stone-400">{error}</p>
+          </div>
+        )}
+
+        {/* ── Resultado búsqueda ── */}
+        {!isLoading && !error && localSearchQuery && (
+          <p className="text-[11px] text-stone-400 mb-5">
+            {currentProducts.length} resultado{currentProducts.length !== 1 ? 's' : ''} para «{localSearchQuery}»
+          </p>
+        )}
+
+        {/* ── FILAS POR CATEGORÍA (vista cuadrícula) ── */}
+        {!isLoading && !error && viewMode === 'grid' && (
+          <div className="space-y-14">
+            {activeCategory !== 'all' && (
+              <button
+                type="button"
+                onClick={() => setActiveCategory('all')}
+                className="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500 hover:text-stone-900 transition-colors"
+              >
+                ← Ver todas las categorías
+              </button>
+            )}
+            {categoryGroups.map(group => (
+              <section key={group.id}>
+                <div className="flex items-end justify-between gap-4 mb-5">
+                  <div>
+                    <p className="text-[10px] tracking-[0.34em] uppercase text-stone-400 mb-2">
+                      {group.products.length} producto{group.products.length !== 1 ? 's' : ''}
+                    </p>
+                    <h3
+                      className="text-[34px] sm:text-[44px] md:text-[56px] font-light leading-none text-stone-900"
+                      style={{ fontFamily: "'Playfair Display', serif" }}
+                    >
+                      {group.name}
+                    </h3>
+                  </div>
+                  <div className="hidden sm:block h-px flex-1 mb-3 bg-gradient-to-r from-stone-200 to-transparent" />
+                </div>
+                <AutoScrollRow>
+                  {group.products.map((product, index) => (
+                    <div key={product.id} className="w-[210px] sm:w-[235px] md:w-[260px] flex-shrink-0 flex">
+                      <div className="w-full [&>*]:h-full">{renderProductCard(product, index, 'grid')}</div>
+                    </div>
+                  ))}
+                </AutoScrollRow>
+              </section>
+            ))}
+          </div>
+        )}
+
+        {/* ── LISTA (igual que antes, con paginación) ── */}
+        {!isLoading && !error && viewMode === 'list' && (
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={`${activeCategory}-${viewMode}-${currentPage}`}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+              className={viewMode === 'grid'
+                ? 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3'
+                : 'flex flex-col gap-3'
+              }
+            >
+              {paginatedProducts.map((product, index) => renderProductCard(product, index, viewMode))}
             </motion.div>
           </AnimatePresence>
         )}
 
-        {/* ── Paginacion ── */}
-        {!isLoading && !error && currentProducts.length > PRODUCTS_PER_PAGE && (
+        {/* ── Paginacion (solo vista lista) ── */}
+        {!isLoading && !error && viewMode === 'list' && currentProducts.length > PRODUCTS_PER_PAGE && (
           <div className="mt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
             <p className="text-[11px] text-stone-400">
               Mostrando {(currentPage - 1) * PRODUCTS_PER_PAGE + 1}-{Math.min(currentPage * PRODUCTS_PER_PAGE, currentProducts.length)} de {currentProducts.length} productos
