@@ -30,7 +30,11 @@ import {
   Ticket,
   Wallet,
   Calculator,
+  Store,
 } from 'lucide-react';
+
+// Abre la tienda en una pestaña nueva sin salir del panel (ver isStorePreview en App.tsx).
+const STORE_PREVIEW_URL = '/?vista=tienda';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -206,6 +210,16 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
             </>
           )}
         </button>
+        <a
+          href={STORE_PREVIEW_URL}
+          target="_blank"
+          rel="noopener"
+          title="Ver tienda"
+          className={`${compact ? 'mx-auto h-12 w-12 px-0 overflow-hidden text-[0px]' : 'w-full gap-2 px-4 text-xs mb-2'} flex items-center justify-center py-2.5 rounded-2xl font-semibold text-white bg-[#2a4038] hover:bg-[#3d5c4e] transition-colors`}
+        >
+          <Store size={14} strokeWidth={1.75} />
+          Ver tienda
+        </a>
         <button
           onClick={logout}
           title="Cerrar sesión"
@@ -260,13 +274,24 @@ export function AdminLayout({ children, currentView, onViewChange }: AdminLayout
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400 leading-none">Juhnios Rold</p>
               <p className="text-[9px] text-gray-400 mt-0.5">{roleLabel}</p>
             </div>
-            <button
-              onClick={logout}
-              className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-              title="Cerrar sesión"
-            >
-              <LogOut className="w-4 h-4 text-gray-400" strokeWidth={1.75} />
-            </button>
+            <div className="flex items-center">
+              <a
+                href={STORE_PREVIEW_URL}
+                target="_blank"
+                rel="noopener"
+                className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                title="Ver tienda"
+              >
+                <Store className="w-4 h-4 text-[#2a4038]" strokeWidth={1.75} />
+              </a>
+              <button
+                onClick={logout}
+                className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                title="Cerrar sesión"
+              >
+                <LogOut className="w-4 h-4 text-gray-400" strokeWidth={1.75} />
+              </button>
+            </div>
           </div>
         </div>
 

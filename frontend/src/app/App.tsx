@@ -187,7 +187,7 @@ function AppContent() {
     );
   }
 
-  if (currentUser) {
+  if (currentUser && !isStorePreview()) {
     return <Admin />;
   }
 
@@ -256,6 +256,46 @@ function AppContent() {
   );
 }
 
+/* ── "Ver tienda" desde el panel admin ──
+   El panel abre la tienda en una pestaña nueva con ?vista=tienda. Esa pestaña
+   (y solo esa: sessionStorage es por pestaña) muestra la tienda aunque haya una
+   sesión de admin, para no tener que salir del panel. */
+const STORE_PREVIEW_KEY = 'juhnios:store-preview';
+
+function isStorePreview(): boolean {
+  try {
+    if (new URLSearchParams(window.location.search).get('vista') === 'tienda') {
+      sessionStorage.setItem(STORE_PREVIEW_KEY, '1');
+      return true;
+    }
+    return sessionStorage.getItem(STORE_PREVIEW_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function StorePreviewBar() {
+  const { currentUser } = useAdmin();
+  if (!currentUser || !isStorePreview()) return null;
+  return (
+    <div className="fixed bottom-4 left-4 z-[200] flex items-center gap-3 rounded-full bg-[#1A1C16] px-4 py-2.5 text-white shadow-xl">
+      <span className="text-[11px] font-semibold">Vista de tienda</span>
+      <button
+        type="button"
+        onClick={() => {
+          try { sessionStorage.removeItem(STORE_PREVIEW_KEY); } catch { /* sin almacenamiento */ }
+          window.close();
+          // Si el navegador no deja cerrar la pestaña, volvemos al panel aquí mismo.
+          window.location.href = '/';
+        }}
+        className="rounded-full bg-white/15 px-3 py-1 text-[11px] font-semibold hover:bg-white/25"
+      >
+        Volver al panel
+      </button>
+    </div>
+  );
+}
+
 function useCaptureReferralCode() {
   useEffect(() => {
     const ref = new URLSearchParams(window.location.search).get('ref');
@@ -273,6 +313,7 @@ export default function App() {
             <CartProvider>
               <SearchProvider>
                 <AppContent />
+                <StorePreviewBar />
               </SearchProvider>
             </CartProvider>
           </NotificationsProvider>
