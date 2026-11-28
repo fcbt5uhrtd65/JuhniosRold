@@ -85,6 +85,27 @@ export async function deleteCustomer(id: string): Promise<void> {
   await api.delete(`/customers/${id}/`);
 }
 
+export interface CustomerEmailRecord {
+  id: string;
+  title: string;
+  message: string;
+  type: string;
+  order_id: string | null;
+  order_number: string;
+  email_status: 'PENDING' | 'SENT' | 'FAILED' | string;
+  email_sent_at: string | null;
+  email_error: string;
+  read: boolean;
+  created_at: string;
+}
+
+/** Historial de correos enviados a un cliente (admin). */
+export async function getCustomerEmailHistory(id: string): Promise<CustomerEmailRecord[]> {
+  const res = await api.get<CustomerEmailRecord[]>(`/customers/${id}/correos/`);
+  if (!res.data) throw new Error(res.message || 'No se pudo cargar el historial de correos.');
+  return res.data;
+}
+
 export interface CustomerExportFilters {
   city?: string;
   minOrders?: number;

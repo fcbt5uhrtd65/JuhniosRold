@@ -35,9 +35,42 @@ class CustomerViewSet(SoftDeleteModelViewSet):
 
     def get_permissions(self):
         self.required_component_action = (
-            "view" if self.action in {"list", "retrieve", "purchase_history", "export_pdf", "export_xlsx"} else "edit"
+            "view"
+            if self.action in {"list", "retrieve", "purchase_history", "email_history", "export_pdf", "export_xlsx"}
+            else "edit"
         )
         return super().get_permissions()
+
+    @action(detail=True, methods=("get",), url_path="correos")
+    def email_history(self, request, pk=None):
+        """Historial de correos enviados al cliente (incluye los de recuperar compra)."""
+        from apps.notifications.infrastructure.models import Notification
+
+        customer = self.get_object()
+        notifications = (
+            Notification.objects.filter(customer=customer)
+            .exclude(email_status="")
+            .select_related("order")
+            .order_by("-created_at")[:100]
+        )
+        return Response(
+            [
+                {
+                    "id": str(n.id),
+                    "title": n.title,
+                    "message": n.message,
+                    "type": n.type,
+                    "order_id": str(n.order_id) if n.order_id else None,
+                    "order_number": n.order.number if n.order_id and n.order else "",
+                    "email_status": n.email_status,
+                    "email_sent_at": n.email_sent_at.isoformat() if n.email_sent_at else None,
+                    "email_error": n.email_error,
+                    "read": n.read,
+                    "created_at": n.created_at.isoformat(),
+                }
+                for n in notifications
+            ]
+        )
 
     @action(detail=True, methods=("get",), url_path="purchase-history")
     def purchase_history(self, request, pk=None):

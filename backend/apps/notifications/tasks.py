@@ -123,12 +123,28 @@ def send_notification_email(notification_id: str):
         subject = "🛍️ ¡Tus productos te están esperando! - Juhnios Rold"
         plain_message, html_message = _build_recovery_email(notif)
 
-    _send_email(
-        subject=subject,
-        message=plain_message,
-        recipient=notif.customer.email,
-        attachments=attachments,
-        html_message=html_message,
+    from django.utils import timezone
+
+    try:
+        _send_email(
+            subject=subject,
+            message=plain_message,
+            recipient=notif.customer.email,
+            attachments=attachments,
+            html_message=html_message,
+        )
+    except Exception as exc:
+        logger.exception("Error enviando el email de la notificación %s.", notification_id)
+        Notification.objects.filter(pk=notif.pk).update(
+            email_status=Notification.EmailStatus.FAILED,
+            email_error=str(exc)[:300],
+        )
+        raise
+
+    Notification.objects.filter(pk=notif.pk).update(
+        email_status=Notification.EmailStatus.SENT,
+        email_sent_at=timezone.now(),
+        email_error="",
     )
 
 

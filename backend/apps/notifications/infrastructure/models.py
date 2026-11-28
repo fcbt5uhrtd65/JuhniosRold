@@ -33,6 +33,16 @@ class Notification(BaseModel):
     read = models.BooleanField(default=False)
     read_at = models.DateTimeField(null=True, blank=True)
 
+    # Registro del envío por correo (vacío = esta notificación no se envió por correo).
+    class EmailStatus(models.TextChoices):
+        PENDING = "PENDING", "En cola"
+        SENT = "SENT", "Enviado"
+        FAILED = "FAILED", "Error al enviar"
+
+    email_status = models.CharField(max_length=10, choices=EmailStatus.choices, blank=True, default="")
+    email_sent_at = models.DateTimeField(null=True, blank=True)
+    email_error = models.CharField(max_length=300, blank=True, default="")
+
     class Meta(BaseModel.Meta):
         indexes = [
             models.Index(fields=["customer", "-created_at"]),

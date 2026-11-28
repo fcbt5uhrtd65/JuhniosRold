@@ -31,6 +31,11 @@ class NotificationService:
             title=title,
             message=message,
             action_url=action_url,
+            email_status=(
+                Notification.EmailStatus.PENDING
+                if send_email and not settings.DEBUG
+                else ""
+            ),
         )
 
         if send_email and not settings.DEBUG:
