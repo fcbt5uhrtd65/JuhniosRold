@@ -41,6 +41,54 @@ class CustomerViewSet(SoftDeleteModelViewSet):
         )
         return super().get_permissions()
 
+    @action(detail=True, methods=("post",), url_path="enviar-correo")
+    def send_email(self, request, pk=None):
+        """Envía el correo «¿Quieres terminar tu compra?» de un pedido fallido o cancelado."""
+        from django.db import transaction
+
+        from apps.commerce.infrastructure.models import Order
+        from apps.commerce.infrastructure.tasks import RECOVERY_NOTIFICATION_TITLE
+        from apps.notifications.infrastructure.models import Notification
+        from apps.notifications.tasks import send_notification_email
+
+        customer = self.get_object()
+        order_id = request.data.get("order_id")
+        order = Order.objects.filter(pk=order_id, customer=customer).first() if order_id else None
+        if order is None:
+            return Response(
+                {"detail": "Selecciona un pedido de este cliente."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if order.status not in (Order.Status.FAILED, Order.Status.CANCELLED):
+            return Response(
+                {"detail": "Solo se puede enviar para pedidos fallidos o cancelados."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not getattr(customer, "email", ""):
+            return Response(
+                {"detail": "Este cliente no tiene correo registrado."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        order_ref = order.number or str(order.id)[:8].upper()
+        notif = Notification.objects.create(
+            customer=customer,
+            order=order,
+            type=Notification.Type.PROMO,
+            title=RECOVERY_NOTIFICATION_TITLE,
+            message=(
+                f"Tu pedido #{order_ref} quedó sin completar. Tus productos te están "
+                "esperando: entra a Mis pedidos y dale a «Terminar mi compra»."
+            ),
+            action_url="/perfil?s=pedidos",
+            email_status=Notification.EmailStatus.PENDING,
+        )
+        notif_id = str(notif.id)
+        transaction.on_commit(
+            lambda: send_notification_email.apply_async(args=(notif_id,), ignore_result=True, retry=False)
+        )
+        return Response({"id": notif_id, "email_status": notif.email_status}, status=status.HTTP_201_CREATED)
+
     @action(detail=True, methods=("get",), url_path="correos")
     def email_history(self, request, pk=None):
         """Historial de correos enviados al cliente (incluye los de recuperar compra)."""

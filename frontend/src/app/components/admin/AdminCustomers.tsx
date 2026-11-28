@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAdmin } from '../../contexts/AdminContext';
-import { Users, TrendingUp, DollarSign, Plus, Search, ChevronDown, ChevronUp, X, FileText, FileDown, FileSpreadsheet, Loader2, Pencil, Trash2, AlertTriangle, Mail } from 'lucide-react';
+import { Users, TrendingUp, DollarSign, Plus, Search, ChevronDown, ChevronUp, X, FileText, FileDown, FileSpreadsheet, Loader2, Pencil, Trash2, AlertTriangle, Mail, Send } from 'lucide-react';
 import { getInvoiceByOrder, openInvoicePdf } from '../../services/payments.service';
-import { exportCustomersPdf, exportCustomersExcel, getCustomerEmailHistory, type CustomerEmailRecord } from '../../services/customers.service';
+import { exportCustomersPdf, exportCustomersExcel, getCustomerEmailHistory, sendCustomerEmail, type CustomerEmailRecord } from '../../services/customers.service';
 import { useToast } from '../../contexts/ToastContext';
 import { format } from 'date-fns';
 import { LocationPicker } from '../ui/LocationPicker';
@@ -98,6 +98,85 @@ function CustomerEmailsModal({ customer, onClose }: { customer: Customer; onClos
                 {r.email_status === 'FAILED' && r.email_error && (
                   <p className="mt-2 text-[11px] text-red-600 break-words">{r.email_error}</p>
                 )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SendCustomerEmailModal({ customer, orders, onClose }: {
+  customer: Customer;
+  orders: Order[];
+  onClose: () => void;
+}) {
+  const toast = useToast();
+  const [sendingId, setSendingId] = useState<string | null>(null);
+  const [sentIds, setSentIds] = useState<string[]>([]);
+
+  // Pedidos a los que se les puede enviar el correo de «terminar tu compra».
+  const failedOrders = useMemo(
+    () => orders
+      .filter(o => o.estado === 'fallido' || o.estado === 'cancelado')
+      .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()),
+    [orders],
+  );
+
+  const handleSend = async (order: Order) => {
+    setSendingId(order.id);
+    try {
+      await sendCustomerEmail(customer.id, order.id);
+      setSentIds(prev => [...prev, order.id]);
+      toast.success(`Correo del pedido #${order.numero ?? order.id.slice(0, 8)} enviado a ${customer.email}.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo enviar el correo.');
+    } finally {
+      setSendingId(null);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+      <div className="relative w-full max-w-lg max-h-[90vh] flex flex-col bg-white rounded-2xl shadow-2xl">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-900">Enviar correo a {customer.nombre}</h2>
+            <p className="text-xs text-gray-400 mt-0.5">{customer.email || 'Sin correo registrado'}</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 transition-colors">
+            <X size={16} />
+          </button>
+        </div>
+        <div className="px-6 pt-4">
+          <p className="text-xs text-gray-500">
+            Envía el correo <strong>«🛍️ ¿Quieres terminar tu compra?»</strong> con los productos y el total del pedido.
+          </p>
+        </div>
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2">
+          {failedOrders.length === 0 && (
+            <p className="py-8 text-center text-sm text-gray-400">Este cliente no tiene pedidos fallidos ni cancelados.</p>
+          )}
+          {failedOrders.map(order => {
+            const sent = sentIds.includes(order.id);
+            return (
+              <div key={order.id} className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-gray-900 font-mono">#{order.numero ?? order.id.slice(0, 8)}</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5">
+                    {format(new Date(order.fecha), 'dd/MM/yyyy')} · {order.estado === 'fallido' ? 'Fallido' : 'Cancelado'} · ${order.total.toLocaleString()}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleSend(order)}
+                  disabled={!customer.email || sendingId !== null || sent}
+                  className="flex flex-shrink-0 items-center gap-1.5 rounded-lg bg-[#2a4038] px-3 py-2 text-[11px] font-semibold text-white hover:bg-[#3d5c4e] transition-colors disabled:opacity-50"
+                >
+                  {sendingId === order.id ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+                  {sent ? 'Enviado' : sendingId === order.id ? 'Enviando…' : 'Enviar correo'}
+                </button>
               </div>
             );
           })}
@@ -260,6 +339,7 @@ export function AdminCustomers() {
   const [expandedCustomerId, setExpandedCustomerId] = useState<string | null>(null);
   const [ordersModalCustomer, setOrdersModalCustomer] = useState<Customer | null>(null);
   const [emailsModalCustomer, setEmailsModalCustomer] = useState<Customer | null>(null);
+  const [sendEmailCustomer, setSendEmailCustomer] = useState<Customer | null>(null);
   const [loadingInvoiceId, setLoadingInvoiceId] = useState<string | null>(null);
   const [isSubmittingCustomer, setIsSubmittingCustomer] = useState(false);
   const [isUpdatingCustomer, setIsUpdatingCustomer] = useState(false);
@@ -752,13 +832,22 @@ export function AdminCustomers() {
                     );
                   })()}
 
-                  <button
-                    type="button"
-                    onClick={() => setEmailsModalCustomer(customer)}
-                    className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-gray-200 py-2 text-[11px] font-semibold text-gray-600 hover:border-[#2a4038] hover:text-[#2a4038] transition-colors"
-                  >
-                    <Mail size={12} /> Correos enviados
-                  </button>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEmailsModalCustomer(customer)}
+                      className="flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 py-2 text-[11px] font-semibold text-gray-600 hover:border-[#2a4038] hover:text-[#2a4038] transition-colors"
+                    >
+                      <Mail size={12} /> Correos enviados
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSendEmailCustomer(customer)}
+                      className="flex items-center justify-center gap-1.5 rounded-lg bg-[#2a4038] py-2 text-[11px] font-semibold text-white hover:bg-[#3d5c4e] transition-colors"
+                    >
+                      <Send size={12} /> Enviar correo
+                    </button>
+                  </div>
                 </div>
               )}
             </Card>
@@ -1095,6 +1184,14 @@ export function AdminCustomers() {
           </div>
         </div>
       </Modal>
+
+      {sendEmailCustomer && (
+        <SendCustomerEmailModal
+          customer={sendEmailCustomer}
+          orders={orders.filter(o => o.clienteId === sendEmailCustomer.id)}
+          onClose={() => setSendEmailCustomer(null)}
+        />
+      )}
 
       {emailsModalCustomer && (
         <CustomerEmailsModal

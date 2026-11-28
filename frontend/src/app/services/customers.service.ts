@@ -99,6 +99,12 @@ export interface CustomerEmailRecord {
   created_at: string;
 }
 
+/** Envía al cliente el correo «¿Quieres terminar tu compra?» de un pedido fallido/cancelado. */
+export async function sendCustomerEmail(id: string, orderId: string): Promise<void> {
+  const res = await api.post<{ id: string; email_status: string }>(`/customers/${id}/enviar-correo/`, { order_id: orderId });
+  if (!res.data) throw new Error(res.message || 'No se pudo enviar el correo.');
+}
+
 /** Historial de correos enviados a un cliente (admin). */
 export async function getCustomerEmailHistory(id: string): Promise<CustomerEmailRecord[]> {
   const res = await api.get<CustomerEmailRecord[]>(`/customers/${id}/correos/`);
